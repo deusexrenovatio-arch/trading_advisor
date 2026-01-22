@@ -1,0 +1,89 @@
+moex:
+  base_url: "https://iss.moex.com"
+  engine_shares: "stock"
+  market_shares: "shares"
+  shares_board: "TQBR"
+  engine_futures: "futures"
+  market_futures: "forts"
+  futures_board: "RFUD"
+  request_timeout_sec: 20
+
+cbr:
+  base_url: "https://www.cbr.ru"
+  key_rate_path: "/Queries/UniDbQuery/DownloadExcel/132934"
+
+database:
+  url: "sqlite:///./data/moex_carry.db"
+  echo: false
+
+costs:
+  stock_commission_bps: 1.5
+  futures_commission_bps: 1.0
+  exchange_fee_bps: 0.5
+  slippage_bps: 0.5
+
+taxes:
+  profit_tax_rate: 0.13
+  dividend_tax_rate: 0.13
+
+strategy:
+  z_window: 60
+  z_min_window: 10
+  z_entry: 2.0
+  z_exit: 0.5
+  implied_rate_buffer: 0.005
+  min_days_to_expiry: 7
+  min_days_to_exdiv: 5
+  term_premium_base: 0.01
+  term_premium_slope: 0.02
+  max_pairs: 25
+  intraday_marketdata: true
+
+aggregation:
+  weights:
+    fundamental: 0.4
+    speculative: 0.3
+    arbitrage: 0.3
+  min_confidence: 0.2
+  max_signals: 3
+  rebalance_cadence: "weekly"
+  rebalance_threshold_pct: 0.02
+  max_turnover_pct: 0.2
+  min_trade_weight: 0.01
+  cooldown_days: 3
+
+ui:
+  host: "127.0.0.1"
+  port: 8050
+
+data:
+  data_dir: "./data"
+  compute_lookback_days: 120
+  backtest_lookback_days: 365
+
+environment:
+  mode: "paper"
+  venue: "MOEX"
+  timezone: "Europe/Moscow"
+
+risk_profile:
+  account_equity: 1000000
+  account_currency: "RUB"
+  max_risk_per_trade_pct: 0.5
+  max_daily_loss_pct: 2.0
+  max_open_risk_pct: 1.5
+  max_leverage: 3
+  max_margin_pct: 60
+  max_contracts_per_instrument: 10
+  max_positions: 6
+  max_correlated_exposure_pct: 40
+  stop_loss_required: true
+  time_stop_minutes: 90
+  slippage_tolerance_ticks: 2
+
+news_filter:
+  lookback_minutes: 180
+  block_severity_threshold: "high"
+  reduce_severity_threshold: "medium"
+  sources:
+    - "trusted-feed"

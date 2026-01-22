@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/decision-view.schema.json",
+  "title": "Decision View",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "decision_view_id",
+    "decision_id",
+    "created_at",
+    "strategy_type",
+    "primary_instrument",
+    "action",
+    "risk_state",
+    "cost_summary",
+    "key_features",
+    "links"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "decision_view_id": {
+      "type": "string"
+    },
+    "decision_id": {
+      "type": "string",
+      "description": "Reference to decision_log.decision_id."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "strategy_type": {
+      "type": "string",
+      "enum": ["fundamental", "speculative", "arbitrage", "mixed"]
+    },
+    "primary_instrument": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string",
+      "enum": ["approve", "reject", "hold"]
+    },
+    "risk_state": {
+      "type": "string",
+      "enum": ["green", "yellow", "red"]
+    },
+    "risk_summary": {
+      "type": "string"
+    },
+    "news_severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "cost_summary": {
+      "type": "object",
+      "required": ["round_trip_cost", "break_even_ticks"],
+      "properties": {
+        "round_trip_cost": { "type": "number" },
+        "break_even_ticks": { "type": "number" },
+        "break_even_points": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "key_features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "value"],
+        "properties": {
+          "name": { "type": "string" },
+          "value": { "type": ["number", "string", "boolean"] },
+          "units": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "allocations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["instrument", "side"],
+        "properties": {
+          "instrument": { "type": "string" },
+          "side": {
+            "type": "string",
+            "enum": ["long", "short", "flat"]
+          },
+          "target_weight": { "type": "number" },
+          "quantity": { "type": "number" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "backtest_metrics": {
+      "type": "object",
+      "properties": {
+        "cagr": { "type": "number" },
+        "max_drawdown": { "type": "number" },
+        "sharpe": { "type": "number" },
+        "hit_rate": { "type": "number" },
+        "turnover": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "aggregation_summary": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["enter", "exit", "hold"]
+        },
+        "score": { "type": "number" },
+        "strategies": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blocked_strategies": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "proposal_summary": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["rebalance", "confirm"]
+        },
+        "cadence": { "type": "string" },
+        "effective_date": { "type": "string", "format": "date-time" },
+        "summary": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "basket_summary": {
+      "type": "object",
+      "properties": {
+        "current": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["basket", "weight"],
+            "properties": {
+              "basket": {
+                "type": "string",
+                "enum": ["fundamental", "speculative", "arbitrage"]
+              },
+              "weight": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "target": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["basket", "weight"],
+            "properties": {
+              "basket": {
+                "type": "string",
+                "enum": ["fundamental", "speculative", "arbitrage"]
+              },
+              "weight": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "delta": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["basket", "weight"],
+            "properties": {
+              "basket": {
+                "type": "string",
+                "enum": ["fundamental", "speculative", "arbitrage"]
+              },
+              "weight": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "operator_action": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["approve", "reject"]
+        },
+        "status": { "type": "string" },
+        "actor": { "type": "string" },
+        "note": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "execution_status": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" },
+        "requested_at": { "type": "string", "format": "date-time" },
+        "executed_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "links": {
+      "type": "object",
+      "required": ["decision_log"],
+      "properties": {
+        "decision_log": { "type": "string" },
+        "input_snapshots": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

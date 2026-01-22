@@ -1,0 +1,47 @@
+.app-root {
+  min-height: 100vh;
+  background: #f5f7fb;
+}
+
+.grid-container {
+  height: 68vh;
+  width: 100%;
+}
+
+.cell-mono {
+  font-family: 'Consolas', monospace;
+}
+
+.cell-approve {
+  color: #166534;
+  font-weight: 600;
+}
+
+.cell-reject {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.cell-risk-green {
+  color: #166534;
+  font-weight: 600;
+}
+
+.cell-risk-yellow {
+  color: #a16207;
+  font-weight: 600;
+}
+
+.cell-risk-red {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.cell-news-high {
+  color: #b91c1c;
+}
+
+.cell-news-critical {
+  color: #7f1d1d;
+  font-weight: 600;
+}

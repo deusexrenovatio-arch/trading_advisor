@@ -1,0 +1,515 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/decision-log.schema.json",
+  "title": "Decision Log",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "decision_id",
+    "created_at",
+    "environment",
+    "input_snapshots",
+    "feature_set",
+    "strategies",
+    "portfolio_proposal",
+    "risk_checks",
+    "cost_model",
+    "decision"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version of this schema."
+    },
+    "decision_id": {
+      "type": "string",
+      "description": "Stable ID for traceability (UUID recommended)."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Pipeline run identifier."
+    },
+    "environment": {
+      "type": "object",
+      "required": ["mode", "venue", "timezone"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["live", "paper", "backtest"]
+        },
+        "venue": {
+          "type": "string",
+          "description": "Trading venue/broker identifier."
+        },
+        "timezone": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "input_snapshots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["source", "snapshot_id", "as_of", "hash"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["MOEX_ISS", "QUIK", "NEWS", "OTHER"]
+          },
+          "snapshot_id": {
+            "type": "string",
+            "description": "Stable snapshot identifier."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hash": {
+            "type": "string",
+            "description": "Content hash for reproducibility."
+          },
+          "uri": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "is_cached": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "feature_set": {
+      "type": "object",
+      "required": ["feature_version", "features"],
+      "properties": {
+        "feature_version": {
+          "type": "string"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": ["number", "string", "boolean"] },
+              "units": { "type": "string" },
+              "source": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "snapshot_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "strategies": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "enabled", "signals", "rules_evaluated"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["fundamental", "speculative", "arbitrage"]
+          },
+          "enabled": { "type": "boolean" },
+          "signals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "value", "direction"],
+              "properties": {
+                "name": { "type": "string" },
+                "value": { "type": "number" },
+                "direction": {
+                  "type": "string",
+                  "enum": ["long", "short", "neutral"]
+                },
+                "confidence": { "type": "number" },
+                "horizon": { "type": "string" },
+                "units": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "rules_evaluated": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "result"],
+              "properties": {
+                "id": { "type": "string" },
+                "description": { "type": "string" },
+                "result": { "type": "boolean" },
+                "severity": {
+                  "type": "string",
+                  "enum": ["info", "warn", "block"]
+                },
+                "params": { "type": "object" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "strategy_signals": {
+      "type": "array",
+      "description": "Normalized module signals used by the strategy aggregator.",
+      "items": {
+        "type": "object",
+        "required": [
+          "strategy_id",
+          "strategy_type",
+          "cadence",
+          "horizon",
+          "action",
+          "confidence"
+        ],
+        "properties": {
+          "strategy_id": { "type": "string" },
+          "strategy_type": {
+            "type": "string",
+            "enum": ["fundamental", "speculative", "arbitrage"]
+          },
+          "cadence": { "type": "string" },
+          "horizon": { "type": "string" },
+          "action": {
+            "type": "string",
+            "enum": ["enter", "exit", "hold"]
+          },
+          "confidence": { "type": "number" },
+          "expected_return": { "type": "number" },
+          "risk_estimate": { "type": "number" },
+          "liquidity_score": { "type": "number" },
+          "instruments": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "intent_allocations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["instrument", "side"],
+              "properties": {
+                "instrument": { "type": "string" },
+                "side": {
+                  "type": "string",
+                  "enum": ["long", "short", "flat"]
+                },
+                "target_weight": { "type": "number" },
+                "quantity": { "type": "number" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "rules_evaluated": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["rule_id", "result"],
+              "properties": {
+                "rule_id": { "type": "string" },
+                "result": { "type": "boolean" },
+                "severity": {
+                  "type": "string",
+                  "enum": ["info", "warn", "block"]
+                },
+                "description": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "metadata": { "type": "object" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "aggregation": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["enter", "exit", "hold"]
+        },
+        "score": { "type": "number" },
+        "weights": {
+          "type": "object",
+          "properties": {
+            "fundamental": { "type": "number" },
+            "speculative": { "type": "number" },
+            "arbitrage": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "used_strategies": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blocked_strategies": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "reasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "proposal": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["rebalance", "confirm"]
+        },
+        "cadence": { "type": "string" },
+        "effective_date": { "type": "string", "format": "date-time" },
+        "summary": { "type": "string" },
+        "confidence": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "basket_allocations": {
+      "type": "object",
+      "properties": {
+        "current": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["basket", "weight"],
+            "properties": {
+              "basket": {
+                "type": "string",
+                "enum": ["fundamental", "speculative", "arbitrage"]
+              },
+              "weight": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "target": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["basket", "weight"],
+            "properties": {
+              "basket": {
+                "type": "string",
+                "enum": ["fundamental", "speculative", "arbitrage"]
+              },
+              "weight": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "delta": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["basket", "weight"],
+            "properties": {
+              "basket": {
+                "type": "string",
+                "enum": ["fundamental", "speculative", "arbitrage"]
+              },
+              "weight": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["category", "label", "value"],
+        "properties": {
+          "category": { "type": "string" },
+          "label": { "type": "string" },
+          "value": { "type": ["number", "string", "boolean"] },
+          "units": { "type": "string" },
+          "source": { "type": "string" },
+          "confidence": { "type": "number" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "operator_action": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["approve", "reject"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["recorded", "revoked"]
+        },
+        "actor": { "type": "string" },
+        "note": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "execution_request": {
+      "type": "object",
+      "properties": {
+        "request_id": { "type": "string" },
+        "action": {
+          "type": "string",
+          "enum": ["approve", "reject"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["queued", "sent", "failed", "succeeded", "canceled"]
+        },
+        "requested_at": { "type": "string", "format": "date-time" },
+        "executed_at": { "type": "string", "format": "date-time" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "news_context": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "headline_count": { "type": "integer" },
+        "summary": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "portfolio_proposal": {
+      "type": "object",
+      "required": ["allocations"],
+      "properties": {
+        "allocations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["instrument", "side"],
+            "properties": {
+              "instrument": { "type": "string" },
+              "side": {
+                "type": "string",
+                "enum": ["long", "short", "flat"]
+              },
+              "target_weight": { "type": "number" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "rationale": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "risk_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "passed"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "limit": { "type": ["number", "string"] },
+          "value": { "type": ["number", "string"] },
+          "unit": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "action": {
+            "type": "string",
+            "enum": ["allow", "reduce", "block"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "cost_model": {
+      "type": "object",
+      "required": ["fee_side", "round_trip_cost", "break_even_ticks"],
+      "properties": {
+        "fee_side": { "type": "number" },
+        "slippage_ticks": { "type": "number" },
+        "spread_ticks": { "type": "number" },
+        "round_trip_cost": { "type": "number" },
+        "break_even_ticks": { "type": "number" },
+        "break_even_points": { "type": "number" },
+        "tax_rate": { "type": "number" },
+        "after_tax_pnl_estimate": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "backtest_metrics": {
+      "type": "object",
+      "properties": {
+        "cagr": { "type": "number" },
+        "max_drawdown": { "type": "number" },
+        "sharpe": { "type": "number" },
+        "hit_rate": { "type": "number" },
+        "turnover": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": ["action", "risk_state"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["approve", "reject", "hold"]
+        },
+        "risk_state": {
+          "type": "string",
+          "enum": ["green", "yellow", "red"]
+        },
+        "reasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "decision_view_id": {
+      "type": "string",
+      "description": "Optional pointer to decision_view projection."
+    }
+  },
+  "additionalProperties": false
+}

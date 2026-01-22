@@ -1,0 +1,99 @@
+# Backend Core Modules
+
+## Scope
+This document covers the Python core in `src/moex_carry`, including orchestration,
+strategies, storage, and the Dash/Flask API used by the UI.
+
+## Entry points
+- `src/moex_carry/__main__.py`: entry point that delegates to the CLI.
+- `src/moex_carry/cli.py`: commands for `fetch`, `compute`, `backtest`, `paper`,
+  `signals`, `ui`, and `history`.
+
+## Orchestration
+- `src/moex_carry/pipeline.py`
+  - `fetch_data`: ingestion for MOEX ISS + CBR inputs.
+  - `compute_pairs`: ranking and signal generation for stock-future pairs.
+  - `run_backtest`: historical replay with output metrics.
+  - `run_paper_trading`: builds `decision_log` + `decision_view`.
+  - `run_signal_cycle`: live signal cycle and persistence.
+  - `build_spread_series`: time series for UI charting.
+
+## Module catalog
+
+### `analytics/`
+- Responsibilities: carry/rate calculations and spread statistics.
+- Key files: `carry.py`, `rates.py`, `stats.py`.
+- Outputs: derived metrics used by strategies and ranking.
+
+### `data/`
+- Responsibilities: data source adapters and normalization for MOEX ISS and CBR.
+- Key files: `moex_iss.py`, `cbr_rates.py`, `providers.py`, `dividends.py`, `streaming.py`.
+- Outputs: normalized data frames and cached responses for the pipeline.
+
+### `selection/`
+- Responsibilities: instrument universe, liquidity checks, and ranking.
+- Key files: `universe.py`, `liquidity.py`, `ranking.py`.
+- Outputs: ranked pairs and candidate lists for strategy evaluation.
+
+### `strategy/`
+- Responsibilities: core signal logic and gating.
+- Key files:
+  - `stat_signal.py`: z-score based entry/exit.
+  - `carry_signal.py`: implied rate and carry logic.
+  - `event_filters.py`: expiry/ex-dividend gating.
+  - `orchestrator.py`: combines stat + carry into a `SignalDecision`.
+  - `risk_gate.py`: deterministic risk checks.
+  - `news_filter.py`: deterministic news gating.
+  - `overall_strategy.py`: hybrid aggregation of module signals.
+  - `strategy_signal.py`: normalized strategy signal contract for aggregation.
+  - `spread_adapter.py`: stub adapter for spread module integration.
+- Outputs: `SignalDecision`, portfolio intents, and risk/news gate results.
+
+### `costs/`
+- Responsibilities: commission/slippage calculations and tax handling.
+- Key files: `engine.py`, `taxes.py`.
+- Outputs: cost model fields used in decision logs and backtests.
+
+### `backtest/`
+- Responsibilities: historical replay and walk-forward reporting.
+- Key files: `engine.py`, `report.py`, `walk_forward.py`.
+- Outputs: backtest metrics persisted in CSV and decision logs.
+
+### `storage/`
+- Responsibilities: database access and persistence of signals/executions.
+- Key files: `db.py`, `models.py`, `repositories.py`.
+- Outputs: SQLite tables for signals, executions, and backtests.
+
+### `decision_log.py`
+- Responsibilities: schema validation and projection to `decision_view`.
+- Inputs: decision payload from the pipeline.
+- Outputs: `decision_log.jsonl` and `decision_view.jsonl`.
+
+### `history.py`
+- Responsibilities: incremental historical candles download with state tracking.
+- Outputs: historical CSV files under `data/history/`.
+
+### `broker/`
+- Responsibilities: adapter boundary for execution and broker integration.
+- Key files: `adapter.py` (abstraction for order flow).
+
+### `logging.py`
+- Responsibilities: logging configuration and formatting.
+
+### `ui/`
+- Responsibilities: Dash UI and Flask API endpoints.
+- Key files:
+  - `app.py`: API routes and Dash layout.
+  - `data.py`: loaders for CSV/JSONL artifacts.
+
+## Persistence outputs
+- CSV artifacts: `data/output/top_pairs.csv`, `data/output/signals.csv`,
+  `data/output/backtest_summary.csv`.
+- Decision logs: `data/decisions/decision_log.jsonl`,
+  `data/decisions/decision_view.jsonl`.
+- Database: SQLite at `data/moex_carry.db` with tables from `storage/models.py`.
+
+## Contracts and dependencies
+- Schemas: `contracts/decision-log.schema.json`,
+  `contracts/decision-view.schema.json`.
+- Config defaults: `configs/default.yaml`, loaded by `config.py`.

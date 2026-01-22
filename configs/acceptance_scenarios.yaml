@@ -1,0 +1,165 @@
+version: 1
+scenarios:
+  - id: decision-view
+    type: api_list
+    scope: backend
+    url: /api/decision-view?limit=5
+    require_non_empty: false
+    required_keys: [decision_id, created_at, action, risk_state]
+    test_cases: [TC-DEC-API-001, TC-DEC-UI-001]
+    title: Просмотр решений
+    user_story: Пользователь видит таблицу решений и может выбрать строку.
+    expectations:
+      - В списке есть идентификатор решения и время.
+      - Видны action и risk_state для быстрой оценки.
+  - id: decision-view-aggregation
+    type: api_list
+    scope: backend
+    url: /api/decision-view?limit=1
+    require_non_empty: false
+    required_keys: [aggregation_summary]
+    test_cases: [TC-DEC-API-002]
+    title: Агрегация в decision_view
+    user_story: Пользователь видит суммарный результат агрегатора в таблице решений.
+    expectations:
+      - Поле aggregation_summary присутствует в decision_view.
+  - id: decision-log-aggregation
+    type: decision_log_detail
+    scope: backend
+    source_url: /api/decision-view?limit=1
+    url_template: /api/decision-log/{decision_id}
+    required_keys: [strategy_signals, aggregation]
+    test_cases: [TC-DEC-API-003]
+    title: Агрегация в decision_log
+    user_story: Пользователь может открыть подробную запись с результатами агрегатора.
+    expectations:
+      - В decision_log присутствуют strategy_signals и aggregation.
+  - id: decision-action
+    type: decision_action
+    scope: backend
+    source_url: /api/decision-view?limit=1
+    url_template: /api/decisions/{decision_id}/action
+    payload:
+      action: approve
+      note: acceptance
+    required_keys: [status, operator_action, execution_status]
+    test_cases: [TC-DEC-API-004, TC-DEC-UI-002]
+    title: Операторское решение
+    user_story: Пользователь подтверждает или отклоняет решение и инициирует выполнение.
+    expectations:
+      - API принимает approve/reject и возвращает статус ok.
+  - id: top-pairs
+    type: api_list
+    scope: backend
+    url: /api/top-pairs?limit=5
+    require_non_empty: false
+    required_keys:
+      [stock, future, spot, future_price, implied_rate_net, required_rate, expected_net_irr, score]
+    forbid_keys: [signal_reasons, signal_metrics]
+    cache_as: top_pairs
+    test_cases: [TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002]
+    title: Просмотр топ-пар
+    user_story: Пользователь видит рейтинг пар без сигналов/причин.
+    expectations:
+      - Ранжирование доступно через поле score.
+      - В ответе нет signal_reasons/signal_metrics.
+  - id: signals-active
+    type: api_list
+    scope: backend
+    url: /api/signals/active
+    require_non_empty: false
+    required_keys: [run_id, timestamp, stock, future, signal_action, signal_score]
+    allowed_field_values:
+      signal_action: [enter, exit]
+    test_cases: [TC-SIG-ACT-API-001]
+    title: Действуемые сигналы
+    user_story: Пользователь получает только actionable сигналы.
+    expectations:
+      - В action только enter/exit.
+      - Сигнал содержит идентификаторы пары и score.
+  - id: signals-execute
+    type: post_json
+    scope: backend
+    url: /api/signals/execute
+    payload:
+      stock: AAA
+      future: AAH6
+      direction: cash_and_carry
+      action: enter
+      price: 100.5
+      quantity: 1
+      side: buy
+      status: filled
+      note: acceptance
+    required_keys: [status]
+    test_cases: [TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001]
+    title: Исполнение сигнала
+    user_story: Пользователь может вручную исполнить сигнал и зафиксировать факт.
+    expectations:
+      - API принимает payload и возвращает статус ok.
+  - id: signals-history
+    type: api_list
+    scope: backend
+    url: /api/signals/history?limit=5
+    require_non_empty: true
+    required_keys:
+      [run_id, timestamp, stock, future, signal_action, signal_direction, signal_score]
+    allowed_field_values:
+      signal_action: [enter, exit, hold]
+    cache_as: signals_history
+    test_cases: [TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002]
+    title: История сигналов
+    user_story: Пользователь видит историю сигналов за период.
+    expectations:
+      - История содержит action/direction/score.
+      - Можно фильтровать по диапазону дат.
+  - id: signals-history-range
+    type: history_date_range
+    scope: backend
+    history_source: signals_history
+    required_keys: [timestamp, stock, future, signal_action]
+    test_cases: [TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001]
+    title: Фильтр истории по датам
+    user_story: Пользователь задаёт дату "с/по" и получает записи за этот день.
+    expectations:
+      - Диапазон дат включает весь день, а не только 00:00.
+  - id: backtests
+    type: api_list
+    scope: backend
+    url: /api/backtests?limit=5
+    require_non_empty: false
+    test_cases: [TC-BACK-API-001, TC-BACK-UI-001]
+    title: Метрики бэктеста
+    user_story: Пользователь видит метрики бэктеста.
+  - id: spread-series
+    type: spread_series
+    scope: backend
+    pair_source: top_pairs
+    window_days: 60
+    required_keys:
+      - spread
+      - zscore
+      - z_entry
+      - z_exit
+      - entry_flag
+      - exit_flag
+      - entry_cycle
+      - exit_cycle
+    test_cases: [TC-SPREAD-API-001, TC-SPREAD-UI-001]
+    title: График спреда
+    user_story: Пользователь видит данные для графика спреда.
+  - id: frontend
+    type: http_status
+    scope: frontend
+    url: /
+    test_cases: [TC-FE-HTTP-001]
+    title: Доступность UI
+    user_story: Пользователь может открыть UI.
+  - id: frontend-proxy
+    type: api_list
+    scope: frontend
+    url: /api/top-pairs?limit=5
+    require_non_empty: false
+    test_cases: [TC-FE-PROXY-001]
+    title: Прокси API
+    user_story: UI получает данные через proxy.

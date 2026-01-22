@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moex-carry"
+version = "0.1.0"
+description = "MOEX cash-and-carry analytics, signals, and backtesting."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "requests>=2.31",
+  "pandas>=2.1",
+  "numpy>=1.26",
+  "sqlalchemy>=2.0",
+  "pyyaml>=6.0",
+  "dash>=2.16",
+  "plotly>=5.20",
+  "python-dateutil>=2.8",
+]
+
+[project.scripts]
+moex-carry = "moex_carry.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "responses>=0.25",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

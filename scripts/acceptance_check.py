@@ -1,0 +1,344 @@
+from __future__ import annotations
+
+import argparse
+import sys
+from typing import Any
+
+import requests
+import yaml
+
+
+def _print_result(name: str, ok: bool, detail: str) -> None:
+    status = "ok" if ok else "fail"
+    print(f"{name}: {status} ({detail})")
+
+
+def _print_skip(name: str, detail: str) -> None:
+    print(f"{name}: skip ({detail})")
+
+
+def _get_json(url: str) -> tuple[bool, str, Any]:
+    try:
+        response = requests.get(url, timeout=10)
+    except requests.RequestException as exc:
+        return False, f"request_error:{exc}", None
+    if not response.ok:
+        return False, f"status:{response.status_code}", None
+    content_type = response.headers.get("content-type", "")
+    if "application/json" not in content_type:
+        return False, f"content_type:{content_type}", None
+    try:
+        return True, "json", response.json()
+    except ValueError as exc:
+        return False, f"json_error:{exc}", None
+
+
+def _require_list(data: Any) -> bool:
+    return isinstance(data, list)
+
+
+def _check_non_empty(name: str, data: list[Any], allow_empty: bool) -> tuple[bool, str]:
+    if data:
+        return True, f"len={len(data)}"
+    if allow_empty:
+        return True, "len=0 (allowed)"
+    return False, "len=0"
+
+
+def _load_config(path: str) -> dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle) or {}
+    except FileNotFoundError:
+        return {}
+
+
+def _build_url(base: str, url: str) -> str:
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if not url.startswith("/"):
+        url = f"/{url}"
+    return f"{base}{url}"
+
+
+def run(args: argparse.Namespace) -> int:
+    failures = 0
+    backend = args.backend_url.rstrip("/")
+    frontend = args.frontend_url.rstrip("/")
+    config = _load_config(args.config)
+    scenarios = config.get("scenarios") or []
+    cache: dict[str, Any] = {}
+
+    for scenario in scenarios:
+        scenario_id = str(scenario.get("id", "scenario"))
+        scope = str(scenario.get("scope", "backend"))
+        allow_empty = bool(scenario.get("allow_empty", args.allow_empty))
+        require_non_empty = bool(scenario.get("require_non_empty", False))
+
+        if scope == "frontend" and args.skip_frontend:
+            _print_skip(scenario_id, "skip-frontend flag")
+            continue
+
+        if scenario.get("type") == "http_status":
+            url = _build_url(frontend if scope == "frontend" else backend, scenario.get("url", "/"))
+            try:
+                response = requests.get(url, timeout=5)
+                ok = response.ok
+                detail = f"status:{response.status_code}"
+            except requests.RequestException as exc:
+                ok = False
+                detail = f"request_error:{exc}"
+            _print_result(scenario_id, ok, detail)
+            failures += 0 if ok else 1
+            continue
+
+        if scenario.get("type") == "spread_series":
+            pair_source = scenario.get("pair_source", "top-pairs")
+            pair_list = cache.get(pair_source)
+            if not pair_list:
+                top_pairs_url = _build_url(backend, "/api/top-pairs?limit=1")
+                ok, detail, pair_list = _get_json(top_pairs_url)
+                if not (ok and _require_list(pair_list) and pair_list):
+                    _print_result(scenario_id, False, "missing_pair_source")
+                    failures += 1
+                    continue
+            pair = pair_list[0]
+            stock = pair.get("stock")
+            future = pair.get("future")
+            if not stock or not future:
+                _print_result(scenario_id, False, "missing_pair_fields")
+                failures += 1
+                continue
+            window_days = int(scenario.get("window_days", 60))
+            url = _build_url(
+                backend,
+                f"/api/spread-series?stock={stock}&future={future}&window_days={window_days}",
+            )
+            ok, detail, data = _get_json(url)
+            required = set(scenario.get("required_keys", []))
+            if ok and _require_list(data):
+                if data:
+                    if required:
+                        missing = required.difference(set(data[0].keys()))
+                        if missing:
+                            ok = False
+                            detail = f"missing_fields:{sorted(missing)}"
+                        else:
+                            detail = f"len={len(data)}"
+                    else:
+                        detail = f"len={len(data)}"
+                elif require_non_empty and not allow_empty:
+                    ok, detail = _check_non_empty(scenario_id, data, allow_empty)
+            else:
+                ok = False
+            _print_result(scenario_id, ok, detail)
+            failures += 0 if ok else 1
+            continue
+
+        if scenario.get("type") == "decision_log_detail":
+            source_url = scenario.get("source_url", "/api/decision-view?limit=1")
+            ok, detail, data = _get_json(_build_url(backend, source_url))
+            if not (ok and _require_list(data)):
+                _print_result(scenario_id, False, f"source_error:{detail}")
+                failures += 1
+                continue
+            if not data:
+                if allow_empty or not require_non_empty:
+                    _print_skip(scenario_id, "no_decision_rows")
+                    continue
+                _print_result(scenario_id, False, "no_decision_rows")
+                failures += 1
+                continue
+            id_field = scenario.get("id_field", "decision_id")
+            decision_id = data[0].get(id_field)
+            if not decision_id:
+                _print_result(scenario_id, False, "missing_decision_id")
+                failures += 1
+                continue
+            template = scenario.get("url_template", "/api/decision-log/{decision_id}")
+            url = _build_url(backend, template.format(decision_id=decision_id))
+            ok, detail, payload = _get_json(url)
+            if not (ok and isinstance(payload, dict)):
+                _print_result(scenario_id, False, f"log_error:{detail}")
+                failures += 1
+                continue
+            required_keys = scenario.get("required_keys", [])
+            if required_keys:
+                missing = set(required_keys).difference(set(payload.keys()))
+                if missing:
+                    _print_result(scenario_id, False, f"missing_keys:{sorted(missing)}")
+                    failures += 1
+                    continue
+            _print_result(scenario_id, True, "ok")
+            continue
+
+        if scenario.get("type") == "decision_action":
+            source_url = scenario.get("source_url", "/api/decision-view?limit=1")
+            ok, detail, data = _get_json(_build_url(backend, source_url))
+            if not (ok and _require_list(data)):
+                _print_result(scenario_id, False, f"source_error:{detail}")
+                failures += 1
+                continue
+            if not data:
+                if allow_empty or not require_non_empty:
+                    _print_skip(scenario_id, "no_decision_rows")
+                    continue
+                _print_result(scenario_id, False, "no_decision_rows")
+                failures += 1
+                continue
+            id_field = scenario.get("id_field", "decision_id")
+            decision_id = data[0].get(id_field)
+            if not decision_id:
+                _print_result(scenario_id, False, "missing_decision_id")
+                failures += 1
+                continue
+            template = scenario.get("url_template", "/api/decisions/{decision_id}/action")
+            url = _build_url(backend, template.format(decision_id=decision_id))
+            payload = scenario.get("payload", {})
+            try:
+                response = requests.post(url, json=payload, timeout=10)
+            except requests.RequestException as exc:
+                _print_result(scenario_id, False, f"request_error:{exc}")
+                failures += 1
+                continue
+            if response.status_code != int(scenario.get("expected_status", 200)):
+                _print_result(scenario_id, False, f"status:{response.status_code}")
+                failures += 1
+                continue
+            try:
+                data = response.json()
+            except ValueError as exc:
+                _print_result(scenario_id, False, f"json_error:{exc}")
+                failures += 1
+                continue
+            required_keys = scenario.get("required_keys", [])
+            if required_keys and isinstance(data, dict):
+                missing = set(required_keys).difference(set(data.keys()))
+                if missing:
+                    _print_result(scenario_id, False, f"missing_keys:{sorted(missing)}")
+                    failures += 1
+                    continue
+            _print_result(scenario_id, True, "ok")
+            continue
+
+        if scenario.get("type") == "history_date_range":
+            history_source = scenario.get("history_source")
+            history_list = cache.get(history_source) if history_source else None
+            if not history_list:
+                history_url = scenario.get("source_url", "/api/signals/history?limit=1")
+                ok, detail, history_list = _get_json(_build_url(backend, history_url))
+                if not (ok and _require_list(history_list) and history_list):
+                    if allow_empty:
+                        _print_skip(scenario_id, "no_history_rows")
+                        continue
+                    _print_result(scenario_id, False, "missing_history_rows")
+                    failures += 1
+                    continue
+            timestamp_field = scenario.get("timestamp_field", "timestamp")
+            timestamp = str(history_list[0].get(timestamp_field, ""))
+            if not timestamp:
+                _print_result(scenario_id, False, "missing_timestamp")
+                failures += 1
+                continue
+            date_value = timestamp.split("T")[0].split(" ")[0]
+            url = _build_url(backend, f"/api/signals/history?from={date_value}&to={date_value}")
+            ok, detail, data = _get_json(url)
+            if ok and _require_list(data):
+                if data:
+                    detail = f"len={len(data)}"
+                    required_keys = scenario.get("required_keys", [])
+                    if required_keys:
+                        missing = set(required_keys).difference(set(data[0].keys()))
+                        if missing:
+                            ok = False
+                            detail = f"missing_keys:{sorted(missing)}"
+                else:
+                    ok = False
+                    detail = "len=0"
+            else:
+                ok = False
+            _print_result(scenario_id, ok, detail)
+            failures += 0 if ok else 1
+            continue
+
+        if scenario.get("type") == "post_json":
+            url = _build_url(frontend if scope == "frontend" else backend, scenario.get("url", "/"))
+            payload = scenario.get("payload", {})
+            expected_status = int(scenario.get("expected_status", 200))
+            try:
+                response = requests.post(url, json=payload, timeout=10)
+            except requests.RequestException as exc:
+                _print_result(scenario_id, False, f"request_error:{exc}")
+                failures += 1
+                continue
+            if response.status_code != expected_status:
+                _print_result(scenario_id, False, f"status:{response.status_code}")
+                failures += 1
+                continue
+            try:
+                data = response.json()
+            except ValueError as exc:
+                _print_result(scenario_id, False, f"json_error:{exc}")
+                failures += 1
+                continue
+            required_keys = scenario.get("required_keys", [])
+            if required_keys and isinstance(data, dict):
+                missing = set(required_keys).difference(set(data.keys()))
+                if missing:
+                    _print_result(scenario_id, False, f"missing_keys:{sorted(missing)}")
+                    failures += 1
+                    continue
+            _print_result(scenario_id, True, "ok")
+            continue
+
+        url = _build_url(frontend if scope == "frontend" else backend, scenario.get("url", "/"))
+        ok, detail, data = _get_json(url)
+        if ok and _require_list(data):
+            if require_non_empty and not allow_empty:
+                ok, detail = _check_non_empty(scenario_id, data, allow_empty)
+            else:
+                detail = f"len={len(data)}"
+            required_keys = scenario.get("required_keys", [])
+            if ok and required_keys and data:
+                missing = set(required_keys).difference(set(data[0].keys()))
+                if missing:
+                    ok = False
+                    detail = f"missing_keys:{sorted(missing)}"
+            forbid_keys = scenario.get("forbid_keys", [])
+            if ok and forbid_keys and data:
+                if any(key in data[0] for key in forbid_keys):
+                    ok = False
+                    detail = f"forbidden_keys:{forbid_keys}"
+            allowed_values = scenario.get("allowed_field_values", {})
+            if ok and allowed_values and data:
+                for field, allowed in allowed_values.items():
+                    invalid = [row.get(field) for row in data if row.get(field) not in set(allowed)]
+                    if invalid:
+                        ok = False
+                        detail = f"invalid_{field}:{invalid[:3]}"
+                        break
+        else:
+            ok = False
+        _print_result(scenario_id, ok, detail)
+        failures += 0 if ok else 1
+
+        cache_as = scenario.get("cache_as")
+        if cache_as and ok:
+            cache[str(cache_as)] = data
+
+    return 1 if failures else 0
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Acceptance smoke checks")
+    parser.add_argument("--config", default="configs/acceptance_scenarios.yaml")
+    parser.add_argument("--backend-url", default="http://127.0.0.1:8050")
+    parser.add_argument("--frontend-url", default="http://127.0.0.1:5176")
+    parser.add_argument("--skip-frontend", action="store_true")
+    parser.add_argument("--allow-empty", action="store_true")
+    args = parser.parse_args()
+    sys.exit(run(args))
+
+
+if __name__ == "__main__":
+    main()
