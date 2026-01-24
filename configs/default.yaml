@@ -39,6 +39,57 @@ strategy:
   max_pairs: 25
   intraday_marketdata: true
 
+spread_carry_alpha:
+  day_count: "ACT/365"
+  use_trading_days: false
+  r_cb_annual: null
+  r_fund_annual: 0.0
+  r_disc_annual: null
+  slip_stock_bps: 0.0
+  slip_fut_bps: 0.0
+  slip_fut_ticks: null
+  tick_size_fut: null
+  fee_stock_per_share: null
+  fee_stock_bps: null
+  fee_fut_per_contract: null
+  floor_tolerance: 0.0
+  riskbuffer_floor: 0.0
+  capital_base_mode: "FULL_CASH"
+  margin_stock_pct: 0.0
+  margin_fut_pct: 0.0
+  var_margin_buffer_pct: 0.0
+  max_spread_bps_stock: null
+  max_spread_bps_fut: null
+  min_avg_dollarvol_stock: null
+  min_avg_dollarvol_fut: null
+  min_open_interest: null
+  participation_rate: 0.1
+  max_days_to_exit: null
+  min_DTE_entry: 7
+  close_buffer_days: 3
+  roll_trigger_days: 0
+  H_max_days: 20
+  TP_pct: 0.01
+  SL_pct: 0.01
+  z_window: 60
+  z_entry_threshold: null
+  max_gross_notional: null
+  max_contracts_per_pair: 1
+  capital_allocated_per_trade: null
+  margin_proxy: 1.0
+  w1: 1.0
+  w2: 1.0
+  w3: 1.0
+  w4: 1.0
+  c1: 1.0
+  c2: 1.0
+  k_event: 0.0
+  min_floor_score: null
+  min_alpha_score: null
+  min_total_score: null
+  allowed_expiry_months: [3, 6, 9, 12]
+  allowed_expiry_years: [2026]
+
 aggregation:
   weights:
     fundamental: 0.4

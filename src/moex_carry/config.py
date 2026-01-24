@@ -56,6 +56,69 @@ class StrategyConfig(BaseModel):
     intraday_marketdata: bool = True
 
 
+class SpreadCarryAlphaConfig(BaseModel):
+    day_count: str = "ACT/365"
+    use_trading_days: bool = False
+
+    r_cb_annual: Optional[float] = None
+    r_fund_annual: Optional[float] = None
+    r_disc_annual: Optional[float] = None
+
+    slip_stock_bps: float = 0.0
+    slip_fut_bps: float = 0.0
+    slip_fut_ticks: Optional[float] = None
+    tick_size_fut: Optional[float] = None
+
+    fee_stock_per_share: Optional[float] = None
+    fee_stock_bps: Optional[float] = None
+    fee_fut_per_contract: Optional[float] = None
+
+    floor_tolerance: float = 0.0
+    riskbuffer_floor: float = 0.0
+    capital_base_mode: str = "FULL_CASH"
+    margin_stock_pct: float = 0.0
+    margin_fut_pct: float = 0.0
+    var_margin_buffer_pct: float = 0.0
+
+    max_spread_bps_stock: Optional[float] = None
+    max_spread_bps_fut: Optional[float] = None
+    min_avg_dollarvol_stock: Optional[float] = None
+    min_avg_dollarvol_fut: Optional[float] = None
+    min_open_interest: Optional[float] = None
+    participation_rate: float = 0.1
+    max_days_to_exit: Optional[float] = None
+
+    min_DTE_entry: int = 7
+    close_buffer_days: int = 3
+    roll_trigger_days: int = 0
+
+    H_max_days: int = 20
+    TP_pct: float = 0.01
+    SL_pct: float = 0.01
+
+    z_window: int = 60
+    z_entry_threshold: Optional[float] = None
+
+    max_gross_notional: Optional[float] = None
+    max_contracts_per_pair: int = 1
+    capital_allocated_per_trade: Optional[float] = None
+    margin_proxy: float = 1.0
+
+    w1: float = 1.0
+    w2: float = 1.0
+    w3: float = 1.0
+    w4: float = 1.0
+    c1: float = 1.0
+    c2: float = 1.0
+    k_event: float = 0.0
+
+    min_floor_score: Optional[float] = None
+    min_alpha_score: Optional[float] = None
+    min_total_score: Optional[float] = None
+    allowed_expiry_months: Optional[list[int]] = None
+    allowed_expiry_years: Optional[list[int]] = None
+
+
 class AggregationConfig(BaseModel):
     weights: dict[str, float] = {
         "fundamental": 0.4,
@@ -124,6 +187,7 @@ class AppSettings(BaseSettings):
     costs: CostsConfig = CostsConfig()
     taxes: TaxesConfig = TaxesConfig()
     strategy: StrategyConfig = StrategyConfig()
+    spread_carry_alpha: SpreadCarryAlphaConfig = SpreadCarryAlphaConfig()
     aggregation: AggregationConfig = AggregationConfig()
     ui: UiConfig = UiConfig()
     data: DataConfig = DataConfig()
@@ -141,15 +205,24 @@ def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
     return base
 
 
+def _default_config_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "configs" / "default.yaml"
+
+
 def load_settings(config_path: Optional[str] = None) -> AppSettings:
     config_data: dict[str, Any] = {}
+    path: Optional[Path] = None
     if config_path:
         path = Path(config_path)
-        if path.exists():
-            with path.open("r", encoding="utf-8") as handle:
-                yaml_data = yaml.safe_load(handle) or {}
-            if isinstance(yaml_data, dict):
-                config_data = _merge_dicts(config_data, yaml_data)
+    else:
+        default_path = _default_config_path()
+        if default_path.exists():
+            path = default_path
+    if path and path.exists():
+        with path.open("r", encoding="utf-8") as handle:
+            yaml_data = yaml.safe_load(handle) or {}
+        if isinstance(yaml_data, dict):
+            config_data = _merge_dicts(config_data, yaml_data)
     return AppSettings(**config_data)
 
 
