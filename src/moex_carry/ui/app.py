@@ -50,6 +50,9 @@ BASE_TABLE_STYLE = {
 }
 
 
+_CACHE_VERSION = "v2"
+
+
 def _append_jsonl(path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
@@ -528,6 +531,7 @@ def create_app(settings: AppSettings) -> Dash:
         future = request.args.get("future")
         if not stock or not future:
             return jsonify({"error": "missing_params"}), 400
+        full_life = request.args.get("full_life", "").lower() in {"1", "true", "yes"}
         window_raw = request.args.get("window_days", "60")
         try:
             window_days = max(int(window_raw), 1)
@@ -537,12 +541,15 @@ def create_app(settings: AppSettings) -> Dash:
 
         cache_dir = paths.data_dir / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_path = cache_dir / f"spread_{stock}_{future}_{window_days}.json"
+        cache_suffix = "full" if full_life else str(window_days)
+        cache_path = cache_dir / f"spread_{stock}_{future}_{cache_suffix}_{_CACHE_VERSION}.json"
         cached = _read_cache(cache_path, ttl_minutes=60)
         if cached is not None:
             return jsonify(cached)
 
-        series_df = build_spread_series(settings, stock, future, window_days=window_days)
+        series_df = build_spread_series(
+            settings, stock, future, window_days=window_days, full_life=full_life
+        )
         if series_df.empty:
             return jsonify([])
         series_df = series_df.copy()
