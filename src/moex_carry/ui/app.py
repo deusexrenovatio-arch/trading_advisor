@@ -317,10 +317,14 @@ def create_app(settings: AppSettings) -> Dash:
 
     @server.route("/api/decisions/<decision_id>/action", methods=["GET", "POST"])
     def decision_action_api(decision_id: str):
-        log_path = paths.data_dir / "decisions" / "decision_log.jsonl"
+        decisions_dir = paths.data_dir / "decisions"
+        log_path = decisions_dir / "decision_log.jsonl"
+        view_path = decisions_dir / "decision_view.jsonl"
         records = load_jsonl(log_path)
         if not any(record.get("decision_id") == decision_id for record in records):
-            return jsonify({"error": "not_found"}), 404
+            view_records = load_jsonl(view_path)
+            if not any(record.get("decision_id") == decision_id for record in view_records):
+                return jsonify({"error": "not_found"}), 404
         if request.method == "GET":
             action_records = load_jsonl(actions_path) if actions_path.exists() else []
             latest_actions = _latest_by_decision_id(action_records)
