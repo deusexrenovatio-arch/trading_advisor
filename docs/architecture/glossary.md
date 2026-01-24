@@ -31,9 +31,17 @@
 
 ## Trading math
 - Spread: price difference between legs of a pair.
+- SpreadPct: spread normalized by spot mid price.
 - Z-score: standardized spread score used for entry/exit thresholds.
 - Carry / implied rate: annualized yield implied by spot vs future pricing.
+- DTE: days to expiry for the futures contract.
+- Tau: year fraction between now and expiry (day-count convention).
 - Hedge ratio: weighting between legs in spread arbitrage.
+- RTC (round-trip cost): estimated entry + exit cost in spread units.
+- Floor rate: expected annualized carry return if held to expiry.
+- TP/SL: take-profit and stop-loss thresholds for alpha exits.
+- MFE/MAE: max favorable/adverse excursion over a horizon.
+- Days-to-exit: estimated trading days required to unwind a position.
 - Liquidity score: a relative measure used to penalize illiquid instruments.
 
 ## Operations

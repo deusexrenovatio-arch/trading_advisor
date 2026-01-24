@@ -26,15 +26,17 @@ python -m venv .venv
 pip install -e .[dev]
 ```
 
-2) Run the demo pipeline:
+2) Run the demo pipeline (defaults to `configs/default.yaml` if `--config` is omitted):
 
 ```
-python -m moex_carry.cli fetch --config configs/default.yaml
-python -m moex_carry.cli compute --config configs/default.yaml
-python -m moex_carry.cli backtest --config configs/default.yaml
-python -m moex_carry.cli paper --config configs/default.yaml
-python -m moex_carry.cli ui --config configs/default.yaml
+python -m moex_carry.cli fetch
+python -m moex_carry.cli compute
+python -m moex_carry.cli backtest
+python -m moex_carry.cli paper
+python -m moex_carry.cli ui
 ```
+
+To use a different config file, pass `--config path/to/config.yaml`.
 
 Or use the demo scripts:
 

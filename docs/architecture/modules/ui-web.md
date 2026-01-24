@@ -11,7 +11,7 @@ This document covers the React UI in `ui-web/` and the API endpoints it uses.
   - Tables for top pairs, signals, and backtests with sorting and filters.
   - Signal execution panel with execution history.
 - `SpreadChart.tsx`
-  - Plots spread and z-score series with entry/exit annotations.
+  - Plots spread_mid and spread_pct series with entry/exit annotations.
 - `main.tsx`
   - App bootstrap, MUI theme, global CSS.
 
@@ -31,6 +31,7 @@ The UI expects these endpoints (served by the Python backend in
   - Records approve/reject and creates an execution request.
 - `GET /api/top-pairs?limit=...&all=true|false`
   - Top ranked pairs with signal metadata.
+  - Includes spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
 - `GET /api/signals/active`
   - Active signals derived from the latest run.
 - `GET /api/signals/history?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=...`
@@ -41,8 +42,25 @@ The UI expects these endpoints (served by the Python backend in
   - Logs a manual execution action.
 - `GET /api/backtests?limit=...`
   - Backtest summary metrics.
-- `GET /api/spread-series?stock=...&future=...&window_days=...`
+- `GET /api/spread-series?stock=...&future=...&window_days=...&full_life=true|false`
   - Spread time series for charting.
+  - `full_life=true` fetches the full contract life (current March/June futures).
+  - Alpha metrics are shown in the details panel (not the main table).
+
+## Parallel dev workflow
+- Backend API (Flask) runs via `python -m moex_carry.cli ui` on `127.0.0.1:8050`.
+- React UI runs via `npm run dev` in `ui-web/` on the Vite dev server.
+- Vite is configured to proxy `/api` to the backend (`ui-web/vite.config.ts`).
+- This keeps frontend and backend deployable separately while supporting parallel development.
+
+## UI layout (screen-fit)
+- Top pairs view uses a two-column layout on desktop:
+  - Left: compact table (sticky header, condensed columns).
+  - Right: details panel with tabs (Overview, Alpha, Liquidity, Execution).
+- Mobile stacks into a single column with the details panel below the table.
+- The details panel uses fixed-height charts (e.g., 280-320px) to avoid vertical overflow.
+- Alpha metrics (tp/sl, p_hit_tp/p_hit_sl, sigma_h, half_life) appear only in the Details > Alpha tab.
+- The main table stays focused on floor + decision visibility to fit the screen.
 
 ## Contract alignment
 - The Decisions tab relies on the fields in `contracts/decision-view.schema.json`.

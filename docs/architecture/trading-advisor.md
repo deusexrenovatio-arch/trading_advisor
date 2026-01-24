@@ -13,6 +13,7 @@ Success criteria:
 - Costs and taxes included in decision outputs and backtest parity.
 - Backtest outputs match the fields in `decision_log` and `decision_view`.
 - Clear module boundaries with explicit contracts and observability.
+- StockFuturesSpreadCarryAlpha delivers floor + alpha metrics with early exit logic.
 
 ## Module boundaries
 
@@ -22,7 +23,7 @@ Success criteria:
 - FeatureStore: derived features with versioning, input snapshot references.
 - StrategyFundamental: valuation, carry, or macro-sensitive signals.
 - StrategySpeculative: momentum/mean-reversion/statistical signals.
-- StrategyArbitrage: spread and relative value signals across leg pairs.
+- StrategyArbitrage: StockFuturesSpreadCarryAlpha (floor carry + early exit) for leg pairs.
 - SignalNormalizer: converts module outputs into a consistent strategy signal payload.
 - StrategyAggregator: hybrid rules + optimization to merge module intents.
 - NewsFilter: event-driven volatility guard; can downweight or block signals.
@@ -102,7 +103,9 @@ flowchart LR
 - `docs/architecture/modules/contracts-configs.md`
 - `docs/architecture/modules/entities.md`
 - `docs/architecture/modules/strategy-signal-interface.md`
+- `docs/architecture/modules/stock-futures-spread-carry-alpha.md`
 - `docs/architecture/modules/ui-web.md`
+- `docs/user-scenarios.md`
 
 ## QC checkpoints and self-correction
 

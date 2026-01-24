@@ -2,7 +2,8 @@
 
 ## Scope
 This document covers the Python core in `src/moex_carry`, including orchestration,
-strategies, storage, and the Dash/Flask API used by the UI.
+strategies, storage, and the Flask API used by the UI. Dash UI is deprecated,
+but the API endpoints remain the primary backend interface for the React app.
 
 ## Entry points
 - `src/moex_carry/__main__.py`: entry point that delegates to the CLI.
@@ -22,7 +23,7 @@ strategies, storage, and the Dash/Flask API used by the UI.
 
 ### `analytics/`
 - Responsibilities: carry/rate calculations and spread statistics.
-- Key files: `carry.py`, `rates.py`, `stats.py`.
+- Key files: `carry.py`, `rates.py`, `stats.py`, `time.py`, `alpha.py` (new).
 - Outputs: derived metrics used by strategies and ranking.
 
 ### `data/`
@@ -38,10 +39,11 @@ strategies, storage, and the Dash/Flask API used by the UI.
 ### `strategy/`
 - Responsibilities: core signal logic and gating.
 - Key files:
-  - `stat_signal.py`: z-score based entry/exit.
-  - `carry_signal.py`: implied rate and carry logic.
+  - `spread_carry_alpha.py`: StockFuturesSpreadCarryAlpha entry/exit rules (primary).
+  - `stat_signal.py`: legacy z-score entry/exit (deprecated after alpha rollout).
+  - `carry_signal.py`: legacy implied rate carry logic (deprecated after alpha rollout).
   - `event_filters.py`: expiry/ex-dividend gating.
-  - `orchestrator.py`: combines stat + carry into a `SignalDecision`.
+  - `orchestrator.py`: emits the module `SignalDecision` for downstream aggregation.
   - `risk_gate.py`: deterministic risk checks.
   - `news_filter.py`: deterministic news gating.
   - `overall_strategy.py`: hybrid aggregation of module signals.
@@ -81,10 +83,15 @@ strategies, storage, and the Dash/Flask API used by the UI.
 - Responsibilities: logging configuration and formatting.
 
 ### `ui/`
-- Responsibilities: Dash UI and Flask API endpoints.
+- Responsibilities: Flask API endpoints for the React UI (Dash UI deprecated).
 - Key files:
-  - `app.py`: API routes and Dash layout.
+  - `app.py`: API routes (Dash layout still present but not used in production).
   - `data.py`: loaders for CSV/JSONL artifacts.
+
+## Parallel dev workflow
+- Run backend API: `python -m moex_carry.cli ui` (serves `/api/*` on `127.0.0.1:8050`).
+- Run React UI: `npm run dev` from `ui-web/` (Vite proxies `/api` to `127.0.0.1:8050`).
+- This allows backend and frontend development in parallel with independent reloads.
 
 ## Persistence outputs
 - CSV artifacts: `data/output/top_pairs.csv`, `data/output/signals.csv`,
