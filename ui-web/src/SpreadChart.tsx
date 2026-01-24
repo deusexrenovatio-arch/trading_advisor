@@ -91,16 +91,16 @@ export default function SpreadChart({ data }: SpreadChartProps) {
             label: 'Spread',
             showMark: false,
             color: '#1976d2',
-            yAxisKey: 'spread',
+            yAxisId: 'spread',
           },
           {
             data: entryValues,
             label: 'Entry',
             showMark: true,
             color: '#16a34a',
-            yAxisKey: 'spread',
-            valueFormatter: (value: number | null, context: { dataIndex?: number }) => {
-              const idx = context?.dataIndex ?? -1
+            yAxisId: 'spread',
+            valueFormatter: (value: number | null, context) => {
+              const idx = context.dataIndex
               const cycle = entryCycles[idx]
               if (value == null) return ''
               return cycle ? `#${cycle} (${value.toFixed(4)})` : value.toFixed(4)
@@ -111,9 +111,9 @@ export default function SpreadChart({ data }: SpreadChartProps) {
             label: 'Exit',
             showMark: true,
             color: '#dc2626',
-            yAxisKey: 'spread',
-            valueFormatter: (value: number | null, context: { dataIndex?: number }) => {
-              const idx = context?.dataIndex ?? -1
+            yAxisId: 'spread',
+            valueFormatter: (value: number | null, context) => {
+              const idx = context.dataIndex
               const cycle = exitCycles[idx]
               const returnPct = data[idx]?.cycle_return_pct
               if (value == null) return ''
@@ -128,7 +128,7 @@ export default function SpreadChart({ data }: SpreadChartProps) {
             label: 'Z-score',
             showMark: false,
             color: '#7c3aed',
-            yAxisKey: 'zscore',
+            yAxisId: 'zscore',
           },
           ...(zEntry == null
             ? []
@@ -138,14 +138,14 @@ export default function SpreadChart({ data }: SpreadChartProps) {
                   label: 'Entry +',
                   showMark: false,
                   color: '#ef4444',
-                  yAxisKey: 'zscore',
+                  yAxisId: 'zscore',
                 },
                 {
                   data: entryLineNeg,
                   label: 'Entry -',
                   showMark: false,
                   color: '#ef4444',
-                  yAxisKey: 'zscore',
+                  yAxisId: 'zscore',
                 },
               ]),
           ...(zExit == null
@@ -156,14 +156,14 @@ export default function SpreadChart({ data }: SpreadChartProps) {
                   label: 'Exit +',
                   showMark: false,
                   color: '#f59e0b',
-                  yAxisKey: 'zscore',
+                  yAxisId: 'zscore',
                 },
                 {
                   data: exitLineNeg,
                   label: 'Exit -',
                   showMark: false,
                   color: '#f59e0b',
-                  yAxisKey: 'zscore',
+                  yAxisId: 'zscore',
                 },
               ]),
         ]}

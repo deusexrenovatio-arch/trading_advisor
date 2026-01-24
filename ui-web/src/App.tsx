@@ -427,7 +427,7 @@ function App() {
         }
         try {
           setter(await result.value.json())
-        } catch (err) {
+        } catch {
           errors.push(`${label} parse error`)
           setter([])
         }
@@ -574,7 +574,7 @@ function App() {
   useEffect(() => {
     fetchDecisionView()
     fetchAuxData({ topPairsLimit, topPairsAll })
-  }, [fetchDecisionView, fetchAuxData])
+  }, [fetchDecisionView, fetchAuxData, topPairsAll, topPairsLimit])
 
   const handleRefresh = useCallback(() => {
     fetchDecisionView()
