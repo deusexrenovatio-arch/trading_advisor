@@ -28,7 +28,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { DataGrid, type GridColDef, type GridRowParams, GridToolbar } from '@mui/x-data-grid'
+import {
+  DataGrid,
+  type GridColDef,
+  type GridRowParams,
+  GridToolbar,
+} from '@mui/x-data-grid'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import SpreadChart from './SpreadChart'
 import './App.css'
@@ -763,7 +768,7 @@ function App() {
       {
         headerName: 'Time',
         field: 'created_at',
-        valueFormatter: (params) => formatDate(params?.value),
+        valueFormatter: (params: { value?: unknown }) => formatDate(params?.value as string),
         width: 190,
       },
       {
@@ -778,7 +783,8 @@ function App() {
         headerName: 'Proposal',
         field: 'proposal_type',
         width: 140,
-        valueGetter: (params) => params.row?.proposal_summary?.type ?? '',
+        valueGetter: (params: { row?: DecisionView } | undefined) =>
+          params?.row?.proposal_summary?.type ?? '',
       },
       {
         headerName: 'Action',
@@ -819,19 +825,23 @@ function App() {
         headerName: 'Execution',
         field: 'execution_status',
         width: 140,
-        valueGetter: (params) =>
-          params.row?.execution_status?.status ?? params.row?.operator_action?.status ?? '',
+        valueGetter: (params: { row?: DecisionView } | undefined) =>
+          params?.row?.execution_status?.status ??
+          params?.row?.operator_action?.status ??
+          '',
       },
       {
         headerName: 'Cost',
         field: 'cost_round_trip',
-        valueFormatter: (params) => formatValue(params?.value, 'cost_round_trip'),
+        valueFormatter: (params: { value?: unknown }) =>
+          formatValue(params?.value, 'cost_round_trip'),
         width: 120,
       },
       {
         headerName: 'Max DD',
         field: 'max_drawdown',
-        valueFormatter: (params) => formatValue(params?.value, 'max_drawdown'),
+        valueFormatter: (params: { value?: unknown }) =>
+          formatValue(params?.value, 'max_drawdown'),
         width: 120,
       },
     ],
@@ -839,8 +849,8 @@ function App() {
   )
 
   const handleRowClick = useCallback(
-    (params: GridRowParams<DecisionView>) => {
-      const decisionId = params.row?.decision_id
+    (params: GridRowParams<DecisionView> | undefined) => {
+      const decisionId = params?.row?.decision_id
       if (!decisionId) return
       setSelectedId(decisionId)
       fetchDecisionLog(decisionId)
@@ -1571,8 +1581,6 @@ function App() {
                           (row.stock && row.future ? `${row.stock}-${row.future}` : null) ??
                           String(row.id)
                         const isExpanded = expandedRowKey === pairKey
-                        const entryDate =
-                          typeof row.snapshot_as_of === 'string' ? row.snapshot_as_of : null
                         const snapshotEntries = snapshotFields
                           .map((field) => ({
                             ...field,

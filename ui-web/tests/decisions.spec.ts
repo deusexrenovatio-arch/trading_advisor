@@ -143,12 +143,11 @@ test.describe('Decisions UI', () => {
     await decisionResponse
     await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible()
 
-    const gridRoot = page.getByRole('grid')
-    await expect(gridRoot).toBeVisible()
-    await gridRoot.scrollIntoViewIfNeeded()
-    const decisionCell1 = page.getByRole('gridcell', { name: 'decision-1' })
-    const decisionCell2 = page.getByRole('gridcell', { name: 'decision-2' })
-    const decisionCell3 = page.getByRole('gridcell', { name: 'decision-3' })
+    await page.getByRole('tab', { name: 'Decisions' }).click()
+
+    const decisionCell1 = page.getByText('decision-1', { exact: true })
+    const decisionCell2 = page.getByText('decision-2', { exact: true })
+    const decisionCell3 = page.getByText('decision-3', { exact: true })
     await expect(decisionCell1).toBeVisible()
     await expect(decisionCell2).toBeVisible()
 
@@ -177,7 +176,7 @@ test.describe('Decisions UI', () => {
     await decisionCell1.click()
     await expect(page.getByText('Orchestrator proposal')).toBeVisible()
     await expect(page.getByText('Basket allocations (by strategy type)')).toBeVisible()
-    await expect(page.getByText('News sentiment')).toBeVisible()
+    await expect(page.getByText('News sentiment: negative')).toBeVisible()
 
     await page.getByRole('button', { name: 'Approve & execute' }).click()
     await expect(page.getByText('Execution: queued')).toBeVisible()
