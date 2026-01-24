@@ -23,6 +23,7 @@ from moex_carry.strategy.news_filter import apply_news_filter
 from moex_carry.strategy.overall_strategy import aggregate_strategy_signals, strategy_signal_to_dict
 from moex_carry.strategy.orchestrator import build_portfolio_proposal, generate_signal
 from moex_carry.strategy.risk_gate import evaluate_risk_profile
+from moex_carry.strategy.spread_cycle import SpreadCycleState, update_spread_cycle
 from moex_carry.strategy.spread_adapter import load_spread_signals
 from moex_carry.backtest.engine import BacktestResult, backtest_pair
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
@@ -285,11 +286,7 @@ def build_spread_series(
     cycle_returns: list[float | None] = []
     implied_series: list[float] = []
     required_series: list[float] = []
-    position: str | None = None
-    cycle_counter = 0
-    entry_spread: float | None = None
-    entry_spot: float | None = None
-    entry_direction: str | None = None
+    cycle_state = SpreadCycleState()
 
     for idx, row in series_df.iterrows():
         row_date = row["date"]
@@ -328,55 +325,22 @@ def build_spread_series(
             min_days_to_expiry=settings.strategy.min_days_to_expiry,
             min_days_to_exdiv=settings.strategy.min_days_to_exdiv,
         )
-
-        entry_flag = False
-        exit_flag = False
-        entry_cycle: int | None = None
-        exit_cycle: int | None = None
-        cycle_return_pct: float | None = None
-        if position is None:
-            if signal.action == "enter" and signal.direction:
-                entry_flag = True
-                cycle_counter += 1
-                entry_cycle = cycle_counter
-                position = signal.direction
-                entry_spread = spreads[idx]
-                entry_spot = float(row["spot"])
-                entry_direction = signal.direction
-        else:
-            if signal.action == "exit":
-                exit_flag = True
-                exit_cycle = cycle_counter
-                position = None
-                if entry_spread is not None and entry_spot:
-                    if entry_direction == "cash_and_carry":
-                        cycle_return_pct = (entry_spread - spreads[idx]) / entry_spot * 100.0
-                    elif entry_direction == "reverse":
-                        cycle_return_pct = (spreads[idx] - entry_spread) / entry_spot * 100.0
-                entry_spread = None
-                entry_spot = None
-                entry_direction = None
-            elif signal.action == "enter" and signal.direction and signal.direction != position:
-                exit_flag = True
-                exit_cycle = cycle_counter
-                position = None
-                if entry_spread is not None and entry_spot:
-                    if entry_direction == "cash_and_carry":
-                        cycle_return_pct = (entry_spread - spreads[idx]) / entry_spot * 100.0
-                    elif entry_direction == "reverse":
-                        cycle_return_pct = (spreads[idx] - entry_spread) / entry_spot * 100.0
-                entry_spread = None
-                entry_spot = None
-                entry_direction = None
+        cycle_update = update_spread_cycle(
+            cycle_state,
+            signal.action,
+            signal.direction,
+            spreads[idx],
+            spot,
+        )
 
         signal_actions.append(signal.action)
         signal_directions.append(signal.direction)
-        entry_flags.append(entry_flag)
-        exit_flags.append(exit_flag)
-        entry_cycles.append(entry_cycle)
-        exit_cycles.append(exit_cycle)
-        cycle_ids.append(cycle_counter if position else None)
-        cycle_returns.append(cycle_return_pct)
+        entry_flags.append(cycle_update.entry_flag)
+        exit_flags.append(cycle_update.exit_flag)
+        entry_cycles.append(cycle_update.entry_cycle)
+        exit_cycles.append(cycle_update.exit_cycle)
+        cycle_ids.append(cycle_update.cycle_id)
+        cycle_returns.append(cycle_update.cycle_return_pct)
         implied_series.append(implied_net)
         required_series.append(required_rate)
 
