@@ -46,3 +46,25 @@ jobs:
         run: npm run lint
       - name: Run build (typecheck)
         run: npm run build
+
+  commitlint:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Lint commit messages
+        run: >
+          npx --yes
+          --package @commitlint/cli
+          --package @commitlint/config-conventional
+          commitlint
+          --from ${{ github.event.pull_request.base.sha }}
+          --to ${{ github.event.pull_request.head.sha }}
+          --config commitlint.config.cjs
