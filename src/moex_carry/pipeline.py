@@ -6,24 +6,46 @@ from typing import Iterable
 
 import pandas as pd
 
-from moex_carry.analytics.carry import fair_value, implied_rate, pv_dividends
-from moex_carry.analytics.stats import spread_stats
+from moex_carry.analytics.alpha import alpha_metrics, round_trip_cost
+from moex_carry.analytics.dividends import div_sum, pv_dividends_exp
+from moex_carry.analytics.floor import compute_floor_metrics
+from moex_carry.analytics.liquidity import (
+    days_to_exit,
+    dollar_volume,
+    evaluate_liquidity,
+    spread_bps,
+)
+from moex_carry.analytics.spread import (
+    spread_entry_exec,
+    spread_exit_exec,
+    spread_mid,
+    spread_pct,
+)
+from moex_carry.analytics.stats import zscore
+from moex_carry.analytics.time import days_to_expiry, year_fraction
 from moex_carry.config import AppSettings, resolve_paths
-from moex_carry.costs.engine import CostProfile, costs_as_annual_rate, total_cost_bps
+from moex_carry.costs.engine import (
+    CostProfile,
+    fut_fee_per_share,
+    round_trip_fees,
+    stock_fee_per_share,
+    total_cost_bps,
+)
 from moex_carry.costs.taxes import TaxProfile
-from moex_carry.data import CbrKeyRateClient, MoexIssClient
+from moex_carry.data import CbrKeyRateClient, MoexIssClient, build_fut_point, build_stock_point
 from moex_carry.data.cbr_rates import latest_rate
 from moex_carry.data.dividends import apply_overrides, load_dividends
 from moex_carry.decision_log import DecisionLogStore, build_decision_view, build_snapshot
 from moex_carry.domain.decision import NewsItem, RiskProfile
 from moex_carry.domain.models import ContractSpec, DividendEvent, Instrument, KeyRate
-from moex_carry.selection.ranking import score_pairs
+from moex_carry.execution.model import build_execution_prices
+from moex_carry.selection.ranking import score_pairs_alpha
 from moex_carry.selection.universe import build_pair_mappings
 from moex_carry.strategy.news_filter import apply_news_filter
 from moex_carry.strategy.overall_strategy import aggregate_strategy_signals, strategy_signal_to_dict
-from moex_carry.strategy.orchestrator import build_portfolio_proposal, generate_signal
+from moex_carry.strategy.orchestrator import build_portfolio_proposal
 from moex_carry.strategy.risk_gate import evaluate_risk_profile
-from moex_carry.strategy.spread_cycle import SpreadCycleState, update_spread_cycle
+from moex_carry.strategy.spread_carry_alpha import SpreadCarryState, step_spread_carry_alpha
 from moex_carry.strategy.spread_adapter import load_spread_signals
 from moex_carry.backtest.engine import BacktestResult, backtest_pair
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
@@ -168,40 +190,34 @@ def compute_spread_series(
     expiry: date,
     dividends: list[DividendEvent],
     key_rates: list[KeyRate],
-    z_window: int = 60,
-    z_min_window: int = 10,
-    z_entry: float = 2.0,
-    z_exit: float = 0.5,
+    r_disc_annual: float | None = None,
+    day_count: str = "ACT/365",
 ) -> pd.DataFrame:
     if prices.empty:
         return pd.DataFrame()
     series_rows = []
-    spread_values: list[float] = []
     for _, row in prices.iterrows():
         row_date = pd.to_datetime(row["date"]).date()
-        spot = float(row["spot"])
-        future_price = float(row["future_price"])
-        time_years = max((expiry - row_date).days / 365.0, 0.0)
+        spot_mid = float(row["spot"])
+        future_mid = float(row["future_price"])
         key_rate_row = latest_rate(key_rates, row_date)
         key_rate_value = key_rate_row.rate if key_rate_row else 0.0
-        pv_div = pv_dividends(dividends, row_date, expiry, key_rate_value)
-        fair = fair_value(spot, pv_div, key_rate_value, time_years)
-        spread = future_price - fair
-        spread_values.append(spread)
+        r_disc = r_disc_annual if r_disc_annual is not None else key_rate_value
+        pv_div = pv_dividends_exp(dividends, row_date, expiry, r_disc, day_count=day_count)
+        div_sum_value = div_sum(dividends, row_date, expiry)
+        spread_mid_value = spread_mid(spot_mid, pv_div, future_mid)
+        spread_pct_value = spread_pct(spread_mid_value, spot_mid)
         series_rows.append(
             {
                 "date": row_date,
-                "spot": spot,
-                "future_price": future_price,
-                "fair_value": fair,
-                "spread": spread,
+                "spot_mid": spot_mid,
+                "future_mid": future_mid,
+                "pv_div": pv_div,
+                "div_sum": div_sum_value,
+                "spread_mid": spread_mid_value,
+                "spread_pct": spread_pct_value,
             }
         )
-    for idx in range(len(series_rows)):
-        stats = spread_stats(spread_values[: idx + 1], window=z_window, min_window=z_min_window)
-        series_rows[idx]["zscore"] = stats["trend_zscore"]
-        series_rows[idx]["z_entry"] = z_entry
-        series_rows[idx]["z_exit"] = z_exit
     return pd.DataFrame(series_rows)
 
 
@@ -210,6 +226,7 @@ def build_spread_series(
     stock_secid: str,
     future_secid: str,
     window_days: int = 60,
+    full_life: bool = False,
 ) -> pd.DataFrame:
     paths = resolve_paths(settings)
     dirs = _data_paths(paths.data_dir)
@@ -224,8 +241,11 @@ def build_spread_series(
     future_scale = _future_price_scale(future_spec)
 
     today = date.today()
-    lookback_days = max(int(window_days), 1)
-    lookback = today - timedelta(days=lookback_days)
+    if full_life:
+        lookback = future_spec.expiry - timedelta(days=365)
+    else:
+        lookback_days = max(int(window_days), 1)
+        lookback = today - timedelta(days=lookback_days)
     client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
 
     stock_candles = _fetch_candles(
@@ -252,108 +272,229 @@ def build_spread_series(
     merged = pd.merge(stock_candles, future_candles, on="date", how="inner")
     if merged.empty:
         return pd.DataFrame()
-    merged.rename(columns={stock_secid: "spot", future_secid: "future_price"}, inplace=True)
+    merged.rename(
+        columns={
+            stock_secid: "spot",
+            future_secid: "future_price",
+            f"{stock_secid}_volume": "spot_volume",
+            f"{future_secid}_volume": "future_volume",
+        },
+        inplace=True,
+    )
 
     dividends = _load_dividends(client, stock_secid, paths.data_dir)
     key_rates = _load_key_rates(dirs["raw"] / "key_rates.csv")
+    alpha_cfg = settings.spread_carry_alpha
     series_df = compute_spread_series(
         merged[["date", "spot", "future_price"]],
         future_spec.expiry,
         dividends,
         key_rates,
-        z_window=settings.strategy.z_window,
-        z_min_window=settings.strategy.z_min_window,
-        z_entry=settings.strategy.z_entry,
-        z_exit=settings.strategy.z_exit,
+        r_disc_annual=alpha_cfg.r_disc_annual,
+        day_count=alpha_cfg.day_count,
     )
     if series_df.empty:
         return series_df
 
-    cost_profile = CostProfile(
-        stock_commission_bps=settings.costs.stock_commission_bps,
-        futures_commission_bps=settings.costs.futures_commission_bps,
-        exchange_fee_bps=settings.costs.exchange_fee_bps,
-        slippage_bps=settings.costs.slippage_bps,
+    series_df = series_df.merge(
+        merged[["date", "spot_volume", "future_volume"]],
+        on="date",
+        how="left",
     )
-    spreads = series_df["spread"].tolist()
+    spreads_pct = series_df["spread_pct"].tolist()
     signal_actions: list[str] = []
     signal_directions: list[str | None] = []
     entry_flags: list[bool] = []
     exit_flags: list[bool] = []
-    entry_cycles: list[int | None] = []
-    exit_cycles: list[int | None] = []
-    cycle_ids: list[int | None] = []
-    cycle_returns: list[float | None] = []
-    implied_series: list[float] = []
-    required_series: list[float] = []
-    cycle_state = SpreadCycleState()
+    entry_spread_pcts: list[float | None] = []
+    exit_spread_pcts: list[float | None] = []
+    trade_cycles: list[int | None] = []
+    trade_returns: list[float | None] = []
+    rtc_pcts: list[float] = []
+    tp_nets: list[float] = []
+    sl_nets: list[float] = []
+    floor_rates: list[float] = []
+    floor_passes: list[bool] = []
+    liquidity_passes: list[bool] = []
+    zscores: list[float] = []
+    state = SpreadCarryState()
+    current_entry_spread_pct: float | None = None
+    current_cycle = 0
 
     for idx, row in series_df.iterrows():
         row_date = row["date"]
-        spot = float(row["spot"])
-        future_price = float(row["future_price"])
-        time_years = max((future_spec.expiry - row_date).days / 365.0, 0.0)
+        spot_mid = float(row["spot_mid"])
+        future_mid = float(row["future_mid"])
         key_rate_row = latest_rate(key_rates, row_date)
         key_rate_value = key_rate_row.rate if key_rate_row else 0.0
-        pv_div = pv_dividends(dividends, row_date, future_spec.expiry, key_rate_value)
-        implied = implied_rate(future_price, spot, pv_div, time_years)
-        implied_net = implied - costs_as_annual_rate(cost_profile, time_years)
-        required_rate = key_rate_value + settings.strategy.term_premium_base + (
-            settings.strategy.term_premium_slope * time_years
+        r_cb = alpha_cfg.r_cb_annual if alpha_cfg.r_cb_annual is not None else key_rate_value
+        r_fund = alpha_cfg.r_fund_annual if alpha_cfg.r_fund_annual is not None else r_cb
+        dte = days_to_expiry(row_date, future_spec.expiry, alpha_cfg.use_trading_days)
+        tau = year_fraction(row_date, future_spec.expiry, alpha_cfg.day_count)
+
+        exec_prices = build_execution_prices(
+            stock_bid=None,
+            stock_ask=None,
+            fut_bid=None,
+            fut_ask=None,
+            stock_mid=spot_mid,
+            fut_mid=future_mid,
+            slip_stock_bps=alpha_cfg.slip_stock_bps,
+            slip_fut_bps=alpha_cfg.slip_fut_bps,
+            slip_fut_ticks=alpha_cfg.slip_fut_ticks,
+            tick_size_fut=alpha_cfg.tick_size_fut or future_spec.price_step,
         )
-        days_to_expiry = (future_spec.expiry - row_date).days
-        days_to_exdiv = min(
-            [
-                (event.ex_date - row_date).days
-                for event in dividends
-                if event.ex_date >= row_date
-            ]
-            or [9999]
+        fee_stock_bps = (
+            alpha_cfg.fee_stock_bps
+            if alpha_cfg.fee_stock_bps is not None
+            else settings.costs.stock_commission_bps
+        )
+        stock_fee = stock_fee_per_share(
+            spot_mid,
+            fee_per_share=alpha_cfg.fee_stock_per_share,
+            fee_bps=fee_stock_bps,
+        )
+        fut_fee_per_contract = alpha_cfg.fee_fut_per_contract or 0.0
+        fut_fee = fut_fee_per_share(fut_fee_per_contract, future_spec.multiplier)
+        fees_rt = round_trip_fees(stock_fee, fut_fee)
+        rtc = round_trip_cost(
+            exec_prices.stock_buy,
+            exec_prices.stock_sell,
+            exec_prices.fut_buy,
+            exec_prices.fut_sell,
+            fees_rt,
+        )
+        rtc_pct = rtc / spot_mid if spot_mid else 0.0
+        tp_net = alpha_cfg.TP_pct + rtc_pct
+        sl_net = alpha_cfg.SL_pct + rtc_pct
+
+        floor_metrics = compute_floor_metrics(
+            spot_buy=exec_prices.stock_buy,
+            fut_sell=exec_prices.fut_sell,
+            div_sum=float(row.get("div_sum", 0.0)),
+            fees_rt=fees_rt,
+            r_cb_annual=r_cb,
+            r_fund_annual=r_fund,
+            tau=tau,
+            dte=dte,
+            floor_tolerance=alpha_cfg.floor_tolerance,
+            riskbuffer_floor=alpha_cfg.riskbuffer_floor,
+            capital_base_mode=alpha_cfg.capital_base_mode,
+            margin_stock_pct=alpha_cfg.margin_stock_pct,
+            margin_fut_pct=alpha_cfg.margin_fut_pct,
+            var_margin_buffer_pct=alpha_cfg.var_margin_buffer_pct,
         )
 
-        signal = generate_signal(
-            spread_series=spreads[: idx + 1],
-            implied_rate_net=implied_net,
-            required_rate=required_rate,
-            days_to_expiry=days_to_expiry,
-            days_to_exdiv=days_to_exdiv,
-            z_window=settings.strategy.z_window,
-            z_min_window=settings.strategy.z_min_window,
-            z_entry=settings.strategy.z_entry,
-            z_exit=settings.strategy.z_exit,
-            implied_rate_buffer=settings.strategy.implied_rate_buffer,
-            min_days_to_expiry=settings.strategy.min_days_to_expiry,
-            min_days_to_exdiv=settings.strategy.min_days_to_exdiv,
-        )
-        cycle_update = update_spread_cycle(
-            cycle_state,
-            signal.action,
-            signal.direction,
-            spreads[idx],
-            spot,
+        spot_volume = row.get("spot_volume")
+        fut_volume = row.get("future_volume")
+        dollar_vol_stock = dollar_volume(spot_mid, spot_volume)
+        dollar_vol_fut = dollar_volume(future_mid, fut_volume, future_spec.multiplier)
+        avg_dollar = None
+        if dollar_vol_stock is not None and dollar_vol_fut is not None:
+            avg_dollar = min(dollar_vol_stock, dollar_vol_fut)
+        else:
+            avg_dollar = dollar_vol_stock or dollar_vol_fut
+        position_notional = alpha_cfg.capital_allocated_per_trade
+        if position_notional is None and alpha_cfg.max_contracts_per_pair > 0:
+            position_notional = spot_mid * future_spec.multiplier * alpha_cfg.max_contracts_per_pair
+        days_exit = days_to_exit(position_notional, avg_dollar, alpha_cfg.participation_rate)
+        liquidity_pass = evaluate_liquidity(
+            spread_bps_stock_value=None,
+            spread_bps_fut_value=None,
+            dollar_vol_stock_value=dollar_vol_stock,
+            dollar_vol_fut_value=dollar_vol_fut,
+            open_interest=None,
+            days_to_exit_value=days_exit,
+            max_spread_bps_stock=alpha_cfg.max_spread_bps_stock,
+            max_spread_bps_fut=alpha_cfg.max_spread_bps_fut,
+            min_dollar_vol_stock=alpha_cfg.min_avg_dollarvol_stock,
+            min_dollar_vol_fut=alpha_cfg.min_avg_dollarvol_fut,
+            min_open_interest=alpha_cfg.min_open_interest,
+            max_days_to_exit=alpha_cfg.max_days_to_exit,
         )
 
-        signal_actions.append(signal.action)
-        signal_directions.append(signal.direction)
-        entry_flags.append(cycle_update.entry_flag)
-        exit_flags.append(cycle_update.exit_flag)
-        entry_cycles.append(cycle_update.entry_cycle)
-        exit_cycles.append(cycle_update.exit_cycle)
-        cycle_ids.append(cycle_update.cycle_id)
-        cycle_returns.append(cycle_update.cycle_return_pct)
-        implied_series.append(implied_net)
-        required_series.append(required_rate)
+        z = 0.0
+        entry_filter_ok = True
+        if alpha_cfg.z_entry_threshold is not None:
+            z = zscore(spreads_pct[: idx + 1], window=alpha_cfg.z_window, min_window=10)
+            entry_filter_ok = z <= alpha_cfg.z_entry_threshold
+
+        spread_entry_exec_value = spread_entry_exec(
+            exec_prices.stock_buy, float(row.get("pv_div", 0.0)), exec_prices.fut_sell
+        )
+        spread_exit_exec_value = spread_exit_exec(
+            exec_prices.stock_sell, float(row.get("pv_div", 0.0)), exec_prices.fut_buy
+        )
+        spread_pct_entry_exec = spread_pct(spread_entry_exec_value, spot_mid)
+        spread_pct_exit_exec = spread_pct(spread_exit_exec_value, spot_mid)
+
+        decision = step_spread_carry_alpha(
+            state,
+            as_of=row_date,
+            floor_pass=floor_metrics.floor_pass,
+            liquidity_pass=liquidity_pass,
+            spread_pct_entry_exec=spread_pct_entry_exec,
+            spread_pct_exit_exec=spread_pct_exit_exec,
+            tp_net=tp_net,
+            sl_net=sl_net,
+            dte=dte,
+            min_dte_entry=alpha_cfg.min_DTE_entry,
+            close_buffer_days=alpha_cfg.close_buffer_days,
+            h_max_days=alpha_cfg.H_max_days,
+            entry_filter_ok=entry_filter_ok,
+        )
+
+        signal_actions.append(decision.action)
+        signal_directions.append(decision.direction)
+        is_entry = decision.action == "enter"
+        is_exit = decision.action == "exit"
+        entry_flags.append(is_entry)
+        exit_flags.append(is_exit)
+        if is_entry:
+            current_cycle += 1
+            current_entry_spread_pct = spread_pct_entry_exec
+            entry_spread_pcts.append(spread_pct_entry_exec)
+            exit_spread_pcts.append(None)
+            trade_cycles.append(current_cycle)
+            trade_returns.append(None)
+        elif is_exit:
+            entry_spread_pcts.append(None)
+            exit_spread_pcts.append(spread_pct_exit_exec)
+            trade_cycles.append(current_cycle if current_cycle > 0 else None)
+            trade_returns.append(
+                (spread_pct_exit_exec - current_entry_spread_pct)
+                if current_entry_spread_pct is not None
+                else None
+            )
+            current_entry_spread_pct = None
+        else:
+            entry_spread_pcts.append(None)
+            exit_spread_pcts.append(None)
+            trade_cycles.append(None)
+            trade_returns.append(None)
+        rtc_pcts.append(rtc_pct)
+        tp_nets.append(tp_net)
+        sl_nets.append(sl_net)
+        floor_rates.append(floor_metrics.floor_rate_annual)
+        floor_passes.append(floor_metrics.floor_pass)
+        liquidity_passes.append(liquidity_pass)
+        zscores.append(z)
 
     series_df["signal_action"] = signal_actions
     series_df["signal_direction"] = signal_directions
     series_df["entry_flag"] = entry_flags
     series_df["exit_flag"] = exit_flags
-    series_df["entry_cycle"] = entry_cycles
-    series_df["exit_cycle"] = exit_cycles
-    series_df["cycle_id"] = cycle_ids
-    series_df["cycle_return_pct"] = cycle_returns
-    series_df["implied_rate_net"] = implied_series
-    series_df["required_rate"] = required_series
+    series_df["entry_spread_pct_exec"] = entry_spread_pcts
+    series_df["exit_spread_pct_exec"] = exit_spread_pcts
+    series_df["trade_cycle"] = trade_cycles
+    series_df["trade_return_pct"] = trade_returns
+    series_df["rtc_pct"] = rtc_pcts
+    series_df["tp_net"] = tp_nets
+    series_df["sl_net"] = sl_nets
+    series_df["floor_rate_annual"] = floor_rates
+    series_df["floor_pass"] = floor_passes
+    series_df["liquidity_pass"] = liquidity_passes
+    series_df["zscore"] = zscores
     return series_df
 
 
@@ -378,23 +519,24 @@ def compute_pairs(
     key_rates = _load_key_rates(dirs["raw"] / "key_rates.csv")
     client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
 
-    as_of_date = as_of or date.today()
+    requested_as_of = as_of
+    as_of_date = requested_as_of or date.today()
     lookback_days = max(settings.data.compute_lookback_days, 1)
     lookback = as_of_date - timedelta(days=lookback_days)
     results = []
-
-    cost_profile = CostProfile(
-        stock_commission_bps=settings.costs.stock_commission_bps,
-        futures_commission_bps=settings.costs.futures_commission_bps,
-        exchange_fee_bps=settings.costs.exchange_fee_bps,
-        slippage_bps=settings.costs.slippage_bps,
-    )
 
     limit = max_pairs if max_pairs is not None else settings.strategy.max_pairs
     selected = mappings if limit == 0 else mappings[: max(limit, 1)]
     for mapping in selected:
         expiry = mapping.expiry
         if expiry <= as_of_date:
+            continue
+        alpha_cfg = settings.spread_carry_alpha
+        allowed_months = alpha_cfg.allowed_expiry_months or []
+        allowed_years = alpha_cfg.allowed_expiry_years or []
+        if allowed_months and expiry.month not in allowed_months:
+            continue
+        if allowed_years and expiry.year not in allowed_years:
             continue
         stock_candles = _fetch_candles(
             client,
@@ -405,7 +547,10 @@ def compute_pairs(
             lookback,
             as_of_date,
         )
-        future_scale = _future_price_scale(future_spec_map.get(mapping.future_secid))
+        future_spec = future_spec_map.get(mapping.future_secid)
+        if future_spec is None:
+            continue
+        future_scale = _future_price_scale(future_spec)
         future_candles = _fetch_candles(
             client,
             settings.moex.engine_futures,
@@ -431,37 +576,39 @@ def compute_pairs(
             inplace=True,
         )
         latest = merged.iloc[-1]
-        if as_of is not None and latest["date"] != as_of_date:
+        if requested_as_of is not None and latest["date"] != as_of_date:
             continue
-        as_of = latest["date"]
+        as_of_snapshot = latest["date"]
         snapshot_payload = merged.to_csv(index=False).encode("utf-8")
         snapshot = build_snapshot(
             source="MOEX_ISS",
             instrument=f"{mapping.stock_secid}-{mapping.future_secid}",
-            as_of=as_of,
+            as_of=as_of_snapshot,
             payload=snapshot_payload,
             is_cached=False,
         )
 
         dividends = _load_dividends(client, mapping.stock_secid, paths.data_dir)
-        fair_series: list[float] = []
-        spread_series: list[float] = []
-        for _, row in merged.iterrows():
-            row_date = row["date"]
-            spot_row = float(row["spot"])
-            future_row = float(row["future"])
-            time_years_row = max((expiry - row_date).days / 365.0, 0.0)
-            key_rate_row = latest_rate(key_rates, row_date)
-            key_rate_value_row = key_rate_row.rate if key_rate_row else 0.0
-            pv_div_row = pv_dividends(dividends, row_date, expiry, key_rate_value_row)
-            fair_row = fair_value(spot_row, pv_div_row, key_rate_value_row, time_years_row)
-            fair_series.append(fair_row)
-            spread_series.append(future_row - fair_row)
+        series_df = compute_spread_series(
+            merged[["date", "spot", "future"]].rename(columns={"future": "future_price"}),
+            expiry,
+            dividends,
+            key_rates,
+            r_disc_annual=alpha_cfg.r_disc_annual,
+            day_count=alpha_cfg.day_count,
+        )
+        if series_df.empty:
+            continue
 
-        spot = float(latest["spot"])
-        future = float(latest["future"])
+        spot_mid = float(latest["spot"])
+        future_mid = float(latest["future"])
+        spot_bid = None
+        spot_ask = None
+        fut_bid = None
+        fut_ask = None
+        open_interest = None
         use_intraday = settings.strategy.intraday_marketdata and (
-            as_of is None or as_of_date == date.today()
+            requested_as_of is None or as_of_date == date.today()
         )
         if use_intraday:
             stock_quotes = client.get_marketdata(
@@ -471,10 +618,10 @@ def compute_pairs(
                 mapping.stock_secid,
             )
             if stock_quotes:
-                last_quote = stock_quotes[0]
-                quote_value = last_quote.get("LAST") or last_quote.get("LCLOSE") or last_quote.get("OPEN")
-                if quote_value:
-                    spot = float(quote_value)
+                stock_point = build_stock_point(stock_quotes[0])
+                spot_mid = stock_point.mid or spot_mid
+                spot_bid = stock_point.bid
+                spot_ask = stock_point.ask
             future_quotes = client.get_marketdata(
                 settings.moex.engine_futures,
                 settings.moex.market_futures,
@@ -482,90 +629,199 @@ def compute_pairs(
                 mapping.future_secid,
             )
             if future_quotes:
-                last_quote = future_quotes[0]
-                quote_value = last_quote.get("LAST") or last_quote.get("LCLOSE") or last_quote.get("OPEN")
-                if quote_value:
-                    future_value = float(quote_value)
-                    future = (
-                        future_value / future_scale if future_scale and future_scale > 0 else future_value
-                    )
-        time_years = max((expiry - as_of).days / 365.0, 0.0)
-        key_rate = latest_rate(key_rates, as_of)
-        key_rate_value = key_rate.rate if key_rate else 0.0
-        pv_div = pv_dividends(dividends, as_of, expiry, key_rate_value)
-        fair = fair_value(spot, pv_div, key_rate_value, time_years)
-        if fair_series:
-            fair_series[-1] = fair
-        if spread_series:
-            spread_series[-1] = future - fair
-        implied = implied_rate(future, spot, pv_div, time_years)
-        implied_net = implied - costs_as_annual_rate(cost_profile, time_years)
-        stats = spread_stats(
-            spread_series,
-            window=settings.strategy.z_window,
-            min_window=settings.strategy.z_min_window,
-        )
-        z = stats["trend_zscore"]
-        spread_vol = stats["std"]
-        spread_vol_pct = spread_vol / max(abs(spot), 1e-6)
-        trend_pos = stats["trend_pos"]
-        trend_slope = stats["trend_slope"]
-        trend_z = stats["trend_zscore"]
+                fut_point = build_fut_point(future_quotes[0])
+                scale = future_scale if future_scale and future_scale > 0 else 1.0
+                fut_bid = fut_point.bid / scale if fut_point.bid is not None else None
+                fut_ask = fut_point.ask / scale if fut_point.ask is not None else None
+                fut_mid = fut_point.mid / scale if fut_point.mid is not None else None
+                fut_last = fut_point.last / scale if fut_point.last is not None else None
+                future_mid = fut_mid or fut_last or future_mid
+                open_interest = fut_point.open_interest
 
-        days_to_expiry = (expiry - as_of).days
-        days_to_exdiv = min(
-            [(event.ex_date - as_of).days for event in dividends if event.ex_date >= as_of] or [9999]
+        key_rate = latest_rate(key_rates, as_of_snapshot)
+        key_rate_value = key_rate.rate if key_rate else 0.0
+        r_cb = alpha_cfg.r_cb_annual if alpha_cfg.r_cb_annual is not None else key_rate_value
+        r_fund = alpha_cfg.r_fund_annual if alpha_cfg.r_fund_annual is not None else r_cb
+        r_disc = alpha_cfg.r_disc_annual if alpha_cfg.r_disc_annual is not None else r_cb
+        pv_div = pv_dividends_exp(
+            dividends, as_of_snapshot, expiry, r_disc, day_count=alpha_cfg.day_count
         )
-        required_rate = key_rate_value + settings.strategy.term_premium_base + (
-            settings.strategy.term_premium_slope * time_years
+        div_sum_value = div_sum(dividends, as_of_snapshot, expiry)
+        spread_mid_value = spread_mid(spot_mid, pv_div, future_mid)
+        spread_pct_value = spread_pct(spread_mid_value, spot_mid)
+        if not series_df.empty:
+            last_idx = series_df.index[-1]
+            series_df.at[last_idx, "spot_mid"] = spot_mid
+            series_df.at[last_idx, "future_mid"] = future_mid
+            series_df.at[last_idx, "pv_div"] = pv_div
+            series_df.at[last_idx, "div_sum"] = div_sum_value
+            series_df.at[last_idx, "spread_mid"] = spread_mid_value
+            series_df.at[last_idx, "spread_pct"] = spread_pct_value
+
+        dte = days_to_expiry(as_of_snapshot, expiry, alpha_cfg.use_trading_days)
+        tau = year_fraction(as_of_snapshot, expiry, alpha_cfg.day_count)
+
+        exec_prices = build_execution_prices(
+            stock_bid=spot_bid,
+            stock_ask=spot_ask,
+            fut_bid=fut_bid,
+            fut_ask=fut_ask,
+            stock_mid=spot_mid,
+            fut_mid=future_mid,
+            slip_stock_bps=alpha_cfg.slip_stock_bps,
+            slip_fut_bps=alpha_cfg.slip_fut_bps,
+            slip_fut_ticks=alpha_cfg.slip_fut_ticks,
+            tick_size_fut=alpha_cfg.tick_size_fut or future_spec.price_step,
         )
-        z_entry = settings.strategy.z_entry
-        implied_buffer = settings.strategy.implied_rate_buffer
-        z_component = abs(z) / z_entry if z_entry else 0.0
-        rate_gap = abs(implied_net - required_rate)
-        rate_component = rate_gap / implied_buffer if implied_buffer else 0.0
-        signal_score_norm = 0.5 * (z_component + rate_component)
-        signal = generate_signal(
-            spread_series=spread_series,
-            implied_rate_net=implied_net,
-            required_rate=required_rate,
-            days_to_expiry=days_to_expiry,
-            days_to_exdiv=days_to_exdiv,
-            z_window=settings.strategy.z_window,
-            z_min_window=settings.strategy.z_min_window,
-            z_entry=settings.strategy.z_entry,
-            z_exit=settings.strategy.z_exit,
-            implied_rate_buffer=settings.strategy.implied_rate_buffer,
-            min_days_to_expiry=settings.strategy.min_days_to_expiry,
-            min_days_to_exdiv=settings.strategy.min_days_to_exdiv,
+        fee_stock_bps = (
+            alpha_cfg.fee_stock_bps
+            if alpha_cfg.fee_stock_bps is not None
+            else settings.costs.stock_commission_bps
         )
-        signal_reasons = signal.reasons
-        signal_metrics = signal.metrics
-        stock_name = instrument_map.get(mapping.stock_secid).name if mapping.stock_secid in instrument_map else mapping.stock_secid
+        stock_fee = stock_fee_per_share(
+            spot_mid,
+            fee_per_share=alpha_cfg.fee_stock_per_share,
+            fee_bps=fee_stock_bps,
+        )
+        fut_fee_per_contract = alpha_cfg.fee_fut_per_contract or 0.0
+        fut_fee = fut_fee_per_share(fut_fee_per_contract, future_spec.multiplier)
+        fees_rt = round_trip_fees(stock_fee, fut_fee)
+        rtc = round_trip_cost(
+            exec_prices.stock_buy,
+            exec_prices.stock_sell,
+            exec_prices.fut_buy,
+            exec_prices.fut_sell,
+            fees_rt,
+        )
+        rtc_pct = rtc / spot_mid if spot_mid else 0.0
+        tp_net = alpha_cfg.TP_pct + rtc_pct
+        sl_net = alpha_cfg.SL_pct + rtc_pct
+
+        floor_metrics = compute_floor_metrics(
+            spot_buy=exec_prices.stock_buy,
+            fut_sell=exec_prices.fut_sell,
+            div_sum=div_sum_value,
+            fees_rt=fees_rt,
+            r_cb_annual=r_cb,
+            r_fund_annual=r_fund,
+            tau=tau,
+            dte=dte,
+            floor_tolerance=alpha_cfg.floor_tolerance,
+            riskbuffer_floor=alpha_cfg.riskbuffer_floor,
+            capital_base_mode=alpha_cfg.capital_base_mode,
+            margin_stock_pct=alpha_cfg.margin_stock_pct,
+            margin_fut_pct=alpha_cfg.margin_fut_pct,
+            var_margin_buffer_pct=alpha_cfg.var_margin_buffer_pct,
+        )
+
+        spread_bps_stock_value = spread_bps(spot_bid, spot_ask, spot_mid)
+        spread_bps_fut_value = spread_bps(fut_bid, fut_ask, future_mid)
+        dollar_vol_stock = dollar_volume(spot_mid, latest.get("spot_volume"))
+        dollar_vol_fut = dollar_volume(future_mid, latest.get("future_volume"), future_spec.multiplier)
+        avg_dollar = None
+        if dollar_vol_stock is not None and dollar_vol_fut is not None:
+            avg_dollar = min(dollar_vol_stock, dollar_vol_fut)
+        else:
+            avg_dollar = dollar_vol_stock or dollar_vol_fut
+        position_notional = alpha_cfg.capital_allocated_per_trade
+        if position_notional is None and alpha_cfg.max_contracts_per_pair > 0:
+            position_notional = spot_mid * future_spec.multiplier * alpha_cfg.max_contracts_per_pair
+        days_exit = days_to_exit(position_notional, avg_dollar, alpha_cfg.participation_rate)
+        liquidity_pass = evaluate_liquidity(
+            spread_bps_stock_value=spread_bps_stock_value,
+            spread_bps_fut_value=spread_bps_fut_value,
+            dollar_vol_stock_value=dollar_vol_stock,
+            dollar_vol_fut_value=dollar_vol_fut,
+            open_interest=open_interest,
+            days_to_exit_value=days_exit,
+            max_spread_bps_stock=alpha_cfg.max_spread_bps_stock,
+            max_spread_bps_fut=alpha_cfg.max_spread_bps_fut,
+            min_dollar_vol_stock=alpha_cfg.min_avg_dollarvol_stock,
+            min_dollar_vol_fut=alpha_cfg.min_avg_dollarvol_fut,
+            min_open_interest=alpha_cfg.min_open_interest,
+            max_days_to_exit=alpha_cfg.max_days_to_exit,
+        )
+
+        spread_pct_series = series_df["spread_pct"].tolist()
+        alpha_stats = alpha_metrics(spread_pct_series, horizon=alpha_cfg.H_max_days, tp=tp_net, sl=alpha_cfg.SL_pct)
+        score_floor = floor_metrics.floor_rate_annual - r_cb
+        score_alpha = alpha_stats.p_hit_tp * tp_net - alpha_stats.p_hit_sl * alpha_cfg.SL_pct - rtc_pct
+        penalty_liq = 0.0
+        if alpha_cfg.max_spread_bps_stock is not None and spread_bps_stock_value is not None:
+            penalty_liq += alpha_cfg.c1 * max(0.0, spread_bps_stock_value - alpha_cfg.max_spread_bps_stock)
+        if alpha_cfg.max_spread_bps_fut is not None and spread_bps_fut_value is not None:
+            penalty_liq += alpha_cfg.c2 * max(0.0, spread_bps_fut_value - alpha_cfg.max_spread_bps_fut)
+        penalty_event = 0.0
+        total_score = (
+            alpha_cfg.w1 * score_floor
+            + alpha_cfg.w2 * score_alpha
+            - alpha_cfg.w3 * penalty_liq
+            - alpha_cfg.w4 * penalty_event
+        )
+
+        decision = "ENTER_OK"
+        if not floor_metrics.floor_pass:
+            decision = "SKIP_FLOOR"
+        elif not liquidity_pass:
+            decision = "SKIP_LIQUIDITY"
+        elif alpha_cfg.min_floor_score is not None and score_floor < alpha_cfg.min_floor_score:
+            decision = "SKIP_SCORE"
+        elif alpha_cfg.min_alpha_score is not None and score_alpha < alpha_cfg.min_alpha_score:
+            decision = "SKIP_SCORE"
+        elif alpha_cfg.min_total_score is not None and total_score < alpha_cfg.min_total_score:
+            decision = "SKIP_SCORE"
+
+        signal_action = "enter" if decision == "ENTER_OK" else "hold"
+        signal_direction = "cash_and_carry" if decision == "ENTER_OK" else None
+        signal_reasons = [decision.lower()]
+        signal_metrics = {
+            "spread_pct": spread_pct_value,
+            "rtc_pct": rtc_pct,
+            "floor_rate_annual": floor_metrics.floor_rate_annual,
+            "score_floor": score_floor,
+            "score_alpha": score_alpha,
+            "total_score": total_score,
+        }
+        stock_name = (
+            instrument_map.get(mapping.stock_secid).name
+            if mapping.stock_secid in instrument_map
+            else mapping.stock_secid
+        )
         results.append(
             {
                 "stock": mapping.stock_secid,
                 "stock_name": stock_name,
                 "future": mapping.future_secid,
                 "expiry": expiry,
-                "spot": spot,
-                "future_price": future,
-                "fair_value": fair,
-                "spread": future - fair,
-                "zscore": z,
-                "zscore_raw": stats["zscore"],
-                "spread_vol": spread_vol,
-                "spread_vol_pct": spread_vol_pct,
-                "spread_trend_pos": trend_pos,
-                "spread_trend_slope": trend_slope,
-                "spread_trend_z": trend_z,
-                "implied_rate_net": implied_net,
-                "required_rate": required_rate,
-                "expected_net_irr": implied_net,
-                "signal_action": signal.action,
-                "signal_direction": signal.direction,
-                "signal_score": signal.score,
-                "signal_score_norm": signal_score_norm,
+                "spot": spot_mid,
+                "future_price": future_mid,
+                "spread_mid": spread_mid_value,
+                "spread_pct": spread_pct_value,
+                "rtc_pct": rtc_pct,
+                "floor_rate_annual": floor_metrics.floor_rate_annual,
+                "score_floor": score_floor,
+                "score_alpha": score_alpha,
+                "total_score": total_score,
+                "decision": decision,
+                "floor_pass": floor_metrics.floor_pass,
+                "liquidity_pass": liquidity_pass,
+                "dte": dte,
+                "p_hit_tp": alpha_stats.p_hit_tp,
+                "p_hit_sl": alpha_stats.p_hit_sl,
+                "sigma_h": alpha_stats.sigma_h,
+                "half_life": alpha_stats.half_life,
+                "spread_bps_stock": spread_bps_stock_value,
+                "spread_bps_fut": spread_bps_fut_value,
+                "dollar_vol_stock": dollar_vol_stock,
+                "dollar_vol_fut": dollar_vol_fut,
+                "days_to_exit": days_exit,
+                "open_interest": open_interest,
+                "r_cb_annual": r_cb,
+                "r_fund_annual": r_fund,
+                "r_disc_annual": r_disc,
+                "signal_action": signal_action,
+                "signal_direction": signal_direction,
+                "signal_score": total_score,
                 "signal_reasons": signal_reasons,
                 "signal_metrics": signal_metrics,
                 "snapshot_id": snapshot["snapshot_id"],
@@ -577,7 +833,7 @@ def compute_pairs(
     if not results:
         return pd.DataFrame() if return_df else None
     metrics_df = pd.DataFrame(results)
-    ranked = score_pairs(metrics_df)
+    ranked = score_pairs_alpha(metrics_df)
     if save_csv:
         top_pairs = ranked.drop(columns=["signal_reasons", "signal_metrics"], errors="ignore")
         top_pairs.to_csv(dirs["output"] / "top_pairs.csv", index=False)
@@ -589,7 +845,8 @@ def compute_pairs(
                 "signal_action",
                 "signal_direction",
                 "signal_score",
-                "implied_rate_net",
+                "spread_pct",
+                "floor_rate_annual",
                 "signal_reasons",
                 "signal_metrics",
             ]
@@ -615,7 +872,8 @@ def run_backtest(settings: AppSettings) -> BacktestResult | None:
 
     futures_df = pd.read_csv(dirs["raw"] / "futures.csv")
     future_spec_map = {spec.secid: spec for spec in _parse_contract_specs(futures_df)}
-    future_scale = _future_price_scale(future_spec_map.get(future_secid))
+    future_spec = future_spec_map.get(future_secid)
+    future_scale = _future_price_scale(future_spec)
     client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
     today = date.today()
     lookback_days = max(settings.data.backtest_lookback_days, 1)
@@ -656,6 +914,9 @@ def run_backtest(settings: AppSettings) -> BacktestResult | None:
         profit_tax_rate=settings.taxes.profit_tax_rate,
         dividend_tax_rate=settings.taxes.dividend_tax_rate,
     )
+    alpha_cfg = settings.spread_carry_alpha
+    multiplier = future_spec.multiplier if future_spec else 1.0
+    tick_size = future_spec.price_step if future_spec else None
     result = backtest_pair(
         prices=merged[["date", "spot", "future"]],
         expiry=expiry,
@@ -663,7 +924,9 @@ def run_backtest(settings: AppSettings) -> BacktestResult | None:
         key_rates=key_rates,
         costs=cost_profile,
         taxes=tax_profile,
-        strategy_config=settings.strategy,
+        strategy_config=alpha_cfg,
+        multiplier=multiplier,
+        tick_size_fut=tick_size,
     )
     summary = pd.DataFrame([result.metrics])
     summary.to_csv(dirs["output"] / "backtest_summary.csv", index=False)
@@ -739,18 +1002,15 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
         "is_cached": False,
     }
     feature_list = [
-        {"name": "spread", "value": float(top.get("spread", 0.0)), "units": "price"},
-        {"name": "zscore", "value": float(top.get("zscore", 0.0)), "units": "z"},
+        {"name": "spread_mid", "value": float(top.get("spread_mid", 0.0)), "units": "price"},
+        {"name": "spread_pct", "value": float(top.get("spread_pct", 0.0)), "units": "pct"},
         {
-            "name": "implied_rate_net",
-            "value": float(top.get("implied_rate_net", 0.0)),
+            "name": "floor_rate_annual",
+            "value": float(top.get("floor_rate_annual", 0.0)),
             "units": "rate",
         },
-        {
-            "name": "required_rate",
-            "value": float(top.get("required_rate", 0.0)),
-            "units": "rate",
-        },
+        {"name": "rtc_pct", "value": float(top.get("rtc_pct", 0.0)), "units": "pct"},
+        {"name": "total_score", "value": float(top.get("total_score", 0.0)), "units": "score"},
     ]
     signal_action_raw = top.get("signal_action", "hold")
     signal_action = str(signal_action_raw) if pd.notna(signal_action_raw) else "hold"
@@ -764,7 +1024,7 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     }
     mapped_direction = signal_direction_map.get(signal_direction, "neutral")
     signal_entry = {
-        "name": "carry_spread",
+        "name": "stock_futures_spread_carry_alpha",
         "value": signal_score,
         "direction": mapped_direction,
         "confidence": min(abs(signal_score), 1.0),
@@ -780,19 +1040,19 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
         stock_secid=str(top.get("stock", "")),
         future_secid=str(top.get("future", "")),
     )
-    expected_return_raw = top.get("expected_net_irr", None)
+    expected_return_raw = top.get("floor_rate_annual", None)
     expected_return = (
         float(expected_return_raw) if pd.notna(expected_return_raw) else None
     )
     spread_payload = {
-        "strategy_id": "carry_spread",
+        "strategy_id": "stock_futures_spread_carry_alpha_v1",
         "strategy_type": "arbitrage",
         "cadence": settings.aggregation.rebalance_cadence,
         "horizon": "short",
         "action": signal_action,
         "confidence": min(abs(signal_score), 1.0),
         "expected_return": expected_return,
-        "risk_estimate": float(top.get("zscore", 0.0)) if pd.notna(top.get("zscore")) else None,
+        "risk_estimate": float(top.get("sigma_h", 0.0)) if pd.notna(top.get("sigma_h")) else None,
         "instruments": [str(top.get("stock", "")), str(top.get("future", ""))],
         "intent_allocations": base_proposal.get("allocations", []),
         "rules_evaluated": [
@@ -805,14 +1065,15 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
         ],
         "warnings": [],
         "metadata": {
-            "spread": float(top.get("spread", 0.0)) if pd.notna(top.get("spread")) else None,
-            "zscore": float(top.get("zscore", 0.0)) if pd.notna(top.get("zscore")) else None,
-            "implied_rate_net": float(top.get("implied_rate_net", 0.0))
-            if pd.notna(top.get("implied_rate_net"))
+            "spread_pct": float(top.get("spread_pct", 0.0)) if pd.notna(top.get("spread_pct")) else None,
+            "rtc_pct": float(top.get("rtc_pct", 0.0)) if pd.notna(top.get("rtc_pct")) else None,
+            "floor_rate_annual": float(top.get("floor_rate_annual", 0.0))
+            if pd.notna(top.get("floor_rate_annual"))
             else None,
-            "required_rate": float(top.get("required_rate", 0.0))
-            if pd.notna(top.get("required_rate"))
-            else None,
+            "score_floor": float(top.get("score_floor", 0.0)) if pd.notna(top.get("score_floor")) else None,
+            "score_alpha": float(top.get("score_alpha", 0.0)) if pd.notna(top.get("score_alpha")) else None,
+            "total_score": float(top.get("total_score", 0.0)) if pd.notna(top.get("total_score")) else None,
+            "decision": str(top.get("decision", "")) if pd.notna(top.get("decision")) else None,
         },
     }
     strategy_signals = load_spread_signals([spread_payload])
@@ -884,7 +1145,7 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
         },
         "strategies": [
             {
-                "name": "carry_spread",
+                "name": "stock_futures_spread_carry_alpha",
                 "type": "arbitrage",
                 "enabled": True,
                 "signals": [signal_entry],

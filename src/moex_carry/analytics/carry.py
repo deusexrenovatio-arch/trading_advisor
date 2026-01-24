@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import date
 from typing import Iterable
 
@@ -16,7 +17,7 @@ def pv_dividends(
         t = (event.ex_date - as_of).days / 365.0
         if t <= 0:
             continue
-        pv += event.amount / (1 + rate * t)
+        pv += event.amount * math.exp(-rate * t)
     return pv
 
 

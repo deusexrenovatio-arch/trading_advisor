@@ -98,10 +98,24 @@ type DecisionLog = Record<string, unknown>
 type GenericRow = Record<string, unknown>
 type SpreadSeriesPoint = {
   date: string
+  spread_mid?: number | null
+  spread_pct?: number | null
   spread?: number | null
-  spot?: number | null
-  future_price?: number | null
-  fair_value?: number | null
+  spot_mid?: number | null
+  future_mid?: number | null
+  pv_div?: number | null
+  div_sum?: number | null
+  rtc_pct?: number | null
+  tp_net?: number | null
+  sl_net?: number | null
+  floor_rate_annual?: number | null
+  floor_pass?: boolean | null
+  liquidity_pass?: boolean | null
+  entry_flag?: boolean | null
+  exit_flag?: boolean | null
+  trade_cycle?: number | null
+  trade_return_pct?: number | null
+  zscore?: number | null
 }
 type SignalHistoryRow = {
   run_id: string
@@ -167,13 +181,35 @@ const labelOverrides: Record<string, string> = {
   score: 'Rank score',
   signal_score: 'Signal score',
   signal_score_norm: 'Signal score (norm)',
-  implied_rate_net: 'Implied rate',
-  required_rate: 'Required rate',
-  expected_net_irr: 'Expected IRR',
   spot: 'Spot',
   future_price: 'Future price',
   fair_value: 'Fair value',
   max_drawdown: 'Max drawdown',
+  spread_mid: 'Spread (mid)',
+  spread_pct: 'Spread %',
+  rtc_pct: 'RTC %',
+  floor_rate_annual: 'Floor rate',
+  score_floor: 'Floor score',
+  score_alpha: 'Alpha score',
+  total_score: 'Total score',
+  p_hit_tp: 'P(hit TP)',
+  p_hit_sl: 'P(hit SL)',
+  sigma_h: 'Spread sigma (H)',
+  half_life: 'Half-life',
+  spread_bps_stock: 'Stock spread (bps)',
+  spread_bps_fut: 'Futures spread (bps)',
+  dollar_vol_stock: 'Stock $ volume',
+  dollar_vol_fut: 'Futures $ volume',
+  days_to_exit: 'Days to exit',
+  open_interest: 'Open interest',
+  r_cb_annual: 'CB rate',
+  r_fund_annual: 'Funding rate',
+  r_disc_annual: 'Discount rate',
+  tp_net: 'TP net',
+  sl_net: 'SL net',
+  share_alpha_exits: 'Alpha exits share',
+  avg_hold_days: 'Avg hold days',
+  decision: 'Decision',
 }
 
 const toTitleCase = (value: string) =>
@@ -200,10 +236,20 @@ const compareValues = (left: unknown, right: unknown) => {
 }
 
 const percentColumns = new Set([
-  'implied_rate_net',
-  'required_rate',
-  'expected_net_irr',
-  'spread_vol_pct',
+  'spread_pct',
+  'rtc_pct',
+  'floor_rate_annual',
+  'score_floor',
+  'score_alpha',
+  'total_score',
+  'p_hit_tp',
+  'p_hit_sl',
+  'r_cb_annual',
+  'r_fund_annual',
+  'r_disc_annual',
+  'tp_net',
+  'sl_net',
+  'share_alpha_exits',
   'cagr',
   'hit_rate',
   'max_drawdown',
@@ -213,17 +259,28 @@ const percentColumns = new Set([
 const columnDigits: Record<string, number> = {
   spot: 2,
   future_price: 2,
-  fair_value: 2,
-  spread: 4,
-  zscore: 3,
-  zscore_raw: 3,
-  spread_vol: 4,
-  spread_trend_pos: 4,
-  spread_trend_slope: 6,
-  spread_trend_z: 3,
-  implied_rate_net: 2,
-  required_rate: 2,
-  expected_net_irr: 2,
+  spread_mid: 4,
+  spread_pct: 4,
+  rtc_pct: 4,
+  floor_rate_annual: 4,
+  score_floor: 4,
+  score_alpha: 4,
+  total_score: 4,
+  p_hit_tp: 3,
+  p_hit_sl: 3,
+  sigma_h: 4,
+  half_life: 3,
+  spread_bps_stock: 2,
+  spread_bps_fut: 2,
+  dollar_vol_stock: 0,
+  dollar_vol_fut: 0,
+  days_to_exit: 2,
+  open_interest: 0,
+  r_cb_annual: 2,
+  r_fund_annual: 2,
+  r_disc_annual: 2,
+  tp_net: 4,
+  sl_net: 4,
   signal_score: 4,
   signal_score_norm: 3,
   score: 4,
@@ -236,6 +293,9 @@ const formatValue = (value: unknown, column?: string): string => {
   if (value === null || value === undefined) return ''
   if (Array.isArray(value)) {
     return value.map((item) => formatValue(item)).join(', ')
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No'
   }
   if (typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
@@ -312,6 +372,9 @@ function App() {
   const [tableSortKey, setTableSortKey] = useState('')
   const [tableSortDirection, setTableSortDirection] = useState<'asc' | 'desc'>('desc')
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null)
+  const [detailTab, setDetailTab] = useState<'overview' | 'alpha' | 'liquidity' | 'execution'>(
+    'overview',
+  )
   const [spreadSeries, setSpreadSeries] = useState<Record<string, SpreadSeriesPoint[]>>({})
   const [spreadLoadingKey, setSpreadLoadingKey] = useState<string | null>(null)
   const [spreadError, setSpreadError] = useState<Record<string, string>>({})
@@ -553,7 +616,7 @@ function App() {
         const response = await fetch(
           `/api/spread-series?stock=${encodeURIComponent(stock)}&future=${encodeURIComponent(
             future,
-          )}&window_days=60`,
+          )}&full_life=true`,
           { cache: 'no-store' },
         )
         if (!response.ok) {
@@ -660,16 +723,18 @@ function App() {
     const pick = (columns: string[]) => columns.filter((column) => available.has(column))
     if (tab === 'top_pairs') {
       return pick([
+        'stock',
         'stock_name',
         'future',
-        'spot',
-        'future_price',
-        'implied_rate_net',
-        'required_rate',
-        'expected_net_irr',
+        'expiry',
+        'spread_pct',
+        'rtc_pct',
+        'floor_rate_annual',
+        'score_floor',
+        'total_score',
+        'decision',
         'signal_action',
         'signal_direction',
-        'score',
       ])
     }
     if (tab === 'signals') {
@@ -680,13 +745,16 @@ function App() {
         'signal_action',
         'signal_direction',
         'signal_score',
+        'spread_pct',
+        'floor_rate_annual',
       ])
     }
     return tableColumns
   }, [tab, tableColumns])
 
   const defaultSortKey = useMemo(() => {
-    if (tab === 'top_pairs' && tableVisibleColumns.includes('score')) return 'score'
+    if (tab === 'top_pairs' && tableVisibleColumns.includes('total_score')) return 'total_score'
+    if (tab === 'top_pairs' && tableVisibleColumns.includes('score_floor')) return 'score_floor'
     if (tab === 'signals' && tableVisibleColumns.includes('signal_score')) return 'signal_score'
     if (tab === 'backtests' && tableVisibleColumns.includes('cagr')) return 'cagr'
     return tableVisibleColumns[0] ?? ''
@@ -880,6 +948,7 @@ function App() {
         return
       }
       setExpandedRowKey(pairKey)
+      setDetailTab('overview')
       const stock = row.stock ? String(row.stock) : ''
       const future = row.future ? String(row.future) : ''
       if (stock && future && !spreadSeries[pairKey]) {
@@ -1008,12 +1077,17 @@ function App() {
       { key: 'stock', label: 'Stock' },
       { key: 'stock_name', label: 'Stock name' },
       { key: 'future', label: 'Future' },
-      { key: 'timestamp', label: 'Timestamp' },
+      { key: 'expiry', label: 'Expiry' },
+      { key: 'dte', label: 'DTE' },
       { key: 'spot', label: 'Spot' },
       { key: 'future_price', label: 'Future price' },
-      { key: 'implied_rate_net', label: 'Implied rate' },
-      { key: 'required_rate', label: 'Required rate' },
-      { key: 'expected_net_irr', label: 'Expected IRR' },
+      { key: 'spread_mid', label: 'Spread (mid)' },
+      { key: 'spread_pct', label: 'Spread %' },
+      { key: 'rtc_pct', label: 'RTC %' },
+      { key: 'floor_rate_annual', label: 'Floor rate' },
+      { key: 'score_floor', label: 'Floor score' },
+      { key: 'total_score', label: 'Total score' },
+      { key: 'decision', label: 'Decision' },
       { key: 'signal_action', label: 'Signal' },
       { key: 'signal_direction', label: 'Direction' },
       { key: 'signal_score', label: 'Signal score' },
@@ -1021,31 +1095,79 @@ function App() {
     [],
   )
 
-  const detailFields = useMemo(() => {
+  const overviewFields = useMemo(
+    () => [
+      { key: 'floor_pass', label: 'Floor pass' },
+      { key: 'liquidity_pass', label: 'Liquidity pass' },
+      { key: 'dte', label: 'DTE' },
+      { key: 'r_cb_annual', label: 'CB rate' },
+      { key: 'r_fund_annual', label: 'Funding rate' },
+      { key: 'r_disc_annual', label: 'Discount rate' },
+      { key: 'snapshot_as_of', label: 'Snapshot as of' },
+    ],
+    [],
+  )
+
+  const alphaFields = useMemo(
+    () => [
+      { key: 'score_alpha', label: 'Alpha score' },
+      { key: 'p_hit_tp', label: 'P(hit TP)' },
+      { key: 'p_hit_sl', label: 'P(hit SL)' },
+      { key: 'sigma_h', label: 'Spread sigma (H)' },
+      { key: 'half_life', label: 'Half-life' },
+    ],
+    [],
+  )
+
+  const liquidityFields = useMemo(
+    () => [
+      { key: 'spread_bps_stock', label: 'Stock spread (bps)' },
+      { key: 'spread_bps_fut', label: 'Futures spread (bps)' },
+      { key: 'dollar_vol_stock', label: 'Stock $ volume' },
+      { key: 'dollar_vol_fut', label: 'Futures $ volume' },
+      { key: 'days_to_exit', label: 'Days to exit' },
+      { key: 'open_interest', label: 'Open interest' },
+    ],
+    [],
+  )
+
+  const executionFields = useMemo(() => {
     const base = [
-      { key: 'signal_score_norm', label: 'Signal score (norm)' },
-      { key: 'spread', label: 'Spread' },
-      { key: 'zscore', label: 'Z-score' },
-      { key: 'spread_vol', label: 'Spread vol' },
-      { key: 'spread_vol_pct', label: 'Spread vol %' },
-      { key: 'spread_trend_pos', label: 'Trend pos' },
-      { key: 'spread_trend_slope', label: 'Trend slope' },
-      { key: 'spread_trend_z', label: 'Trend Z' },
+      { key: 'signal_action', label: 'Signal action' },
+      { key: 'signal_direction', label: 'Signal direction' },
+      { key: 'signal_score', label: 'Signal score' },
     ]
-    const signalDetails =
+    const extra =
       tab === 'signals'
         ? [
             { key: 'signal_reasons', label: 'Signal reasons' },
             { key: 'signal_metrics', label: 'Signal metrics' },
           ]
-        : []
-    return [
-      ...base,
-      ...signalDetails,
-      { key: 'score', label: 'Score' },
-      { key: 'snapshot_as_of', label: 'Snapshot as of' },
-    ]
+        : [{ key: 'decision', label: 'Decision' }]
+    return [...base, ...extra]
   }, [tab])
+
+  const renderFieldGrid = (
+    entries: { key: string; label: string; value: unknown }[],
+  ) => (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+        gap: 1,
+        mt: 1,
+      }}
+    >
+      {entries.map((entry) => (
+        <Box key={entry.key}>
+          <Typography variant="caption" color="text.secondary">
+            {entry.label}
+          </Typography>
+          <Typography variant="body2">{formatCellValue(entry.value, entry.key)}</Typography>
+        </Box>
+      ))}
+    </Box>
+  )
 
   return (
     <Box className="app-root">
@@ -1587,7 +1709,25 @@ function App() {
                             value: row[field.key],
                           }))
                           .filter((field) => field.value !== null && field.value !== undefined)
-                        const detailEntries = detailFields
+                        const overviewEntries = overviewFields
+                          .map((field) => ({
+                            ...field,
+                            value: row[field.key],
+                          }))
+                          .filter((field) => field.value !== null && field.value !== undefined)
+                        const alphaEntries = alphaFields
+                          .map((field) => ({
+                            ...field,
+                            value: row[field.key],
+                          }))
+                          .filter((field) => field.value !== null && field.value !== undefined)
+                        const liquidityEntries = liquidityFields
+                          .map((field) => ({
+                            ...field,
+                            value: row[field.key],
+                          }))
+                          .filter((field) => field.value !== null && field.value !== undefined)
+                        const executionEntries = executionFields
                           .map((field) => ({
                             ...field,
                             value: row[field.key],
@@ -1618,55 +1758,34 @@ function App() {
                                       <Typography variant="subtitle2" fontWeight={600}>
                                         Snapshot
                                       </Typography>
-                                      <Box
-                                        sx={{
-                                          display: 'grid',
-                                          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                                          gap: 1,
-                                          mt: 1,
-                                        }}
-                                      >
-                                        {snapshotEntries.map((entry) => (
-                                          <Box key={entry.key}>
-                                            <Typography variant="caption" color="text.secondary">
-                                              {entry.label}
-                                            </Typography>
-                                            <Typography variant="body2">
-                                              {formatCellValue(entry.value, entry.key)}
-                                            </Typography>
-                                          </Box>
-                                        ))}
-                                      </Box>
+                                      {renderFieldGrid(snapshotEntries)}
                                     </Box>
-                                    {detailEntries.length ? (
-                                      <Box>
-                                        <Typography variant="subtitle2" fontWeight={600}>
-                                          Details
-                                        </Typography>
-                                        <Box
-                                          sx={{
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                                            gap: 1,
-                                            mt: 1,
-                                          }}
-                                        >
-                                          {detailEntries.map((entry) => (
-                                            <Box key={entry.key}>
-                                              <Typography variant="caption" color="text.secondary">
-                                                {entry.label}
-                                              </Typography>
-                                              <Typography variant="body2">
-                                              {formatCellValue(entry.value, entry.key)}
-                                              </Typography>
-                                            </Box>
-                                          ))}
-                                        </Box>
-                                      </Box>
-                                    ) : null}
+                                    <Box>
+                                      <Tabs
+                                        value={detailTab}
+                                        onChange={(_, value) => setDetailTab(value)}
+                                      >
+                                        <Tab label="Overview" value="overview" />
+                                        <Tab label="Alpha" value="alpha" />
+                                        <Tab label="Liquidity" value="liquidity" />
+                                        <Tab label="Execution" value="execution" />
+                                      </Tabs>
+                                      {detailTab === 'overview' && overviewEntries.length
+                                        ? renderFieldGrid(overviewEntries)
+                                        : null}
+                                      {detailTab === 'alpha' && alphaEntries.length
+                                        ? renderFieldGrid(alphaEntries)
+                                        : null}
+                                      {detailTab === 'liquidity' && liquidityEntries.length
+                                        ? renderFieldGrid(liquidityEntries)
+                                        : null}
+                                      {detailTab === 'execution' && executionEntries.length
+                                        ? renderFieldGrid(executionEntries)
+                                        : null}
+                                    </Box>
                                     <Box>
                                       <Typography variant="subtitle2" fontWeight={600}>
-                                        Spread chart (60d)
+                                        Spread chart (contract life)
                                       </Typography>
                                       {spreadError[pairKey] ? (
                                         <Typography variant="body2" color="error">

@@ -57,6 +57,7 @@ Steps:
 3. Click Reload.
 Expected:
 - Rows update per filter and after reload.
+- Columns include spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
 
 ### TC-TOP-UI-002 Top pairs details chart
 Acceptance: top-pairs, spread-series
@@ -66,6 +67,7 @@ Steps:
 2. Click Details on a row.
 Expected:
 - Spread chart renders with data.
+- Details panel shows alpha metrics (tp/sl, p_hit_tp/p_hit_sl, sigma_h).
 
 ### TC-SPREAD-UI-001 Spread chart renders for a pair
 Acceptance: spread-series
@@ -74,7 +76,8 @@ Steps:
 1. Open Top pairs.
 2. Click Details on a row.
 Expected:
-- Spread chart renders with data.
+- Spread chart renders with spread_mid and spread_pct data.
+
 
 ### TC-SIG-HIST-UI-001 Signals history filters and date range
 Acceptance: signals-history, signals-history-range
@@ -160,7 +163,8 @@ Automation: scripts/acceptance_check.py (top-pairs)
 Request:
 - GET /api/top-pairs?limit=5
 Expected:
-- Required keys exist, signal_reasons/signal_metrics are absent.
+- Required keys include spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
+- signal_reasons/signal_metrics are absent.
 
 ### TC-SIG-ACT-API-001 Active signals actionable
 Acceptance: signals-active
@@ -208,7 +212,7 @@ Automation: scripts/acceptance_check.py (backtests)
 Request:
 - GET /api/backtests?limit=5
 Expected:
-- JSON list with backtest metrics.
+- JSON list with backtest metrics including share_alpha_exits and avg_hold_days.
 
 ### TC-SPREAD-API-001 Spread series fields
 Acceptance: spread-series
@@ -216,7 +220,8 @@ Automation: scripts/acceptance_check.py (spread-series)
 Request:
 - GET /api/spread-series?stock=...&future=...&window_days=60
 Expected:
-- Fields spread, zscore, z_entry, z_exit, entry/exit flags.
+- Fields spread_mid, spread_pct, entry/exit flags.
+
 
 ### TC-FE-PROXY-001 Vite proxy API
 Acceptance: frontend-proxy

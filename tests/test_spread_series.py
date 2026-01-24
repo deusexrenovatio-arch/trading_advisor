@@ -15,8 +15,5 @@ def test_compute_spread_series_basic():
     )
     series = compute_spread_series(prices, date(2024, 12, 31), dividends=[], key_rates=[])
     assert len(series) == 2
-    assert "fair_value" in series.columns
-    assert "spread" in series.columns
-    assert "zscore" in series.columns
-    assert "z_entry" in series.columns
-    assert "z_exit" in series.columns
+    assert "spread_mid" in series.columns
+    assert "spread_pct" in series.columns

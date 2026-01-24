@@ -54,15 +54,26 @@ scenarios:
     url: /api/top-pairs?limit=5
     require_non_empty: false
     required_keys:
-      [stock, future, spot, future_price, implied_rate_net, required_rate, expected_net_irr, score]
+      [
+        stock,
+        future,
+        spot,
+        future_price,
+        spread_pct,
+        rtc_pct,
+        floor_rate_annual,
+        score_floor,
+        total_score,
+        decision
+      ]
     forbid_keys: [signal_reasons, signal_metrics]
     cache_as: top_pairs
     test_cases: [TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002]
-    title: Просмотр топ-пар
-    user_story: Пользователь видит рейтинг пар без сигналов/причин.
+    title: Top pairs table (floor + alpha)
+    user_story: Operator reviews ranked pairs with floor + alpha metrics.
     expectations:
-      - Ранжирование доступно через поле score.
-      - В ответе нет signal_reasons/signal_metrics.
+      - Ranking uses total_score for ordering.
+      - Response excludes signal_reasons and signal_metrics.
   - id: signals-active
     type: api_list
     scope: backend
@@ -128,6 +139,7 @@ scenarios:
     scope: backend
     url: /api/backtests?limit=5
     require_non_empty: false
+    required_keys: [share_alpha_exits, avg_hold_days]
     test_cases: [TC-BACK-API-001, TC-BACK-UI-001]
     title: Метрики бэктеста
     user_story: Пользователь видит метрики бэктеста.
@@ -137,14 +149,10 @@ scenarios:
     pair_source: top_pairs
     window_days: 60
     required_keys:
-      - spread
-      - zscore
-      - z_entry
-      - z_exit
+      - spread_mid
+      - spread_pct
       - entry_flag
       - exit_flag
-      - entry_cycle
-      - exit_cycle
     test_cases: [TC-SPREAD-API-001, TC-SPREAD-UI-001]
     title: График спреда
     user_story: Пользователь видит данные для графика спреда.

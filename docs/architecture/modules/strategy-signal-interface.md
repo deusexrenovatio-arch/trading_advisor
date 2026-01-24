@@ -30,6 +30,20 @@ Optional fields:
 - `warnings`: list of strings.
 - `metadata`: free-form dictionary for module-specific fields.
 
+## StockFuturesSpreadCarryAlpha metadata
+When the strategy_id is `stock_futures_spread_carry_alpha_v1`, metadata should include
+the core spread carry fields used by the floor + alpha logic:
+- `spread_pct`
+- `rtc_pct`
+- `floor_rate_annual`
+- `score_floor`
+- `score_alpha`
+- `total_score`
+- `dte`
+- `tp_pct`
+- `sl_pct`
+- `entry_reason` or `exit_reason`
+
 ### Allocation payload
 - `instrument`: `secid`
 - `side`: `long` | `short` | `flat`
@@ -51,7 +65,7 @@ Optional fields:
 ## Example JSON
 ```json
 {
-  "strategy_id": "spread_arbitrage_v1",
+  "strategy_id": "stock_futures_spread_carry_alpha_v1",
   "strategy_type": "arbitrage",
   "cadence": "intraday",
   "horizon": "short",
@@ -69,6 +83,17 @@ Optional fields:
     { "rule_id": "z_entry", "result": true, "severity": "info" }
   ],
   "warnings": [],
-  "metadata": { "hedge_ratio": 0.8, "entry_zscore": 2.1 }
+  "metadata": {
+    "spread_pct": 0.012,
+    "rtc_pct": 0.002,
+    "floor_rate_annual": 0.165,
+    "score_floor": 0.01,
+    "score_alpha": 0.004,
+    "total_score": 0.012,
+    "dte": 42,
+    "tp_pct": 0.01,
+    "sl_pct": 0.008,
+    "entry_reason": "floor_pass+alpha_edge"
+  }
 }
 ```

@@ -11,6 +11,11 @@ reproducible backtests.
   tag each row with source metadata.
 - Caching: store latest snapshot in a local cache with a short TTL.
 - Historical storage: persist raw responses and normalized tables for audit.
+- Marketdata fields used when available:
+  - Stocks: bid, ask, last, volume.
+  - Futures: bid, ask, last, volume, open interest.
+- Fallbacks: if bid/ask is missing, use last/close as mid; if open interest is
+  missing, liquidity gates rely on volume only.
 
 ## QUIK ingestion
 - Source: broker terminal or gateway.

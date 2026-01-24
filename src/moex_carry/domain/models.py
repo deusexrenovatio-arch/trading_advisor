@@ -84,3 +84,25 @@ class BacktestRun:
     run_id: str
     started_at: datetime
     params: dict[str, Any]
+
+
+@dataclass
+class StockMarketPoint:
+    timestamp: datetime
+    bid: Optional[float]
+    ask: Optional[float]
+    mid: Optional[float]
+    last: Optional[float]
+    volume: Optional[float]
+    dollar_volume: Optional[float]
+
+
+@dataclass
+class FutMarketPoint:
+    timestamp: datetime
+    bid: Optional[float]
+    ask: Optional[float]
+    mid: Optional[float]
+    last: Optional[float]
+    volume: Optional[float]
+    open_interest: Optional[float]

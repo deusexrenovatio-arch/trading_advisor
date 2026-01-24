@@ -5,27 +5,39 @@ const topPairsFirst = [
     stock: 'SBER',
     stock_name: 'Sberbank',
     future: 'SRH6',
+    expiry: '2026-03-19',
     spot: 220.12,
     future_price: 223.45,
-    implied_rate_net: 0.12,
-    required_rate: 0.08,
-    expected_net_irr: 0.12,
+    spread_mid: 1.2,
+    spread_pct: 0.012,
+    rtc_pct: 0.001,
+    floor_rate_annual: 0.18,
+    score_floor: 0.02,
+    score_alpha: 0.005,
+    total_score: 0.025,
+    decision: 'ENTER_OK',
     signal_action: 'enter',
     signal_direction: 'cash_and_carry',
-    score: 1.2,
+    signal_score: 0.025,
   },
   {
     stock: 'GAZP',
     stock_name: 'Gazprom',
     future: 'GZH6',
+    expiry: '2026-03-19',
     spot: 156.7,
     future_price: 158.3,
-    implied_rate_net: 0.09,
-    required_rate: 0.08,
-    expected_net_irr: 0.09,
-    signal_action: 'exit',
+    spread_mid: -0.4,
+    spread_pct: -0.004,
+    rtc_pct: 0.001,
+    floor_rate_annual: 0.09,
+    score_floor: -0.01,
+    score_alpha: 0.002,
+    total_score: -0.008,
+    decision: 'SKIP_FLOOR',
+    signal_action: 'hold',
     signal_direction: 'reverse',
-    score: 0.6,
+    signal_score: -0.008,
   },
 ]
 
@@ -34,14 +46,20 @@ const topPairsSecond = [
     stock: 'ALRS',
     stock_name: 'Alrosa',
     future: 'ALH6',
+    expiry: '2026-06-18',
     spot: 65.2,
     future_price: 66.1,
-    implied_rate_net: 0.07,
-    required_rate: 0.06,
-    expected_net_irr: 0.07,
+    spread_mid: 0.5,
+    spread_pct: 0.008,
+    rtc_pct: 0.001,
+    floor_rate_annual: 0.11,
+    score_floor: 0.01,
+    score_alpha: 0.004,
+    total_score: 0.014,
+    decision: 'ENTER_OK',
     signal_action: 'enter',
     signal_direction: 'cash_and_carry',
-    score: 0.9,
+    signal_score: 0.014,
   },
 ]
 
@@ -113,14 +131,10 @@ const backtests = [
 const spreadSeries = [
   {
     date: '2026-01-10',
-    spread: 1.2,
-    zscore: 2.1,
-    z_entry: 2.0,
-    z_exit: 0.5,
+    spread_mid: 1.2,
+    spread_pct: 0.012,
     entry_flag: true,
     exit_flag: false,
-    entry_cycle: 1,
-    exit_cycle: null,
   },
 ]
 
@@ -193,7 +207,7 @@ test.describe('Top pairs + Signals UI', () => {
     await page.getByRole('tab', { name: 'Top pairs' }).click()
     await page.locator('table tbody tr').first().getByRole('button', { name: 'Details' }).click()
 
-    await expect(page.getByText('Spread chart (60d)')).toBeVisible()
+    await expect(page.getByText('Spread chart (contract life)')).toBeVisible()
     await expect.poll(() => spreadCalls).toBeGreaterThan(0)
   })
 

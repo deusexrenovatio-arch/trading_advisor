@@ -22,6 +22,12 @@ def test_api_endpoints_return_rows(tmp_path):
                 "stock": "AAA",
                 "stock_name": "Alpha",
                 "future": "AAH6",
+                "spread_pct": 0.01,
+                "rtc_pct": 0.002,
+                "floor_rate_annual": 0.12,
+                "score_floor": 0.01,
+                "total_score": 0.02,
+                "decision": "ENTER_OK",
                 "signal_action": "enter",
                 "signal_direction": "cash_and_carry",
                 "signal_score": 0.1,
@@ -38,7 +44,8 @@ def test_api_endpoints_return_rows(tmp_path):
                 "signal_action": "enter",
                 "signal_direction": "cash_and_carry",
                 "signal_score": 0.1,
-                "implied_rate_net": 0.12,
+                "spread_pct": 0.01,
+                "floor_rate_annual": 0.12,
             }
         ],
     )
@@ -86,18 +93,12 @@ def test_spread_series_endpoint_uses_builder(tmp_path, monkeypatch):
         [
             {
                 "date": date(2024, 1, 1),
-                "spot": 100.0,
-                "future_price": 101.5,
-                "fair_value": 99.5,
-                "spread": 2.0,
-                "zscore": 1.5,
-                "z_entry": 2.0,
-                "z_exit": 0.5,
+                "spot_mid": 100.0,
+                "future_mid": 101.5,
+                "spread_mid": 2.0,
+                "spread_pct": 0.02,
                 "entry_flag": True,
                 "exit_flag": False,
-                "entry_cycle": 1,
-                "exit_cycle": None,
-                "cycle_return_pct": None,
             }
         ]
     )
@@ -111,8 +112,7 @@ def test_spread_series_endpoint_uses_builder(tmp_path, monkeypatch):
     data = response.get_json()
     assert isinstance(data, list)
     assert len(data) == 1
-    assert data[0]["spread"] == 2.0
+    assert data[0]["spread_mid"] == 2.0
     assert data[0]["date"] == "2024-01-01"
-    assert data[0]["zscore"] == 1.5
+    assert data[0]["spread_pct"] == 0.02
     assert data[0]["entry_flag"] is True
-    assert data[0]["entry_cycle"] == 1
