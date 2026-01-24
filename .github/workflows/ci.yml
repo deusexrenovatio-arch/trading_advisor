@@ -68,3 +68,23 @@ jobs:
           --from ${{ github.event.pull_request.base.sha }}
           --to ${{ github.event.pull_request.head.sha }}
           --config commitlint.config.cjs
+
+  release-notes:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure release note fragment
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+          changed_files=$(git diff --name-only "$base_sha" "$head_sha")
+          if ! echo "$changed_files" | grep -E '^docs/releases\.d/[^/]+\.md$' -q; then
+            echo "ERROR: Missing release note fragment in docs/releases.d/."
+            echo "Add a file like docs/releases.d/YYYY-MM-DD-short-title.md"
+            exit 1
+          fi

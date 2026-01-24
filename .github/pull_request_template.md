@@ -25,3 +25,4 @@
 - [ ] Tests added/updated
 - [ ] Docs updated (if needed)
 - [ ] Observability updated (if needed)
+- [ ] Release notes fragment added in `docs/releases.d/`
