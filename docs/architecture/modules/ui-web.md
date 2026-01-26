@@ -9,7 +9,11 @@ This document covers the React UI in `ui-web/` and the API endpoints it uses.
   - Decision grid with filters (strategy, instrument, risk, news).
   - Decision details panel (raw `decision_log` JSON).
   - Tables for top pairs, signals, and backtests with sorting and filters.
+  - Auto-refresh toggle (60s) for Top pairs / Signals / Backtests with last-updated timestamp.
+  - Recomputed timestamp sourced from backend refresh status.
   - Signal execution panel with execution history.
+  - Auto-refresh re-fetches API data; periodic recompute is controlled by backend
+    `ui.signal_refresh_*` settings.
 - `SpreadChart.tsx`
   - Plots spread_mid and spread_pct series with entry/exit annotations.
 - `main.tsx`
@@ -34,6 +38,10 @@ The UI expects these endpoints (served by the Python backend in
   - Includes spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
 - `GET /api/signals/active`
   - Active signals derived from the latest run.
+- `GET /api/signals/refresh-status`
+  - Scheduler status and last successful recompute timestamp.
+- `POST /api/signals/refresh`
+  - Triggers an on-demand signal recompute; UI reload uses this endpoint.
 - `GET /api/signals/history?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=...`
   - Historical signal actions.
 - `GET /api/signals/executions?stock=...&future=...&limit=...`

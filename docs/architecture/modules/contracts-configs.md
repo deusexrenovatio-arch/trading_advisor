@@ -41,7 +41,15 @@ pipeline, UI, and decision logging rely on.
   - `environment`: mode, venue, timezone.
   - `risk_profile`: limits used by `risk_gate`.
   - `news_filter`: severity thresholds and sources list.
-  - `ui`: Dash UI host/port.
+  - `ui`: API host/port plus optional signal refresh scheduler.
+
+UI refresh keys:
+- `signal_refresh_enabled`: turn on periodic `run_signal_cycle` execution.
+- `signal_refresh_interval_sec`: interval in seconds between refresh runs.
+- `signal_refresh_daily_time`: optional local time (`HH:MM` or `HH:MM:SS`) for daily refresh.
+- `signal_refresh_timezone`: optional IANA timezone for daily scheduling (defaults to `environment.timezone`).
+- `signal_refresh_max_pairs`: optional max pairs override for refresh.
+- `signal_refresh_save_csv`: persist refreshed CSV outputs when true.
 
 ### SpreadCarryAlpha settings (new)
 Expected parameters include (non-exhaustive):

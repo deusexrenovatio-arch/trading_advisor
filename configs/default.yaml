@@ -106,6 +106,12 @@ aggregation:
 ui:
   host: "127.0.0.1"
   port: 8050
+  signal_refresh_enabled: true
+  signal_refresh_interval_sec: 0
+  signal_refresh_daily_time: "01:00"
+  signal_refresh_timezone: null
+  signal_refresh_max_pairs: null
+  signal_refresh_save_csv: true
 
 data:
   data_dir: "./data"

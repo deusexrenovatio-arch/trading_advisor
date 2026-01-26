@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
+import threading
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as dt_time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from dash import Dash, Input, Output, State, dash_table, dcc, html
@@ -12,7 +15,7 @@ from flask import Flask, jsonify, request
 
 from moex_carry.config import AppSettings, resolve_paths
 from moex_carry.decision_log import load_jsonl
-from moex_carry.pipeline import build_spread_series
+from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_active_signals,
@@ -157,6 +160,46 @@ def _normalize_datetime(value: datetime) -> datetime:
     return value
 
 
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _parse_daily_time(raw: str | None) -> dt_time | None:
+    if not raw:
+        return None
+    value = raw.strip()
+    if not value:
+        return None
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            parsed = datetime.strptime(value, fmt)
+            return dt_time(parsed.hour, parsed.minute, parsed.second)
+        except ValueError:
+            continue
+    return None
+
+
+def _resolve_tz(raw: str | None, fallback: str) -> timezone:
+    name = raw or fallback or "UTC"
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        return timezone.utc
+
+
+def _next_daily_run(now_utc: datetime, target: dt_time, tzinfo: timezone) -> datetime:
+    local_now = now_utc.astimezone(tzinfo)
+    target_local = local_now.replace(
+        hour=target.hour,
+        minute=target.minute,
+        second=target.second,
+        microsecond=0,
+    )
+    if target_local <= local_now:
+        target_local = target_local + timedelta(days=1)
+    return target_local.astimezone(timezone.utc)
+
+
 def _parse_date_bound(raw: str, bound: str) -> datetime | None:
     if not raw:
         return None
@@ -265,6 +308,86 @@ def create_app(settings: AppSettings) -> Dash:
     decisions_dir = paths.data_dir / "decisions"
     actions_path = decisions_dir / "decision_actions.jsonl"
     executions_path = decisions_dir / "execution_requests.jsonl"
+    logger = logging.getLogger(__name__)
+
+    refresh_enabled = bool(settings.ui.signal_refresh_enabled)
+    refresh_interval = int(settings.ui.signal_refresh_interval_sec or 0)
+    refresh_daily_time = _parse_daily_time(settings.ui.signal_refresh_daily_time)
+    refresh_tz = _resolve_tz(settings.ui.signal_refresh_timezone, settings.environment.timezone)
+    refresh_mode = "daily" if refresh_daily_time else "interval"
+    refresh_state = {
+        "enabled": refresh_enabled,
+        "interval_sec": refresh_interval,
+        "mode": refresh_mode,
+        "daily_time": settings.ui.signal_refresh_daily_time,
+        "timezone": settings.ui.signal_refresh_timezone or settings.environment.timezone,
+        "status": "disabled",
+        "last_started_at": None,
+        "last_success_at": None,
+        "last_error": None,
+        "next_run_at": None,
+    }
+    refresh_lock = threading.Lock()
+    refresh_stop = threading.Event()
+
+    def _run_signal_refresh(trigger: str, force: bool = False) -> bool:
+        if not refresh_enabled and not force:
+            refresh_state["status"] = "disabled"
+            refresh_state["last_error"] = f"skip:{trigger}"
+            return False
+        if refresh_lock.locked():
+            refresh_state["status"] = "busy"
+            refresh_state["last_error"] = f"skip:{trigger}"
+            return False
+        with refresh_lock:
+            refresh_state["status"] = "running"
+            refresh_state["last_started_at"] = _iso_now()
+            refresh_state["last_error"] = None
+            try:
+                run_signal_cycle(
+                    settings,
+                    max_pairs=settings.ui.signal_refresh_max_pairs,
+                    save_csv=settings.ui.signal_refresh_save_csv,
+                )
+                refresh_state["last_success_at"] = _iso_now()
+                refresh_state["status"] = "ok"
+            except Exception as exc:
+                refresh_state["last_error"] = str(exc)
+                refresh_state["status"] = "error"
+                logger.exception("Signal refresh failed")
+                return False
+        return True
+
+    def _refresh_loop() -> None:
+        if refresh_daily_time is None and refresh_interval <= 0:
+            return
+        while not refresh_stop.is_set():
+            if refresh_daily_time is not None:
+                next_run = _next_daily_run(datetime.now(timezone.utc), refresh_daily_time, refresh_tz)
+                refresh_state["next_run_at"] = next_run.isoformat().replace("+00:00", "Z")
+                wait_seconds = max((next_run - datetime.now(timezone.utc)).total_seconds(), 0)
+                if refresh_stop.wait(wait_seconds):
+                    break
+                _run_signal_refresh("daily")
+            else:
+                _run_signal_refresh("interval")
+                refresh_state["next_run_at"] = (
+                    datetime.now(timezone.utc) + timedelta(seconds=refresh_interval)
+                ).isoformat().replace("+00:00", "Z")
+                refresh_stop.wait(refresh_interval)
+
+    if refresh_enabled and (refresh_daily_time is not None or refresh_interval > 0):
+        refresh_state["status"] = "scheduled"
+        thread = threading.Thread(
+            target=_refresh_loop,
+            name="signal-refresh",
+            daemon=True,
+        )
+        thread.start()
+        if refresh_daily_time is not None:
+            logger.info("Signal refresh scheduler enabled (daily=%s)", settings.ui.signal_refresh_daily_time)
+        else:
+            logger.info("Signal refresh scheduler enabled (interval=%ss)", refresh_interval)
 
     @server.after_request
     def _cors_headers(response):
@@ -272,6 +395,18 @@ def create_app(settings: AppSettings) -> Dash:
         response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
         return response
+
+    @server.route("/api/signals/refresh-status", methods=["GET"])
+    def signals_refresh_status_api():
+        return jsonify(refresh_state)
+
+    @server.route("/api/signals/refresh", methods=["POST"])
+    def signals_refresh_api():
+        if refresh_lock.locked():
+            return jsonify({**refresh_state, "status": "busy"}), 409
+        ok = _run_signal_refresh("manual", force=True)
+        status_code = 200 if ok else 500
+        return jsonify(refresh_state), status_code
 
     @server.route("/api/decision-view", methods=["GET"])
     def decision_view_api():

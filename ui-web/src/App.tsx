@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Accordion,
   AccordionDetails,
@@ -140,6 +140,18 @@ type ExecutionRow = {
   status?: string | null
   note?: string | null
 }
+type RefreshStatus = {
+  enabled?: boolean
+  interval_sec?: number
+  status?: string
+  last_started_at?: string | null
+  last_success_at?: string | null
+  last_error?: string | null
+  next_run_at?: string | null
+}
+
+const AUTO_REFRESH_MS = 60_000
+const AUTO_REFRESH_LABEL = '60s'
 
 const formatNumber = (value?: number, digits = 2): string => {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -344,6 +356,11 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [auxLoading, setAuxLoading] = useState(false)
   const [auxError, setAuxError] = useState<string | null>(null)
+  const [auxLastUpdated, setAuxLastUpdated] = useState<string | null>(null)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [refreshStatus, setRefreshStatus] = useState<RefreshStatus | null>(null)
+  const [recomputeLoading, setRecomputeLoading] = useState(false)
+  const [recomputeError, setRecomputeError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<DecisionLog | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -394,6 +411,7 @@ function App() {
     status: '',
     note: '',
   })
+  const auxFetchInFlight = useRef(false)
 
   const fetchDecisionView = useCallback(async () => {
     setLoading(true)
@@ -450,26 +468,29 @@ function App() {
 
   const fetchAuxData = useCallback(
     async (options: { topPairsLimit: string; topPairsAll: boolean }) => {
-    setAuxLoading(true)
-    setAuxError(null)
-    try {
-      const { topPairsLimit: limitRaw, topPairsAll: allPairs } = options
-      const topPairsParams = new URLSearchParams()
-      if (allPairs) {
-        topPairsParams.set('all', 'true')
-      } else {
-        const limitValue = Number(limitRaw)
-        if (!Number.isNaN(limitValue) && limitValue >= 0) {
-          topPairsParams.set('limit', String(limitValue))
+      if (auxFetchInFlight.current) return
+      auxFetchInFlight.current = true
+      setAuxLoading(true)
+      setAuxError(null)
+      try {
+        const { topPairsLimit: limitRaw, topPairsAll: allPairs } = options
+        const topPairsParams = new URLSearchParams()
+        if (allPairs) {
+          topPairsParams.set('all', 'true')
         } else {
-          topPairsParams.set('limit', '500')
+          const limitValue = Number(limitRaw)
+          if (!Number.isNaN(limitValue) && limitValue >= 0) {
+            topPairsParams.set('limit', String(limitValue))
+          } else {
+            topPairsParams.set('limit', '500')
+          }
         }
-      }
-      const topPairsUrl = `/api/top-pairs?${topPairsParams.toString()}`
+        const topPairsUrl = `/api/top-pairs?${topPairsParams.toString()}`
       const results = await Promise.allSettled([
         fetch(topPairsUrl, { cache: 'no-store' }),
         fetch('/api/signals/active', { cache: 'no-store' }),
         fetch('/api/backtests?limit=500', { cache: 'no-store' }),
+        fetch('/api/signals/refresh-status', { cache: 'no-store' }),
       ])
 
       const errors: string[] = []
@@ -481,33 +502,64 @@ function App() {
         if (result.status === 'rejected') {
           errors.push(`${label} fetch failed`)
           setter([])
-          return
+          return false
         }
         if (!result.value.ok) {
           errors.push(`${label} API error: ${result.value.status}`)
           setter([])
-          return
+          return false
         }
         try {
           setter(await result.value.json())
+          return true
         } catch {
           errors.push(`${label} parse error`)
           setter([])
+          return false
+        }
+      }
+      const parseObjectResult = async <T,>(
+        label: string,
+        result: PromiseSettledResult<Response>,
+        setter: (payload: T | null) => void,
+      ) => {
+        if (result.status === 'rejected') {
+          errors.push(`${label} fetch failed`)
+          setter(null)
+          return false
+        }
+        if (!result.value.ok) {
+          errors.push(`${label} API error: ${result.value.status}`)
+          setter(null)
+          return false
+        }
+        try {
+          setter((await result.value.json()) as T)
+          return true
+        } catch {
+          errors.push(`${label} parse error`)
+          setter(null)
+          return false
         }
       }
 
-      await parseResult('Top pairs', results[0], setTopPairs)
-      await parseResult('Signals', results[1], setSignals)
+      const topPairsOk = await parseResult('Top pairs', results[0], setTopPairs)
+      const signalsOk = await parseResult('Signals', results[1], setSignals)
       await parseResult('Backtests', results[2], setBacktests)
+      await parseObjectResult<RefreshStatus>('Refresh status', results[3], setRefreshStatus)
 
-      if (errors.length) {
-        setAuxError(errors.join(' | '))
+        if (topPairsOk && signalsOk) {
+          setAuxLastUpdated(new Date().toISOString())
+        }
+        if (errors.length) {
+          setAuxError(errors.join(' | '))
+        }
+      } catch (err) {
+        setAuxError(err instanceof Error ? err.message : 'Failed to load tables')
+      } finally {
+        setAuxLoading(false)
+        auxFetchInFlight.current = false
       }
-    } catch (err) {
-      setAuxError(err instanceof Error ? err.message : 'Failed to load tables')
-    } finally {
-      setAuxLoading(false)
-    }
     },
     [],
   )
@@ -639,14 +691,54 @@ function App() {
     fetchAuxData({ topPairsLimit, topPairsAll })
   }, [fetchDecisionView, fetchAuxData, topPairsAll, topPairsLimit])
 
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = window.setInterval(() => {
+      void fetchAuxData({ topPairsLimit, topPairsAll })
+    }, AUTO_REFRESH_MS)
+    return () => window.clearInterval(interval)
+  }, [autoRefresh, fetchAuxData, topPairsAll, topPairsLimit])
+
+  const requestRecompute = useCallback(async (): Promise<boolean> => {
+    setRecomputeLoading(true)
+    setRecomputeError(null)
+    try {
+      const response = await fetch('/api/signals/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!response.ok) {
+        let message = `Recompute API error: ${response.status}`
+        try {
+          const payload = (await response.json()) as { last_error?: string }
+          if (payload?.last_error) {
+            message = `Recompute error: ${payload.last_error}`
+          }
+        } catch {
+          // ignore parsing errors
+        }
+        throw new Error(message)
+      }
+      const payload = (await response.json()) as RefreshStatus
+      setRefreshStatus(payload)
+      return true
+    } catch (err) {
+      setRecomputeError(err instanceof Error ? err.message : 'Failed to recompute data')
+      return false
+    } finally {
+      setRecomputeLoading(false)
+    }
+  }, [])
+
   const handleRefresh = useCallback(() => {
     fetchDecisionView()
     fetchAuxData({ topPairsLimit, topPairsAll })
   }, [fetchDecisionView, fetchAuxData, topPairsAll, topPairsLimit])
 
-  const handleAuxRefresh = useCallback(() => {
-    fetchAuxData({ topPairsLimit, topPairsAll })
-  }, [fetchAuxData, topPairsAll, topPairsLimit])
+  const handleAuxRefresh = useCallback(async () => {
+    await requestRecompute()
+    await fetchAuxData({ topPairsLimit, topPairsAll })
+  }, [fetchAuxData, requestRecompute, topPairsAll, topPairsLimit])
 
   const submitDecisionAction = useCallback(
     async (action: 'approve' | 'reject') => {
@@ -961,7 +1053,7 @@ function App() {
     [expandedRowKey, executionLogs, fetchExecutionLog, fetchSpreadSeries, spreadSeries, tab],
   )
 
-  const isLoading = loading || auxLoading
+  const isLoading = loading || auxLoading || recomputeLoading
 
   const decisionRows = useMemo(
     () =>
@@ -1624,9 +1716,32 @@ function App() {
                       />
                     </>
                   ) : null}
-                  <Button variant="outlined" onClick={handleAuxRefresh} disabled={auxLoading}>
-                    Reload
+                  <Button
+                    variant="outlined"
+                    onClick={handleAuxRefresh}
+                    disabled={auxLoading || recomputeLoading}
+                  >
+                    {recomputeLoading ? 'Recomputing...' : 'Reload'}
                   </Button>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={autoRefresh}
+                        onChange={(event) => setAutoRefresh(event.target.checked)}
+                      />
+                    }
+                    label={`Auto refresh (${AUTO_REFRESH_LABEL})`}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    {auxLastUpdated
+                      ? `Updated ${formatDate(auxLastUpdated)}`
+                      : 'Updated: n/a'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {refreshStatus?.last_success_at
+                      ? `Recomputed ${formatDate(refreshStatus.last_success_at)}`
+                      : 'Recomputed: n/a'}
+                  </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {auxLoading ? 'Loading...' : `${sortedTableRows.length} rows`}
                   </Typography>
@@ -1638,6 +1753,11 @@ function App() {
                   {auxError ? (
                     <Typography variant="body2" color="error">
                       {auxError}
+                    </Typography>
+                  ) : null}
+                  {recomputeError ? (
+                    <Typography variant="body2" color="error">
+                      {recomputeError}
                     </Typography>
                   ) : null}
                 </Stack>
