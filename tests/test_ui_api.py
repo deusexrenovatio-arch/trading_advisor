@@ -26,6 +26,7 @@ def test_api_endpoints_return_rows(tmp_path):
                 "rtc_pct": 0.002,
                 "floor_rate_annual": 0.12,
                 "score_floor": 0.01,
+                "avg_trade_return_annual_recent": 0.2,
                 "total_score": 0.02,
                 "decision": "ENTER_OK",
                 "signal_action": "enter",

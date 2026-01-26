@@ -72,6 +72,7 @@ scenarios:
         rtc_pct,
         floor_rate_annual,
         score_floor,
+        avg_trade_return_annual_recent,
         total_score,
         decision
       ]

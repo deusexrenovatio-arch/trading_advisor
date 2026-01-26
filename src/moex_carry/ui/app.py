@@ -54,7 +54,7 @@ BASE_TABLE_STYLE = {
 }
 
 
-_CACHE_VERSION = "v2"
+_CACHE_VERSION = "v4"
 
 
 def _append_jsonl(path, payload: dict[str, object]) -> None:

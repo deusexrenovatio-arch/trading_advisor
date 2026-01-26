@@ -13,6 +13,7 @@ const topPairsFirst = [
     rtc_pct: 0.001,
     floor_rate_annual: 0.18,
     score_floor: 0.02,
+    avg_trade_return_annual_recent: 0.14,
     score_alpha: 0.005,
     total_score: 0.025,
     decision: 'ENTER_OK',
@@ -32,6 +33,7 @@ const topPairsFirst = [
     rtc_pct: 0.001,
     floor_rate_annual: 0.09,
     score_floor: -0.01,
+    avg_trade_return_annual_recent: 0.05,
     score_alpha: 0.002,
     total_score: -0.008,
     decision: 'SKIP_FLOOR',
@@ -54,6 +56,7 @@ const topPairsSecond = [
     rtc_pct: 0.001,
     floor_rate_annual: 0.11,
     score_floor: 0.01,
+    avg_trade_return_annual_recent: 0.09,
     score_alpha: 0.004,
     total_score: 0.014,
     decision: 'ENTER_OK',
@@ -189,6 +192,7 @@ test.describe('Top pairs + Signals UI', () => {
     await page.goto('/')
     await page.getByRole('tab', { name: 'Top pairs' }).click()
     await expect(page.getByText('SRH6')).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Avg trade return (annual, last 5)' })).toBeVisible()
 
     await expect(page.locator('[role="combobox"]').first()).toBeVisible()
     await page.locator('[role="combobox"]').first().click()

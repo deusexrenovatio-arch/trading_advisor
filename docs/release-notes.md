@@ -1,5 +1,20 @@
 ﻿# Release Notes
 
+
+## 2026-01-26 - Stage 4: Trade Returns & UI Metrics
+
+Added
+- Trade PnL cash, net return (pre-tax), annualized return, and hold days in spread series.
+- Average annualized return over last 5 exits for Top Pairs.
+- UI table column and Alpha detail field for average annual return.
+- UI trade summary line now shows pnl/net/annual/hold per cycle.
+- Acceptance + UI tests updated to enforce new field.
+
+Notes
+- Net returns are pre-tax (dividend/profit taxes not applied in series).
+- Reload recomputes signals on fresh market data and may differ from cached/top_pairs.
+
+
 ## 2026-01-26 - Stage 1: Contracts and Config
 
 Added

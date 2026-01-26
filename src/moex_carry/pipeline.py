@@ -221,86 +221,28 @@ def compute_spread_series(
     return pd.DataFrame(series_rows)
 
 
-def build_spread_series(
+RECENT_TRADES_WINDOW = 5
+
+
+def _apply_spread_carry_signals(
+    series_df: pd.DataFrame,
+    merged: pd.DataFrame | None,
+    dividends: list[DividendEvent],
+    key_rates: list[KeyRate],
     settings: AppSettings,
-    stock_secid: str,
-    future_secid: str,
-    window_days: int = 60,
-    full_life: bool = False,
+    future_spec: ContractSpec,
+    alpha_cfg: object,
 ) -> pd.DataFrame:
-    paths = resolve_paths(settings)
-    dirs = _data_paths(paths.data_dir)
-    futures_path = dirs["raw"] / "futures.csv"
-    if not futures_path.exists():
-        return pd.DataFrame()
-    futures_df = pd.read_csv(futures_path)
-    future_spec_map = {spec.secid: spec for spec in _parse_contract_specs(futures_df)}
-    future_spec = future_spec_map.get(future_secid)
-    if future_spec is None or not future_spec.expiry:
-        return pd.DataFrame()
-    future_scale = _future_price_scale(future_spec)
-
-    today = date.today()
-    if full_life:
-        lookback = future_spec.expiry - timedelta(days=365)
-    else:
-        lookback_days = max(int(window_days), 1)
-        lookback = today - timedelta(days=lookback_days)
-    client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
-
-    stock_candles = _fetch_candles(
-        client,
-        settings.moex.engine_shares,
-        settings.moex.market_shares,
-        settings.moex.shares_board,
-        stock_secid,
-        lookback,
-        today,
-    )
-    future_candles = _fetch_candles(
-        client,
-        settings.moex.engine_futures,
-        settings.moex.market_futures,
-        settings.moex.futures_board,
-        future_secid,
-        lookback,
-        today,
-        price_scale=future_scale,
-    )
-    if stock_candles.empty or future_candles.empty:
-        return pd.DataFrame()
-    merged = pd.merge(stock_candles, future_candles, on="date", how="inner")
-    if merged.empty:
-        return pd.DataFrame()
-    merged.rename(
-        columns={
-            stock_secid: "spot",
-            future_secid: "future_price",
-            f"{stock_secid}_volume": "spot_volume",
-            f"{future_secid}_volume": "future_volume",
-        },
-        inplace=True,
-    )
-
-    dividends = _load_dividends(client, stock_secid, paths.data_dir)
-    key_rates = _load_key_rates(dirs["raw"] / "key_rates.csv")
-    alpha_cfg = settings.spread_carry_alpha
-    series_df = compute_spread_series(
-        merged[["date", "spot", "future_price"]],
-        future_spec.expiry,
-        dividends,
-        key_rates,
-        r_disc_annual=alpha_cfg.r_disc_annual,
-        day_count=alpha_cfg.day_count,
-    )
     if series_df.empty:
         return series_df
+    series_df = series_df.copy()
+    if merged is not None and {"spot_volume", "future_volume"}.issubset(merged.columns):
+        series_df = series_df.merge(
+            merged[["date", "spot_volume", "future_volume"]],
+            on="date",
+            how="left",
+        )
 
-    series_df = series_df.merge(
-        merged[["date", "spot_volume", "future_volume"]],
-        on="date",
-        how="left",
-    )
     spreads_pct = series_df["spread_pct"].tolist()
     signal_actions: list[str] = []
     signal_directions: list[str | None] = []
@@ -310,6 +252,10 @@ def build_spread_series(
     exit_spread_pcts: list[float | None] = []
     trade_cycles: list[int | None] = []
     trade_returns: list[float | None] = []
+    trade_pnls: list[float | None] = []
+    trade_return_pct_net: list[float | None] = []
+    trade_return_annual: list[float | None] = []
+    trade_hold_days: list[int | None] = []
     rtc_pcts: list[float] = []
     tp_nets: list[float] = []
     sl_nets: list[float] = []
@@ -319,6 +265,11 @@ def build_spread_series(
     zscores: list[float] = []
     state = SpreadCarryState()
     current_entry_spread_pct: float | None = None
+    current_entry_spot_exec: float | None = None
+    current_entry_fut_exec: float | None = None
+    current_entry_date: date | None = None
+    current_entry_stock_fee: float | None = None
+    current_entry_fut_fee: float | None = None
     current_cycle = 0
 
     for idx, row in series_df.iterrows():
@@ -453,10 +404,19 @@ def build_spread_series(
         if is_entry:
             current_cycle += 1
             current_entry_spread_pct = spread_pct_entry_exec
+            current_entry_spot_exec = exec_prices.stock_buy
+            current_entry_fut_exec = exec_prices.fut_sell
+            current_entry_date = row_date
+            current_entry_stock_fee = stock_fee
+            current_entry_fut_fee = fut_fee
             entry_spread_pcts.append(spread_pct_entry_exec)
             exit_spread_pcts.append(None)
             trade_cycles.append(current_cycle)
             trade_returns.append(None)
+            trade_pnls.append(None)
+            trade_return_pct_net.append(None)
+            trade_return_annual.append(None)
+            trade_hold_days.append(None)
         elif is_exit:
             entry_spread_pcts.append(None)
             exit_spread_pcts.append(spread_pct_exit_exec)
@@ -466,12 +426,58 @@ def build_spread_series(
                 if current_entry_spread_pct is not None
                 else None
             )
+            trade_pnl = None
+            trade_return_net = None
+            trade_return_ann = None
+            hold_days_value = None
+            if (
+                current_entry_spot_exec is not None
+                and current_entry_fut_exec is not None
+                and current_entry_date is not None
+            ):
+                dividend_cash = sum(
+                    event.amount
+                    for event in dividends
+                    if current_entry_date < event.ex_date <= row_date
+                )
+                hold_tau = year_fraction(current_entry_date, row_date, alpha_cfg.day_count)
+                funding_cost = current_entry_spot_exec * r_fund * hold_tau
+                exit_stock_fee = stock_fee
+                exit_fut_fee = fut_fee
+                entry_stock_fee = current_entry_stock_fee or 0.0
+                entry_fut_fee = current_entry_fut_fee or 0.0
+                fees_total = entry_stock_fee + entry_fut_fee + exit_stock_fee + exit_fut_fee
+                trade_pnl = (
+                    (exec_prices.stock_sell - current_entry_spot_exec)
+                    - (exec_prices.fut_buy - current_entry_fut_exec)
+                    + dividend_cash
+                    - funding_cost
+                    - fees_total
+                )
+                trade_return_net = trade_pnl / current_entry_spot_exec if current_entry_spot_exec else None
+                trade_return_ann = (
+                    trade_return_net / hold_tau if hold_tau > 0 and trade_return_net is not None else None
+                )
+                hold_days_value = (row_date - current_entry_date).days
+            trade_pnls.append(trade_pnl)
+            trade_return_pct_net.append(trade_return_net)
+            trade_return_annual.append(trade_return_ann)
+            trade_hold_days.append(hold_days_value)
             current_entry_spread_pct = None
+            current_entry_spot_exec = None
+            current_entry_fut_exec = None
+            current_entry_date = None
+            current_entry_stock_fee = None
+            current_entry_fut_fee = None
         else:
             entry_spread_pcts.append(None)
             exit_spread_pcts.append(None)
             trade_cycles.append(None)
             trade_returns.append(None)
+            trade_pnls.append(None)
+            trade_return_pct_net.append(None)
+            trade_return_annual.append(None)
+            trade_hold_days.append(None)
         rtc_pcts.append(rtc_pct)
         tp_nets.append(tp_net)
         sl_nets.append(sl_net)
@@ -488,6 +494,10 @@ def build_spread_series(
     series_df["exit_spread_pct_exec"] = exit_spread_pcts
     series_df["trade_cycle"] = trade_cycles
     series_df["trade_return_pct"] = trade_returns
+    series_df["trade_pnl_cash"] = trade_pnls
+    series_df["trade_return_pct_net"] = trade_return_pct_net
+    series_df["trade_return_annual"] = trade_return_annual
+    series_df["trade_hold_days"] = trade_hold_days
     series_df["rtc_pct"] = rtc_pcts
     series_df["tp_net"] = tp_nets
     series_df["sl_net"] = sl_nets
@@ -496,6 +506,104 @@ def build_spread_series(
     series_df["liquidity_pass"] = liquidity_passes
     series_df["zscore"] = zscores
     return series_df
+
+
+def _avg_recent_trade_return_annual(series_df: pd.DataFrame) -> float | None:
+    if series_df.empty or "trade_return_annual" not in series_df.columns:
+        return None
+    exits = series_df.loc[
+        series_df.get("exit_flag", False) & series_df["trade_return_annual"].notna(),
+        "trade_return_annual",
+    ]
+    if exits.empty:
+        return None
+    return float(exits.tail(RECENT_TRADES_WINDOW).mean())
+
+
+def build_spread_series(
+    settings: AppSettings,
+    stock_secid: str,
+    future_secid: str,
+    window_days: int = 60,
+    full_life: bool = False,
+) -> pd.DataFrame:
+    paths = resolve_paths(settings)
+    dirs = _data_paths(paths.data_dir)
+    futures_path = dirs["raw"] / "futures.csv"
+    if not futures_path.exists():
+        return pd.DataFrame()
+    futures_df = pd.read_csv(futures_path)
+    future_spec_map = {spec.secid: spec for spec in _parse_contract_specs(futures_df)}
+    future_spec = future_spec_map.get(future_secid)
+    if future_spec is None or not future_spec.expiry:
+        return pd.DataFrame()
+    future_scale = _future_price_scale(future_spec)
+
+    today = date.today()
+    if full_life:
+        lookback = future_spec.expiry - timedelta(days=365)
+    else:
+        lookback_days = max(int(window_days), 1)
+        lookback = today - timedelta(days=lookback_days)
+    client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+
+    stock_candles = _fetch_candles(
+        client,
+        settings.moex.engine_shares,
+        settings.moex.market_shares,
+        settings.moex.shares_board,
+        stock_secid,
+        lookback,
+        today,
+    )
+    future_candles = _fetch_candles(
+        client,
+        settings.moex.engine_futures,
+        settings.moex.market_futures,
+        settings.moex.futures_board,
+        future_secid,
+        lookback,
+        today,
+        price_scale=future_scale,
+    )
+    if stock_candles.empty or future_candles.empty:
+        return pd.DataFrame()
+    merged = pd.merge(stock_candles, future_candles, on="date", how="inner")
+    if merged.empty:
+        return pd.DataFrame()
+    merged.rename(
+        columns={
+            stock_secid: "spot",
+            future_secid: "future_price",
+            f"{stock_secid}_volume": "spot_volume",
+            f"{future_secid}_volume": "future_volume",
+        },
+        inplace=True,
+    )
+
+    dividends = _load_dividends(client, stock_secid, paths.data_dir)
+    key_rates = _load_key_rates(dirs["raw"] / "key_rates.csv")
+    alpha_cfg = settings.spread_carry_alpha
+    series_df = compute_spread_series(
+        merged[["date", "spot", "future_price"]],
+        future_spec.expiry,
+        dividends,
+        key_rates,
+        r_disc_annual=alpha_cfg.r_disc_annual,
+        day_count=alpha_cfg.day_count,
+    )
+    if series_df.empty:
+        return series_df
+
+    return _apply_spread_carry_signals(
+        series_df,
+        merged=merged,
+        dividends=dividends,
+        key_rates=key_rates,
+        settings=settings,
+        future_spec=future_spec,
+        alpha_cfg=alpha_cfg,
+    )
 
 
 def compute_pairs(
@@ -658,6 +766,17 @@ def compute_pairs(
             series_df.at[last_idx, "spread_mid"] = spread_mid_value
             series_df.at[last_idx, "spread_pct"] = spread_pct_value
 
+        series_with_signals = _apply_spread_carry_signals(
+            series_df,
+            merged=merged,
+            dividends=dividends,
+            key_rates=key_rates,
+            settings=settings,
+            future_spec=future_spec,
+            alpha_cfg=alpha_cfg,
+        )
+        avg_trade_return_annual = _avg_recent_trade_return_annual(series_with_signals)
+
         dte = days_to_expiry(as_of_snapshot, expiry, alpha_cfg.use_trading_days)
         tau = year_fraction(as_of_snapshot, expiry, alpha_cfg.day_count)
 
@@ -819,6 +938,7 @@ def compute_pairs(
                 "r_cb_annual": r_cb,
                 "r_fund_annual": r_fund,
                 "r_disc_annual": r_disc,
+                "avg_trade_return_annual_recent": avg_trade_return_annual,
                 "signal_action": signal_action,
                 "signal_direction": signal_direction,
                 "signal_score": total_score,

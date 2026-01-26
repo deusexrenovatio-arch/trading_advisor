@@ -10,6 +10,10 @@ type SpreadPoint = {
   exit_flag?: boolean | null
   trade_cycle?: number | null
   trade_return_pct?: number | null
+  trade_pnl_cash?: number | null
+  trade_return_pct_net?: number | null
+  trade_return_annual?: number | null
+  trade_hold_days?: number | null
 }
 
 type SpreadChartProps = {
@@ -38,7 +42,18 @@ export default function SpreadChart({ data }: SpreadChartProps) {
   )
 
   const cycleSummary = (() => {
-    const map = new Map<number, { entry?: string; exit?: string; returnPct?: number | null }>()
+    const map = new Map<
+      number,
+      {
+        entry?: string
+        exit?: string
+        returnPct?: number | null
+        pnlCash?: number | null
+        returnNet?: number | null
+        returnAnn?: number | null
+        holdDays?: number | null
+      }
+    >()
     data.forEach((point) => {
       if (point.trade_cycle == null) return
       const entry = map.get(point.trade_cycle) ?? {}
@@ -47,9 +62,11 @@ export default function SpreadChart({ data }: SpreadChartProps) {
       }
       if (point.exit_flag) {
         entry.exit = point.date
-        if (typeof point.trade_return_pct === 'number') {
-          entry.returnPct = point.trade_return_pct
-        }
+        if (typeof point.trade_return_pct === 'number') entry.returnPct = point.trade_return_pct
+        if (typeof point.trade_pnl_cash === 'number') entry.pnlCash = point.trade_pnl_cash
+        if (typeof point.trade_return_pct_net === 'number') entry.returnNet = point.trade_return_pct_net
+        if (typeof point.trade_return_annual === 'number') entry.returnAnn = point.trade_return_annual
+        if (typeof point.trade_hold_days === 'number') entry.holdDays = point.trade_hold_days
       }
       map.set(point.trade_cycle, entry)
     })
@@ -57,6 +74,11 @@ export default function SpreadChart({ data }: SpreadChartProps) {
       .map(([cycle, value]) => ({ cycle, ...value }))
       .sort((a, b) => a.cycle - b.cycle)
   })()
+
+  const formatPct = (value?: number | null) =>
+    value == null ? '--' : `${(value * 100).toFixed(2)}%`
+  const formatCash = (value?: number | null) =>
+    value == null ? '--' : Number(value).toFixed(2)
 
   return (
     <Box sx={{ width: '100%', minHeight: 320 }}>
@@ -113,8 +135,9 @@ export default function SpreadChart({ data }: SpreadChartProps) {
           </Typography>
           {cycleSummary.map((item) => (
             <Typography key={item.cycle} variant="caption" display="block">
-              #{item.cycle}: entry {item.entry ?? '—'} · exit {item.exit ?? '—'} · return{' '}
-              {typeof item.returnPct === 'number' ? `${(item.returnPct * 100).toFixed(2)}%` : '—'}
+              #{item.cycle}: entry {item.entry ?? '--'} | exit {item.exit ?? '--'} | pnl{' '}
+              {formatCash(item.pnlCash)} | net {formatPct(item.returnNet)} | ann{' '}
+              {formatPct(item.returnAnn)} | hold {item.holdDays ?? '--'}d
             </Typography>
           ))}
         </Box>

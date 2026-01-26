@@ -115,6 +115,10 @@ type SpreadSeriesPoint = {
   exit_flag?: boolean | null
   trade_cycle?: number | null
   trade_return_pct?: number | null
+  trade_pnl_cash?: number | null
+  trade_return_pct_net?: number | null
+  trade_return_annual?: number | null
+  trade_hold_days?: number | null
   zscore?: number | null
 }
 type SignalHistoryRow = {
@@ -218,6 +222,11 @@ const labelOverrides: Record<string, string> = {
   r_fund_annual: 'Funding rate',
   r_disc_annual: 'Discount rate',
   tp_net: 'TP net',
+  trade_pnl_cash: 'Trade PnL (cash, pre-tax)',
+  trade_return_pct_net: 'Trade return (net %, pre-tax)',
+  trade_return_annual: 'Trade return (annual, pre-tax)',
+  trade_hold_days: 'Trade hold days',
+  avg_trade_return_annual_recent: 'Avg trade return (annual, last 5)',
   sl_net: 'SL net',
   share_alpha_exits: 'Alpha exits share',
   avg_hold_days: 'Avg hold days',
@@ -824,6 +833,7 @@ function App() {
         'floor_rate_annual',
         'score_floor',
         'total_score',
+        'avg_trade_return_annual_recent',
         'decision',
         'signal_action',
         'signal_direction',
@@ -1202,6 +1212,7 @@ function App() {
 
   const alphaFields = useMemo(
     () => [
+      { key: 'avg_trade_return_annual_recent', label: 'Avg trade return (annual, last 5)' },
       { key: 'score_alpha', label: 'Alpha score' },
       { key: 'p_hit_tp', label: 'P(hit TP)' },
       { key: 'p_hit_sl', label: 'P(hit SL)' },
