@@ -48,6 +48,15 @@ scenarios:
     user_story: Пользователь подтверждает или отклоняет решение и инициирует выполнение.
     expectations:
       - API принимает approve/reject и возвращает статус ok.
+  - id: params-specs
+    type: api_list
+    scope: backend
+    url: /api/params/specs
+    require_non_empty: true
+    required_keys: [key, value_type, default]
+    test_cases: [TC-PARAMS-API-001]
+    title: Strategy parameter specs
+    user_story: Operator can review available configuration parameters.
   - id: top-pairs
     type: api_list
     scope: backend
@@ -124,6 +133,15 @@ scenarios:
     expectations:
       - История содержит action/direction/score.
       - Можно фильтровать по диапазону дат.
+  - id: signals-history-reasons
+    type: api_list
+    scope: backend
+    url: /api/signals/history?limit=5
+    require_non_empty: false
+    required_keys: [signal_action, signal_reasons, signal_metrics]
+    test_cases: [TC-SIG-HIST-API-004]
+    title: Signal history includes reasons
+    user_story: Operator can inspect exit reasons and metrics.
   - id: signals-history-range
     type: history_date_range
     scope: backend

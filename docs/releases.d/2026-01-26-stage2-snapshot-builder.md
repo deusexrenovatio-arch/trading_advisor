@@ -1,0 +1,3 @@
+- Added stage 2 calculation blocks (execution, costs, dividends, funding, spread/floor/liquidity).
+- Added SnapshotBuilder to assemble SnapshotPerPair universe with execution spreads, rtc_pct, and floor metrics.
+- Added unit tests for execution OHLC, dividends PV, floor margin, and snapshot builder.

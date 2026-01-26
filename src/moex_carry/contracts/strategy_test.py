@@ -32,6 +32,8 @@ class BacktestUniverseConfig(BaseModel):
 class BacktestExecutionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    price_mode: str = "BIDASK"
+    half_spread_bps: float = 0.0
     slip_stock_bps: float = 0.0
     slip_fut_bps: float = 0.0
     slip_fut_ticks: float | None = None
