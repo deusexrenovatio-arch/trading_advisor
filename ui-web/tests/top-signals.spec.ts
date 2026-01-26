@@ -137,6 +137,12 @@ const spreadSeries = [
     exit_flag: false,
   },
 ]
+const refreshStatus = {
+  enabled: true,
+  interval_sec: 3600,
+  status: 'ok',
+  last_success_at: '2026-01-26T15:00:00Z',
+}
 
 const registerCommonRoutes = async (
   page,
@@ -150,6 +156,12 @@ const registerCommonRoutes = async (
   await page.route('**/api/backtests**', (route) => route.fulfill({ json: backtests }))
   await page.route('**/api/signals/active**', (route) =>
     route.fulfill({ json: activeSignalsOverride ?? activeSignals }),
+  )
+  await page.route('**/api/signals/refresh-status**', (route) =>
+    route.fulfill({ json: refreshStatus }),
+  )
+  await page.route('**/api/signals/refresh**', (route) =>
+    route.fulfill({ json: refreshStatus }),
   )
   await page.route('**/api/spread-series**', (route) => route.fulfill({ json: spreadSeries }))
   await page.route('**/api/signals/history**', (route) => {
@@ -167,11 +179,10 @@ const registerCommonRoutes = async (
 
 test.describe('Top pairs + Signals UI', () => {
   test('Top pairs filters and Reload button', async ({ page }) => {
-    let topPairsCalls = 0
+    let useSecond = false
     await registerCommonRoutes(page)
     await page.route('**/api/top-pairs**', (route) => {
-      topPairsCalls += 1
-      const data = topPairsCalls > 2 ? topPairsSecond : topPairsFirst
+      const data = useSecond ? topPairsSecond : topPairsFirst
       route.fulfill({ json: data })
     })
 
@@ -189,6 +200,7 @@ test.describe('Top pairs + Signals UI', () => {
     await page.locator('[role="combobox"]').first().click()
     await page.getByRole('option', { name: 'All' }).click()
 
+    useSecond = true
     await page.getByRole('button', { name: 'Reload' }).click()
     await expect(page.getByText('ALH6')).toBeVisible()
     await expect(page.getByText('SRH6')).toHaveCount(0)

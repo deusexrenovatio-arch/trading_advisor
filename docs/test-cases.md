@@ -14,8 +14,8 @@
 - decision-view-aggregation -> TC-DEC-API-002
 - decision-log-aggregation -> TC-DEC-API-003
 - decision-action -> TC-DEC-API-004, TC-DEC-UI-002
-- top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002
-- signals-active -> TC-SIG-ACT-API-001
+- top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
+- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
 - signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
@@ -69,6 +69,27 @@ Expected:
 - Spread chart renders with data.
 - Details panel shows alpha metrics (tp/sl, p_hit_tp/p_hit_sl, sigma_h).
 
+### TC-TOP-UI-003 Top pairs auto refresh indicator
+Acceptance: top-pairs
+Automation: manual
+Steps:
+1. Open Top pairs tab.
+2. Ensure Auto refresh is enabled.
+3. Wait for one refresh interval (60s) or longer.
+Expected:
+- Updated timestamp changes after the interval.
+- Table rows refresh without full page reload.
+
+### TC-TOP-UI-004 Manual recompute updates timestamp
+Acceptance: top-pairs
+Automation: manual
+Steps:
+1. Open Top pairs tab.
+2. Click Reload (triggers recompute).
+Expected:
+- Recomputed timestamp updates after the run.
+- Table rows refresh with the new snapshot.
+
 ### TC-SPREAD-UI-001 Spread chart renders for a pair
 Acceptance: spread-series
 Automation: ui-web/tests/top-signals.spec.ts
@@ -77,6 +98,17 @@ Steps:
 2. Click Details on a row.
 Expected:
 - Spread chart renders with spread_mid and spread_pct data.
+
+### TC-SIG-ACT-UI-001 Active signals auto refresh
+Acceptance: signals-active
+Automation: manual
+Steps:
+1. Open Signals tab.
+2. Ensure Auto refresh is enabled.
+3. Wait for one refresh interval (60s) or longer.
+Expected:
+- Updated timestamp changes after the interval.
+- Signals table refreshes without full page reload.
 
 
 ### TC-SIG-HIST-UI-001 Signals history filters and date range

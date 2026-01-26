@@ -1,0 +1,3 @@
+- Added backend signal recompute scheduler with daily scheduling and on-demand refresh endpoint.
+- UI reload now triggers recompute and shows last successful recompute time.
+- Default scheduler set to run daily at 01:00 (local timezone).

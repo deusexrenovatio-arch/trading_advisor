@@ -68,7 +68,7 @@ scenarios:
       ]
     forbid_keys: [signal_reasons, signal_metrics]
     cache_as: top_pairs
-    test_cases: [TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002]
+    test_cases: [TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004]
     title: Top pairs table (floor + alpha)
     user_story: Operator reviews ranked pairs with floor + alpha metrics.
     expectations:
@@ -82,7 +82,7 @@ scenarios:
     required_keys: [run_id, timestamp, stock, future, signal_action, signal_score]
     allowed_field_values:
       signal_action: [enter, exit]
-    test_cases: [TC-SIG-ACT-API-001]
+    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001]
     title: Действуемые сигналы
     user_story: Пользователь получает только actionable сигналы.
     expectations:

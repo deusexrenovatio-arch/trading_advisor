@@ -12,14 +12,19 @@ Expected:
 - Defaults are explicit and documented.
 
 ## US-02 Daily scan of pairs
-Actor: Operator
-Goal: Get ranked pairs with floor + alpha metrics.
+Actor: User
+Goal: See the current state of spread signals and top pairs.
 Steps:
-1. Run compute pipeline or signal cycle.
-2. Open Top pairs view.
+1. Run the signal cycle or wait for the scheduled refresh.
+2. Open Top pairs and Signals views.
+3. Click Reload to trigger recompute and refresh rankings and signals.
+4. Open pair Details to confirm snapshot_as_of and signal timestamps.
 Expected:
 - Pairs are ranked by total_score.
 - Each row includes spread_pct, rtc_pct, floor_rate_annual, score_floor, score_alpha.
+- Signals list includes actionable entries with timestamp.
+- UI shows last successful recompute time.
+- snapshot_as_of and signal timestamps reflect the latest run time (current date/time).
 
 ## US-03 Drill into a pair
 Actor: Operator

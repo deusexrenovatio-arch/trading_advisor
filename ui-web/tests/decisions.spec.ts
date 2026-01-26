@@ -84,11 +84,23 @@ const decisionLogs: Record<string, Record<string, unknown>> = {
     aggregation: { reasons: ['risk_limit_breach'] },
   },
 }
+const refreshStatus = {
+  enabled: true,
+  interval_sec: 3600,
+  status: 'ok',
+  last_success_at: '2026-01-26T15:00:00Z',
+}
 
 const registerBaseRoutes = async (page) => {
   await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/signals/active**', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/backtests**', (route) => route.fulfill({ json: [] }))
+  await page.route('**/api/signals/refresh-status**', (route) =>
+    route.fulfill({ json: refreshStatus }),
+  )
+  await page.route('**/api/signals/refresh**', (route) =>
+    route.fulfill({ json: refreshStatus }),
+  )
   await page.route('**/api/decisions/**/action', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({
