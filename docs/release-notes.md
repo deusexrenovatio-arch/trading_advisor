@@ -25,3 +25,14 @@ Added
 
 Notes
 - Strategy, rebalance, and backtest business logic unchanged.
+
+## 2026-01-26 - Stage 3: PortfolioRebalanceController
+
+Added
+- Portfolio rebalance controller implementing hard exits, TP/SL, rotation, band-rebalance, and turnover caps.
+- Allocation methods: EQUAL, SCORE_WEIGHTED, SCORE_RISK_PARITY, FLOOR_PLUS_ALPHA_OVERLAY.
+- Rebalance contracts (RebalanceConfig, RebalanceResult, TargetPosition) and portfolio utilities.
+- Portfolio tests covering exits, hysteresis, rotation, band-rebalance, turnover cap, and risk-parity weights.
+
+Notes
+- Backtest engine and decision_log/decision_view schemas unchanged.

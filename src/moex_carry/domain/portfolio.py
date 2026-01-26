@@ -128,6 +128,10 @@ class PositionState:
     realized_pnl: Optional[float] = None
     state: str = "open"
     metadata: dict[str, Any] = field(default_factory=dict)
+    entry_spread_exec_pct: Optional[float] = None
+    liq_fail_streak: int = 0
+    drop_rank_streak: int = 0
+    trail_peak_spread_pct: Optional[float] = None
 
 
 @dataclass
