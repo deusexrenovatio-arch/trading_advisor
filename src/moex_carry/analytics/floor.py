@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from moex_carry.analytics.funding import funding_cost
+
 
 @dataclass
 class FloorMetrics:
@@ -45,8 +47,8 @@ def compute_floor_metrics(
     margin_fut_pct: float = 0.0,
     var_margin_buffer_pct: float = 0.0,
 ) -> FloorMetrics:
-    funding_cost = float(spot_buy) * float(r_fund_annual) * float(max(tau, 0.0))
-    costs_hold = float(fees_rt) + funding_cost + float(riskbuffer_floor)
+    fund_cost = funding_cost(spot_buy, r_fund_annual, tau)
+    costs_hold = float(fees_rt) + fund_cost + float(riskbuffer_floor)
     floor_pnl = (float(fut_sell) - float(spot_buy)) + float(div_sum) - costs_hold
 
     if capital_base_mode.upper() == "MARGIN_AWARE":

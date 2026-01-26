@@ -79,10 +79,26 @@ class SnapshotPerPair:
     stock_secid: str
     future_secid: str
     expiry: Optional[date] = None
+    spot_bid: Optional[float] = None
+    spot_ask: Optional[float] = None
     spot_mid: Optional[float] = None
+    spot_open: Optional[float] = None
+    spot_close: Optional[float] = None
+    future_bid: Optional[float] = None
+    future_ask: Optional[float] = None
     future_mid: Optional[float] = None
+    future_open: Optional[float] = None
+    future_close: Optional[float] = None
+    dte: Optional[int] = None
+    tau: Optional[float] = None
+    pv_div: Optional[float] = None
+    div_sum: Optional[float] = None
     spread_mid: Optional[float] = None
     spread_pct: Optional[float] = None
+    spread_entry_exec: Optional[float] = None
+    spread_exit_exec: Optional[float] = None
+    spread_entry_exec_pct: Optional[float] = None
+    spread_exit_exec_pct: Optional[float] = None
     rtc_pct: Optional[float] = None
     floor_rate_annual: Optional[float] = None
     floor_pass: Optional[bool] = None

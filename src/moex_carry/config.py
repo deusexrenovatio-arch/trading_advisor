@@ -64,6 +64,8 @@ class SpreadCarryAlphaConfig(BaseModel):
     r_fund_annual: Optional[float] = None
     r_disc_annual: Optional[float] = None
 
+    price_mode: str = "BIDASK"
+    half_spread_bps: float = 0.0
     slip_stock_bps: float = 0.0
     slip_fut_bps: float = 0.0
     slip_fut_ticks: Optional[float] = None

@@ -122,6 +122,7 @@ def _apply_cost_stress(resolved: dict[str, Any], mult: float) -> None:
             costs[field] = float(value) * mult
 
     slippage_fields = [
+        "half_spread_bps",
         "slip_stock_bps",
         "slip_fut_bps",
         "slip_fut_ticks",
