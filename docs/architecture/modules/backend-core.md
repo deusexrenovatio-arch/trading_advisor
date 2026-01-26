@@ -87,6 +87,8 @@ but the API endpoints remain the primary backend interface for the React app.
 - Key files:
   - `app.py`: API routes (Dash layout still present but not used in production).
   - `data.py`: loaders for CSV/JSONL artifacts.
+  - Optional signal refresh scheduler (configurable in `ui.signal_refresh_*`).
+  - Refresh endpoints: `POST /api/signals/refresh`, `GET /api/signals/refresh-status`.
 
 ## Parallel dev workflow
 - Run backend API: `python -m moex_carry.cli ui` (serves `/api/*` on `127.0.0.1:8050`).

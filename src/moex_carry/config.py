@@ -137,6 +137,12 @@ class AggregationConfig(BaseModel):
 class UiConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8050
+    signal_refresh_enabled: bool = False
+    signal_refresh_interval_sec: int = 300
+    signal_refresh_daily_time: Optional[str] = None
+    signal_refresh_timezone: Optional[str] = None
+    signal_refresh_max_pairs: Optional[int] = None
+    signal_refresh_save_csv: bool = True
 
 
 class DataConfig(BaseModel):
