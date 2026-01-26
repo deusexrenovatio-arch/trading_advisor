@@ -15,6 +15,7 @@ from flask import Flask, jsonify, request
 
 from moex_carry.config import AppSettings, resolve_paths
 from moex_carry.decision_log import load_jsonl
+from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
@@ -508,6 +509,15 @@ def create_app(settings: AppSettings) -> Dash:
                 "execution_status": execution_entry,
             }
         )
+
+    @server.route("/api/params/specs", methods=["GET"])
+    def params_specs_api():
+        preset = request.args.get("preset")
+        try:
+            specs = get_parameter_specs(preset)
+        except ValueError as exc:
+            return jsonify({"error": "unknown_preset", "message": str(exc)}), 400
+        return jsonify([spec.model_dump() for spec in specs])
 
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
