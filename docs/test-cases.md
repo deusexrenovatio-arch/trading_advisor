@@ -14,15 +14,27 @@
 - decision-view-aggregation -> TC-DEC-API-002
 - decision-log-aggregation -> TC-DEC-API-003
 - decision-action -> TC-DEC-API-004, TC-DEC-UI-002
+- params-specs -> TC-PARAMS-API-001
 - top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
 - signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
+- signals-history-reasons -> TC-SIG-HIST-API-004
 - signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
 - backtests -> TC-BACK-API-001, TC-BACK-UI-001
 - spread-series -> TC-SPREAD-API-001, TC-SPREAD-UI-001
 - frontend -> TC-FE-HTTP-001
 - frontend-proxy -> TC-FE-PROXY-001
+
+## User Scenario Coverage (US -> acceptance/test cases)
+- US-01 Configure the strategy -> params-specs (TC-PARAMS-API-001) + unit tests: tests/test_config_resolver.py, tests/test_parameter_specs.py.
+- US-02 Daily scan of pairs -> top-pairs, signals-active, signals-history, frontend, frontend-proxy (TC-TOP-*, TC-SIG-ACT-*, TC-SIG-HIST-*, TC-FE-*).
+- US-03 Drill into a pair -> spread-series + top-pairs details (TC-SPREAD-API-001, TC-SPREAD-UI-001, TC-TOP-UI-002).
+- US-04 Enter a position -> signals-execute + decision-action (TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-DEC-API-004, TC-DEC-UI-002).
+- US-05 Early exit (alpha) -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
+- US-06 Hold to expiry or roll -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
+- US-07 Backtest review -> backtests (TC-BACK-API-001, TC-BACK-UI-001).
+- US-08 Risk/liquidity rejection -> top-pairs + unit checks (TC-TOP-API-001, TC-TOP-UI-001; tests/test_liquidity_metrics.py, tests/test_risk_gate.py).
 
 ## UI Test Cases
 
@@ -189,6 +201,14 @@ Request:
 Expected:
 - status ok and operator_action/execution_status present.
 
+### TC-PARAMS-API-001 Strategy parameter specs
+Acceptance: params-specs
+Automation: scripts/acceptance_check.py (api_list)
+Request:
+- GET /api/params/specs
+Expected:
+- JSON list with key, value_type, default fields.
+
 ### TC-TOP-API-001 Top pairs fields and forbidden keys
 Acceptance: top-pairs
 Automation: scripts/acceptance_check.py (top-pairs)
@@ -229,6 +249,14 @@ Request:
 - GET /api/signals/history?stock=SBER&future=SRH6&signal_action=enter&limit=500
 Expected:
 - All rows match stock/future/action.
+
+### TC-SIG-HIST-API-004 Signal reasons and metrics present
+Acceptance: signals-history-reasons
+Automation: scripts/acceptance_check.py (api_list)
+Request:
+- GET /api/signals/history?limit=5
+Expected:
+- Each row includes signal_reasons and signal_metrics.
 
 ### TC-SIG-EXEC-API-001 Execute signal endpoint
 Acceptance: signals-execute
