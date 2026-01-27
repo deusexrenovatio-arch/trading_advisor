@@ -12,9 +12,13 @@ import pandas as pd
 from dash import Dash, Input, Output, State, dash_table, dcc, html
 from dash.dash_table.Format import Format, Scheme, Trim
 from flask import Flask, jsonify, request
+from pydantic import ValidationError
 
 from moex_carry.config import AppSettings, resolve_paths
+from moex_carry.contracts.strategy_test import BacktestRequest, ForwardTestRequest, HpoRequest
+from moex_carry.backtest_v2.runtime import run_backtest_v2_cached, serialize_backtest_report
 from moex_carry.decision_log import load_jsonl
+from moex_carry.forward.runtime import load_forward_status, start_forward_run
 from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
@@ -145,6 +149,29 @@ def _contains_nan(value) -> bool:
     if isinstance(value, list):
         return any(_contains_nan(item) for item in value)
     return False
+
+
+def _parse_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "y"}:
+            return True
+        if lowered in {"0", "false", "no", "n"}:
+            return False
+    return None
+
+
+def _bad_request(message: str, *, details: object | None = None):
+    payload = {"error": "invalid_request", "message": message}
+    if details is not None:
+        payload["details"] = details
+    return jsonify(payload), 400
 
 
 def _df_to_records(df: pd.DataFrame) -> list[dict[str, object]]:
@@ -393,7 +420,7 @@ def create_app(settings: AppSettings) -> Dash:
     @server.after_request
     def _cors_headers(response):
         response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
         return response
 
@@ -518,6 +545,80 @@ def create_app(settings: AppSettings) -> Dash:
         except ValueError as exc:
             return jsonify({"error": "unknown_preset", "message": str(exc)}), 400
         return jsonify([spec.model_dump() for spec in specs])
+
+    @server.route("/api/backtest/run", methods=["POST"])
+    def backtest_run_api():
+        payload = request.get_json(silent=True)
+        if payload is None:
+            return _bad_request("invalid_json")
+        precompute = None
+        request_payload = payload
+        if isinstance(payload, dict):
+            if "request" in payload:
+                request_payload = payload.get("request")
+                precompute = _parse_bool(payload.get("precompute"))
+            elif "precompute" in payload:
+                precompute = _parse_bool(payload.get("precompute"))
+                request_payload = dict(payload)
+                request_payload.pop("precompute", None)
+        if not isinstance(request_payload, dict):
+            return _bad_request("missing_request")
+        try:
+            backtest_request = BacktestRequest.model_validate(request_payload)
+        except ValidationError as exc:
+            return _bad_request("validation_error", details=exc.errors())
+        try:
+            report = run_backtest_v2_cached(backtest_request, paths.data_dir, precompute=precompute)
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("Backtest v2 failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+        return jsonify(serialize_backtest_report(report))
+
+    @server.route("/api/forward/start", methods=["POST"])
+    def forward_start_api():
+        payload = request.get_json(silent=True) or {}
+        request_payload = payload
+        if isinstance(payload, dict) and "request" in payload:
+            request_payload = payload.get("request") or {}
+        if not isinstance(request_payload, dict):
+            return _bad_request("missing_request")
+        try:
+            forward_request = ForwardTestRequest.model_validate(request_payload)
+        except ValidationError as exc:
+            return _bad_request("validation_error", details=exc.errors())
+        try:
+            run_info = start_forward_run(forward_request, paths.data_dir)
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("Forward start failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+        return jsonify(run_info)
+
+    @server.route("/api/forward/status", methods=["GET"])
+    def forward_status_api():
+        run_id = request.args.get("run_id")
+        try:
+            status = load_forward_status(paths.data_dir, run_id=run_id)
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("Forward status failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+        return jsonify(status)
+
+    @server.route("/api/hpo/run", methods=["POST"])
+    def hpo_run_api():
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return _bad_request("invalid_json")
+        try:
+            _ = HpoRequest.model_validate(payload)
+        except ValidationError as exc:
+            return _bad_request("validation_error", details=exc.errors())
+        return jsonify({"status": "stub", "message": "HPO endpoint not wired yet"})
 
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
