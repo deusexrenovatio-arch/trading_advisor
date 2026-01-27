@@ -1,5 +1,13 @@
 # Release Notes
 
+## 2026-01-27 - C/D/E Completion: API/CLI + HPO + UI
+
+Added
+- Completed API/CLI + UI surface for Backtest v2, Forward status, and HPO (HPO API validates payloads and returns stub status).
+
+Notes
+- Backtest v2 performance optimizations (precompute cache + fast alpha path) remain intact.
+
 ## 2026-01-27 - UI Backtest v2, Forward Status, HPO
 
 Added

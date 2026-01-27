@@ -180,6 +180,48 @@ scenarios:
     test_cases: [TC-BACK-API-001, TC-BACK-UI-001]
     title: Метрики бэктеста
     user_story: Пользователь видит метрики бэктеста.
+  - id: backtest-run
+    type: post_json
+    scope: backend
+    url: /api/backtest/run
+    payload: {}
+    required_keys: [summary_metrics, equity_curve, trades]
+    test_cases: [TC-BACK-V2-API-001, TC-BACK-V2-API-002]
+    title: Backtest v2 run
+    user_story: Оператор запускает Backtest v2 через API.
+    expectations:
+      - Ответ содержит summary_metrics, equity_curve и trades.
+  - id: forward-start
+    type: post_json
+    scope: backend
+    url: /api/forward/start
+    payload: {}
+    required_keys: [run_id, status, state]
+    test_cases: [TC-FWD-API-001]
+    title: Forward start
+    user_story: Оператор инициализирует forward-run.
+    expectations:
+      - Ответ содержит run_id и начальное состояние.
+  - id: forward-status
+    type: http_status
+    scope: backend
+    url: /api/forward/status
+    test_cases: [TC-FWD-API-002, TC-FWD-UI-001]
+    title: Forward status
+    user_story: Оператор проверяет статус forward-run.
+    expectations:
+      - Endpoint возвращает 200, когда forward-run активен.
+  - id: hpo
+    type: post_json
+    scope: backend
+    url: /api/hpo/run
+    payload: {}
+    required_keys: [status]
+    test_cases: [TC-HPO-UNIT-001]
+    title: HPO run
+    user_story: Исследователь запускает HPO.
+    expectations:
+      - Ответ содержит статус (stub).
   - id: spread-series
     type: spread_series
     scope: backend

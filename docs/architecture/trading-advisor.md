@@ -33,6 +33,7 @@ Success criteria:
 - DecisionView: UI projection (`decision_view` schema).
 - TradingUI: operator view with filters and drilldowns to raw log.
 - BacktestEngine: replays historical data to produce comparable outputs (legacy + v2 multi-pair engine).
+- HPOEngine: hyperparameter optimization over Backtest v2 (walk-forward folds + constraints).
 - ForwardTestEngine: paper EOD -> OPEN -> after-close loop with state persistence.
 
 ## Agentic vs deterministic steps

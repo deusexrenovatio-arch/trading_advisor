@@ -36,6 +36,26 @@ but the API endpoints remain the primary backend interface for the React app.
 - Key files: `moex_iss.py`, `cbr_rates.py`, `providers.py`, `dividends.py`, `streaming.py`, `history_store.py`.
 - Outputs: normalized data frames and cached responses for the pipeline.
 
+### `domain/`
+- Responsibilities: shared domain models for instruments, portfolio state, and decisions.
+- Key files: `models.py`, `decision.py`, `portfolio.py`.
+- Outputs: typed entities reused across pipeline, storage, and contracts.
+
+### `execution/`
+- Responsibilities: execution model primitives (price mode, slippage, tick sizes).
+- Key files: `model.py`.
+- Outputs: execution parameters consumed by snapshot building and backtest/forward engines.
+
+### `snapshot/`
+- Responsibilities: assemble `SnapshotPerPair` with spreads, floor, liquidity, and costs.
+- Key files: `builder.py`.
+- Outputs: snapshot universe for backtest v2 and forward engines.
+
+### `portfolio/`
+- Responsibilities: allocation math and rebalance controller for target positions.
+- Key files: `allocation.py`, `contracts.py`, `rebalance_controller.py`, `turnover.py`.
+- Outputs: target positions, rebalance actions, turnover caps.
+
 ### `selection/`
 - Responsibilities: instrument universe, liquidity checks, and ranking.
 - Key files: `universe.py`, `liquidity.py`, `ranking.py`.

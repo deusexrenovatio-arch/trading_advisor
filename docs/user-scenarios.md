@@ -82,7 +82,7 @@ Steps:
 Expected:
 - Decision indicates SKIP_* with traceable thresholds.
 
-## US-09 Forward paper daily cycle
+## US-09 Forward cycle
 Actor: Operator
 Goal: Run the forward paper loop with EOD -> OPEN -> after close persistence.
 Steps:
@@ -97,7 +97,7 @@ Expected:
 - Equity curve appends one point per day.
 - Alerts are emitted for missing data, wide spreads, or drawdown breaches.
 
-## US-10 HPO run + leaderboard
+## US-10 HPO run
 Actor: Quant Researcher
 Goal: Optimize strategy parameters using Backtest v2 as a black box.
 Steps:
