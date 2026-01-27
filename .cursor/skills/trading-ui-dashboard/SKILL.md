@@ -41,6 +41,11 @@ description: Build production-grade trading advisor UI with React/Vite/TypeScrip
   - `contracts/decision-view.schema.json`
   - `contracts/decision-log.schema.json`
 
+## Field & parameter metadata
+- Use `fieldMeta` + `formatValue` + `getFieldLabel/getFieldTooltip` as the source of truth for UI labels/formatting.
+- Tooltips should follow: "Формула: ... Интерпретация: ...".
+- For Backtest v2 params, use `paramMeta` (human labels, no raw keys; dict params -> labeled rows).
+
 ## Layout recommendation
 - Top toolbar: time range, quick filter, refresh.
 - Main area: decision table.

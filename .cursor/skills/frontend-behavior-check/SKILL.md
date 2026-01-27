@@ -43,6 +43,7 @@ Quickly validate that the UI features work after frontend changes without relyin
   - Top pairs / Signals / Backtests show rows (non-empty arrays).
   - Details panel for a pair returns spread-series data (non-empty).
   - Sorting should work on numeric columns (verify column exists and values are numeric).
+  - Backtest v2 params show human labels (no technical keys with dots) and dict weights render as labeled rows.
 
 ### 4) Optional automated tests
 - Run:

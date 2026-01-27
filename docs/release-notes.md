@@ -1,5 +1,25 @@
 # Release Notes
 
+## 2026-01-27 - Backtest v2 Params UX
+
+Added
+- Human-friendly labels/tooltips for Backtest v2 parameters (no raw technical keys).
+- Dict parameters (e.g., allocation weights) render as labeled rows with numeric inputs.
+- Param filter matches labels and sections are ordered (Test/Universe/Execution/...).
+- Value label mappings for key enum-like params (price_mode, capital_base_mode, cadence).
+
+## 2026-01-27 - UI: Russian localization + metrics UX
+
+Added
+- Russian UI labels across Decisions, Top Pairs, Signals, Backtests, Forward, and HPO tabs.
+- Unified field labels/formatting (percent/bps/currency/days) via field metadata.
+- Metric tooltips with formula + interpretation in table headers and detail panels.
+- Default Signals history range (last 7 days).
+- Basket weights formatted as percentages with consistent labels.
+
+Notes
+- Detail grids filter out row-duplicated fields where possible to reduce repetition.
+
 ## 2026-01-27 - C/D/E Completion: API/CLI + HPO + UI
 
 Added

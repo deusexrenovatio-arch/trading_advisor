@@ -63,7 +63,7 @@ scenarios:
     url: /api/params/specs
     require_non_empty: true
     required_keys: [key, value_type, default]
-    test_cases: [TC-BACK-V2-UI-001]
+    test_cases: [TC-BACK-V2-UI-001, TC-BACK-V2-UI-002]
     title: Frontend params specs proxy
     user_story: UI can load parameter specs for Backtest v2.
   - id: frontend-hpo-run

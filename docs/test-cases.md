@@ -15,6 +15,7 @@
 - decision-log-aggregation -> TC-DEC-API-003
 - decision-action -> TC-DEC-API-004, TC-DEC-UI-002
 - params-specs -> TC-PARAMS-API-001
+- frontend-params-specs -> TC-BACK-V2-UI-001, TC-BACK-V2-UI-002
 - top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
 - signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
@@ -173,6 +174,18 @@ Steps:
 2. Load params and run backtest.
 Expected:
 - Summary metrics, equity curve, and trades are visible.
+
+### TC-BACK-V2-UI-002 Backtest v2 parameters UX
+Acceptance: frontend-params-specs
+Automation: ui-web/tests/backtest-forward-hpo.spec.ts
+Steps:
+1. Open Backtest v2 tab.
+2. Verify human-friendly labels (e.g., "Дата начала").
+3. Verify allocation weights show labeled rows (e.g., "Фундаментальная").
+4. Ensure technical keys (with dots) are not shown as labels.
+Expected:
+- Parameters are readable for humans without raw keys.
+- Dict parameters render as labeled rows with numeric inputs.
 
 ### TC-FWD-UI-001 Forward status view
 Acceptance: forward-status
