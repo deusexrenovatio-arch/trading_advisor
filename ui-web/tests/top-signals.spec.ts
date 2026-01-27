@@ -190,9 +190,10 @@ test.describe('Top pairs + Signals UI', () => {
     })
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Top pairs' }).click()
+    await page.getByRole('tab', { name: 'Топ пар' }).click()
     await expect(page.getByText('SRH6')).toBeVisible()
-    await expect(page.getByRole('columnheader', { name: 'Avg trade return (annual, last 5)' })).toBeVisible()
+    const headerRow = page.locator('table thead')
+    await expect(headerRow.getByText('Средн. годовая доходность (посл. 5)')).toBeVisible()
 
     await expect(page.locator('[role="combobox"]').first()).toBeVisible()
     await page.locator('[role="combobox"]').first().click()
@@ -202,10 +203,10 @@ test.describe('Top pairs + Signals UI', () => {
     await expect(tableRows).toHaveCount(1)
 
     await page.locator('[role="combobox"]').first().click()
-    await page.getByRole('option', { name: 'All' }).click()
+    await page.getByRole('option', { name: 'Все' }).click()
 
     useSecond = true
-    await page.getByRole('button', { name: 'Reload' }).click()
+    await page.getByRole('button', { name: 'Обновить' }).click()
     await expect(page.getByText('ALH6')).toBeVisible()
     await expect(page.getByText('SRH6')).toHaveCount(0)
   })
@@ -220,10 +221,10 @@ test.describe('Top pairs + Signals UI', () => {
     })
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Top pairs' }).click()
-    await page.locator('table tbody tr').first().getByRole('button', { name: 'Details' }).click()
+    await page.getByRole('tab', { name: 'Топ пар' }).click()
+    await page.locator('table tbody tr').first().getByRole('button', { name: 'Детали' }).click()
 
-    await expect(page.getByText('Spread chart (contract life)')).toBeVisible()
+    await expect(page.getByText('График спреда (жизнь контракта)')).toBeVisible()
     await expect.poll(() => spreadCalls).toBeGreaterThan(0)
   })
 
@@ -232,7 +233,7 @@ test.describe('Top pairs + Signals UI', () => {
     await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Backtests' }).click()
+    await page.getByRole('tab', { name: 'Бэктесты' }).click()
 
     const tableRows = page.locator('table tbody tr')
     await expect(tableRows).toHaveCount(1)
@@ -244,20 +245,20 @@ test.describe('Top pairs + Signals UI', () => {
     await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Signals' }).click()
+    await page.getByRole('tab', { name: 'Сигналы' }).click()
     await expect(page.getByText('SBER')).toBeVisible()
 
-    await page.getByLabel('History from (YYYY-MM-DD)').fill('2026-01-12')
-    await page.getByLabel('History to (YYYY-MM-DD)').fill('2026-01-12')
-    await page.getByRole('button', { name: 'Load history' }).click()
+    await page.getByLabel('История с (ГГГГ-ММ-ДД)').fill('2026-01-12')
+    await page.getByLabel('История по (ГГГГ-ММ-ДД)').fill('2026-01-12')
+    await page.getByRole('button', { name: 'Загрузить историю' }).click()
 
-    const historySection = page.getByText('Signal history').locator('..')
+    const historySection = page.getByText('История сигналов').locator('..')
     const historyTable = historySection.locator('table')
     await expect(historyTable.locator('tbody tr')).toHaveCount(1)
 
-    await page.getByLabel('History from (YYYY-MM-DD)').fill('')
-    await page.getByLabel('History to (YYYY-MM-DD)').fill('')
-    await page.getByRole('button', { name: 'Load history' }).click()
+    await page.getByLabel('История с (ГГГГ-ММ-ДД)').fill('')
+    await page.getByLabel('История по (ГГГГ-ММ-ДД)').fill('')
+    await page.getByRole('button', { name: 'Загрузить историю' }).click()
     await expect(historyTable.locator('tbody tr')).toHaveCount(2)
 
     await expect(page.locator('[role="combobox"]').first()).toBeVisible()
@@ -266,10 +267,10 @@ test.describe('Top pairs + Signals UI', () => {
     await expect(historyTable.locator('tbody tr')).toHaveCount(1)
 
     await page.locator('[role="combobox"]').first().click()
-    await page.getByRole('option', { name: 'All' }).click()
+    await page.getByRole('option', { name: 'Все' }).click()
 
     await page.locator('[role="combobox"]').nth(2).click()
-    await page.getByRole('option', { name: 'exit' }).click()
+    await page.getByRole('option', { name: 'Выход' }).click()
     await expect(historyTable.locator('tbody tr')).toHaveCount(1)
   })
 
@@ -281,10 +282,12 @@ test.describe('Top pairs + Signals UI', () => {
     await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Signals' }).click()
-    await page.getByRole('button', { name: 'Load history' }).click()
+    await page.getByRole('tab', { name: 'Сигналы' }).click()
+    await page.getByLabel('История с (ГГГГ-ММ-ДД)').fill('')
+    await page.getByLabel('История по (ГГГГ-ММ-ДД)').fill('')
+    await page.getByRole('button', { name: 'Загрузить историю' }).click()
 
-    const historySection = page.getByText('Signal history').locator('..')
+    const historySection = page.getByText('История сигналов').locator('..')
     const historyTable = historySection.locator('table')
     await expect(historyTable.locator('tbody tr')).toHaveCount(2)
 
@@ -309,19 +312,19 @@ test.describe('Top pairs + Signals UI', () => {
     })
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Signals' }).click()
-    await page.locator('table tbody tr').first().getByRole('button', { name: 'Details' }).click()
+    await page.getByRole('tab', { name: 'Сигналы' }).click()
+    await page.locator('table tbody tr').first().getByRole('button', { name: 'Детали' }).click()
 
-    await expect(page.getByText('Execute signal')).toBeVisible()
-    await page.getByLabel('Price').fill('225.5')
-    await page.getByLabel('Qty').fill('2')
-    await page.getByLabel('Side').fill('buy')
-    await page.getByLabel('Status').fill('filled')
-    await page.getByLabel('Note').fill('manual')
-    await page.getByRole('button', { name: 'Execute' }).click()
+    await expect(page.getByText('Исполнить сигнал')).toBeVisible()
+    await page.getByLabel('Цена').fill('225.5')
+    await page.getByLabel('Кол-во').fill('2')
+    await page.getByLabel('Сторона').fill('buy')
+    await page.getByLabel('Статус').fill('filled')
+    await page.getByLabel('Комментарий').fill('manual')
+    await page.getByRole('button', { name: 'Исполнить' }).click()
 
-    await expect(page.getByText('Execution history')).toBeVisible()
-    await expect(page.getByText('filled')).toBeVisible()
+    await expect(page.getByText('История исполнений')).toBeVisible()
+    await expect(page.getByText('исполнено')).toBeVisible()
     await expect.poll(() => executionPayload).not.toBeNull()
     await expect.poll(() => executionCalls).toBeGreaterThan(1)
     expect(executionPayload).toMatchObject({

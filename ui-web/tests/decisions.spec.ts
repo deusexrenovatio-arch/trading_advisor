@@ -151,11 +151,11 @@ test.describe('Decisions UI', () => {
 
     const decisionResponse = page.waitForResponse('**/api/decision-view**')
     await page.goto('/')
-    await expect(page.getByText('Trading Advisor Decisions')).toBeVisible()
+    await expect(page.getByText('Решения торгового советника')).toBeVisible()
     await decisionResponse
-    await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Обновить' })).toBeVisible()
 
-    await page.getByRole('tab', { name: 'Decisions' }).click()
+    await page.getByRole('tab', { name: 'Решения' }).click()
 
     const decisionCell1 = page.getByText('decision-1', { exact: true })
     const decisionCell2 = page.getByText('decision-2', { exact: true })
@@ -165,12 +165,12 @@ test.describe('Decisions UI', () => {
 
     const filters = page.locator('[role="combobox"]')
     await filters.nth(0).click()
-    await page.getByRole('option', { name: 'arbitrage' }).click()
+    await page.getByRole('option', { name: 'Арбитраж' }).click()
     await expect(decisionCell1).toBeVisible()
     await expect(decisionCell2).toHaveCount(0)
 
     await filters.nth(0).click()
-    await page.getByRole('option', { name: 'All' }).click()
+    await page.getByRole('option', { name: 'Все' }).click()
 
     await filters.nth(1).click()
     await page.getByRole('option', { name: 'GAZP' }).click()
@@ -178,22 +178,22 @@ test.describe('Decisions UI', () => {
     await expect(decisionCell1).toHaveCount(0)
 
     await filters.nth(1).click()
-    await page.getByRole('option', { name: 'All' }).click()
+    await page.getByRole('option', { name: 'Все' }).click()
 
-    await page.getByLabel('Quick search').fill('SBER')
+    await page.getByLabel('Быстрый поиск').fill('SBER')
     await expect(decisionCell1).toBeVisible()
     await expect(decisionCell2).toHaveCount(0)
-    await page.getByLabel('Quick search').fill('')
+    await page.getByLabel('Быстрый поиск').fill('')
 
     await decisionCell1.click()
-    await expect(page.getByText('Orchestrator proposal')).toBeVisible()
-    await expect(page.getByText('Basket allocations (by strategy type)')).toBeVisible()
+    await expect(page.getByText('Предложение оркестратора')).toBeVisible()
+    await expect(page.getByText('Распределение корзин (по типу стратегии)')).toBeVisible()
     await expect(page.getByText('News sentiment: negative')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Approve & execute' }).click()
-    await expect(page.getByText('Execution: queued')).toBeVisible()
+    await page.getByRole('button', { name: 'Одобрить и исполнить' }).click()
+    await expect(page.getByText('Исполнение: в очереди')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Refresh' }).click()
+    await page.getByRole('button', { name: 'Обновить' }).click()
     await expect(decisionCell3).toBeVisible()
   })
 })

@@ -73,15 +73,18 @@ test.describe('Backtest v2 + Forward + HPO UI', () => {
     await page.route('**/api/backtest/run', (route) => route.fulfill({ json: backtestReport }))
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Backtest v2' }).click()
+    await page.getByRole('tab', { name: 'Бэктест v2' }).click()
 
-    await expect(page.getByLabel('test.start_date')).toBeVisible()
-    await page.getByRole('button', { name: 'Run backtest' }).click()
+    await expect(page.getByLabel('Дата начала')).toBeVisible()
+    await expect(page.getByText('Вес корзин')).toBeVisible()
+    await expect(page.getByText('Фундаментальная')).toBeVisible()
+    await expect(page.getByText('test.start_date', { exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Запустить бэктест' }).click()
 
-    await expect(page.getByText('Summary metrics')).toBeVisible()
-    await expect(page.getByText('Equity curve')).toBeVisible()
-    await expect(page.getByText('Trades')).toBeVisible()
-    await expect(page.getByText('Warning: cache_miss')).toBeVisible()
+    await expect(page.getByText('Итоговые метрики')).toBeVisible()
+    await expect(page.getByText('Кривая эквити')).toBeVisible()
+    await expect(page.getByText('Сделки')).toBeVisible()
+    await expect(page.getByText('Предупреждение: cache_miss')).toBeVisible()
     await expect(page.getByRole('cell', { name: 'SBER', exact: true })).toBeVisible()
   })
 
@@ -90,11 +93,11 @@ test.describe('Backtest v2 + Forward + HPO UI', () => {
     await page.route('**/api/forward/status**', (route) => route.fulfill({ json: forwardStatus }))
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Forward status' }).click()
-    await page.getByRole('button', { name: 'Load status' }).click()
+    await page.getByRole('tab', { name: 'Статус форварда' }).click()
+    await page.getByRole('button', { name: 'Загрузить статус' }).click()
 
-    await expect(page.getByText('Run: fwd-123')).toBeVisible()
-    await expect(page.getByText('Status: ready')).toBeVisible()
+    await expect(page.getByText('Прогон: fwd-123')).toBeVisible()
+    await expect(page.getByText('Статус: готово')).toBeVisible()
     await expect(page.getByText('DATA_STALE')).toBeVisible()
   })
 
@@ -105,9 +108,9 @@ test.describe('Backtest v2 + Forward + HPO UI', () => {
 
     await page.goto('/')
     await page.getByRole('tab', { name: 'HPO' }).click()
-    await page.getByRole('button', { name: 'Run HPO' }).click()
+    await page.getByRole('button', { name: 'Запустить HPO' }).click()
 
-    await expect(page.getByText('Leaderboard')).toBeVisible()
+    await expect(page.getByText('Лидерборд')).toBeVisible()
     await expect(page.getByText('1.2000')).toBeVisible()
   })
 })
