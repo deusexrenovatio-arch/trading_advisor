@@ -32,7 +32,7 @@ Success criteria:
 - DecisionLog: canonical immutable decision record (`decision_log` schema).
 - DecisionView: UI projection (`decision_view` schema).
 - TradingUI: operator view with filters and drilldowns to raw log.
-- BacktestEngine: replays historical data to produce comparable outputs.
+- BacktestEngine: replays historical data to produce comparable outputs (legacy + v2 multi-pair engine).
 
 ## Agentic vs deterministic steps
 
@@ -115,6 +115,7 @@ flowchart LR
 - RiskGate QC: strict limit checks with reason codes on failure.
 - DecisionLog QC: schema validation, snapshot and feature references present.
 - Backtest QC: parity check between backtest output and `decision_log` fields.
+- Backtest v2 QC: precompute compatibility checks and deterministic batch scoring for parameter sweeps.
 
 Self-correction rules:
 - Retry data ingestion on transient source failures with capped attempts.
@@ -161,6 +162,8 @@ Traces:
 - Backtest outputs populate `decision_log.backtest_metrics` and
   `decision_view.backtest_metrics`, and reuse the cost and risk fields from
   `decision_log`.
+- Backtest v2 adds multi-pair replay with precomputed snapshots and optional fast alpha
+  cache to support large parameter sweeps.
 - UI filters: strategy_type, primary_instrument, risk_state, created_at, news_severity.
 - UI drilldowns always link back to `decision_id` with full log view.
 

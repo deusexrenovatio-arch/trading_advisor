@@ -70,6 +70,13 @@ Defaults:
 - `load_settings` merges YAML overrides into default settings.
 - Environment variables can override settings via `MOEX_CARRY__` prefix.
 
+### Backtest request settings
+- File: `src/moex_carry/contracts/strategy_test.py`
+- `BacktestRequest` defines the backtest surface used by backtest v2.
+- Notable strategy fields include `H_max_days`, `TP_pct`, `SL_pct`,
+  and `spread_history_days` (default 90) used by the alpha window.
+- Validation and AUTO resolution live in `config_resolver.py`.
+
 ## Compatibility rules
 - Contracts are the source of truth for decision outputs and UI projections.
 - Configuration defaults must keep the pipeline deterministic and reproducible.

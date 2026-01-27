@@ -25,6 +25,7 @@ but the API endpoints remain the primary backend interface for the React app.
 - Responsibilities: carry/rate calculations and spread statistics.
 - Key files: `carry.py`, `rates.py`, `stats.py`, `time.py`, `alpha.py` (new).
 - Outputs: derived metrics used by strategies and ranking.
+- Notes: alpha matrix helpers can use optional numba acceleration for batch backtests.
 
 ### `data/`
 - Responsibilities: data source adapters and normalization for MOEX ISS and CBR.
@@ -60,6 +61,12 @@ but the API endpoints remain the primary backend interface for the React app.
 - Responsibilities: historical replay and walk-forward reporting.
 - Key files: `engine.py`, `report.py`, `walk_forward.py`.
 - Outputs: backtest metrics persisted in CSV and decision logs.
+
+### `backtest_v2/`
+- Responsibilities: multi-pair backtest engine isolated from legacy backtest.
+- Key files: `engine.py` (run_backtest_v2 + precompute), `batch.py` (feature/alpha matrices + batch scoring).
+- Outputs: `BacktestReport` with equity curve, trades, and summary metrics.
+- Notes: uses SnapshotBuilder + PortfolioRebalanceController; optional fast alpha cache when precomputed data is supplied.
 
 ### `storage/`
 - Responsibilities: database access and persistence of signals/executions.
