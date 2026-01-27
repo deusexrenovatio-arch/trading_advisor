@@ -1,5 +1,19 @@
 # Release Notes
 
+## 2026-01-27 - Backtest v2 + Forward API/CLI Wiring
+
+Added
+- API endpoints: `POST /api/backtest/run`, `POST /api/forward/start`, `GET /api/forward/status`, `POST /api/hpo/run` (stub).
+- CLI commands: `backtest_v2`, `forward_start`, `forward_status`.
+- History-backed runtime adapters for Backtest v2 and Forward (uses `data/history/` candles + `raw/key_rates.csv`).
+- Precompute cache for Backtest v2 runs to preserve fast alpha/precompute paths.
+- Integration tests for backtest/forward API wiring and validation errors.
+
+Notes
+- No changes to Backtest v2/Forward internal logic, decision_log, or UI.
+- HPO endpoint validates payload only (stub).
+
+
 ## 2026-01-27 - Forward Paper Engine
 
 Added
@@ -10,7 +24,6 @@ Added
 - Documentation updates for US-09 and backend module catalog; frontend behavior checklist updated for spread-series fields.
 
 Notes
-- No UI/CLI/API changes; forward engine is not wired to CLI yet.
 - Backtest v2 and legacy backtest remain unchanged.
 
 

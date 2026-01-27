@@ -22,7 +22,10 @@
 - signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
 - backtests -> TC-BACK-API-001, TC-BACK-UI-001
+- backtest-run -> TC-BACK-V2-API-001, TC-BACK-V2-API-002
 - spread-series -> TC-SPREAD-API-001, TC-SPREAD-UI-001
+- forward-start -> TC-FWD-API-001
+- forward-status -> TC-FWD-API-002
 - frontend -> TC-FE-HTTP-001
 - frontend-proxy -> TC-FE-PROXY-001
 
@@ -35,7 +38,7 @@
 - US-06 Hold to expiry or roll -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
 - US-07 Backtest review -> backtests (TC-BACK-API-001, TC-BACK-UI-001).
 - US-08 Risk/liquidity rejection -> top-pairs + unit checks (TC-TOP-API-001, TC-TOP-UI-001; tests/test_liquidity_metrics.py, tests/test_risk_gate.py).
-- US-09 Forward paper daily cycle -> unit tests: tests/test_forward_engine.py.
+- US-09 Forward paper daily cycle -> forward-start/forward-status (TC-FWD-API-001, TC-FWD-API-002) + unit tests: tests/test_forward_engine.py.
 
 ## UI Test Cases
 
@@ -275,6 +278,22 @@ Request:
 Expected:
 - JSON list with backtest metrics including share_alpha_exits and avg_hold_days.
 
+### TC-BACK-V2-API-001 Backtest v2 run
+Acceptance: backtest-run
+Automation: tests/test_backtest_forward_api.py
+Request:
+- POST /api/backtest/run
+Expected:
+- JSON response includes summary_metrics, equity_curve, trades.
+
+### TC-BACK-V2-API-002 Backtest v2 validation error
+Acceptance: backtest-run
+Automation: tests/test_backtest_forward_api.py
+Request:
+- POST /api/backtest/run (invalid payload)
+Expected:
+- 400 with validation details.
+
 ### TC-SPREAD-API-001 Spread series fields
 Acceptance: spread-series
 Automation: scripts/acceptance_check.py (spread-series)
@@ -282,6 +301,22 @@ Request:
 - GET /api/spread-series?stock=...&future=...&window_days=60
 Expected:
 - Fields spread_mid, spread_pct, entry/exit flags.
+
+### TC-FWD-API-001 Forward start
+Acceptance: forward-start
+Automation: tests/test_backtest_forward_api.py
+Request:
+- POST /api/forward/start
+Expected:
+- Response includes run_id and state payload.
+
+### TC-FWD-API-002 Forward status
+Acceptance: forward-status
+Automation: tests/test_backtest_forward_api.py
+Request:
+- GET /api/forward/status
+Expected:
+- Response includes run_id and last known state.
 
 
 ### TC-FE-PROXY-001 Vite proxy API

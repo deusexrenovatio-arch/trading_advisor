@@ -68,7 +68,7 @@ Expected:
 Actor: Operator
 Goal: Validate share of alpha exits and holding profile.
 Steps:
-1. Run backtest pipeline.
+1. Run backtest v2 via CLI (`moex-carry backtest_v2`) or API (`POST /api/backtest/run`).
 2. Review backtest metrics.
 Expected:
 - Metrics include share_alpha_exits and avg_hold_days.
@@ -86,9 +86,11 @@ Expected:
 Actor: Operator
 Goal: Run the forward paper loop with EOD -> OPEN -> after close persistence.
 Steps:
-1. Run the forward paper engine at EOD to create next-open orders.
-2. Run the OPEN phase to simulate fills and persist trades.
-3. Run the after-close phase to mark to market and append equity.
+1. Initialize the forward run (`POST /api/forward/start` or `moex-carry forward_start`).
+2. Inspect status (`GET /api/forward/status` or `moex-carry forward_status`).
+3. Run the forward paper engine at EOD to create next-open orders.
+4. Run the OPEN phase to simulate fills and persist trades.
+5. Run the after-close phase to mark to market and append equity.
 Expected:
 - State store persists portfolio and open orders across restarts.
 - Trades are appended on OPEN fills.

@@ -8,7 +8,7 @@ but the API endpoints remain the primary backend interface for the React app.
 ## Entry points
 - `src/moex_carry/__main__.py`: entry point that delegates to the CLI.
 - `src/moex_carry/cli.py`: commands for `fetch`, `compute`, `backtest`, `paper`,
-  `signals`, `ui`, and `history`.
+  `signals`, `ui`, `history`, `backtest_v2`, `forward_start`, and `forward_status`.
 
 ## Orchestration
 - `src/moex_carry/pipeline.py`
@@ -33,7 +33,7 @@ but the API endpoints remain the primary backend interface for the React app.
 
 ### `data/`
 - Responsibilities: data source adapters and normalization for MOEX ISS and CBR.
-- Key files: `moex_iss.py`, `cbr_rates.py`, `providers.py`, `dividends.py`, `streaming.py`.
+- Key files: `moex_iss.py`, `cbr_rates.py`, `providers.py`, `dividends.py`, `streaming.py`, `history_store.py`.
 - Outputs: normalized data frames and cached responses for the pipeline.
 
 ### `selection/`
@@ -68,15 +68,16 @@ but the API endpoints remain the primary backend interface for the React app.
 
 ### `backtest_v2/`
 - Responsibilities: multi-pair backtest engine isolated from legacy backtest.
-- Key files: `engine.py` (run_backtest_v2 + precompute), `batch.py` (feature/alpha matrices + batch scoring).
+- Key files: `engine.py` (run_backtest_v2 + precompute), `batch.py` (feature/alpha matrices + batch scoring),
+  `runtime.py` (history-backed runner + precompute cache).
 - Outputs: `BacktestReport` with equity curve, trades, and summary metrics.
 - Notes: uses SnapshotBuilder + PortfolioRebalanceController; optional fast alpha cache when precomputed data is supplied.
 
 ### `forward/`
 - Responsibilities: forward paper execution loop with state persistence.
-- Key files: `engine.py`, `broker.py`, `store.py`, `interfaces.py`.
+- Key files: `engine.py`, `broker.py`, `store.py`, `interfaces.py`, `runtime.py`.
 - Outputs: persisted state (`state.json`), trades/equity/alerts JSONL streams.
-- Notes: not wired to CLI/UI yet; uses SnapshotBuilder + PortfolioRebalanceController.
+- Notes: wired to API/CLI via history-backed runtime adapter.
 
 ### `storage/`
 - Responsibilities: database access and persistence of signals/executions.
@@ -106,6 +107,8 @@ but the API endpoints remain the primary backend interface for the React app.
   - `data.py`: loaders for CSV/JSONL artifacts.
   - Optional signal refresh scheduler (configurable in `ui.signal_refresh_*`).
   - Refresh endpoints: `POST /api/signals/refresh`, `GET /api/signals/refresh-status`.
+  - Backtest/forward endpoints: `POST /api/backtest/run`, `POST /api/forward/start`, `GET /api/forward/status`.
+  - HPO stub endpoint: `POST /api/hpo/run` (payload validation only).
 
 ## Parallel dev workflow
 - Run backend API: `python -m moex_carry.cli ui` (serves `/api/*` on `127.0.0.1:8050`).
