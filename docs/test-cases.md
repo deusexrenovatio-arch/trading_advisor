@@ -165,6 +165,33 @@ Steps:
 Expected:
 - Table shows rows and numeric values render correctly.
 
+### TC-BACK-V2-UI-001 Backtest v2 run view
+Acceptance: backtest-run
+Automation: ui-web/tests/backtest-forward-hpo.spec.ts
+Steps:
+1. Open Backtest v2 tab.
+2. Load params and run backtest.
+Expected:
+- Summary metrics, equity curve, and trades are visible.
+
+### TC-FWD-UI-001 Forward status view
+Acceptance: forward-status
+Automation: ui-web/tests/backtest-forward-hpo.spec.ts
+Steps:
+1. Open Forward status tab.
+2. Load status.
+Expected:
+- Run id/status render and last equity/trade/alert blocks are visible.
+
+### TC-HPO-UI-001 HPO leaderboard view
+Acceptance: hpo
+Automation: ui-web/tests/backtest-forward-hpo.spec.ts
+Steps:
+1. Open HPO tab.
+2. Run HPO with a search space payload.
+Expected:
+- Leaderboard rows render with objective/params.
+
 ### TC-FE-HTTP-001 UI доступен
 Acceptance: frontend
 Automation: scripts/acceptance_check.py (http_status)

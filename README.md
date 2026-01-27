@@ -4,8 +4,9 @@ MOEX Carry MVP
 
 This project builds a cash-and-carry analytics and backtesting stack for MOEX
 stock-futures pairs. It ingests MOEX ISS data and CBR key rate history, models
-dividends, costs, and taxes, then ranks pairs and generates signals. A Dash
-UI provides a simple dashboard for the top pairs, backtests, and decision logs.
+dividends, costs, and taxes, then ranks pairs and generates signals. A React/Vite
+UI (ui-web) provides the dashboard for top pairs, signals, backtests, and
+Backtest v2 / Forward / HPO workflows.
 
 Note: MOEX ISS free data can be delayed. Real-time requires a paid feed or
 broker streaming API. The system exposes interfaces for real-time providers.
@@ -35,6 +36,16 @@ python -m moex_carry.cli backtest
 python -m moex_carry.cli paper
 python -m moex_carry.cli ui
 ```
+
+3) Start the UI (React + Vite):
+
+```
+cd ui-web
+npm install
+npm run dev -- --host 127.0.0.1 --port 5176
+```
+
+Open `http://127.0.0.1:5176` (Vite proxy forwards `/api/*` to the backend).
 
 To use a different config file, pass `--config path/to/config.yaml`.
 

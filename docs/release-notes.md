@@ -1,5 +1,16 @@
 # Release Notes
 
+## 2026-01-27 - UI Backtest v2, Forward Status, HPO
+
+Added
+- Backtest v2 tab with parameter specs form, run action, and summary/equity/trades views.
+- Forward status tab with last equity/trade/alert panels and state snapshot.
+- HPO tab with search space form and leaderboard view.
+- Playwright UI smoke coverage + acceptance scenarios for new tabs.
+
+Notes
+- UI uses API calls only; backend logic and Backtest v2 optimizations remain unchanged.
+
 ## 2026-01-27 - HPO Module (Backtest v2 Black Box)
 
 Added
@@ -22,7 +33,7 @@ Added
 - Integration tests for backtest/forward API wiring and validation errors.
 
 Notes
-- No changes to Backtest v2/Forward internal logic, decision_log, or UI.
+- No changes to Backtest v2/Forward internal logic or decision_log.
 - HPO endpoint validates payload only (stub).
 
 

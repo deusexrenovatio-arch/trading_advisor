@@ -1,7 +1,8 @@
 # HPO How-To (Backtest v2 Black Box)
 
 This guide shows how to run HPO locally using the `moex_carry.hpo` module.
-The HPO runner is **not** wired to API/CLI yet, so use Python directly.
+The HPO runner is **not** wired to API/CLI yet (the UI calls `/api/hpo/run`, which returns a stub),
+so use Python directly for real optimization runs.
 
 ## Prerequisites
 - Historical candles under `data/history/candles/` (stocks + futures).

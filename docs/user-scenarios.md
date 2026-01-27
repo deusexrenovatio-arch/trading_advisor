@@ -68,8 +68,8 @@ Expected:
 Actor: Operator
 Goal: Validate share of alpha exits and holding profile.
 Steps:
-1. Run backtest v2 via CLI (`moex-carry backtest_v2`) or API (`POST /api/backtest/run`).
-2. Review backtest metrics.
+1. Run backtest v2 via UI (Backtest v2 tab) or CLI (`moex-carry backtest_v2`) or API (`POST /api/backtest/run`).
+2. Review summary metrics, equity curve, and trades.
 Expected:
 - Metrics include share_alpha_exits and avg_hold_days.
 
@@ -87,7 +87,7 @@ Actor: Operator
 Goal: Run the forward paper loop with EOD -> OPEN -> after close persistence.
 Steps:
 1. Initialize the forward run (`POST /api/forward/start` or `moex-carry forward_start`).
-2. Inspect status (`GET /api/forward/status` or `moex-carry forward_status`).
+2. Inspect status (`GET /api/forward/status` or `moex-carry forward_status`) or use the Forward status UI tab.
 3. Run the forward paper engine at EOD to create next-open orders.
 4. Run the OPEN phase to simulate fills and persist trades.
 5. Run the after-close phase to mark to market and append equity.
@@ -103,7 +103,7 @@ Goal: Optimize strategy parameters using Backtest v2 as a black box.
 Steps:
 1. Define a search space for strategy parameters (e.g., z_window, TP_pct, SL_pct).
 2. Configure walk-forward folds with embargo and choose evaluation mode (CONTINUOUS or WARMUP_THEN_FLAT).
-3. Run HPO over the folds and inspect the leaderboard.
+3. Run HPO over the folds and inspect the leaderboard (HPO UI tab submits `/api/hpo/run` and currently returns stub status).
 Expected:
 - Folds respect train/val/test boundaries and embargo gaps.
 - Objective penalizes violations and returns -INF on constraint breaches.
