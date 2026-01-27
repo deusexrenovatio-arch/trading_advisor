@@ -50,6 +50,10 @@ python scripts/run_ui.py
 See `docs/DEV_WORKFLOW.md` for required checks (backend tests, UI lint/build)
 and optional acceptance/E2E smoke checks.
 
+## HPO
+
+See `docs/hpo-howto.md` for running HPO locally with Backtest v2 as a black box.
+
 ## Incremental History Collection
 
 To gradually collect historical candles in the background:
