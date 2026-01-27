@@ -1,4 +1,17 @@
-﻿# Release Notes
+# Release Notes
+
+## 2026-01-27 - Forward Paper Engine
+
+Added
+- ForwardTestEngine with EOD -> OPEN -> after-close paper cycle using SnapshotBuilder + PortfolioRebalanceController.
+- PaperBroker for simulated fills and JsonStateStore for state/trade/equity/alert persistence.
+- Forward alert codes: DATA_STALE, MISSING_QUOTES, SPREAD_TOO_WIDE, DRAWDOWN_KILL, TURNOVER_SPIKE.
+- Unit tests for forward engine persistence, daily cycle, and alerting.
+- Documentation updates for US-09 and backend module catalog; frontend behavior checklist updated for spread-series fields.
+
+Notes
+- No UI/CLI/API changes; forward engine is not wired to CLI yet.
+- Backtest v2 and legacy backtest remain unchanged.
 
 
 ## 2026-01-27 - Backtest v2 Performance & Batch Scoring
