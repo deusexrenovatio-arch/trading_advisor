@@ -1,6 +1,20 @@
 ﻿# Release Notes
 
 
+## 2026-01-27 - Backtest v2 Performance & Batch Scoring
+
+Added
+- Backtest v2 precompute flow with cached snapshots/bars.
+- Feature matrices and batch scoring helpers for fast parameter sweeps.
+- Fast alpha matrices with optional numba acceleration (numpy fallback).
+- Fast alpha cache integrated into backtest v2 when precompute data is used.
+- `strategy.spread_history_days` default (90) and validation.
+- Unit tests for v2 engine, batch scoring, and fast alpha.
+
+Notes
+- Fast alpha is used only when `precomputed` data is provided; otherwise the classic alpha path runs.
+- Numba is optional; install it to unlock JIT acceleration.
+
 ## 2026-01-26 - Stage 4: Trade Returns & UI Metrics
 
 Added
@@ -51,3 +65,4 @@ Added
 
 Notes
 - Backtest engine and decision_log/decision_view schemas unchanged.
+
