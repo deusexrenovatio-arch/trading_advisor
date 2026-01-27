@@ -86,6 +86,7 @@ class BacktestStrategyConfig(BaseModel):
     close_buffer_days: int = 3
     roll_trigger_days: int = 0
     H_max_days: int = 20
+    spread_history_days: int = 90
     TP_pct: float = 0.01
     SL_pct: float = 0.01
     z_window: int = 60

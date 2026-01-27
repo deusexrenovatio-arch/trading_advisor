@@ -167,6 +167,7 @@ def _validate_request(request: BacktestRequest) -> None:
 
     _require_positive(portfolio.margin_proxy, "portfolio.margin_proxy", allow_zero=False)
     _require_positive(strategy.H_max_days, "strategy.H_max_days", allow_zero=False)
+    _require_positive(strategy.spread_history_days, "strategy.spread_history_days", allow_zero=False)
     _require_positive(strategy.z_window, "strategy.z_window", allow_zero=False)
     _require_positive(strategy.min_DTE_entry, "strategy.min_DTE_entry", allow_zero=False)
     _require_positive(strategy.close_buffer_days, "strategy.close_buffer_days", allow_zero=True)
