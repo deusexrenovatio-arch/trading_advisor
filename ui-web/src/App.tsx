@@ -26,6 +26,7 @@ import {
   TableRow,
   TableSortLabel,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -34,7 +35,9 @@ import {
   type GridRowParams,
   GridToolbar,
 } from '@mui/x-data-grid'
+import { ruRU } from '@mui/x-data-grid/locales'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import SpreadChart from './SpreadChart'
 import './App.css'
 
@@ -164,6 +167,9 @@ type ParameterSpec = {
   description?: string | null
 }
 
+type ParamPrimitive = string | number | boolean | null
+type ParamValue = ParamPrimitive | ParamPrimitive[] | Record<string, ParamPrimitive | unknown>
+
 type BacktestEquityPoint = {
   date: string
   equity?: number | null
@@ -230,7 +236,7 @@ type HpoResponse = {
 }
 
 const AUTO_REFRESH_MS = 60_000
-const AUTO_REFRESH_LABEL = '60s'
+const AUTO_REFRESH_LABEL = '60 с'
 
 const formatNumber = (value?: number, digits = 2): string => {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -240,10 +246,10 @@ const formatNumber = (value?: number, digits = 2): string => {
 }
 
 const formatDate = (value?: string): string => {
-  if (!value) return ''
+  if (!value) return '—'
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString()
+  return parsed.toLocaleString('ru-RU')
 }
 
 const parseDateInput = (value: string, bound: 'start' | 'end') => {
@@ -268,56 +274,1700 @@ const parseDateInput = (value: string, bound: 'start' | 'end') => {
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime()
 }
 
-const labelOverrides: Record<string, string> = {
-  score: 'Rank score',
-  signal_score: 'Signal score',
-  signal_score_norm: 'Signal score (norm)',
-  spot: 'Spot',
-  future_price: 'Future price',
-  fair_value: 'Fair value',
-  max_drawdown: 'Max drawdown',
-  spread_mid: 'Spread (mid)',
-  spread_pct: 'Spread %',
-  rtc_pct: 'RTC %',
-  floor_rate_annual: 'Floor rate',
-  score_floor: 'Floor score',
-  score_alpha: 'Alpha score',
-  total_score: 'Total score',
-  p_hit_tp: 'P(hit TP)',
-  p_hit_sl: 'P(hit SL)',
-  sigma_h: 'Spread sigma (H)',
-  half_life: 'Half-life',
-  spread_bps_stock: 'Stock spread (bps)',
-  spread_bps_fut: 'Futures spread (bps)',
-  dollar_vol_stock: 'Stock $ volume',
-  dollar_vol_fut: 'Futures $ volume',
-  days_to_exit: 'Days to exit',
-  open_interest: 'Open interest',
-  r_cb_annual: 'CB rate',
-  r_fund_annual: 'Funding rate',
-  r_disc_annual: 'Discount rate',
-  tp_net: 'TP net',
-  trade_pnl_cash: 'Trade PnL (cash, pre-tax)',
-  trade_return_pct_net: 'Trade return (net %, pre-tax)',
-  trade_return_annual: 'Trade return (annual, pre-tax)',
-  trade_hold_days: 'Trade hold days',
-  pnl: 'PnL',
-  entry_price_stock: 'Entry price (stock)',
-  entry_price_fut: 'Entry price (fut)',
-  exit_price_stock: 'Exit price (stock)',
-  exit_price_fut: 'Exit price (fut)',
-  quantity_stock: 'Qty (stock)',
-  quantity_fut: 'Qty (fut)',
-  avg_trade_return_annual_recent: 'Avg trade return (annual, last 5)',
-  sl_net: 'SL net',
-  share_alpha_exits: 'Alpha exits share',
-  avg_hold_days: 'Avg hold days',
-  decision: 'Decision',
+type FieldFormat = 'percent' | 'bps' | 'currency' | 'days'
+type FieldMeta = {
+  label: string
+  tooltip?: string
+  format?: FieldFormat
+  digits?: number
 }
 
-const toTitleCase = (value: string) =>
-  labelOverrides[value] ??
+const formatDateInputValue = (value: Date) => value.toISOString().slice(0, 10)
+
+const humanizeKey = (value: string) =>
   value.replaceAll('_', ' ').replace(/\b\w/g, (match) => match.toUpperCase())
+
+const fieldMeta: Record<string, FieldMeta> = {
+  created_at: {
+    label: 'Время',
+    tooltip: 'Дата и время создания записи.',
+  },
+  decision_id: {
+    label: 'ID решения',
+    tooltip: 'Уникальный идентификатор решения.',
+  },
+  decision_view_id: {
+    label: 'ID витрины',
+    tooltip: 'Идентификатор записи decision_view.',
+  },
+  strategy_type: {
+    label: 'Стратегия',
+    tooltip: 'Тип стратегии, сформировавшей решение.',
+  },
+  primary_instrument: {
+    label: 'Инструмент',
+    tooltip: 'Основной инструмент решения.',
+  },
+  proposal_type: {
+    label: 'Тип предложения',
+    tooltip: 'Тип предложения оркестратора.',
+  },
+  action: {
+    label: 'Действие',
+    tooltip: 'Операционное решение (approve/reject/hold).',
+  },
+  risk_state: {
+    label: 'Риск',
+    tooltip: 'Оценка риска: зелёный/жёлтый/красный.',
+  },
+  news_severity: {
+    label: 'Новости',
+    tooltip: 'Сила новостного риска.',
+  },
+  execution_status: {
+    label: 'Исполнение',
+    tooltip: 'Текущий статус исполнения.',
+  },
+  cost_round_trip: {
+    label: 'Стоимость round-trip',
+    tooltip:
+      'Формула: (buy_stock - sell_stock) + (buy_fut - sell_fut) + fees_rt. ' +
+      'Полные издержки вход-выход.',
+    digits: 2,
+    format: 'currency',
+  },
+  basket: {
+    label: 'Корзина',
+    tooltip: 'Категория корзины стратегии.',
+  },
+  basket_weight: {
+    label: 'Вес корзины, %',
+    tooltip:
+      'Формула: weight. ' +
+      'Интерпретация: доля корзины в портфеле.',
+    format: 'percent',
+    digits: 2,
+  },
+  break_even_ticks: {
+    label: 'Безубыток, тиков',
+    tooltip:
+      'Формула: break_even_ticks = round_trip_cost / tick_value. ' +
+      'Интерпретация: сколько тиков нужно пройти, чтобы покрыть издержки.',
+    digits: 2,
+  },
+  break_even_points: {
+    label: 'Безубыток, пунктов',
+    tooltip:
+      'Формула: break_even_points = break_even_ticks * price_step. ' +
+      'Интерпретация: требуемое движение цены в пунктах.',
+    digits: 2,
+  },
+  max_drawdown: {
+    label: 'Макс. просадка',
+    tooltip:
+      'Формула: min(equity / rolling_max - 1). ' +
+      'Интерпретация: максимальная просадка капитала.',
+    format: 'percent',
+    digits: 2,
+  },
+  stock: {
+    label: 'Акция',
+    tooltip: 'Тикер акции.',
+  },
+  stock_name: {
+    label: 'Название акции',
+    tooltip: 'Краткое название эмитента.',
+  },
+  future: {
+    label: 'Фьючерс',
+    tooltip: 'Тикер фьючерсного контракта.',
+  },
+  expiry: {
+    label: 'Экспирация',
+    tooltip: 'Дата экспирации фьючерса.',
+  },
+  dte: {
+    label: 'DTE (дней до экспирации)',
+    tooltip: 'Количество дней до экспирации.',
+    format: 'days',
+    digits: 0,
+  },
+  spot: {
+    label: 'Спот',
+    tooltip: 'Текущая цена спота.',
+    digits: 2,
+  },
+  future_price: {
+    label: 'Цена фьючерса',
+    tooltip: 'Текущая цена фьючерса.',
+    digits: 2,
+  },
+  spread_mid: {
+    label: 'Спред (mid)',
+    tooltip:
+      'Формула: (Spot_mid - PV(div) - Futures_mid). ' +
+      'Интерпретация: абсолютный спред между спотом и фьючерсом.',
+    digits: 4,
+  },
+  spread_pct: {
+    label: 'Спред, %',
+    tooltip:
+      'Формула: spread_mid / spot_mid. ' +
+      'Интерпретация: доля спреда относительно цены спота.',
+    format: 'percent',
+    digits: 2,
+  },
+  rtc_pct: {
+    label: 'Издержки RT, %',
+    tooltip:
+      'Формула: rtc / spot_mid, где rtc = (buy_stock - sell_stock) + ' +
+      '(buy_fut - sell_fut) + fees_rt. ' +
+      'Интерпретация: доля round-trip издержек в цене спота.',
+    format: 'percent',
+    digits: 2,
+  },
+  floor_rate_annual: {
+    label: 'Floor-ставка, % год.',
+    tooltip:
+      'Формула: (floor_pnl / capital_base) * 365 / DTE. ' +
+      'Интерпретация: годовая carry-доходность при удержании до экспирации.',
+    format: 'percent',
+    digits: 2,
+  },
+  floor_pnl: {
+    label: 'Floor PnL, ₽',
+    tooltip:
+      'Формула: (fut_sell - spot_buy) + div_sum - costs_hold. ' +
+      'Интерпретация: ожидаемая прибыль floor-удержания до экспирации.',
+    format: 'currency',
+    digits: 2,
+  },
+  capital_base: {
+    label: 'База капитала, ₽',
+    tooltip:
+      'Формула: FULL_CASH -> spot_buy; MARGIN_AWARE -> margin_stock + margin_fut + var_buffer. ' +
+      'Интерпретация: капитал, на который нормируется floor_rate_annual.',
+    format: 'currency',
+    digits: 2,
+  },
+  costs_hold: {
+    label: 'Издержки удержания, ₽',
+    tooltip:
+      'Формула: fees_rt + funding_cost + riskbuffer_floor. ' +
+      'Интерпретация: ожидаемые издержки на удержание до экспирации.',
+    format: 'currency',
+    digits: 2,
+  },
+  score_floor: {
+    label: 'Floor-скор',
+    tooltip:
+      'Формула: floor_rate_annual - r_cb_annual. ' +
+      'Интерпретация: превышение над бенчмарком.',
+    format: 'percent',
+    digits: 2,
+  },
+  implied_rate_net: {
+    label: 'Имплайд-ставка (net), % год.',
+    tooltip:
+      'Формула: (future_price + pv_div - spot) / (spot * tau). ' +
+      'Интерпретация: implied ставка, скорректированная на дивиденды/издержки.',
+    format: 'percent',
+    digits: 2,
+  },
+  required_rate: {
+    label: 'Требуемая ставка, % год.',
+    tooltip:
+      'Формула: required_rate (бенчмарк/ставка из настроек). ' +
+      'Интерпретация: порог для сравнения с implied_rate_net.',
+    format: 'percent',
+    digits: 2,
+  },
+  score_alpha: {
+    label: 'Alpha-скор',
+    tooltip:
+      'Формула: p_hit_tp * tp_net - p_hit_sl * sl_pct - rtc_pct. ' +
+      'Интерпретация: ожидаемая alpha-доходность с учетом TP/SL и издержек.',
+    format: 'percent',
+    digits: 2,
+  },
+  total_score: {
+    label: 'Итоговый скор',
+    tooltip:
+      'Формула: w1*score_floor + w2*score_alpha - w3*penalty_liq - w4*penalty_event. ' +
+      'Интерпретация: итоговый скор пары (выше лучше).',
+    digits: 4,
+  },
+  signal_score: {
+    label: 'Скор сигнала',
+    tooltip:
+      'Формула: total_score. ' +
+      'Интерпретация: скор сигнала для ранжирования.',
+    digits: 4,
+  },
+  signal_score_norm: {
+    label: 'Норм. скор сигнала',
+    tooltip:
+      'Формула: 0.5 * (|zscore| / z_entry + |implied_rate_net - required_rate| / implied_rate_buffer). ' +
+      'Интерпретация: нормированная сила сигнала (выше = сильнее).',
+    digits: 3,
+  },
+  signal_action: {
+    label: 'Сигнал',
+    tooltip: 'Действие по паре: вход/выход/держать.',
+  },
+  signal_direction: {
+    label: 'Направление',
+    tooltip: 'Тип позиции: cash-and-carry или reverse.',
+  },
+  signal_reasons: {
+    label: 'Причины сигнала',
+    tooltip: 'Список причин решения по сигналу.',
+  },
+  signal_metrics: {
+    label: 'Метрики сигнала',
+    tooltip: 'Метрики, использованные при расчёте сигнала.',
+  },
+  decision: {
+    label: 'Решение',
+    tooltip: 'Техническое решение: ENTER_OK / SKIP_*.',
+  },
+  floor_pass: {
+    label: 'Floor-проход',
+    tooltip: 'Истина, если floor_rate_annual ≥ r_cb_annual − floor_tolerance.',
+  },
+  liquidity_pass: {
+    label: 'Ликвидность пройдена',
+    tooltip: 'Истина, если пройдены пороги ликвидности (спреды, объёмы, OI, days_to_exit).',
+  },
+  r_cb_annual: {
+    label: 'Ключевая ставка, % год.',
+    tooltip: 'Ключевая ставка (r_cb).',
+    format: 'percent',
+    digits: 2,
+  },
+  r_fund_annual: {
+    label: 'Ставка фондирования, % год.',
+    tooltip: 'Ставка фондирования позиции.',
+    format: 'percent',
+    digits: 2,
+  },
+  r_disc_annual: {
+    label: 'Ставка дисконт., % год.',
+    tooltip: 'Ставка дисконтирования дивидендов.',
+    format: 'percent',
+    digits: 2,
+  },
+  expected_return: {
+    label: 'Ожидаемая доходность, % год.',
+    tooltip:
+      'Формула: expected_return = floor_rate_annual. ' +
+      'Интерпретация: ожидаемая годовая carry-доходность.',
+    format: 'percent',
+    digits: 2,
+  },
+  risk_estimate: {
+    label: 'Оценка риска',
+    tooltip:
+      'Формула: risk_estimate = sigma_h (волатильность spread_pct на горизонте H). ' +
+      'Интерпретация: риск-оценка стратегии.',
+    digits: 4,
+  },
+  liquidity_score: {
+    label: 'Ликвидность, скор',
+    tooltip:
+      'Формула: liquidity_score (0..1). ' +
+      'Интерпретация: 0 - низкая, 1 - высокая ликвидность.',
+    format: 'percent',
+    digits: 1,
+  },
+  snapshot_as_of: {
+    label: 'Снимок на',
+    tooltip: 'Дата/время расчёта снимка.',
+  },
+  avg_trade_return_annual_recent: {
+    label: 'Средн. годовая доходность (посл. 5)',
+    tooltip:
+      'Формула: mean(trade_return_annual последних 5 сделок). ' +
+      'Интерпретация: средняя годовая доходность по последним выходам.',
+    format: 'percent',
+    digits: 2,
+  },
+  share_alpha_exits: {
+    label: 'Доля alpha-выходов',
+    tooltip:
+      'Формула: alpha_exit_count / total_trades. ' +
+      'Интерпретация: доля выходов по alpha-триггерам.',
+    format: 'percent',
+    digits: 2,
+  },
+  avg_hold_days: {
+    label: 'Средн. дни удержания',
+    tooltip:
+      'Формула: mean(hold_days). ' +
+      'Интерпретация: средняя длительность удержания позиции.',
+    format: 'days',
+    digits: 1,
+  },
+  p_hit_tp: {
+    label: 'P(достиж. TP)',
+    tooltip:
+      'Формула: mean(1{MFE ≥ TP}) по окну H. ' +
+      'Интерпретация: вероятность достижения take-profit.',
+    format: 'percent',
+    digits: 2,
+  },
+  p_hit_sl: {
+    label: 'P(достиж. SL)',
+    tooltip:
+      'Формула: mean(1{MAE ≤ −SL}) по окну H. ' +
+      'Интерпретация: вероятность достижения stop-loss.',
+    format: 'percent',
+    digits: 2,
+  },
+  sigma_h: {
+    label: 'Сигма спреда (H)',
+    tooltip:
+      'Формула: σ(Δspread_pct) на горизонте H. ' +
+      'Интерпретация: волатильность спреда на окне H.',
+    digits: 4,
+  },
+  half_life: {
+    label: 'Период полураспада',
+    tooltip:
+      'Формула: ln(2)/-ln(phi), где phi — коэффициент AR(1) spread_pct. ' +
+      'Интерпретация: скорость возврата к среднему.',
+    digits: 2,
+  },
+  mfe_q50: {
+    label: 'MFE q50, %',
+    tooltip:
+      'Формула: медиана(max(spread_pct_window - entry)). ' +
+      'Интерпретация: типичное благоприятное движение.',
+    format: 'percent',
+    digits: 2,
+  },
+  mfe_q75: {
+    label: 'MFE q75, %',
+    tooltip:
+      'Формула: 75-й процентиль max(spread_pct_window - entry). ' +
+      'Интерпретация: сильное благоприятное движение.',
+    format: 'percent',
+    digits: 2,
+  },
+  mfe_q90: {
+    label: 'MFE q90, %',
+    tooltip:
+      'Формула: 90-й процентиль max(spread_pct_window - entry). ' +
+      'Интерпретация: экстремальное благоприятное движение.',
+    format: 'percent',
+    digits: 2,
+  },
+  mae_q50: {
+    label: 'MAE q50, %',
+    tooltip:
+      'Формула: медиана(min(spread_pct_window - entry)). ' +
+      'Интерпретация: типичное неблагоприятное движение.',
+    format: 'percent',
+    digits: 2,
+  },
+  mae_q75: {
+    label: 'MAE q75, %',
+    tooltip:
+      'Формула: 75-й процентиль min(spread_pct_window - entry). ' +
+      'Интерпретация: сильное неблагоприятное движение.',
+    format: 'percent',
+    digits: 2,
+  },
+  mae_q90: {
+    label: 'MAE q90, %',
+    tooltip:
+      'Формула: 90-й процентиль min(spread_pct_window - entry). ' +
+      'Интерпретация: экстремальное неблагоприятное движение.',
+    format: 'percent',
+    digits: 2,
+  },
+  spread_bps_stock: {
+    label: 'Спред акции, б.п.',
+    tooltip:
+      'Формула: (ask - bid) / mid * 10 000. ' +
+      'Интерпретация: относительная ширина спреда акции.',
+    format: 'bps',
+    digits: 2,
+  },
+  spread_bps_fut: {
+    label: 'Спред фьючерса, б.п.',
+    tooltip:
+      'Формула: (ask - bid) / mid * 10 000. ' +
+      'Интерпретация: относительная ширина спреда фьючерса.',
+    format: 'bps',
+    digits: 2,
+  },
+  dollar_vol_stock: {
+    label: 'Денежный объём акций',
+    tooltip:
+      'Формула: price * volume. ' +
+      'Интерпретация: денежный оборот акций.',
+    digits: 0,
+  },
+  dollar_vol_fut: {
+    label: 'Денежный объём фьючерса',
+    tooltip:
+      'Формула: price * volume * multiplier. ' +
+      'Интерпретация: денежный оборот фьючерса.',
+    digits: 0,
+  },
+  days_to_exit: {
+    label: 'Дней до выхода',
+    tooltip:
+      'Формула: position_notional / (avg_dollar_vol * participation_rate). ' +
+      'Интерпретация: оценка времени выхода из позиции.',
+    format: 'days',
+    digits: 1,
+  },
+  open_interest: {
+    label: 'Открытый интерес',
+    tooltip: 'Количество открытых контрактов.',
+    digits: 0,
+  },
+  tp_pct: {
+    label: 'TP, %',
+    tooltip:
+      'Формула: TP_pct (параметр стратегии). ' +
+      'Интерпретация: целевой профит по spread_pct.',
+    format: 'percent',
+    digits: 2,
+  },
+  sl_pct: {
+    label: 'SL, %',
+    tooltip:
+      'Формула: SL_pct (параметр стратегии). ' +
+      'Интерпретация: стоп-уровень по spread_pct.',
+    format: 'percent',
+    digits: 2,
+  },
+  tp_net: {
+    label: 'TP net, %',
+    tooltip:
+      'Формула: TP_pct + rtc_pct. ' +
+      'Интерпретация: TP с учётом издержек.',
+    format: 'percent',
+    digits: 2,
+  },
+  sl_net: {
+    label: 'SL net, %',
+    tooltip:
+      'Формула: SL_pct + rtc_pct. ' +
+      'Интерпретация: SL с учётом издержек.',
+    format: 'percent',
+    digits: 2,
+  },
+  spread_entry_exec: {
+    label: 'Спред входа (exec)',
+    tooltip:
+      'Формула: stock_buy - pv_div - fut_sell. ' +
+      'Интерпретация: спред по ценам исполнения на входе.',
+    digits: 4,
+  },
+  spread_exit_exec: {
+    label: 'Спред выхода (exec)',
+    tooltip:
+      'Формула: stock_sell - pv_div - fut_buy. ' +
+      'Интерпретация: спред по ценам исполнения на выходе.',
+    digits: 4,
+  },
+  spread_pct_entry_exec: {
+    label: 'Спред входа, %',
+    tooltip:
+      'Формула: spread_entry_exec / spot_mid. ' +
+      'Интерпретация: спред входа в процентах от спота.',
+    format: 'percent',
+    digits: 2,
+  },
+  spread_pct_exit_exec: {
+    label: 'Спред выхода, %',
+    tooltip:
+      'Формула: spread_exit_exec / spot_mid. ' +
+      'Интерпретация: спред выхода в процентах от спота.',
+    format: 'percent',
+    digits: 2,
+  },
+  entry_spread_pct_exec: {
+    label: 'Entry spread, % (exec)',
+    tooltip:
+      'Формула: spread_entry_exec / spot_mid. ' +
+      'Интерпретация: спред входа (серия спредов).',
+    format: 'percent',
+    digits: 2,
+  },
+  exit_spread_pct_exec: {
+    label: 'Exit spread, % (exec)',
+    tooltip:
+      'Формула: spread_exit_exec / spot_mid. ' +
+      'Интерпретация: спред выхода (серия спредов).',
+    format: 'percent',
+    digits: 2,
+  },
+  pnl_spread_pct: {
+    label: 'PnL по спреду, %',
+    tooltip:
+      'Формула: spread_pct_exit_exec - spread_pct_entry_exec. ' +
+      'Интерпретация: прибыль/убыток по спреду.',
+    format: 'percent',
+    digits: 2,
+  },
+  entry_spread_exec_pct: {
+    label: 'Entry spread (exec), %',
+    tooltip:
+      'Формула: spread_entry_exec / spot_mid. ' +
+      'Интерпретация: зафиксированный спред входа.',
+    format: 'percent',
+    digits: 2,
+  },
+  trail_peak_spread_pct: {
+    label: 'Пик трейла, %',
+    tooltip:
+      'Формула: max(exit_spread_pct - entry_spread_pct). ' +
+      'Интерпретация: лучшая достигнутая доходность по трейлу.',
+    format: 'percent',
+    digits: 2,
+  },
+  cycle_return_pct: {
+    label: 'Доходность цикла, %',
+    tooltip:
+      'Формула: cash_and_carry => (entry_spread - spread) / entry_spot * 100; ' +
+      'reverse => (spread - entry_spread) / entry_spot * 100. ' +
+      'Интерпретация: результат завершённого цикла.',
+    format: 'percent',
+    digits: 2,
+  },
+  trade_return_pct: {
+    label: 'Доходность спреда, %',
+    tooltip:
+      'Формула: spread_pct_exit_exec - spread_pct_entry_exec. ' +
+      'Интерпретация: изменение спреда между входом и выходом.',
+    format: 'percent',
+    digits: 2,
+  },
+  trade_pnl_cash: {
+    label: 'P&L, руб.',
+    tooltip:
+      'Формула: (sell_stock - buy_stock) - (buy_fut - sell_fut) + дивиденды - фондирование - комиссии. ' +
+      'Интерпретация: денежный результат сделки.',
+    format: 'currency',
+    digits: 2,
+  },
+  trade_return_pct_net: {
+    label: 'Доходность (net), %',
+    tooltip:
+      'Формула: trade_pnl_cash / entry_spot_exec. ' +
+      'Интерпретация: net-доходность относительно спота на входе.',
+    format: 'percent',
+    digits: 2,
+  },
+  trade_return_annual: {
+    label: 'Годовая доходность (net), %',
+    tooltip:
+      'Формула: trade_return_net / hold_tau. ' +
+      'Интерпретация: годовая net-доходность сделки.',
+    format: 'percent',
+    digits: 2,
+  },
+  trade_hold_days: {
+    label: 'Дней в сделке',
+    tooltip:
+      'Формула: exit_date - entry_date. ' +
+      'Интерпретация: длительность удержания сделки.',
+    format: 'days',
+    digits: 0,
+  },
+  pnl: {
+    label: 'P&L',
+    tooltip: 'Прибыль/убыток по сделке.',
+    digits: 2,
+  },
+  entry_price_stock: {
+    label: 'Цена входа (акция)',
+    tooltip: 'Цена входа по акции.',
+    digits: 2,
+  },
+  entry_price_fut: {
+    label: 'Цена входа (фьючерс)',
+    tooltip: 'Цена входа по фьючерсу.',
+    digits: 2,
+  },
+  exit_price_stock: {
+    label: 'Цена выхода (акция)',
+    tooltip: 'Цена выхода по акции.',
+    digits: 2,
+  },
+  exit_price_fut: {
+    label: 'Цена выхода (фьючерс)',
+    tooltip: 'Цена выхода по фьючерсу.',
+    digits: 2,
+  },
+  quantity_stock: {
+    label: 'Кол-во (акция)',
+    tooltip: 'Количество акций.',
+    digits: 0,
+  },
+  quantity_fut: {
+    label: 'Кол-во (фьючерс)',
+    tooltip: 'Количество фьючерсов.',
+    digits: 0,
+  },
+  hold_days: {
+    label: 'Дней в позиции',
+    tooltip: 'Длительность сделки в днях.',
+    format: 'days',
+    digits: 0,
+  },
+  exit_reason: {
+    label: 'Причина выхода',
+    tooltip: 'Причина закрытия позиции.',
+  },
+  equity: {
+    label: 'Эквити',
+    tooltip: 'Размер капитала в моменте.',
+    digits: 0,
+  },
+  cash: {
+    label: 'Кэш',
+    tooltip: 'Свободные денежные средства.',
+    digits: 0,
+  },
+  drawdown: {
+    label: 'Просадка',
+    tooltip:
+      'Формула: equity / rolling_max - 1. ' +
+      'Интерпретация: текущая просадка капитала.',
+    format: 'percent',
+    digits: 2,
+  },
+  turnover: {
+    label: 'Оборачиваемость',
+    tooltip:
+      'Формула: v1 -> #trades / years; v2 -> turnover_notional / equity. ' +
+      'Интерпретация: частота/доля оборота.',
+    digits: 2,
+  },
+  positions: {
+    label: 'Позиции',
+    tooltip: 'Количество открытых позиций.',
+    digits: 0,
+  },
+  cagr: {
+    label: 'CAGR, % год.',
+    tooltip:
+      'Формула: equity_last^(1/years) - 1. ' +
+      'Интерпретация: среднегодовой темп роста капитала.',
+    format: 'percent',
+    digits: 2,
+  },
+  sharpe: {
+    label: 'Sharpe',
+    tooltip:
+      'Формула: mean(ret)/std(ret) * sqrt(252). ' +
+      'Интерпретация: доходность на единицу риска.',
+    digits: 2,
+  },
+  hit_rate: {
+    label: 'Доля прибыльных',
+    tooltip:
+      'Формула: #profit / #trades. ' +
+      'Интерпретация: доля прибыльных сделок.',
+    format: 'percent',
+    digits: 2,
+  },
+  objective: {
+    label: 'Целевая метрика',
+    tooltip:
+      'Формула: excess_ann - penalty_dd - penalty_to (с ограничениями по dd/turnover). ' +
+      'Интерпретация: итоговая цель для HPO.',
+    digits: 4,
+  },
+  params: {
+    label: 'Параметры',
+    tooltip: 'Набор параметров эксперимента.',
+  },
+  fold_objectives: {
+    label: 'Метрики фолдов',
+    tooltip: 'Значения метрики по фолдам.',
+  },
+  run_id: {
+    label: 'ID прогона',
+    tooltip: 'Идентификатор прогона.',
+  },
+  status: {
+    label: 'Статус',
+    tooltip: 'Статус процесса.',
+  },
+  message: {
+    label: 'Сообщение',
+    tooltip: 'Текстовое сообщение.',
+  },
+  code: {
+    label: 'Код',
+    tooltip: 'Код события/ошибки.',
+  },
+  confidence: {
+    label: 'Достоверность',
+    tooltip: 'Доля уверенности (0–1).',
+    format: 'percent',
+    digits: 2,
+  },
+  timestamp: {
+    label: 'Время',
+    tooltip: 'Дата и время события.',
+  },
+  date: {
+    label: 'Дата',
+    tooltip: 'Дата записи.',
+  },
+  action_note: {
+    label: 'Комментарий',
+  },
+  pair_id: {
+    label: 'Пара',
+    tooltip: 'Код пары акция-фьючерс.',
+  },
+  stock_secid: {
+    label: 'Акция',
+    tooltip: 'Код акции.',
+  },
+  future_secid: {
+    label: 'Фьючерс',
+    tooltip: 'Код фьючерса.',
+  },
+  direction: {
+    label: 'Направление',
+    tooltip: 'Тип позиции.',
+  },
+  entry_date: {
+    label: 'Дата входа',
+    tooltip: 'Дата открытия позиции.',
+  },
+  exit_date: {
+    label: 'Дата выхода',
+    tooltip: 'Дата закрытия позиции.',
+  },
+  price: {
+    label: 'Цена',
+    tooltip: 'Цена исполнения.',
+    digits: 2,
+  },
+  quantity: {
+    label: 'Количество',
+    tooltip: 'Количество контрактов/акций.',
+    digits: 0,
+  },
+  side: {
+    label: 'Сторона',
+    tooltip: 'Buy/Sell сторона сделки.',
+  },
+  note: {
+    label: 'Комментарий',
+    tooltip: 'Комментарий оператора/системы.',
+  },
+  trade_cycle: {
+    label: 'Цикл сделки',
+    tooltip: 'Идентификатор торгового цикла.',
+    digits: 0,
+  },
+  entry_cycle: {
+    label: 'Цикл входа',
+    tooltip: 'Идентификатор цикла при входе.',
+    digits: 0,
+  },
+  exit_cycle: {
+    label: 'Цикл выхода',
+    tooltip: 'Идентификатор цикла при выходе.',
+    digits: 0,
+  },
+  cycle_id: {
+    label: 'Активный цикл',
+    tooltip: 'Номер текущего цикла, если позиция открыта.',
+    digits: 0,
+  },
+  entry_flag: {
+    label: 'Вход',
+    tooltip: 'Маркер события входа.',
+  },
+  exit_flag: {
+    label: 'Выход',
+    tooltip: 'Маркер события выхода.',
+  },
+  zscore: {
+    label: 'Z-score',
+    tooltip:
+      'Формула: (last - mean) / std на окне z_window. ' +
+      'Интерпретация: насколько спред отклонился от среднего.',
+    digits: 2,
+  },
+  z_entry: {
+    label: 'Z-entry',
+    tooltip:
+      'Формула: порог входа по z-score. ' +
+      'Интерпретация: значение z-score для входа.',
+    digits: 2,
+  },
+  z_exit: {
+    label: 'Z-exit',
+    tooltip:
+      'Формула: порог выхода по z-score. ' +
+      'Интерпретация: значение z-score для выхода.',
+    digits: 2,
+  },
+  zscore_raw: {
+    label: 'Z-score (raw)',
+    tooltip:
+      'Формула: (last - mean) / std на окне window. ' +
+      'Интерпретация: базовый z-score без тренд-коррекции.',
+    digits: 2,
+  },
+  window: {
+    label: 'Окно',
+    tooltip:
+      'Формула: размер окна расчёта статистики. ' +
+      'Интерпретация: длина истории в точках.',
+    digits: 0,
+  },
+  mean: {
+    label: 'Среднее',
+    tooltip:
+      'Формула: mean(series) на окне window. ' +
+      'Интерпретация: средний уровень ряда.',
+    digits: 4,
+  },
+  std: {
+    label: 'Стандартное отклонение',
+    tooltip:
+      'Формула: std(series) на окне window. ' +
+      'Интерпретация: разброс значений ряда.',
+    digits: 4,
+  },
+  trend: {
+    label: 'Тренд',
+    tooltip:
+      'Формула: значение трендовой линии в последней точке. ' +
+      'Интерпретация: ожидаемый уровень по тренду.',
+    digits: 4,
+  },
+  spread_vol: {
+    label: 'Волатильность спреда',
+    tooltip:
+      'Формула: std(spread_series) на окне window. ' +
+      'Интерпретация: разброс значений спреда.',
+    digits: 4,
+  },
+  spread_vol_pct: {
+    label: 'Волатильность спреда, %',
+    tooltip:
+      'Формула: std(spread_pct) на окне window. ' +
+      'Интерпретация: разброс спреда в процентах.',
+    format: 'percent',
+    digits: 2,
+  },
+  trend_pos: {
+    label: 'Отклонение от тренда',
+    tooltip:
+      'Формула: last - trend_last. ' +
+      'Интерпретация: позиция относительно тренда.',
+    digits: 4,
+  },
+  trend_slope: {
+    label: 'Наклон тренда',
+    tooltip:
+      'Формула: slope линейной регрессии spread_pct. ' +
+      'Интерпретация: направление тренда.',
+    digits: 4,
+  },
+  trend_zscore: {
+    label: 'Z-score тренда',
+    tooltip:
+      'Формула: residual / std(residual) на окне window. ' +
+      'Интерпретация: насколько текущая точка отклоняется от тренда.',
+    digits: 2,
+  },
+  spread_trend_z: {
+    label: 'Z-score тренда (abs)',
+    tooltip:
+      'Формула: |trend_zscore|. ' +
+      'Интерпретация: сила трендового отклонения.',
+    digits: 2,
+  },
+  expected_net_irr: {
+    label: 'Ожид. net IRR',
+    tooltip:
+      'Формула: expected_net_irr (из модели carry/alpha). ' +
+      'Интерпретация: ожидаемая годовая доходность.',
+    format: 'percent',
+    digits: 2,
+  },
+  mae: {
+    label: 'MAE',
+    tooltip:
+      'Формула: min(spread_pct_window - entry). ' +
+      'Интерпретация: максимальное неблагоприятное отклонение.',
+    digits: 4,
+  },
+  model_breaks: {
+    label: 'Сбои модели',
+    tooltip:
+      'Формула: счётчик нарушений модели. ' +
+      'Интерпретация: количество флагов качества данных.',
+    digits: 0,
+  },
+  universe: {
+    label: 'Вселенная',
+  },
+  execution: {
+    label: 'Исполнение',
+  },
+  rates: {
+    label: 'Ставки',
+  },
+  costs: {
+    label: 'Издержки',
+  },
+  portfolio: {
+    label: 'Портфель',
+  },
+  rebalance: {
+    label: 'Ребалансировка',
+  },
+  general: {
+    label: 'Общие',
+  },
+  test: {
+    label: 'Тест',
+  },
+  strategy: {
+    label: 'Стратегия',
+  },
+  allocation: {
+    label: 'Аллокация',
+  },
+  liquidity: {
+    label: 'Ликвидность',
+  },
+}
+
+const valueLabels: Record<string, Record<string, string>> = {
+  strategy_type: {
+    arbitrage: 'Арбитраж',
+    fundamental: 'Фундаментальная',
+    speculative: 'Спекулятивная',
+    mixed: 'Смешанная',
+    carry: 'Кэрри',
+    stat: 'Стат',
+  },
+  basket: {
+    fundamental: 'Фундаментальная',
+    speculative: 'Спекулятивная',
+    arbitrage: 'Арбитраж',
+  },
+  price_mode: {
+    BIDASK: 'Bid/Ask',
+    OHLC: 'OHLC',
+    AUTO: 'Авто',
+    bidask: 'Bid/Ask',
+    ohlc: 'OHLC',
+    auto: 'Авто',
+  },
+  capital_base_mode: {
+    FULL_CASH: 'Полный кэш',
+    MARGIN_AWARE: 'С учётом маржи',
+    full_cash: 'Полный кэш',
+    margin_aware: 'С учётом маржи',
+  },
+  cadence: {
+    daily: 'Ежедневно',
+    weekly: 'Еженедельно',
+    monthly: 'Ежемесячно',
+    none: 'Нет',
+    DAILY: 'Ежедневно',
+    WEEKLY: 'Еженедельно',
+    MONTHLY: 'Ежемесячно',
+    NONE: 'Нет',
+  },
+  day_count: {
+    'ACT/365': 'ACT/365',
+    'ACT/360': 'ACT/360',
+  },
+  action: {
+    approve: 'Одобрить',
+    reject: 'Отклонить',
+    hold: 'Удержать',
+    enter: 'Вход',
+    exit: 'Выход',
+  },
+  risk_state: {
+    green: 'Зелёный',
+    yellow: 'Жёлтый',
+    red: 'Красный',
+  },
+  news_severity: {
+    low: 'Низкая',
+    medium: 'Средняя',
+    high: 'Высокая',
+    critical: 'Критическая',
+  },
+  signal_action: {
+    enter: 'Вход',
+    exit: 'Выход',
+    hold: 'Держать',
+  },
+  signal_direction: {
+    cash_and_carry: 'Кэш-энд-кэрри',
+    reverse: 'Реверс',
+    neutral: 'Нейтрально',
+  },
+  signal_reasons: {
+    enter_ok: 'Вход разрешён',
+    skip_floor: 'Пропуск: floor',
+    skip_liquidity: 'Пропуск: ликвидность',
+    skip_score: 'Пропуск: скор',
+    floor_fail: 'Floor не пройден',
+    liquidity_fail: 'Ликвидность не пройдена',
+    entry_filter_fail: 'Фильтр входа не пройден',
+    dte_too_low: 'Слишком мало дней до экспирации',
+    hold: 'Держать',
+    tp: 'TP',
+    sl: 'SL',
+    time: 'Таймстоп',
+    expiry: 'Близко к экспирации',
+    implied_rate_above_required: 'Имплайд ставка выше требуемой',
+    implied_rate_below_required: 'Имплайд ставка ниже требуемой',
+    implied_rate_neutral: 'Имплайд ставка нейтральна',
+    insufficient_history: 'Недостаточно истории',
+    zscore_high: 'Z-score высокий',
+    zscore_low: 'Z-score низкий',
+    zscore_revert: 'Z-score вернулся',
+    zscore_mid: 'Z-score в зоне ожидания',
+    event_filter_blocked: 'Заблокировано фильтром событий',
+    direction_conflict: 'Конфликт направлений',
+    stat_not_confirmed: 'Стат-сигнал не подтверждён',
+    carry_not_confirmed: 'Carry-сигнал не подтверждён',
+  },
+  direction: {
+    cash_and_carry: 'Кэш-энд-кэрри',
+    reverse: 'Реверс',
+    neutral: 'Нейтрально',
+  },
+  decision: {
+    ENTER_OK: 'Вход разрешён',
+    SKIP_FLOOR: 'Пропуск: floor',
+    SKIP_LIQUIDITY: 'Пропуск: ликвидность',
+    SKIP_SCORE: 'Пропуск: скор',
+    enter_ok: 'Вход разрешён',
+    skip_floor: 'Пропуск: floor',
+    skip_liquidity: 'Пропуск: ликвидность',
+    skip_score: 'Пропуск: скор',
+  },
+  proposal_type: {
+    rebalance: 'Ребалансировка',
+    confirm: 'Подтверждение',
+  },
+  side: {
+    buy: 'Покупка',
+    sell: 'Продажа',
+  },
+  exit_reason: {
+    TP: 'TP',
+    SL: 'SL',
+    TRAIL: 'Трейлинг',
+  },
+  status: {
+    ok: 'ок',
+    queued: 'в очереди',
+    ready: 'готово',
+    recorded: 'записано',
+    filled: 'исполнено',
+    failed: 'ошибка',
+    cancelled: 'отменено',
+    pending: 'ожидание',
+    running: 'в работе',
+    stub: 'заглушка',
+  },
+}
+
+type ParamMeta = {
+  label: string
+  tooltip?: string
+  valueLabels?: Record<string, string>
+  order?: string[]
+}
+
+const paramMeta: Record<string, ParamMeta> = {
+  'test.start_date': {
+    label: 'Дата начала',
+    tooltip:
+      'Формула: start_date. ' +
+      'Интерпретация: дата начала исторического периода.',
+  },
+  'test.end_date': {
+    label: 'Дата окончания',
+    tooltip:
+      'Формула: end_date. ' +
+      'Интерпретация: дата окончания исторического периода.',
+  },
+  'test.timezone': {
+    label: 'Часовой пояс',
+    tooltip:
+      'Формула: timezone. ' +
+      'Интерпретация: таймзона для приведения дат/времени.',
+  },
+  'test.cost_stress_mult': {
+    label: 'Множитель издержек',
+    tooltip:
+      'Формула: costs *= cost_stress_mult. ' +
+      'Интерпретация: стресс-множитель издержек.',
+  },
+  'test.seed': {
+    label: 'Сид генератора',
+    tooltip:
+      'Формула: seed. ' +
+      'Интерпретация: фиксирует случайность для повторяемости.',
+  },
+  'universe.pair_ids': {
+    label: 'Список пар',
+    tooltip:
+      'Формула: использовать только pair_ids. ' +
+      'Интерпретация: ручной список пар.',
+  },
+  'universe.include_stocks': {
+    label: 'Тикеры акций',
+    tooltip:
+      'Формула: фильтр по акциям. ' +
+      'Интерпретация: разрешённые тикеры акций.',
+  },
+  'universe.include_futures': {
+    label: 'Тикеры фьючерсов',
+    tooltip:
+      'Формула: фильтр по фьючерсам. ' +
+      'Интерпретация: разрешённые тикеры фьючерсов.',
+  },
+  'universe.max_pairs': {
+    label: 'Лимит пар',
+    tooltip:
+      'Формула: limit = max_pairs. ' +
+      'Интерпретация: максимальное число пар в расчёте.',
+  },
+  'universe.allowed_expiry_months': {
+    label: 'Месяцы экспирации',
+    tooltip:
+      'Формула: expiry_month ∈ allowed_expiry_months. ' +
+      'Интерпретация: допустимые месяцы экспирации.',
+  },
+  'universe.allowed_expiry_years': {
+    label: 'Годы экспирации',
+    tooltip:
+      'Формула: expiry_year ∈ allowed_expiry_years. ' +
+      'Интерпретация: допустимые годы экспирации.',
+  },
+  'execution.price_mode': {
+    label: 'Режим цены',
+    tooltip:
+      'Формула: mode = price_mode (BIDASK/OHLC/AUTO). ' +
+      'Интерпретация: источник цены исполнения.',
+  },
+  'execution.half_spread_bps': {
+    label: 'Половина спреда, б.п.',
+    tooltip:
+      'Формула: price ± half_spread_bps. ' +
+      'Интерпретация: половина спреда в б.п.',
+  },
+  'execution.slip_stock_bps': {
+    label: 'Проскальзывание акций, б.п.',
+    tooltip:
+      'Формула: slip_stock_bps. ' +
+      'Интерпретация: проскальзывание по акциям в б.п.',
+  },
+  'execution.slip_fut_bps': {
+    label: 'Проскальзывание фьючерса, б.п.',
+    tooltip:
+      'Формула: slip_fut_bps. ' +
+      'Интерпретация: проскальзывание по фьючерсу в б.п.',
+  },
+  'execution.slip_fut_ticks': {
+    label: 'Проскальзывание фьючерса, тиков',
+    tooltip:
+      'Формула: slip_fut_ticks × tick_size_fut. ' +
+      'Интерпретация: проскальзывание в тиках.',
+  },
+  'execution.tick_size_fut': {
+    label: 'Шаг цены фьючерса',
+    tooltip:
+      'Формула: tick_size_fut. ' +
+      'Интерпретация: шаг цены фьючерса для пересчёта тиков.',
+  },
+  'rates.day_count': {
+    label: 'База дней',
+    tooltip:
+      'Формула: tau = days / day_count. ' +
+      'Интерпретация: база дней для годовых ставок.',
+  },
+  'rates.use_trading_days': {
+    label: 'Торговые дни',
+    tooltip:
+      'Формула: использовать торговые дни вместо календарных. ' +
+      'Интерпретация: пересчёт tau и ставок.',
+  },
+  'costs.stock_commission_bps': {
+    label: 'Комиссия акций, б.п.',
+    tooltip:
+      'Формула: комиссия = notional × stock_commission_bps. ' +
+      'Интерпретация: комиссия по акциям в б.п.',
+  },
+  'costs.futures_commission_bps': {
+    label: 'Комиссия фьючерсов, б.п.',
+    tooltip:
+      'Формула: комиссия = notional × futures_commission_bps. ' +
+      'Интерпретация: комиссия по фьючерсам в б.п.',
+  },
+  'costs.exchange_fee_bps': {
+    label: 'Биржевой сбор, б.п.',
+    tooltip:
+      'Формула: сбор = notional × exchange_fee_bps. ' +
+      'Интерпретация: биржевой сбор в б.п.',
+  },
+  'costs.fee_stock_per_share': {
+    label: 'Комиссия за акцию, ₽',
+    tooltip:
+      'Формула: fee_stock_per_share × qty. ' +
+      'Интерпретация: фиксированная комиссия за акцию.',
+  },
+  'costs.fee_stock_bps': {
+    label: 'Доп. комиссия акций, б.п.',
+    tooltip:
+      'Формула: fee_stock_bps. ' +
+      'Интерпретация: дополнительная комиссия по акциям.',
+  },
+  'costs.fee_fut_per_contract': {
+    label: 'Комиссия за контракт, ₽',
+    tooltip:
+      'Формула: fee_fut_per_contract × contracts. ' +
+      'Интерпретация: фиксированная комиссия за контракт.',
+  },
+  'liquidity.max_spread_bps_stock': {
+    label: 'Макс. спред акций, б.п.',
+    tooltip:
+      'Формула: spread_bps_stock ≤ max_spread_bps_stock. ' +
+      'Интерпретация: фильтр по спреду акций.',
+  },
+  'liquidity.max_spread_bps_fut': {
+    label: 'Макс. спред фьючерса, б.п.',
+    tooltip:
+      'Формула: spread_bps_fut ≤ max_spread_bps_fut. ' +
+      'Интерпретация: фильтр по спреду фьючерса.',
+  },
+  'liquidity.min_avg_dollarvol_stock': {
+    label: 'Мин. оборот акций, ₽',
+    tooltip:
+      'Формула: avg_dollarvol_stock ≥ min_avg_dollarvol_stock. ' +
+      'Интерпретация: минимум оборота по акциям.',
+  },
+  'liquidity.min_avg_dollarvol_fut': {
+    label: 'Мин. оборот фьючерса, ₽',
+    tooltip:
+      'Формула: avg_dollarvol_fut ≥ min_avg_dollarvol_fut. ' +
+      'Интерпретация: минимум оборота по фьючерсу.',
+  },
+  'liquidity.min_open_interest': {
+    label: 'Мин. открытый интерес',
+    tooltip:
+      'Формула: open_interest ≥ min_open_interest. ' +
+      'Интерпретация: минимум открытого интереса.',
+  },
+  'liquidity.participation_rate': {
+    label: 'Доля участия',
+    tooltip:
+      'Формула: days_to_exit(position, avg_dollar, participation_rate). ' +
+      'Интерпретация: доля участия в дневном объёме.',
+  },
+  'liquidity.max_days_to_exit': {
+    label: 'Макс. дней на выход',
+    tooltip:
+      'Формула: days_to_exit ≤ max_days_to_exit. ' +
+      'Интерпретация: ограничение по сроку выхода.',
+  },
+  'liquidity.use_adv': {
+    label: 'Использовать ADV',
+    tooltip:
+      'Формула: use_adv. ' +
+      'Интерпретация: использовать среднедневной оборот (ADV) в фильтрах ликвидности.',
+  },
+  'strategy.floor_tolerance': {
+    label: 'Допуск floor',
+    tooltip:
+      'Формула: floor_pass = floor_rate_annual ≥ r_cb_annual - floor_tolerance. ' +
+      'Интерпретация: допуск к ключевой ставке.',
+  },
+  'strategy.riskbuffer_floor': {
+    label: 'Риск-буфер floor',
+    tooltip:
+      'Формула: costs_hold += riskbuffer_floor. ' +
+      'Интерпретация: дополнительный буфер издержек удержания.',
+  },
+  'strategy.capital_base_mode': {
+    label: 'База капитала',
+    tooltip:
+      'Формула: FULL_CASH → spot_buy; MARGIN_AWARE → margin_stock + margin_fut + var_buffer. ' +
+      'Интерпретация: база капитала для floor_rate.',
+  },
+  'strategy.margin_stock_pct': {
+    label: 'Маржа акций, доля',
+    tooltip:
+      'Формула: margin_stock = spot × margin_stock_pct. ' +
+      'Интерпретация: доля маржи по акциям.',
+  },
+  'strategy.margin_fut_pct': {
+    label: 'Маржа фьючерса, доля',
+    tooltip:
+      'Формула: margin_fut = fut × margin_fut_pct. ' +
+      'Интерпретация: доля маржи по фьючерсу.',
+  },
+  'strategy.var_margin_buffer_pct': {
+    label: 'Буфер вариационки, доля',
+    tooltip:
+      'Формула: var_buffer = margin_fut × var_margin_buffer_pct. ' +
+      'Интерпретация: буфер вариационной маржи.',
+  },
+  'strategy.min_dte_entry': {
+    label: 'Мин. DTE для входа',
+    tooltip:
+      'Формула: DTE ≥ min_DTE_entry. ' +
+      'Интерпретация: минимум дней до экспирации для входа.',
+  },
+  'strategy.close_buffer_days': {
+    label: 'Буфер до экспирации, дней',
+    tooltip:
+      'Формула: выход за close_buffer_days до экспирации. ' +
+      'Интерпретация: временной буфер закрытия.',
+  },
+  'strategy.roll_trigger_days': {
+    label: 'Триггер ролловера, дней',
+    tooltip:
+      'Формула: DTE ≤ roll_trigger_days. ' +
+      'Интерпретация: порог для ролловера.',
+  },
+  'strategy.h_max_days': {
+    label: 'Горизонт H, дней',
+    tooltip:
+      'Формула: горизонт расчёта alpha-метрик. ' +
+      'Интерпретация: число дней вперёд для TP/SL.',
+  },
+  'strategy.spread_history_days': {
+    label: 'История спреда, дней',
+    tooltip:
+      'Формула: использовать последние spread_history_days. ' +
+      'Интерпретация: глубина истории спреда.',
+  },
+  'strategy.tp_pct': {
+    label: 'TP-порог',
+    tooltip:
+      'Формула: выход по TP при spread_pct ≥ TP_pct. ' +
+      'Интерпретация: порог фиксации прибыли (доля, 0.01 = 1%).',
+  },
+  'strategy.sl_pct': {
+    label: 'SL-порог',
+    tooltip:
+      'Формула: выход по SL при spread_pct ≤ -SL_pct. ' +
+      'Интерпретация: порог стоп-лосса (доля, 0.01 = 1%).',
+  },
+  'strategy.z_window': {
+    label: 'Окно Z-score',
+    tooltip:
+      'Формула: zscore = (last - mean) / std на окне z_window. ' +
+      'Интерпретация: длина окна расчёта.',
+  },
+  'strategy.z_entry_threshold': {
+    label: 'Порог входа Z-score',
+    tooltip:
+      'Формула: |zscore| ≥ z_entry_threshold. ' +
+      'Интерпретация: порог стат-входа.',
+  },
+  'strategy.min_floor_score': {
+    label: 'Мин. floor-скор',
+    tooltip:
+      'Формула: score_floor ≥ min_floor_score. ' +
+      'Интерпретация: минимум floor-скора для входа.',
+  },
+  'strategy.min_alpha_score': {
+    label: 'Мин. alpha-скор',
+    tooltip:
+      'Формула: score_alpha ≥ min_alpha_score. ' +
+      'Интерпретация: минимум alpha-скора для входа.',
+  },
+  'strategy.min_total_score': {
+    label: 'Мин. итоговый скор',
+    tooltip:
+      'Формула: total_score ≥ min_total_score. ' +
+      'Интерпретация: минимум итогового скора.',
+  },
+  'strategy.w_floor': {
+    label: 'Вес floor-скора',
+    tooltip:
+      'Формула: total_score = w_floor*score_floor + ... ' +
+      'Интерпретация: вес floor-скора.',
+  },
+  'strategy.w_alpha': {
+    label: 'Вес alpha-скора',
+    tooltip:
+      'Формула: total_score = ... + w_alpha*score_alpha + ... ' +
+      'Интерпретация: вес alpha-скора.',
+  },
+  'strategy.w_liq': {
+    label: 'Вес штрафа ликвидности',
+    tooltip:
+      'Формула: total_score -= w_liq*penalty_liq. ' +
+      'Интерпретация: вес штрафа ликвидности.',
+  },
+  'strategy.w_event': {
+    label: 'Вес событийного штрафа',
+    tooltip:
+      'Формула: total_score -= w_event*penalty_event. ' +
+      'Интерпретация: вес событийного штрафа.',
+  },
+  'strategy.k_event': {
+    label: 'Коэф. событийного штрафа',
+    tooltip:
+      'Формула: penalty_event = k_event * event_score. ' +
+      'Интерпретация: коэффициент событийного штрафа.',
+  },
+  'portfolio.account_equity': {
+    label: 'Капитал счёта, ₽',
+    tooltip:
+      'Формула: account_equity. ' +
+      'Интерпретация: размер капитала для расчётов.',
+  },
+  'portfolio.account_currency': {
+    label: 'Валюта счёта',
+    tooltip:
+      'Формула: account_currency. ' +
+      'Интерпретация: валюта портфеля.',
+  },
+  'portfolio.max_gross_notional': {
+    label: 'Лимит общей позиции, ₽',
+    tooltip:
+      'Формула: gross_notional ≤ max_gross_notional. ' +
+      'Интерпретация: лимит по общей позиции.',
+  },
+  'portfolio.max_contracts_per_pair': {
+    label: 'Лимит контрактов на пару',
+    tooltip:
+      'Формула: contracts ≤ max_contracts_per_pair. ' +
+      'Интерпретация: ограничение контрактов на пару.',
+  },
+  'portfolio.capital_allocated_per_trade': {
+    label: 'Капитал на сделку, ₽',
+    tooltip:
+      'Формула: capital_allocated_per_trade. ' +
+      'Интерпретация: капитал на одну сделку.',
+  },
+  'portfolio.margin_proxy': {
+    label: 'Множитель маржи',
+    tooltip:
+      'Формула: margin = notional × margin_proxy. ' +
+      'Интерпретация: множитель маржи.',
+  },
+  'allocation.weights': {
+    label: 'Вес корзин',
+    tooltip:
+      'Формула: target_weight[basket]. ' +
+      'Интерпретация: распределение веса по корзинам (сумма обычно = 1).',
+    valueLabels: valueLabels.basket,
+    order: ['fundamental', 'speculative', 'arbitrage'],
+  },
+  'allocation.min_confidence': {
+    label: 'Мин. уверенность',
+    tooltip:
+      'Формула: confidence ≥ min_confidence. ' +
+      'Интерпретация: минимальная уверенность пары.',
+  },
+  'allocation.max_signals': {
+    label: 'Макс. сигналов',
+    tooltip:
+      'Формула: top N ≤ max_signals. ' +
+      'Интерпретация: ограничение числа сигналов.',
+  },
+  'allocation.max_turnover_pct': {
+    label: 'Лимит оборота',
+    tooltip:
+      'Формула: turnover ≤ max_turnover_pct. ' +
+      'Интерпретация: ограничение оборота (доля, 0.1 = 10%).',
+  },
+  'allocation.min_trade_weight': {
+    label: 'Мин. вес сделки',
+    tooltip:
+      'Формула: trade_weight ≥ min_trade_weight. ' +
+      'Интерпретация: минимальный вес сделки.',
+  },
+  'rebalance.cadence': {
+    label: 'Частота ребаланса',
+    tooltip:
+      'Формула: cadence (daily/weekly). ' +
+      'Интерпретация: периодичность ребалансировки.',
+  },
+  'rebalance.threshold_pct': {
+    label: 'Порог ребаланса',
+    tooltip:
+      'Формула: |target - current| ≥ threshold_pct. ' +
+      'Интерпретация: порог для ребалансировки.',
+  },
+  'rebalance.cooldown_days': {
+    label: 'Пауза ребаланса, дней',
+    tooltip:
+      'Формула: cooldown_days между ребалансами. ' +
+      'Интерпретация: пауза после ребаланса.',
+  },
+}
+
+const paramSectionOrder = [
+  'test',
+  'universe',
+  'execution',
+  'rates',
+  'costs',
+  'liquidity',
+  'strategy',
+  'portfolio',
+  'allocation',
+  'rebalance',
+  'general',
+]
+
+const valueTypeLabels: Record<string, string> = {
+  bool: 'да/нет',
+  int: 'целое',
+  float: 'число',
+  str: 'текст',
+  dict: 'словарь',
+  list: 'список',
+  tuple: 'список',
+  set: 'набор',
+  union: 'смешанный',
+  date: 'дата',
+  datetime: 'дата/время',
+}
+
+const getFieldLabel = (key: string) => fieldMeta[key]?.label ?? humanizeKey(key)
+const getFieldTooltip = (key: string) => fieldMeta[key]?.tooltip ?? ''
+const getValueLabel = (column: string | undefined, value: string) => {
+  if (!column) return null
+  const map = valueLabels[column]
+  return map?.[value] ?? null
+}
+
+const normalizeParamKey = (value: string) =>
+  value.replace(/[A-Z]/g, (match) => match.toLowerCase())
+
+const getParamLeaf = (key: string) => {
+  const parts = key.split('.')
+  return parts[parts.length - 1] || key
+}
+
+const getParamLabel = (spec: ParameterSpec) => {
+  const meta = paramMeta[spec.key] ?? paramMeta[normalizeParamKey(spec.key)]
+  if (meta?.label) return meta.label
+  const leaf = getParamLeaf(spec.key)
+  const normalized = normalizeParamKey(leaf)
+  return (
+    fieldMeta[leaf]?.label ??
+    fieldMeta[normalized]?.label ??
+    humanizeKey(normalized)
+  )
+}
+
+const getParamTooltip = (spec: ParameterSpec) => {
+  const meta = paramMeta[spec.key] ?? paramMeta[normalizeParamKey(spec.key)]
+  if (meta?.tooltip) return meta.tooltip
+  const leaf = getParamLeaf(spec.key)
+  const normalized = normalizeParamKey(leaf)
+  return fieldMeta[leaf]?.tooltip ?? fieldMeta[normalized]?.tooltip ?? spec.description ?? ''
+}
+
+const getParamOptionLabel = (spec: ParameterSpec, option: unknown) => {
+  const raw = String(option)
+  const leaf = getParamLeaf(spec.key)
+  const normalized = normalizeParamKey(leaf)
+  const metaLabels =
+    paramMeta[spec.key]?.valueLabels ??
+    paramMeta[normalizeParamKey(spec.key)]?.valueLabels ??
+    valueLabels[spec.key] ??
+    valueLabels[leaf] ??
+    valueLabels[normalized]
+  return metaLabels?.[raw] ?? raw
+}
+
+const formatParamDefault = (spec: ParameterSpec) => {
+  if (spec.default === undefined) return ''
+  if (spec.default === null) return '—'
+  if (spec.value_type === 'bool') {
+    return spec.default ? 'Да' : 'Нет'
+  }
+  if (spec.value_type === 'dict') {
+    let raw: Record<string, unknown> | null = null
+    if (typeof spec.default === 'string') {
+      try {
+        raw = getObject<Record<string, unknown>>(JSON.parse(spec.default))
+      } catch {
+        raw = null
+      }
+    } else {
+      raw = getObject<Record<string, unknown>>(spec.default)
+    }
+    if (!raw) return '—'
+    const meta = paramMeta[spec.key] ?? paramMeta[normalizeParamKey(spec.key)]
+    const labels = meta?.valueLabels
+    const entries = Object.entries(raw)
+    if (!entries.length) return '—'
+    return entries
+      .map(([key, value]) => {
+        if (value === undefined) return null
+        const label = labels?.[key] ?? humanizeKey(key)
+        if (typeof value === 'number') {
+          const digits = Number.isInteger(value) ? 0 : 3
+          return `${label}: ${formatNumber(value, digits)}`
+        }
+        return `${label}: ${String(value)}`
+      })
+      .filter(Boolean)
+      .join(', ')
+  }
+  if (Array.isArray(spec.default)) {
+    return spec.default.map((item) => String(item)).join(', ')
+  }
+  return shortenText(compactJson(spec.default))
+}
+
+const buildParamHelperText = (spec: ParameterSpec) => {
+  const parts: string[] = []
+  const typeLabel = valueTypeLabels[spec.value_type] ?? spec.value_type
+  if (typeLabel) parts.push(`Тип: ${typeLabel}`)
+  if (spec.min_value !== null && spec.min_value !== undefined) {
+    parts.push(`Мин: ${spec.min_value}`)
+  }
+  if (spec.max_value !== null && spec.max_value !== undefined) {
+    parts.push(`Макс: ${spec.max_value}`)
+  }
+  const defaultLabel = formatParamDefault(spec)
+  if (defaultLabel) parts.push(`По умолчанию: ${defaultLabel}`)
+  return parts.filter(Boolean).join(' | ')
+}
+
+const ParamLabel = ({ label, tooltip }: { label: string; tooltip?: string }) => (
+  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+    <span>{label}</span>
+    {tooltip ? (
+      <Tooltip title={tooltip} arrow placement="top">
+        <InfoOutlinedIcon fontSize="inherit" sx={{ color: 'text.secondary' }} />
+      </Tooltip>
+    ) : null}
+  </Box>
+)
+
+const toTitleCase = (value: string) => getFieldLabel(value)
 
 const toNumeric = (value: unknown) => {
   if (typeof value === 'number') return value
@@ -345,19 +1995,40 @@ const percentColumns = new Set([
   'score_floor',
   'score_alpha',
   'total_score',
+  'signal_score',
+  'expected_return',
   'p_hit_tp',
   'p_hit_sl',
   'r_cb_annual',
   'r_fund_annual',
   'r_disc_annual',
+  'implied_rate_net',
+  'required_rate',
+  'tp_pct',
+  'sl_pct',
   'tp_net',
   'sl_net',
+  'spread_pct_entry_exec',
+  'spread_pct_exit_exec',
+  'pnl_spread_pct',
+  'entry_spread_exec_pct',
+  'entry_spread_pct_exec',
+  'exit_spread_pct_exec',
+  'trail_peak_spread_pct',
   'share_alpha_exits',
+  'avg_trade_return_annual_recent',
+  'trade_return_pct',
+  'trade_return_pct_net',
+  'trade_return_annual',
   'cagr',
   'hit_rate',
   'max_drawdown',
-  'cycle_return_pct',
+  'drawdown',
+  'expected_net_irr',
+  'spread_vol_pct',
 ])
+
+const alreadyPercentColumns = new Set(['cycle_return_pct'])
 
 const columnDigits: Record<string, number> = {
   spot: 2,
@@ -393,26 +2064,44 @@ const columnDigits: Record<string, number> = {
 }
 
 const formatValue = (value: unknown, column?: string): string => {
-  if (value === null || value === undefined) return ''
+  if (value === null || value === undefined) return '—'
   if (Array.isArray(value)) {
-    return value.map((item) => formatValue(item)).join(', ')
+    return value.map((item) => formatValue(item, column)).join(', ')
   }
   if (typeof value === 'boolean') {
-    return value ? 'Yes' : 'No'
+    return value ? 'Да' : 'Нет'
+  }
+  if (typeof value === 'string') {
+    const mapped = getValueLabel(column, value)
+    if (mapped) return mapped
   }
   if (typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
-    if (!entries.length) return ''
+    if (!entries.length) return '—'
     return entries
       .map(([key, item]) => `${toTitleCase(key)}: ${formatValue(item, key)}`)
       .join(', ')
   }
   const numeric = toNumeric(value)
-  if (column && percentColumns.has(column) && !Number.isNaN(numeric)) {
-    return `${formatNumber(numeric * 100, 2)}%`
+  const meta = column ? fieldMeta[column] : undefined
+  if (!Number.isNaN(numeric)) {
+    if (meta?.format === 'percent' || (column && percentColumns.has(column))) {
+      const scaled =
+        column && alreadyPercentColumns.has(column) ? numeric : numeric * 100
+      return `${formatNumber(scaled, meta?.digits ?? 2)}%`
+    }
+    if (meta?.format === 'bps') {
+      return `${formatNumber(numeric, meta?.digits ?? 2)} б.п.`
+    }
+    if (meta?.format === 'currency') {
+      return `${formatNumber(numeric, meta?.digits ?? 2)} ₽`
+    }
+    if (meta?.format === 'days') {
+      return `${formatNumber(numeric, meta?.digits ?? 0)} дн.`
+    }
   }
   if (!Number.isNaN(numeric)) {
-    const digits = column && column in columnDigits ? columnDigits[column] : 4
+    const digits = meta?.digits ?? (column && column in columnDigits ? columnDigits[column] : 4)
     return formatNumber(numeric, digits)
   }
   return String(value)
@@ -441,7 +2130,16 @@ const getTableColumns = (rows: GenericRow[]): string[] => {
 
 const formatCellValue = (value: unknown, column?: string): string => formatValue(value, column)
 
-type ParamValue = string | boolean
+const renderFieldLabel = (key: string, labelOverride?: string) => {
+  const label = labelOverride ?? getFieldLabel(key)
+  const tooltip = getFieldTooltip(key)
+  if (!tooltip) return label
+  return (
+    <Tooltip title={tooltip} arrow placement="top">
+      <span>{label}</span>
+    </Tooltip>
+  )
+}
 
 const isJsonValueType = (valueType: string) =>
   ['list', 'dict', 'tuple', 'set'].includes(valueType)
@@ -459,11 +2157,93 @@ const compactJson = (value: unknown): string => {
   }
 }
 
+const parseParamDictValue = (raw: ParamValue | undefined): Record<string, unknown> => {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+const normalizeDictPayload = (payload: Record<string, unknown>) => {
+  const next: Record<string, unknown> = {}
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined) return
+    if (value === null) {
+      next[key] = null
+      return
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) {
+        next[key] = null
+        return
+      }
+      const numeric = Number(trimmed.replace(',', '.'))
+      next[key] = Number.isNaN(numeric) ? trimmed : numeric
+      return
+    }
+    next[key] = value
+  })
+  return next
+}
+
+const getParamDictEntries = (spec: ParameterSpec, raw: Record<string, unknown>) => {
+  const meta = paramMeta[spec.key] ?? paramMeta[normalizeParamKey(spec.key)]
+  const labels = meta?.valueLabels
+  const keys = new Set<string>([
+    ...Object.keys(raw ?? {}),
+    ...Object.keys(labels ?? {}),
+  ])
+  const ordered = Array.from(keys)
+  if (meta?.order?.length) {
+    const orderIndex = new Map(meta.order.map((key, index) => [key, index]))
+    ordered.sort((left, right) => {
+      const leftRank = orderIndex.get(left) ?? Number.MAX_SAFE_INTEGER
+      const rightRank = orderIndex.get(right) ?? Number.MAX_SAFE_INTEGER
+      if (leftRank !== rightRank) return leftRank - rightRank
+      return left.localeCompare(right)
+    })
+  } else {
+    ordered.sort((left, right) => left.localeCompare(right))
+  }
+  return ordered.map((key) => ({
+    key,
+    label: labels?.[key] ?? getFieldLabel(key),
+    value: raw?.[key],
+  }))
+}
+
 const normalizeParamDefault = (spec: ParameterSpec): ParamValue => {
   if (spec.value_type === 'bool') {
     return Boolean(spec.default)
   }
   if (spec.default === null || spec.default === undefined) {
+    return ''
+  }
+  if (spec.value_type === 'dict') {
+    if (typeof spec.default === 'string') {
+      try {
+        const parsed = JSON.parse(spec.default)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, ParamPrimitive | unknown>
+        }
+      } catch {
+        return ''
+      }
+    }
+    if (typeof spec.default === 'object' && !Array.isArray(spec.default)) {
+      return spec.default as Record<string, ParamPrimitive | unknown>
+    }
     return ''
   }
   if (isJsonValueType(spec.value_type) || typeof spec.default === 'object') {
@@ -505,6 +2285,7 @@ const parseParamValue = (raw: ParamValue | undefined, spec: ParameterSpec) => {
     return { value: spec.default ?? null }
   }
   const valueType = spec.value_type
+  const label = getParamLabel(spec)
   if (valueType === 'bool') {
     if (typeof raw === 'boolean') {
       return { value: raw }
@@ -513,24 +2294,40 @@ const parseParamValue = (raw: ParamValue | undefined, spec: ParameterSpec) => {
     if (normalized === 'true' || normalized === 'false') {
       return { value: normalized === 'true' }
     }
-    return { value: null, error: `${spec.key}: invalid boolean` }
+    return { value: null, error: `${label}: неверное значение (да/нет)` }
   }
   if (valueType === 'int') {
     const parsed = Number.parseInt(String(raw), 10)
     if (Number.isNaN(parsed)) {
-      return { value: null, error: `${spec.key}: invalid int` }
+      return { value: null, error: `${label}: неверное целое` }
     }
     return { value: parsed }
   }
   if (valueType === 'float') {
     const parsed = Number.parseFloat(String(raw))
     if (Number.isNaN(parsed)) {
-      return { value: null, error: `${spec.key}: invalid float` }
+      return { value: null, error: `${label}: неверное число` }
     }
     return { value: parsed }
   }
   if (valueType === 'str') {
     return { value: String(raw) }
+  }
+  if (valueType === 'dict') {
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw)
+        const payload = getObject<Record<string, unknown>>(parsed)
+        if (!payload) {
+          return { value: null, error: `${label}: неверный JSON` }
+        }
+        return { value: normalizeDictPayload(payload) }
+      } catch {
+        return { value: null, error: `${label}: неверный JSON` }
+      }
+    }
+    const payload = getObject<Record<string, unknown>>(raw) ?? {}
+    return { value: normalizeDictPayload(payload) }
   }
   if (isJsonValueType(valueType) || valueType === 'union') {
     if (typeof raw !== 'string') {
@@ -539,7 +2336,7 @@ const parseParamValue = (raw: ParamValue | undefined, spec: ParameterSpec) => {
     try {
       return { value: JSON.parse(raw) }
     } catch {
-      return { value: null, error: `${spec.key}: invalid JSON` }
+      return { value: null, error: `${label}: неверный JSON` }
     }
   }
   if (typeof raw === 'string') {
@@ -548,7 +2345,7 @@ const parseParamValue = (raw: ParamValue | undefined, spec: ParameterSpec) => {
       try {
         return { value: JSON.parse(trimmed) }
       } catch {
-        return { value: null, error: `${spec.key}: invalid JSON` }
+        return { value: null, error: `${label}: неверный JSON` }
       }
     }
   }
@@ -651,8 +2448,12 @@ function App() {
   const [topPairsAll, setTopPairsAll] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
-  const [historyFrom, setHistoryFrom] = useState('')
-  const [historyTo, setHistoryTo] = useState('')
+  const [historyFrom, setHistoryFrom] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() - 7)
+    return formatDateInputValue(date)
+  })
+  const [historyTo, setHistoryTo] = useState(() => formatDateInputValue(new Date()))
   const [executionForm, setExecutionForm] = useState({
     price: '',
     quantity: '',
@@ -668,12 +2469,12 @@ function App() {
     try {
       const response = await fetch('/api/decision-view?limit=500', { cache: 'no-store' })
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
+        throw new Error(`Ошибка API: ${response.status}`)
       }
       const data: DecisionView[] = await response.json()
       setRows(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data')
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить данные')
     } finally {
       setLoading(false)
     }
@@ -685,12 +2486,12 @@ function App() {
     try {
       const response = await fetch(`/api/decision-log/${decisionId}`)
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
+        throw new Error(`Ошибка API: ${response.status}`)
       }
       const data: DecisionLog = await response.json()
       setDetail(data)
     } catch (err) {
-      setDetailError(err instanceof Error ? err.message : 'Failed to load decision log')
+      setDetailError(err instanceof Error ? err.message : 'Не удалось загрузить лог решения')
     }
   }, [])
 
@@ -701,7 +2502,7 @@ function App() {
     try {
       const response = await fetch(`/api/decisions/${decisionId}/action`, { cache: 'no-store' })
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
+        throw new Error(`Ошибка API: ${response.status}`)
       }
       const data = (await response.json()) as {
         operator_action?: OperatorAction
@@ -709,7 +2510,7 @@ function App() {
       }
       setDecisionAction(data)
     } catch (err) {
-      setDecisionActionError(err instanceof Error ? err.message : 'Failed to load decision action')
+      setDecisionActionError(err instanceof Error ? err.message : 'Не удалось загрузить действие решения')
     } finally {
       setDecisionActionLoading(false)
     }
@@ -749,12 +2550,12 @@ function App() {
         setter: (rows: GenericRow[]) => void,
       ) => {
         if (result.status === 'rejected') {
-          errors.push(`${label} fetch failed`)
+          errors.push(`${label}: ошибка загрузки`)
           setter([])
           return false
         }
         if (!result.value.ok) {
-          errors.push(`${label} API error: ${result.value.status}`)
+          errors.push(`${label}: ошибка API ${result.value.status}`)
           setter([])
           return false
         }
@@ -762,7 +2563,7 @@ function App() {
           setter(await result.value.json())
           return true
         } catch {
-          errors.push(`${label} parse error`)
+          errors.push(`${label}: ошибка разбора`)
           setter([])
           return false
         }
@@ -773,12 +2574,12 @@ function App() {
         setter: (payload: T | null) => void,
       ) => {
         if (result.status === 'rejected') {
-          errors.push(`${label} fetch failed`)
+          errors.push(`${label}: ошибка загрузки`)
           setter(null)
           return false
         }
         if (!result.value.ok) {
-          errors.push(`${label} API error: ${result.value.status}`)
+          errors.push(`${label}: ошибка API ${result.value.status}`)
           setter(null)
           return false
         }
@@ -786,16 +2587,16 @@ function App() {
           setter((await result.value.json()) as T)
           return true
         } catch {
-          errors.push(`${label} parse error`)
+          errors.push(`${label}: ошибка разбора`)
           setter(null)
           return false
         }
       }
 
-      const topPairsOk = await parseResult('Top pairs', results[0], setTopPairs)
-      const signalsOk = await parseResult('Signals', results[1], setSignals)
-      await parseResult('Backtests', results[2], setBacktests)
-      await parseObjectResult<RefreshStatus>('Refresh status', results[3], setRefreshStatus)
+      const topPairsOk = await parseResult('Топ пар', results[0], setTopPairs)
+      const signalsOk = await parseResult('Сигналы', results[1], setSignals)
+      await parseResult('Бэктесты', results[2], setBacktests)
+      await parseObjectResult<RefreshStatus>('Статус обновления', results[3], setRefreshStatus)
 
         if (topPairsOk && signalsOk) {
           setAuxLastUpdated(new Date().toISOString())
@@ -804,7 +2605,7 @@ function App() {
           setAuxError(errors.join(' | '))
         }
       } catch (err) {
-        setAuxError(err instanceof Error ? err.message : 'Failed to load tables')
+        setAuxError(err instanceof Error ? err.message : 'Не удалось загрузить таблицы')
       } finally {
         setAuxLoading(false)
         auxFetchInFlight.current = false
@@ -828,11 +2629,11 @@ function App() {
         cache: 'no-store',
       })
       if (!response.ok) {
-        let message = `History API error: ${response.status}`
+        let message = `Ошибка API истории: ${response.status}`
         try {
           const payload = (await response.json()) as { error?: string }
           if (payload?.error) {
-            message = `History API error: ${payload.error}`
+            message = `Ошибка API истории: ${payload.error}`
           }
         } catch {
           // ignore parsing errors, keep status-based message
@@ -842,7 +2643,7 @@ function App() {
       const data: SignalHistoryRow[] = await response.json()
       setSignalHistory(data)
     } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : 'Failed to load history')
+      setHistoryError(err instanceof Error ? err.message : 'Не удалось загрузить историю')
     } finally {
       setHistoryLoading(false)
     }
@@ -861,12 +2662,12 @@ function App() {
         cache: 'no-store',
       })
       if (!response.ok) {
-        throw new Error(`Executions API error: ${response.status}`)
+        throw new Error(`Ошибка API исполнений: ${response.status}`)
       }
       const data: ExecutionRow[] = await response.json()
       setExecutionLogs((prev) => ({ ...prev, [pairKey]: data }))
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load executions'
+      const message = err instanceof Error ? err.message : 'Не удалось загрузить исполнения'
       setExecutionError((prev) => ({ ...prev, [pairKey]: message }))
     } finally {
       setExecutionLoadingKey(null)
@@ -892,7 +2693,7 @@ function App() {
         body: JSON.stringify(payload),
       })
       if (!response.ok) {
-        throw new Error(`Execute API error: ${response.status}`)
+        throw new Error(`Ошибка API исполнения: ${response.status}`)
       }
       const pairKey = row.stock && row.future ? `${row.stock}-${row.future}` : null
       if (pairKey) {
@@ -921,12 +2722,12 @@ function App() {
           { cache: 'no-store' },
         )
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`)
+          throw new Error(`Ошибка API: ${response.status}`)
         }
         const data: SpreadSeriesPoint[] = await response.json()
         setSpreadSeries((prev) => ({ ...prev, [pairKey]: data }))
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load spread series'
+        const message = err instanceof Error ? err.message : 'Не удалось загрузить серию спреда'
         setSpreadError((prev) => ({ ...prev, [pairKey]: message }))
       } finally {
         setSpreadLoadingKey(null)
@@ -947,7 +2748,7 @@ function App() {
         const url = params.toString() ? `/api/params/specs?${params.toString()}` : '/api/params/specs'
         const response = await fetch(url, { cache: 'no-store' })
         if (!response.ok) {
-          throw new Error(`Params API error: ${response.status}`)
+          throw new Error(`Ошибка API параметров: ${response.status}`)
         }
         const data = (await response.json()) as ParameterSpec[]
         setParamSpecs(data)
@@ -963,7 +2764,7 @@ function App() {
           return next
         })
       } catch (err) {
-        setParamSpecsError(err instanceof Error ? err.message : 'Failed to load params')
+        setParamSpecsError(err instanceof Error ? err.message : 'Не удалось загрузить параметры')
       } finally {
         setParamSpecsLoading(false)
       }
@@ -992,11 +2793,11 @@ function App() {
       })
       const data = (await response.json()) as BacktestReport & { error?: string; message?: string }
       if (!response.ok) {
-        throw new Error(data?.message || data?.error || `Backtest API error: ${response.status}`)
+        throw new Error(data?.message || data?.error || `Ошибка API бэктеста: ${response.status}`)
       }
       setBacktestRunReport(data)
     } catch (err) {
-      setBacktestRunError(err instanceof Error ? err.message : 'Failed to run backtest')
+      setBacktestRunError(err instanceof Error ? err.message : 'Не удалось запустить бэктест')
     } finally {
       setBacktestRunLoading(false)
     }
@@ -1015,11 +2816,11 @@ function App() {
       const response = await fetch(url, { cache: 'no-store' })
       const data = (await response.json()) as ForwardStatus & { error?: string; message?: string }
       if (!response.ok) {
-        throw new Error(data?.message || data?.error || `Forward API error: ${response.status}`)
+        throw new Error(data?.message || data?.error || `Ошибка API форварда: ${response.status}`)
       }
       setForwardStatus(data)
     } catch (err) {
-      setForwardError(err instanceof Error ? err.message : 'Failed to load forward status')
+      setForwardError(err instanceof Error ? err.message : 'Не удалось загрузить статус форварда')
     } finally {
       setForwardLoading(false)
     }
@@ -1041,7 +2842,7 @@ function App() {
         try {
           searchSpace = JSON.parse(hpoSearchSpace)
         } catch {
-          setHpoError('Search space JSON is invalid.')
+          setHpoError('Неверный JSON пространства поиска.')
           return
         }
       }
@@ -1052,11 +2853,11 @@ function App() {
       })
       const data = (await response.json()) as HpoResponse & { error?: string; message?: string }
       if (!response.ok) {
-        throw new Error(data?.message || data?.error || `HPO API error: ${response.status}`)
+        throw new Error(data?.message || data?.error || `Ошибка API HPO: ${response.status}`)
       }
       setHpoResponse(data)
     } catch (err) {
-      setHpoError(err instanceof Error ? err.message : 'Failed to run HPO')
+      setHpoError(err instanceof Error ? err.message : 'Не удалось запустить HPO')
     } finally {
       setHpoLoading(false)
     }
@@ -1090,7 +2891,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
       })
       if (!response.ok) {
-        let message = `Recompute API error: ${response.status}`
+        let message = `Ошибка API пересчёта: ${response.status}`
         try {
           const payload = (await response.json()) as { last_error?: string }
           if (payload?.last_error) {
@@ -1105,7 +2906,7 @@ function App() {
       setRefreshStatus(payload)
       return true
     } catch (err) {
-      setRecomputeError(err instanceof Error ? err.message : 'Failed to recompute data')
+      setRecomputeError(err instanceof Error ? err.message : 'Не удалось пересчитать данные')
       return false
     } finally {
       setRecomputeLoading(false)
@@ -1146,7 +2947,7 @@ function App() {
           }),
         })
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`)
+          throw new Error(`Ошибка API: ${response.status}`)
         }
         const data = (await response.json()) as {
           operator_action?: OperatorAction
@@ -1168,7 +2969,7 @@ function App() {
         }
         setDecisionActionNote('')
       } catch (err) {
-        setDecisionActionError(err instanceof Error ? err.message : 'Failed to submit action')
+        setDecisionActionError(err instanceof Error ? err.message : 'Не удалось отправить действие')
       } finally {
         setDecisionActionSubmitting(false)
       }
@@ -1235,6 +3036,14 @@ function App() {
     }
     return tableColumns
   }, [tab, tableColumns])
+  const tableVisibleSet = useMemo(() => new Set(tableVisibleColumns), [tableVisibleColumns])
+  const stripDuplicates = useCallback(
+    (entries: { key: string; value: unknown }[]) => {
+      const filtered = entries.filter((entry) => !tableVisibleSet.has(entry.key))
+      return filtered.length ? filtered : entries
+    },
+    [tableVisibleSet],
+  )
 
   const defaultSortKey = useMemo(() => {
     if (tab === 'top_pairs' && tableVisibleColumns.includes('total_score')) return 'total_score'
@@ -1318,7 +3127,10 @@ function App() {
   const filteredParamSpecs = useMemo(() => {
     const query = paramFilter.trim().toLowerCase()
     if (!query) return paramSpecs
-    return paramSpecs.filter((spec) => spec.key.toLowerCase().includes(query))
+    return paramSpecs.filter((spec) => {
+      const label = getParamLabel(spec).toLowerCase()
+      return spec.key.toLowerCase().includes(query) || label.includes(query)
+    })
   }, [paramFilter, paramSpecs])
 
   const paramSections = useMemo<[string, ParameterSpec[]][]>(() => {
@@ -1329,22 +3141,24 @@ function App() {
       list.push(spec)
       grouped.set(section, list)
     })
+    const orderIndex = new Map(paramSectionOrder.map((section, index) => [section, index]))
     return Array.from(grouped.entries())
       .map(([section, specs]) => [
         section,
         specs.sort((left, right) => left.key.localeCompare(right.key)),
       ])
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => {
+        const leftRank = orderIndex.get(left) ?? Number.MAX_SAFE_INTEGER
+        const rightRank = orderIndex.get(right) ?? Number.MAX_SAFE_INTEGER
+        if (leftRank !== rightRank) return leftRank - rightRank
+        return left.localeCompare(right)
+      })
   }, [filteredParamSpecs])
 
   const backtestSummaryEntries = useMemo(() => {
     const metrics = backtestRunReport?.summary_metrics
     if (!metrics) return []
-    return Object.entries(metrics).map(([key, value]) => ({
-      key,
-      label: toTitleCase(key),
-      value,
-    }))
+    return Object.entries(metrics).map(([key, value]) => ({ key, value }))
   }, [backtestRunReport])
 
   const backtestEquityRows = useMemo<GenericRow[]>(
@@ -1418,28 +3232,46 @@ function App() {
   const decisionColumns = useMemo<GridColDef[]>(
     () => [
       {
-        headerName: 'Time',
+        headerName: getFieldLabel('created_at'),
+        description: getFieldTooltip('created_at'),
         field: 'created_at',
         valueFormatter: (params: { value?: unknown }) => formatDate(params?.value as string),
         width: 190,
       },
       {
-        headerName: 'Decision',
+        headerName: getFieldLabel('decision_id'),
+        description: getFieldTooltip('decision_id'),
         field: 'decision_id',
         width: 260,
         cellClassName: 'cell-mono',
       },
-      { headerName: 'Strategy', field: 'strategy_type', width: 140 },
-      { headerName: 'Instrument', field: 'primary_instrument', width: 140 },
       {
-        headerName: 'Proposal',
+        headerName: getFieldLabel('strategy_type'),
+        description: getFieldTooltip('strategy_type'),
+        field: 'strategy_type',
+        width: 160,
+        valueFormatter: (params: { value?: unknown }) =>
+          formatValue(params?.value, 'strategy_type'),
+      },
+      {
+        headerName: getFieldLabel('primary_instrument'),
+        description: getFieldTooltip('primary_instrument'),
+        field: 'primary_instrument',
+        width: 140,
+      },
+      {
+        headerName: getFieldLabel('proposal_type'),
+        description: getFieldTooltip('proposal_type'),
         field: 'proposal_type',
         width: 140,
         valueGetter: (params: { row?: DecisionView } | undefined) =>
           params?.row?.proposal_summary?.type ?? '',
+        valueFormatter: (params: { value?: unknown }) =>
+          formatValue(params?.value, 'proposal_type'),
       },
       {
-        headerName: 'Action',
+        headerName: getFieldLabel('action'),
+        description: getFieldTooltip('action'),
         field: 'action',
         width: 120,
         cellClassName: (params) =>
@@ -1448,9 +3280,11 @@ function App() {
             : params.value === 'reject'
               ? 'cell-reject'
               : '',
+        valueFormatter: (params: { value?: unknown }) => formatValue(params?.value, 'action'),
       },
       {
-        headerName: 'Risk',
+        headerName: getFieldLabel('risk_state'),
+        description: getFieldTooltip('risk_state'),
         field: 'risk_state',
         width: 110,
         cellClassName: (params) =>
@@ -1461,9 +3295,11 @@ function App() {
               : params.value === 'red'
                 ? 'cell-risk-red'
                 : '',
+        valueFormatter: (params: { value?: unknown }) => formatValue(params?.value, 'risk_state'),
       },
       {
-        headerName: 'News',
+        headerName: getFieldLabel('news_severity'),
+        description: getFieldTooltip('news_severity'),
         field: 'news_severity',
         width: 110,
         cellClassName: (params) =>
@@ -1472,25 +3308,31 @@ function App() {
             : params.value === 'critical'
               ? 'cell-news-critical'
               : '',
+        valueFormatter: (params: { value?: unknown }) =>
+          formatValue(params?.value, 'news_severity'),
       },
       {
-        headerName: 'Execution',
+        headerName: getFieldLabel('execution_status'),
+        description: getFieldTooltip('execution_status'),
         field: 'execution_status',
         width: 140,
         valueGetter: (params: { row?: DecisionView } | undefined) =>
           params?.row?.execution_status?.status ??
           params?.row?.operator_action?.status ??
           '',
+        valueFormatter: (params: { value?: unknown }) => formatValue(params?.value, 'status'),
       },
       {
-        headerName: 'Cost',
+        headerName: getFieldLabel('cost_round_trip'),
+        description: getFieldTooltip('cost_round_trip'),
         field: 'cost_round_trip',
         valueFormatter: (params: { value?: unknown }) =>
           formatValue(params?.value, 'cost_round_trip'),
         width: 120,
       },
       {
-        headerName: 'Max DD',
+        headerName: getFieldLabel('max_drawdown'),
+        description: getFieldTooltip('max_drawdown'),
         field: 'max_drawdown',
         valueFormatter: (params: { value?: unknown }) =>
           formatValue(params?.value, 'max_drawdown'),
@@ -1658,83 +3500,67 @@ function App() {
 
   const snapshotFields = useMemo(
     () => [
-      { key: 'stock', label: 'Stock' },
-      { key: 'stock_name', label: 'Stock name' },
-      { key: 'future', label: 'Future' },
-      { key: 'expiry', label: 'Expiry' },
-      { key: 'dte', label: 'DTE' },
-      { key: 'spot', label: 'Spot' },
-      { key: 'future_price', label: 'Future price' },
-      { key: 'spread_mid', label: 'Spread (mid)' },
-      { key: 'spread_pct', label: 'Spread %' },
-      { key: 'rtc_pct', label: 'RTC %' },
-      { key: 'floor_rate_annual', label: 'Floor rate' },
-      { key: 'score_floor', label: 'Floor score' },
-      { key: 'total_score', label: 'Total score' },
-      { key: 'decision', label: 'Decision' },
-      { key: 'signal_action', label: 'Signal' },
-      { key: 'signal_direction', label: 'Direction' },
-      { key: 'signal_score', label: 'Signal score' },
+      'stock',
+      'stock_name',
+      'future',
+      'expiry',
+      'spot',
+      'future_price',
+      'spread_mid',
+      'spread_pct',
+      'rtc_pct',
+      'total_score',
     ],
     [],
   )
 
   const overviewFields = useMemo(
     () => [
-      { key: 'floor_pass', label: 'Floor pass' },
-      { key: 'liquidity_pass', label: 'Liquidity pass' },
-      { key: 'dte', label: 'DTE' },
-      { key: 'r_cb_annual', label: 'CB rate' },
-      { key: 'r_fund_annual', label: 'Funding rate' },
-      { key: 'r_disc_annual', label: 'Discount rate' },
-      { key: 'snapshot_as_of', label: 'Snapshot as of' },
+      'floor_pass',
+      'liquidity_pass',
+      'dte',
+      'floor_rate_annual',
+      'score_floor',
+      'r_cb_annual',
+      'r_fund_annual',
+      'r_disc_annual',
+      'snapshot_as_of',
     ],
     [],
   )
 
   const alphaFields = useMemo(
     () => [
-      { key: 'avg_trade_return_annual_recent', label: 'Avg trade return (annual, last 5)' },
-      { key: 'score_alpha', label: 'Alpha score' },
-      { key: 'p_hit_tp', label: 'P(hit TP)' },
-      { key: 'p_hit_sl', label: 'P(hit SL)' },
-      { key: 'sigma_h', label: 'Spread sigma (H)' },
-      { key: 'half_life', label: 'Half-life' },
+      'avg_trade_return_annual_recent',
+      'score_alpha',
+      'p_hit_tp',
+      'p_hit_sl',
+      'sigma_h',
+      'half_life',
     ],
     [],
   )
 
   const liquidityFields = useMemo(
     () => [
-      { key: 'spread_bps_stock', label: 'Stock spread (bps)' },
-      { key: 'spread_bps_fut', label: 'Futures spread (bps)' },
-      { key: 'dollar_vol_stock', label: 'Stock $ volume' },
-      { key: 'dollar_vol_fut', label: 'Futures $ volume' },
-      { key: 'days_to_exit', label: 'Days to exit' },
-      { key: 'open_interest', label: 'Open interest' },
+      'spread_bps_stock',
+      'spread_bps_fut',
+      'dollar_vol_stock',
+      'dollar_vol_fut',
+      'days_to_exit',
+      'open_interest',
     ],
     [],
   )
 
   const executionFields = useMemo(() => {
-    const base = [
-      { key: 'signal_action', label: 'Signal action' },
-      { key: 'signal_direction', label: 'Signal direction' },
-      { key: 'signal_score', label: 'Signal score' },
-    ]
+    const base = ['signal_action', 'signal_direction', 'signal_score']
     const extra =
-      tab === 'signals'
-        ? [
-            { key: 'signal_reasons', label: 'Signal reasons' },
-            { key: 'signal_metrics', label: 'Signal metrics' },
-          ]
-        : [{ key: 'decision', label: 'Decision' }]
+      tab === 'signals' ? ['signal_reasons', 'signal_metrics'] : ['decision']
     return [...base, ...extra]
   }, [tab])
 
-  const renderFieldGrid = (
-    entries: { key: string; label: string; value: unknown }[],
-  ) => (
+  const renderFieldGrid = (entries: { key: string; value: unknown }[]) => (
     <Box
       sx={{
         display: 'grid',
@@ -1746,7 +3572,7 @@ function App() {
       {entries.map((entry) => (
         <Box key={entry.key}>
           <Typography variant="caption" color="text.secondary">
-            {entry.label}
+            {renderFieldLabel(entry.key)}
           </Typography>
           <Typography variant="body2">{formatCellValue(entry.value, entry.key)}</Typography>
         </Box>
@@ -1754,12 +3580,8 @@ function App() {
     </Box>
   )
 
-  const renderKeyValueGrid = (payload?: Record<string, unknown>, emptyLabel = 'No data') => {
-    const entries = Object.entries(payload ?? {}).map(([key, value]) => ({
-      key,
-      label: toTitleCase(key),
-      value,
-    }))
+  const renderKeyValueGrid = (payload?: Record<string, unknown>, emptyLabel = 'Нет данных') => {
+    const entries = Object.entries(payload ?? {}).map(([key, value]) => ({ key, value }))
     if (!entries.length) {
       return (
         <Typography variant="body2" color="text.secondary">
@@ -1801,7 +3623,7 @@ function App() {
           <TableHead>
             <TableRow>
               {columns.map((column) => (
-                <TableCell key={column}>{toTitleCase(column)}</TableCell>
+                <TableCell key={column}>{renderFieldLabel(column)}</TableCell>
               ))}
             </TableRow>
           </TableHead>
@@ -1828,20 +3650,59 @@ function App() {
 
   const renderParamInput = (spec: ParameterSpec) => {
     const value = paramValues[spec.key]
-    const helperParts = []
-    if (spec.description) helperParts.push(spec.description)
-    helperParts.push(`type: ${spec.value_type}`)
-    if (spec.min_value !== null && spec.min_value !== undefined) {
-      helperParts.push(`min: ${spec.min_value}`)
+    const label = getParamLabel(spec)
+    const tooltip = getParamTooltip(spec)
+    const helperText = buildParamHelperText(spec)
+    const labelNode = <ParamLabel label={label} tooltip={tooltip} />
+    const inputLabelProps = { sx: { pointerEvents: 'auto' } }
+
+    if (spec.value_type === 'dict') {
+      const dictValue = parseParamDictValue(value)
+      const entries = getParamDictEntries(spec, dictValue)
+      return (
+        <Box key={spec.key} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography variant="caption" fontWeight={600}>
+            {labelNode}
+          </Typography>
+          {entries.length ? (
+            <Stack spacing={1}>
+              {entries.map((entry) => (
+                <Stack key={entry.key} direction="row" spacing={1} alignItems="center">
+                  <Typography variant="body2" sx={{ minWidth: 160 }}>
+                    {entry.label}
+                  </Typography>
+                  <TextField
+                    size="small"
+                    type="number"
+                    value={
+                      entry.value === null || entry.value === undefined
+                        ? ''
+                        : String(entry.value)
+                    }
+                    onChange={(event) => {
+                      const nextValue = event.target.value
+                      const next = { ...dictValue, [entry.key]: nextValue }
+                      handleParamValueChange(spec.key, next)
+                    }}
+                    inputProps={{ step: 'any' }}
+                    sx={{ flex: 1 }}
+                  />
+                </Stack>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Нет значений.
+            </Typography>
+          )}
+          {helperText ? (
+            <Typography variant="caption" color="text.secondary">
+              {helperText}
+            </Typography>
+          ) : null}
+        </Box>
+      )
     }
-    if (spec.max_value !== null && spec.max_value !== undefined) {
-      helperParts.push(`max: ${spec.max_value}`)
-    }
-    if (spec.default !== undefined) {
-      const defaultLabel = spec.default === null ? 'null' : shortenText(compactJson(spec.default))
-      helperParts.push(`default: ${defaultLabel}`)
-    }
-    const helperText = helperParts.filter(Boolean).join(' | ')
 
     if (spec.value_type === 'bool') {
       return (
@@ -1853,7 +3714,7 @@ function App() {
                 onChange={(event) => handleParamValueChange(spec.key, event.target.checked)}
               />
             }
-            label={spec.key}
+            label={labelNode}
           />
           {helperText ? (
             <Typography variant="caption" color="text.secondary">
@@ -1872,14 +3733,15 @@ function App() {
           select
           fullWidth
           size="small"
-          label={spec.key}
+          label={labelNode}
+          InputLabelProps={inputLabelProps}
           value={stringValue}
           onChange={(event) => handleParamValueChange(spec.key, event.target.value)}
           helperText={helperText}
         >
           {spec.options.map((option) => (
             <MenuItem key={String(option)} value={String(option)}>
-              {String(option)}
+              {getParamOptionLabel(spec, option)}
             </MenuItem>
           ))}
         </TextField>
@@ -1887,23 +3749,30 @@ function App() {
     }
 
     const inputValue =
-      typeof value === 'string' ? value : value === undefined ? '' : String(value)
+      typeof value === 'string' || typeof value === 'number'
+        ? String(value)
+        : value === undefined || value === null
+          ? ''
+          : compactJson(value)
     const multiline = isJsonValueType(spec.value_type) || spec.value_type === 'union'
     const inputType =
       spec.value_type === 'int' || spec.value_type === 'float' ? 'number' : 'text'
+    const step = spec.value_type === 'int' ? '1' : 'any'
 
     return (
       <TextField
         key={spec.key}
         fullWidth
         size="small"
-        label={spec.key}
+        label={labelNode}
+        InputLabelProps={inputLabelProps}
         value={inputValue}
         onChange={(event) => handleParamValueChange(spec.key, event.target.value)}
         helperText={helperText}
         type={inputType}
         multiline={multiline}
         minRows={multiline ? 3 : undefined}
+        inputProps={inputType === 'number' ? { step } : undefined}
       />
     )
   }
@@ -1913,15 +3782,15 @@ function App() {
       <Container maxWidth="xl" sx={{ py: 3 }}>
         <Stack spacing={2}>
           <Typography variant="h5" fontWeight={600}>
-            Trading Advisor Decisions
+            Решения торгового советника
           </Typography>
           <Tabs value={tab} onChange={(_, value) => setTab(value)}>
-            <Tab label="Decisions" value="decisions" />
-            <Tab label="Top pairs" value="top_pairs" />
-            <Tab label="Signals" value="signals" />
-            <Tab label="Backtests" value="backtests" />
-            <Tab label="Backtest v2" value="backtest_v2" />
-            <Tab label="Forward status" value="forward" />
+            <Tab label="Решения" value="decisions" />
+            <Tab label="Топ пар" value="top_pairs" />
+            <Tab label="Сигналы" value="signals" />
+            <Tab label="Бэктесты" value="backtests" />
+            <Tab label="Бэктест v2" value="backtest_v2" />
+            <Tab label="Статус форварда" value="forward" />
             <Tab label="HPO" value="hpo" />
           </Tabs>
           {tab === 'decisions' ? (
@@ -1929,35 +3798,35 @@ function App() {
               <Paper sx={{ p: 2 }}>
                 <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                   <TextField
-                    label="Quick search"
+                    label="Быстрый поиск"
                     size="small"
                     value={quickFilter}
                     onChange={(event) => setQuickFilter(event.target.value)}
                     sx={{ minWidth: 240 }}
                   />
                   <FormControl size="small" sx={{ minWidth: 160 }}>
-                    <InputLabel>Strategy</InputLabel>
+                    <InputLabel>Стратегия</InputLabel>
                     <Select
-                      label="Strategy"
+                      label="Стратегия"
                       value={strategyFilter}
                       onChange={(event) => setStrategyFilter(event.target.value)}
                     >
-                      <MenuItem value="">All</MenuItem>
+                      <MenuItem value="">Все</MenuItem>
                       {strategyOptions.map((item) => (
                         <MenuItem key={item} value={item}>
-                          {item}
+                          {formatValue(item, 'strategy_type')}
                         </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
                   <FormControl size="small" sx={{ minWidth: 160 }}>
-                    <InputLabel>Instrument</InputLabel>
+                    <InputLabel>Инструмент</InputLabel>
                     <Select
-                      label="Instrument"
+                      label="Инструмент"
                       value={instrumentFilter}
                       onChange={(event) => setInstrumentFilter(event.target.value)}
                     >
-                      <MenuItem value="">All</MenuItem>
+                      <MenuItem value="">Все</MenuItem>
                       {instrumentOptions.map((item) => (
                         <MenuItem key={item} value={item}>
                           {item}
@@ -1966,40 +3835,40 @@ function App() {
                     </Select>
                   </FormControl>
                   <FormControl size="small" sx={{ minWidth: 140 }}>
-                    <InputLabel>Risk</InputLabel>
+                    <InputLabel>Риск</InputLabel>
                     <Select
-                      label="Risk"
+                      label="Риск"
                       value={riskFilter}
                       onChange={(event) => setRiskFilter(event.target.value)}
                     >
-                      <MenuItem value="">All</MenuItem>
+                      <MenuItem value="">Все</MenuItem>
                       {riskOptions.map((item) => (
                         <MenuItem key={item} value={item}>
-                          {item}
+                          {formatValue(item, 'risk_state')}
                         </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
                   <FormControl size="small" sx={{ minWidth: 140 }}>
-                    <InputLabel>News</InputLabel>
+                    <InputLabel>Новости</InputLabel>
                     <Select
-                      label="News"
+                      label="Новости"
                       value={newsFilter}
                       onChange={(event) => setNewsFilter(event.target.value)}
                     >
-                      <MenuItem value="">All</MenuItem>
+                      <MenuItem value="">Все</MenuItem>
                       {newsOptions.map((item) => (
                         <MenuItem key={item} value={item}>
-                          {item}
+                          {formatValue(item, 'news_severity')}
                         </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
                   <Button variant="contained" onClick={handleRefresh} disabled={isLoading}>
-                    Refresh
+                    Обновить
                   </Button>
                   <Typography variant="body2" color="text.secondary">
-                    {isLoading ? 'Loading...' : `${filteredRows.length} rows`}
+                    {isLoading ? 'Загрузка...' : `${filteredRows.length} строк`}
                   </Typography>
                   {error ? (
                     <Typography variant="body2" color="error">
@@ -2022,13 +3891,14 @@ function App() {
                     }}
                     slots={{ toolbar: GridToolbar }}
                     slotProps={{ toolbar: { showQuickFilter: false } }}
+                    localeText={ruRU.components.MuiDataGrid.defaultProps.localeText}
                     sx={{ height: '68vh' }}
                   />
                 </Paper>
                 <Paper sx={{ flex: 1, p: 2 }}>
                   <Stack spacing={1}>
                     <Typography variant="subtitle1" fontWeight={600}>
-                      Decision details
+                      Детали решения
                     </Typography>
                     {selectedId ? (
                       <Typography variant="body2" color="text.secondary">
@@ -2044,29 +3914,34 @@ function App() {
                       <Stack spacing={2}>
                         <Stack direction="row" spacing={1} flexWrap="wrap">
                           <Chip
-                            label={`Action: ${
+                            label={`Действие: ${formatValue(
                               selectedDecision?.action ||
-                              getString(detailDecision?.['action']) ||
-                              'hold'
-                            }`}
+                                getString(detailDecision?.['action']) ||
+                                'hold',
+                              'action',
+                            )}`}
                             color="primary"
                             size="small"
                           />
                           <Chip
-                            label={`Risk: ${
+                            label={`Риск: ${formatValue(
                               selectedDecision?.risk_state ||
-                              getString(detailDecision?.['risk_state']) ||
-                              'unknown'
-                            }`}
+                                getString(detailDecision?.['risk_state']) ||
+                                'н/д',
+                              'risk_state',
+                            )}`}
                             size="small"
                           />
                           <Chip
-                            label={`News: ${selectedDecision?.news_severity || 'n/a'}`}
+                            label={`Новости: ${formatValue(
+                              selectedDecision?.news_severity || 'н/д',
+                              'news_severity',
+                            )}`}
                             size="small"
                           />
                           {selectedDecision?.aggregation_summary?.score !== undefined ? (
                             <Chip
-                              label={`Agg score: ${formatNumber(
+                              label={`Скор агрегации: ${formatNumber(
                                 selectedDecision?.aggregation_summary?.score,
                                 3,
                               )}`}
@@ -2079,44 +3954,45 @@ function App() {
 
                         <Box>
                           <Typography variant="subtitle2" fontWeight={600}>
-                            Orchestrator proposal
+                            Предложение оркестратора
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
                             {selectedDecision?.proposal_summary?.summary ||
                               getString(detailProposal?.['summary']) ||
-                              'Proposal not available.'}
+                              'Предложение недоступно.'}
                           </Typography>
                           <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1 }}>
                             <Chip
-                              label={`Type: ${
+                              label={`Тип: ${formatValue(
                                 selectedDecision?.proposal_summary?.type ||
                                 getString(detailProposal?.['type']) ||
-                                'n/a'
-                              }`}
+                                'н/д',
+                              'proposal_type',
+                            )}`}
                               size="small"
                             />
                             <Chip
-                              label={`Cadence: ${
+                              label={`Периодичность: ${
                                 selectedDecision?.proposal_summary?.cadence ||
                                 getString(detailProposal?.['cadence']) ||
-                                'n/a'
+                                'н/д'
                               }`}
                               size="small"
                             />
                             {selectedDecision?.proposal_summary?.effective_date ||
                             getString(detailProposal?.['effective_date']) ? (
                               <Chip
-                                label={`Effective: ${
+                                label={`Вступает в силу: ${formatDate(
                                   selectedDecision?.proposal_summary?.effective_date ||
-                                  getString(detailProposal?.['effective_date'])
-                                }`}
+                                    getString(detailProposal?.['effective_date']),
+                                )}`}
                                 size="small"
                               />
                             ) : null}
                           </Stack>
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }} flexWrap="wrap">
                             <TextField
-                              label="Operator note"
+                              label="Комментарий оператора"
                               size="small"
                               value={decisionActionNote}
                               onChange={(event) => setDecisionActionNote(event.target.value)}
@@ -2128,7 +4004,7 @@ function App() {
                               disabled={!selectedId || decisionActionSubmitting}
                               onClick={() => submitDecisionAction('approve')}
                             >
-                              Approve & execute
+                              Одобрить и исполнить
                             </Button>
                             <Button
                               variant="outlined"
@@ -2136,7 +4012,7 @@ function App() {
                               disabled={!selectedId || decisionActionSubmitting}
                               onClick={() => submitDecisionAction('reject')}
                             >
-                              Reject & execute
+                              Отклонить и исполнить
                             </Button>
                           </Stack>
                           {decisionActionError ? (
@@ -2146,37 +4022,52 @@ function App() {
                           ) : null}
                           {decisionActionLoading ? (
                             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                              Loading operator status...
+                              Загрузка статуса оператора...
                             </Typography>
                           ) : null}
                           {operatorAction ? (
                             <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1 }}>
                               <Chip
-                                label={`Operator: ${operatorAction.action ?? 'n/a'}`}
+                                label={`Оператор: ${formatValue(
+                                  operatorAction.action ?? 'н/д',
+                                  'action',
+                                )}`}
                                 size="small"
                               />
                               {operatorAction.status ? (
-                                <Chip label={`Status: ${operatorAction.status}`} size="small" />
+                                <Chip
+                                  label={`Статус: ${formatValue(
+                                    operatorAction.status,
+                                    'status',
+                                  )}`}
+                                  size="small"
+                                />
                               ) : null}
                               {operatorAction.actor ? (
-                                <Chip label={`Actor: ${operatorAction.actor}`} size="small" />
+                                <Chip label={`Исполнитель: ${operatorAction.actor}`} size="small" />
                               ) : null}
                             </Stack>
                           ) : null}
                           {executionStatus ? (
                             <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1 }}>
                               {executionStatus.status ? (
-                                <Chip label={`Execution: ${executionStatus.status}`} size="small" />
+                                <Chip
+                                  label={`Исполнение: ${formatValue(
+                                    executionStatus.status,
+                                    'status',
+                                  )}`}
+                                  size="small"
+                                />
                               ) : null}
                               {executionStatus.requested_at ? (
                                 <Chip
-                                  label={`Requested: ${formatDate(executionStatus.requested_at)}`}
+                                  label={`Запрос: ${formatDate(executionStatus.requested_at)}`}
                                   size="small"
                                 />
                               ) : null}
                               {executionStatus.executed_at ? (
                                 <Chip
-                                  label={`Executed: ${formatDate(executionStatus.executed_at)}`}
+                                  label={`Исполнено: ${formatDate(executionStatus.executed_at)}`}
                                   size="small"
                                 />
                               ) : null}
@@ -2188,32 +4079,32 @@ function App() {
 
                         <Box>
                           <Typography variant="subtitle2" fontWeight={600}>
-                            Basket allocations (by strategy type)
+                            Распределение корзин (по типу стратегии)
                           </Typography>
                           {basketRows.length ? (
                             <Table size="small">
                               <TableHead>
                                 <TableRow>
-                                  <TableCell>Basket</TableCell>
-                                  <TableCell>Current</TableCell>
-                                  <TableCell>Target</TableCell>
-                                  <TableCell>Delta</TableCell>
+                                  <TableCell>Корзина</TableCell>
+                                  <TableCell>Текущее</TableCell>
+                                  <TableCell>Целевое</TableCell>
+                                  <TableCell>Дельта</TableCell>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
                                 {basketRows.map((row) => (
                                   <TableRow key={row.basket}>
-                                    <TableCell>{row.basket}</TableCell>
-                                    <TableCell>{formatValue(row.current)}</TableCell>
-                                    <TableCell>{formatValue(row.target)}</TableCell>
-                                    <TableCell>{formatValue(row.delta)}</TableCell>
+                                    <TableCell>{formatValue(row.basket, 'basket')}</TableCell>
+                                    <TableCell>{formatValue(row.current, 'basket_weight')}</TableCell>
+                                    <TableCell>{formatValue(row.target, 'basket_weight')}</TableCell>
+                                    <TableCell>{formatValue(row.delta, 'basket_weight')}</TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>
                             </Table>
                           ) : (
                             <Typography variant="body2" color="text.secondary">
-                              Basket allocations not provided.
+                              Данные по корзинам не переданы.
                             </Typography>
                           )}
                         </Box>
@@ -2222,7 +4113,7 @@ function App() {
 
                         <Box>
                           <Typography variant="subtitle2" fontWeight={600}>
-                            Evidence & rationale
+                            Доказательства и обоснование
                           </Typography>
                           <Stack spacing={1} sx={{ mt: 1 }}>
                             {detailFacts.length ? (
@@ -2235,19 +4126,19 @@ function App() {
                                     {getString(fact['category'])}
                                     {fact['source'] ? ` · ${getString(fact['source'])}` : ''}
                                     {fact['confidence'] !== undefined
-                                      ? ` · conf ${formatValue(fact['confidence'], 'confidence')}`
+                                      ? ` · дост. ${formatValue(fact['confidence'], 'confidence')}`
                                       : ''}
                                   </Typography>
                                 </Box>
                               ))
                             ) : (
                               <Typography variant="body2" color="text.secondary">
-                                Evidence facts not provided.
+                                Факты не предоставлены.
                               </Typography>
                             )}
                             {detailAggregation?.['reasons'] ? (
                               <Typography variant="caption" color="text.secondary">
-                                Aggregation reasons: {formatValue(detailAggregation['reasons'])}
+                                Причины агрегации: {formatValue(detailAggregation['reasons'])}
                               </Typography>
                             ) : null}
                           </Stack>
@@ -2255,7 +4146,7 @@ function App() {
 
                         <Accordion>
                           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                            <Typography variant="subtitle2">Raw decision log</Typography>
+                            <Typography variant="subtitle2">Сырой лог решения</Typography>
                           </AccordionSummary>
                           <AccordionDetails>
                             <Box
@@ -2277,7 +4168,7 @@ function App() {
                       </Stack>
                     ) : (
                       <Typography variant="body2" color="text.secondary">
-                        Select a decision to inspect full log.
+                        Выберите решение, чтобы просмотреть полный лог.
                       </Typography>
                     )}
                   </Stack>
@@ -2290,7 +4181,7 @@ function App() {
               <Paper sx={{ p: 2 }}>
                 <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                   <TextField
-                    label="Quick search"
+                    label="Быстрый поиск"
                     size="small"
                     value={tableFilter}
                     onChange={(event) => setTableFilter(event.target.value)}
@@ -2299,13 +4190,13 @@ function App() {
                   {tab === 'top_pairs' || tab === 'signals' ? (
                     <>
                       <FormControl size="small" sx={{ minWidth: 140 }}>
-                        <InputLabel>Stock</InputLabel>
+                        <InputLabel>Акция</InputLabel>
                         <Select
-                          label="Stock"
+                          label="Акция"
                           value={tableStockFilter}
                           onChange={(event) => setTableStockFilter(event.target.value)}
                         >
-                          <MenuItem value="">All</MenuItem>
+                          <MenuItem value="">Все</MenuItem>
                           {tableStockOptions.map((item) => (
                             <MenuItem key={item} value={item}>
                               {item}
@@ -2314,13 +4205,13 @@ function App() {
                         </Select>
                       </FormControl>
                       <FormControl size="small" sx={{ minWidth: 140 }}>
-                        <InputLabel>Future</InputLabel>
+                        <InputLabel>Фьючерс</InputLabel>
                         <Select
-                          label="Future"
+                          label="Фьючерс"
                           value={tableFutureFilter}
                           onChange={(event) => setTableFutureFilter(event.target.value)}
                         >
-                          <MenuItem value="">All</MenuItem>
+                          <MenuItem value="">Все</MenuItem>
                           {tableFutureOptions.map((item) => (
                             <MenuItem key={item} value={item}>
                               {item}
@@ -2329,26 +4220,26 @@ function App() {
                         </Select>
                       </FormControl>
                       <FormControl size="small" sx={{ minWidth: 140 }}>
-                        <InputLabel>Signal</InputLabel>
+                        <InputLabel>Сигнал</InputLabel>
                         <Select
-                          label="Signal"
+                          label="Сигнал"
                           value={tableSignalFilter}
                           onChange={(event) => setTableSignalFilter(event.target.value)}
                         >
-                          <MenuItem value="">All</MenuItem>
+                          <MenuItem value="">Все</MenuItem>
                           {tableSignalOptions.map((item) => (
                             <MenuItem key={item} value={item}>
-                              {item}
+                              {formatValue(item, 'signal_action')}
                             </MenuItem>
                           ))}
                         </Select>
                       </FormControl>
                     </>
                   ) : null}
-                  {tab === 'top_pairs' ? (
+                    {tab === 'top_pairs' ? (
                     <>
                       <TextField
-                        label="Top pairs limit"
+                        label="Лимит топ-пар"
                         size="small"
                         type="number"
                         value={topPairsLimit}
@@ -2363,7 +4254,7 @@ function App() {
                             onChange={(event) => setTopPairsAll(event.target.checked)}
                           />
                         }
-                        label="All pairs"
+                        label="Все пары"
                       />
                     </>
                   ) : null}
@@ -2372,7 +4263,7 @@ function App() {
                     onClick={handleAuxRefresh}
                     disabled={auxLoading || recomputeLoading}
                   >
-                    {recomputeLoading ? 'Recomputing...' : 'Reload'}
+                    {recomputeLoading ? 'Пересчёт...' : 'Обновить'}
                   </Button>
                   <FormControlLabel
                     control={
@@ -2381,24 +4272,25 @@ function App() {
                         onChange={(event) => setAutoRefresh(event.target.checked)}
                       />
                     }
-                    label={`Auto refresh (${AUTO_REFRESH_LABEL})`}
+                    label={`Автообновление (${AUTO_REFRESH_LABEL})`}
                   />
                   <Typography variant="body2" color="text.secondary">
                     {auxLastUpdated
-                      ? `Updated ${formatDate(auxLastUpdated)}`
-                      : 'Updated: n/a'}
+                      ? `Обновлено ${formatDate(auxLastUpdated)}`
+                      : 'Обновлено: н/д'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {refreshStatus?.last_success_at
-                      ? `Recomputed ${formatDate(refreshStatus.last_success_at)}`
-                      : 'Recomputed: n/a'}
+                      ? `Пересчитано ${formatDate(refreshStatus.last_success_at)}`
+                      : 'Пересчитано: н/д'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {auxLoading ? 'Loading...' : `${sortedTableRows.length} rows`}
+                    {auxLoading ? 'Загрузка...' : `${sortedTableRows.length} строк`}
                   </Typography>
                   {!auxLoading ? (
                     <Typography variant="body2" color="text.secondary">
-                      Top pairs: {topPairs.length} · Signals: {signals.length} · Backtests: {backtests.length}
+                      Топ пар: {topPairs.length} · Сигналы: {signals.length} · Бэктесты:{' '}
+                      {backtests.length}
                     </Typography>
                   ) : null}
                   {auxError ? (
@@ -2417,25 +4309,25 @@ function App() {
                 <Paper sx={{ p: 2 }}>
                   <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                     <TextField
-                      label="History from (YYYY-MM-DD)"
+                      label="История с (ГГГГ-ММ-ДД)"
                       size="small"
                       value={historyFrom}
                       onChange={(event) => setHistoryFrom(event.target.value)}
                       sx={{ minWidth: 200 }}
                     />
                     <TextField
-                      label="History to (YYYY-MM-DD)"
+                      label="История по (ГГГГ-ММ-ДД)"
                       size="small"
                       value={historyTo}
                       onChange={(event) => setHistoryTo(event.target.value)}
                       sx={{ minWidth: 200 }}
                     />
                     <Button variant="outlined" onClick={fetchSignalHistory} disabled={historyLoading}>
-                      Load history
+                      Загрузить историю
                     </Button>
                     {historyLoading ? (
                       <Typography variant="body2" color="text.secondary">
-                        Loading history...
+                        Загрузка истории...
                       </Typography>
                     ) : null}
                     {historyError ? (
@@ -2462,7 +4354,7 @@ function App() {
                               direction={tableSortKey === column ? tableSortDirection : 'asc'}
                               onClick={() => handleTableSort(column)}
                             >
-                              {toTitleCase(column)}
+                              {renderFieldLabel(column)}
                             </TableSortLabel>
                           </TableCell>
                         ))}
@@ -2474,36 +4366,46 @@ function App() {
                           (row.stock && row.future ? `${row.stock}-${row.future}` : null) ??
                           String(row.id)
                         const isExpanded = expandedRowKey === pairKey
-                        const snapshotEntries = snapshotFields
-                          .map((field) => ({
-                            ...field,
-                            value: row[field.key],
-                          }))
-                          .filter((field) => field.value !== null && field.value !== undefined)
-                        const overviewEntries = overviewFields
-                          .map((field) => ({
-                            ...field,
-                            value: row[field.key],
-                          }))
-                          .filter((field) => field.value !== null && field.value !== undefined)
-                        const alphaEntries = alphaFields
-                          .map((field) => ({
-                            ...field,
-                            value: row[field.key],
-                          }))
-                          .filter((field) => field.value !== null && field.value !== undefined)
-                        const liquidityEntries = liquidityFields
-                          .map((field) => ({
-                            ...field,
-                            value: row[field.key],
-                          }))
-                          .filter((field) => field.value !== null && field.value !== undefined)
-                        const executionEntries = executionFields
-                          .map((field) => ({
-                            ...field,
-                            value: row[field.key],
-                          }))
-                          .filter((field) => field.value !== null && field.value !== undefined)
+                        const snapshotEntries = stripDuplicates(
+                          snapshotFields
+                            .map((key) => ({
+                              key,
+                              value: row[key],
+                            }))
+                            .filter((field) => field.value !== null && field.value !== undefined),
+                        )
+                        const overviewEntries = stripDuplicates(
+                          overviewFields
+                            .map((key) => ({
+                              key,
+                              value: row[key],
+                            }))
+                            .filter((field) => field.value !== null && field.value !== undefined),
+                        )
+                        const alphaEntries = stripDuplicates(
+                          alphaFields
+                            .map((key) => ({
+                              key,
+                              value: row[key],
+                            }))
+                            .filter((field) => field.value !== null && field.value !== undefined),
+                        )
+                        const liquidityEntries = stripDuplicates(
+                          liquidityFields
+                            .map((key) => ({
+                              key,
+                              value: row[key],
+                            }))
+                            .filter((field) => field.value !== null && field.value !== undefined),
+                        )
+                        const executionEntries = stripDuplicates(
+                          executionFields
+                            .map((key) => ({
+                              key,
+                              value: row[key],
+                            }))
+                            .filter((field) => field.value !== null && field.value !== undefined),
+                        )
 
                         return (
                           <Fragment key={pairKey}>
@@ -2511,7 +4413,7 @@ function App() {
                               {showPairDetails ? (
                                 <TableCell>
                                   <Button size="small" onClick={() => handleToggleDetails(row)}>
-                                    {isExpanded ? 'Hide' : 'Details'}
+                                    {isExpanded ? 'Скрыть' : 'Детали'}
                                   </Button>
                                 </TableCell>
                               ) : null}
@@ -2527,7 +4429,7 @@ function App() {
                                   <Stack spacing={2}>
                                     <Box>
                                       <Typography variant="subtitle2" fontWeight={600}>
-                                        Snapshot
+                                        Снимок
                                       </Typography>
                                       {renderFieldGrid(snapshotEntries)}
                                     </Box>
@@ -2536,10 +4438,10 @@ function App() {
                                         value={detailTab}
                                         onChange={(_, value) => setDetailTab(value)}
                                       >
-                                        <Tab label="Overview" value="overview" />
-                                        <Tab label="Alpha" value="alpha" />
-                                        <Tab label="Liquidity" value="liquidity" />
-                                        <Tab label="Execution" value="execution" />
+                                        <Tab label="Обзор" value="overview" />
+                                        <Tab label="Альфа" value="alpha" />
+                                        <Tab label="Ликвидность" value="liquidity" />
+                                        <Tab label="Исполнение" value="execution" />
                                       </Tabs>
                                       {detailTab === 'overview' && overviewEntries.length
                                         ? renderFieldGrid(overviewEntries)
@@ -2556,7 +4458,7 @@ function App() {
                                     </Box>
                                     <Box>
                                       <Typography variant="subtitle2" fontWeight={600}>
-                                        Spread chart (contract life)
+                                        График спреда (жизнь контракта)
                                       </Typography>
                                       {spreadError[pairKey] ? (
                                         <Typography variant="body2" color="error">
@@ -2565,7 +4467,7 @@ function App() {
                                       ) : null}
                                       {spreadLoadingKey === pairKey ? (
                                         <Typography variant="body2" color="text.secondary">
-                                          Loading spread series...
+                                          Загрузка серии спреда...
                                         </Typography>
                                       ) : (
                                         <SpreadChart data={spreadSeries[pairKey] ?? []} />
@@ -2573,91 +4475,91 @@ function App() {
                                     </Box>
                                     {tab === 'signals' ? (
                                       <Box>
-                                        <Typography variant="subtitle2" fontWeight={600}>
-                                          Execute signal
-                                        </Typography>
-                                        <Stack direction="row" spacing={2} flexWrap="wrap">
-                                          <TextField
-                                            label="Price"
-                                            size="small"
-                                            value={executionForm.price}
-                                            onChange={(event) =>
-                                              setExecutionForm((prev) => ({
-                                                ...prev,
+                                      <Typography variant="subtitle2" fontWeight={600}>
+                                        Исполнить сигнал
+                                      </Typography>
+                                      <Stack direction="row" spacing={2} flexWrap="wrap">
+                                        <TextField
+                                          label="Цена"
+                                          size="small"
+                                          value={executionForm.price}
+                                          onChange={(event) =>
+                                            setExecutionForm((prev) => ({
+                                              ...prev,
                                                 price: event.target.value,
                                               }))
                                             }
                                             sx={{ minWidth: 140 }}
-                                          />
-                                          <TextField
-                                            label="Qty"
-                                            size="small"
-                                            value={executionForm.quantity}
-                                            onChange={(event) =>
-                                              setExecutionForm((prev) => ({
-                                                ...prev,
+                                        />
+                                        <TextField
+                                          label="Кол-во"
+                                          size="small"
+                                          value={executionForm.quantity}
+                                          onChange={(event) =>
+                                            setExecutionForm((prev) => ({
+                                              ...prev,
                                                 quantity: event.target.value,
                                               }))
                                             }
                                             sx={{ minWidth: 120 }}
-                                          />
-                                          <TextField
-                                            label="Side"
-                                            size="small"
-                                            value={executionForm.side}
-                                            onChange={(event) =>
-                                              setExecutionForm((prev) => ({
-                                                ...prev,
+                                        />
+                                        <TextField
+                                          label="Сторона"
+                                          size="small"
+                                          value={executionForm.side}
+                                          onChange={(event) =>
+                                            setExecutionForm((prev) => ({
+                                              ...prev,
                                                 side: event.target.value,
                                               }))
                                             }
                                             sx={{ minWidth: 120 }}
-                                          />
-                                          <TextField
-                                            label="Status"
-                                            size="small"
-                                            value={executionForm.status}
-                                            onChange={(event) =>
-                                              setExecutionForm((prev) => ({
-                                                ...prev,
+                                        />
+                                        <TextField
+                                          label="Статус"
+                                          size="small"
+                                          value={executionForm.status}
+                                          onChange={(event) =>
+                                            setExecutionForm((prev) => ({
+                                              ...prev,
                                                 status: event.target.value,
                                               }))
                                             }
                                             sx={{ minWidth: 120 }}
-                                          />
-                                          <TextField
-                                            label="Note"
-                                            size="small"
-                                            value={executionForm.note}
-                                            onChange={(event) =>
-                                              setExecutionForm((prev) => ({
-                                                ...prev,
+                                        />
+                                        <TextField
+                                          label="Комментарий"
+                                          size="small"
+                                          value={executionForm.note}
+                                          onChange={(event) =>
+                                            setExecutionForm((prev) => ({
+                                              ...prev,
                                                 note: event.target.value,
                                               }))
                                             }
                                             sx={{ minWidth: 240 }}
-                                          />
-                                          <Button
-                                            variant="contained"
-                                            onClick={() => handleExecuteSignal(row)}
-                                          >
-                                            Execute
-                                          </Button>
-                                        </Stack>
-                                        <Box sx={{ mt: 2 }}>
-                                          <Typography variant="subtitle2" fontWeight={600}>
-                                            Execution history
+                                        />
+                                        <Button
+                                          variant="contained"
+                                          onClick={() => handleExecuteSignal(row)}
+                                        >
+                                          Исполнить
+                                        </Button>
+                                      </Stack>
+                                      <Box sx={{ mt: 2 }}>
+                                        <Typography variant="subtitle2" fontWeight={600}>
+                                          История исполнений
+                                        </Typography>
+                                        {executionError[pairKey] ? (
+                                          <Typography variant="body2" color="error">
+                                            {executionError[pairKey]}
                                           </Typography>
-                                          {executionError[pairKey] ? (
-                                            <Typography variant="body2" color="error">
-                                              {executionError[pairKey]}
-                                            </Typography>
-                                          ) : null}
-                                          {executionLoadingKey === pairKey ? (
-                                            <Typography variant="body2" color="text.secondary">
-                                              Loading executions...
-                                            </Typography>
-                                          ) : executionLogs[pairKey]?.length ? (
+                                        ) : null}
+                                        {executionLoadingKey === pairKey ? (
+                                          <Typography variant="body2" color="text.secondary">
+                                            Загрузка исполнений...
+                                          </Typography>
+                                        ) : executionLogs[pairKey]?.length ? (
                                             <Table size="small">
                                               <TableHead>
                                                 <TableRow>
@@ -2671,7 +4573,7 @@ function App() {
                                                     'status',
                                                     'note',
                                                   ].map((col) => (
-                                                    <TableCell key={col}>{toTitleCase(col)}</TableCell>
+                                                    <TableCell key={col}>{renderFieldLabel(col)}</TableCell>
                                                   ))}
                                                 </TableRow>
                                               </TableHead>
@@ -2679,14 +4581,24 @@ function App() {
                                                 {executionLogs[pairKey].map((entry, index) => (
                                                   <TableRow key={`${entry.timestamp}-${index}`}>
                                                     <TableCell>{formatDate(entry.timestamp)}</TableCell>
-                                                    <TableCell>{entry.action}</TableCell>
-                                                    <TableCell>{entry.direction ?? ''}</TableCell>
+                                                    <TableCell>
+                                                      {formatValue(entry.action, 'action')}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      {formatValue(entry.direction ?? '', 'direction')}
+                                                    </TableCell>
                                                     <TableCell>
                                                       {formatValue(entry.price, 'future_price')}
                                                     </TableCell>
-                                                    <TableCell>{formatValue(entry.quantity)}</TableCell>
-                                                    <TableCell>{entry.side ?? ''}</TableCell>
-                                                    <TableCell>{entry.status ?? ''}</TableCell>
+                                                    <TableCell>
+                                                      {formatValue(entry.quantity, 'quantity')}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      {formatValue(entry.side ?? '', 'side')}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      {formatValue(entry.status ?? '', 'status')}
+                                                    </TableCell>
                                                     <TableCell>{entry.note ?? ''}</TableCell>
                                                   </TableRow>
                                                 ))}
@@ -2694,7 +4606,7 @@ function App() {
                                             </Table>
                                           ) : (
                                             <Typography variant="body2" color="text.secondary">
-                                              No executions logged yet.
+                                              Исполнений пока нет.
                                             </Typography>
                                           )}
                                         </Box>
@@ -2713,15 +4625,15 @@ function App() {
                 {!sortedTableRows.length ? (
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                     {tab === 'signals' && !auxLoading && signals.length === 0
-                      ? 'No actionable signals yet. Open Details on an active signal row to execute.'
-                      : 'No rows match the current filter.'}
+                      ? 'Пока нет активных сигналов. Откройте детали активной строки, чтобы исполнить.'
+                      : 'Нет строк по текущему фильтру.'}
                   </Typography>
                 ) : null}
               </Paper>
               {tab === 'signals' && signalHistory.length ? (
                 <Paper sx={{ p: 2 }}>
                   <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
-                    Signal history
+                    История сигналов
                   </Typography>
                   <Table size="small" stickyHeader>
                     <TableHead>
@@ -2735,7 +4647,7 @@ function App() {
                           'signal_score',
                         ].map(
                           (col) => (
-                            <TableCell key={col}>{toTitleCase(col)}</TableCell>
+                            <TableCell key={col}>{renderFieldLabel(col)}</TableCell>
                           ),
                         )}
                       </TableRow>
@@ -2748,8 +4660,10 @@ function App() {
                           <TableCell>{formatDate(row.timestamp)}</TableCell>
                           <TableCell>{row.stock}</TableCell>
                           <TableCell>{row.future}</TableCell>
-                          <TableCell>{row.signal_action}</TableCell>
-                          <TableCell>{row.signal_direction ?? ''}</TableCell>
+                          <TableCell>{formatValue(row.signal_action, 'signal_action')}</TableCell>
+                          <TableCell>
+                            {formatValue(row.signal_direction ?? '', 'signal_direction')}
+                          </TableCell>
                           <TableCell>{formatValue(row.signal_score, 'signal_score')}</TableCell>
                         </TableRow>
                       ))}
@@ -2757,7 +4671,7 @@ function App() {
                   </Table>
                   {!filteredSignalHistory.length ? (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      No history rows match the current filter.
+                      Нет строк истории по текущему фильтру.
                     </Typography>
                   ) : null}
                 </Paper>
@@ -2770,7 +4684,7 @@ function App() {
                 <Stack spacing={2}>
                   <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                     <TextField
-                      label="Preset (optional)"
+                      label="Пресет (опционально)"
                       size="small"
                       value={paramPreset}
                       onChange={(event) => setParamPreset(event.target.value)}
@@ -2781,14 +4695,14 @@ function App() {
                       onClick={() => fetchParamSpecs({ resetValues: true })}
                       disabled={paramSpecsLoading}
                     >
-                      {paramSpecsLoading ? 'Loading params...' : 'Load params'}
+                      {paramSpecsLoading ? 'Загрузка параметров...' : 'Загрузить параметры'}
                     </Button>
                     <Button
                       variant="text"
                       onClick={handleParamReset}
                       disabled={!paramSpecs.length}
                     >
-                      Reset defaults
+                      Сбросить по умолчанию
                     </Button>
                     <FormControlLabel
                       control={
@@ -2797,10 +4711,10 @@ function App() {
                           onChange={(event) => setBacktestPrecompute(event.target.checked)}
                         />
                       }
-                      label="Precompute cache"
+                      label="Предрасчёт кэша"
                     />
                     <Typography variant="body2" color="text.secondary">
-                      {paramSpecs.length ? `Params: ${paramSpecs.length}` : 'Params: n/a'}
+                      {paramSpecs.length ? `Параметров: ${paramSpecs.length}` : 'Параметров: н/д'}
                     </Typography>
                     {paramSpecsError ? (
                       <Typography variant="body2" color="error">
@@ -2809,7 +4723,7 @@ function App() {
                     ) : null}
                   </Stack>
                   <TextField
-                    label="Filter params"
+                    label="Фильтр параметров"
                     size="small"
                     value={paramFilter}
                     onChange={(event) => setParamFilter(event.target.value)}
@@ -2839,12 +4753,12 @@ function App() {
                       ))
                     ) : (
                       <Typography variant="body2" color="text.secondary">
-                        No parameters match the current filter.
+                        Нет параметров, подходящих под фильтр.
                       </Typography>
                     )
                   ) : (
                     <Typography variant="body2" color="text.secondary">
-                      Load params to edit the backtest request payload.
+                      Загрузите параметры, чтобы редактировать запрос бэктеста.
                     </Typography>
                   )}
                   <Divider />
@@ -2854,11 +4768,11 @@ function App() {
                       onClick={handleBacktestRun}
                       disabled={backtestRunLoading || !paramSpecs.length}
                     >
-                      Run backtest
+                      Запустить бэктест
                     </Button>
                     {backtestRunLoading ? (
                       <Typography variant="body2" color="text.secondary">
-                        Running backtest...
+                        Запуск бэктеста...
                       </Typography>
                     ) : null}
                     {backtestRunParseError ? (
@@ -2879,15 +4793,19 @@ function App() {
                   <Paper sx={{ p: 2 }}>
                     <Stack spacing={1}>
                       <Typography variant="subtitle1" fontWeight={600}>
-                        Summary metrics
+                        Итоговые метрики
                       </Typography>
                       {backtestSummaryEntries.length
                         ? renderFieldGrid(backtestSummaryEntries)
-                        : renderKeyValueGrid({}, 'Summary metrics not available yet.')}
+                        : renderKeyValueGrid({}, 'Итоговые метрики пока недоступны.')}
                       {backtestRunReport.warnings && backtestRunReport.warnings.length ? (
                         <Stack direction="row" spacing={1} flexWrap="wrap">
                           {backtestRunReport.warnings.map((warning, index) => (
-                            <Chip key={`${warning}-${index}`} label={`Warning: ${warning}`} size="small" />
+                            <Chip
+                              key={`${warning}-${index}`}
+                              label={`Предупреждение: ${warning}`}
+                              size="small"
+                            />
                           ))}
                         </Stack>
                       ) : null}
@@ -2895,20 +4813,20 @@ function App() {
                   </Paper>
                   <Paper sx={{ p: 2 }}>
                     <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
-                      Equity curve
+                      Кривая эквити
                     </Typography>
-                    {renderTable(backtestEquityRows, backtestEquityColumns, 'Equity curve is empty.')}
+                    {renderTable(backtestEquityRows, backtestEquityColumns, 'Кривая эквити пуста.')}
                   </Paper>
                   <Paper sx={{ p: 2 }}>
                     <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
-                      Trades
+                      Сделки
                     </Typography>
-                    {renderTable(backtestTradeRows, backtestTradeColumns, 'Trades list is empty.')}
+                    {renderTable(backtestTradeRows, backtestTradeColumns, 'Список сделок пуст.')}
                   </Paper>
                   {backtestRunReport.resolved_config ? (
                     <Accordion>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Typography variant="subtitle2">Resolved config</Typography>
+                        <Typography variant="subtitle2">Развёрнутый конфиг</Typography>
                       </AccordionSummary>
                       <AccordionDetails>{renderJsonBlock(backtestRunReport.resolved_config)}</AccordionDetails>
                     </Accordion>
@@ -2916,7 +4834,7 @@ function App() {
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  Run a backtest to see summary metrics, equity curve, and trades.
+                  Запустите бэктест, чтобы увидеть метрики, кривую эквити и сделки.
                 </Typography>
               )}
             </Stack>
@@ -2925,19 +4843,19 @@ function App() {
             <Stack spacing={2}>
               <Paper sx={{ p: 2 }}>
                 <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-                  <TextField
-                    label="Run id (optional)"
+                    <TextField
+                      label="ID прогона (опционально)"
                     size="small"
                     value={forwardRunId}
                     onChange={(event) => setForwardRunId(event.target.value)}
                     sx={{ minWidth: 220 }}
                   />
                   <Button variant="contained" onClick={fetchForwardStatus} disabled={forwardLoading}>
-                    Load status
+                    Загрузить статус
                   </Button>
                   {forwardLoading ? (
                     <Typography variant="body2" color="text.secondary">
-                      Loading status...
+                      Загрузка статуса...
                     </Typography>
                   ) : null}
                   {forwardError ? (
@@ -2951,40 +4869,46 @@ function App() {
                 <Stack spacing={2}>
                   <Paper sx={{ p: 2 }}>
                     <Stack direction="row" spacing={1} flexWrap="wrap">
-                      <Chip label={`Run: ${forwardStatus.run_id ?? 'n/a'}`} size="small" />
-                      <Chip label={`Status: ${forwardStatus.status ?? 'n/a'}`} size="small" />
+                      <Chip label={`Прогон: ${forwardStatus.run_id ?? 'н/д'}`} size="small" />
+                      <Chip
+                        label={`Статус: ${formatValue(forwardStatus.status ?? 'н/д', 'status')}`}
+                        size="small"
+                      />
                     </Stack>
                   </Paper>
                   <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
                     <Paper sx={{ p: 2, flex: 1 }}>
                       <Typography variant="subtitle2" fontWeight={600}>
-                        Last equity report
+                        Последний отчёт по эквити
                       </Typography>
-                      {renderKeyValueGrid(forwardStatus.last_equity ?? undefined, 'No equity yet.')}
+                      {renderKeyValueGrid(forwardStatus.last_equity ?? undefined, 'Отчёта по эквити пока нет.')}
                     </Paper>
                     <Paper sx={{ p: 2, flex: 1 }}>
                       <Typography variant="subtitle2" fontWeight={600}>
-                        Last trade
+                        Последняя сделка
                       </Typography>
-                      {renderKeyValueGrid(forwardStatus.last_trade ?? undefined, 'No trades yet.')}
+                      {renderKeyValueGrid(forwardStatus.last_trade ?? undefined, 'Сделок пока нет.')}
                     </Paper>
                     <Paper sx={{ p: 2, flex: 1 }}>
                       <Typography variant="subtitle2" fontWeight={600}>
-                        Last alert
+                        Последнее уведомление
                       </Typography>
-                      {renderKeyValueGrid(forwardStatus.last_alert ?? undefined, 'No alerts yet.')}
+                      {renderKeyValueGrid(
+                        forwardStatus.last_alert ?? undefined,
+                        'Уведомлений пока нет.',
+                      )}
                     </Paper>
                   </Stack>
                   <Accordion>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">State snapshot</Typography>
+                      <Typography variant="subtitle2">Снимок состояния</Typography>
                     </AccordionSummary>
                     <AccordionDetails>{renderJsonBlock(forwardStatus.state ?? {})}</AccordionDetails>
                   </Accordion>
                   {forwardStatus.run_meta ? (
                     <Accordion>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Typography variant="subtitle2">Run metadata</Typography>
+                        <Typography variant="subtitle2">Метаданные прогона</Typography>
                       </AccordionSummary>
                       <AccordionDetails>{renderJsonBlock(forwardStatus.run_meta)}</AccordionDetails>
                     </Accordion>
@@ -2992,7 +4916,7 @@ function App() {
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  Load the forward status to see the latest report and alerts.
+                  Загрузите статус форварда, чтобы увидеть отчёты и уведомления.
                 </Typography>
               )}
             </Stack>
@@ -3003,16 +4927,16 @@ function App() {
                 <Stack spacing={2}>
                   <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                     <Button variant="outlined" onClick={() => fetchParamSpecs({ resetValues: false })}>
-                      Load params
+                      Загрузить параметры
                     </Button>
                     <Typography variant="body2" color="text.secondary">
                       {paramSpecs.length
-                        ? `Base params loaded: ${paramSpecs.length}`
-                        : 'Base params not loaded (defaults will be used)'}
+                        ? `Базовые параметры загружены: ${paramSpecs.length}`
+                        : 'Базовые параметры не загружены (будут использованы значения по умолчанию)'}
                     </Typography>
                   </Stack>
                   <TextField
-                    label="Search space (JSON)"
+                    label="Пространство поиска (JSON)"
                     size="small"
                     value={hpoSearchSpace}
                     onChange={(event) => setHpoSearchSpace(event.target.value)}
@@ -3022,11 +4946,11 @@ function App() {
                   />
                   <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                     <Button variant="contained" onClick={handleHpoRun} disabled={hpoLoading}>
-                      Run HPO
+                      Запустить HPO
                     </Button>
                     {hpoLoading ? (
                       <Typography variant="body2" color="text.secondary">
-                        Running HPO...
+                        Запуск HPO...
                       </Typography>
                     ) : null}
                     {hpoError ? (
@@ -3042,7 +4966,10 @@ function App() {
                   <Paper sx={{ p: 2 }}>
                     <Stack direction="row" spacing={1} flexWrap="wrap">
                       {hpoResponse.status ? (
-                        <Chip label={`Status: ${hpoResponse.status}`} size="small" />
+                        <Chip
+                          label={`Статус: ${formatValue(hpoResponse.status, 'status')}`}
+                          size="small"
+                        />
                       ) : null}
                       {hpoResponse.message ? (
                         <Chip label={hpoResponse.message} size="small" />
@@ -3051,24 +4978,24 @@ function App() {
                   </Paper>
                   <Paper sx={{ p: 2 }}>
                     <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
-                      Leaderboard
+                      Лидерборд
                     </Typography>
                     {renderTable(
                       hpoLeaderboardRows as GenericRow[],
                       hpoLeaderboardColumns,
-                      'No leaderboard entries yet.',
+                      'Пока нет записей в лидерборде.',
                     )}
                   </Paper>
                   <Accordion>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Raw HPO response</Typography>
+                      <Typography variant="subtitle2">Сырой ответ HPO</Typography>
                     </AccordionSummary>
                     <AccordionDetails>{renderJsonBlock(hpoResponse)}</AccordionDetails>
                   </Accordion>
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  Run HPO to see the leaderboard.
+                  Запустите HPO, чтобы увидеть лидерборд.
                 </Typography>
               )}
             </Stack>
@@ -3080,3 +5007,4 @@ function App() {
 }
 
 export default App
+

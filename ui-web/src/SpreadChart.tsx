@@ -24,7 +24,7 @@ export default function SpreadChart({ data }: SpreadChartProps) {
   if (!data.length) {
     return (
       <Typography variant="body2" color="text.secondary">
-        No spread data available.
+        Нет данных по спреду.
       </Typography>
     )
   }
@@ -91,34 +91,34 @@ export default function SpreadChart({ data }: SpreadChartProps) {
           },
         ]}
         yAxis={[
-          { id: 'spread_mid', label: 'Spread (mid)', position: 'left' },
-          { id: 'spread_pct', label: 'Spread %', position: 'right' },
+          { id: 'spread_mid', label: 'Спред (mid)', position: 'left' },
+          { id: 'spread_pct', label: 'Спред, %', position: 'right' },
         ]}
         series={[
           {
             data: spreadValues,
-            label: 'Spread (mid)',
+            label: 'Спред (mid)',
             showMark: false,
             color: '#1976d2',
             yAxisId: 'spread_mid',
           },
           {
             data: entryValues,
-            label: 'Entry',
+            label: 'Вход',
             showMark: true,
             color: '#16a34a',
             yAxisId: 'spread_mid',
           },
           {
             data: exitValues,
-            label: 'Exit',
+            label: 'Выход',
             showMark: true,
             color: '#dc2626',
             yAxisId: 'spread_mid',
           },
           {
             data: spreadPctValues,
-            label: 'Spread %',
+            label: 'Спред, %',
             showMark: false,
             color: '#0f766e',
             yAxisId: 'spread_pct',
@@ -131,13 +131,13 @@ export default function SpreadChart({ data }: SpreadChartProps) {
       {cycleSummary.length ? (
         <Box sx={{ mt: 1 }}>
           <Typography variant="caption" color="text.secondary">
-            Trades
+            Сделки
           </Typography>
           {cycleSummary.map((item) => (
             <Typography key={item.cycle} variant="caption" display="block">
-              #{item.cycle}: entry {item.entry ?? '--'} | exit {item.exit ?? '--'} | pnl{' '}
-              {formatCash(item.pnlCash)} | net {formatPct(item.returnNet)} | ann{' '}
-              {formatPct(item.returnAnn)} | hold {item.holdDays ?? '--'}d
+              #{item.cycle}: вход {item.entry ?? '--'} | выход {item.exit ?? '--'} | PnL{' '}
+              {formatCash(item.pnlCash)} | net {formatPct(item.returnNet)} | год.{' '}
+              {formatPct(item.returnAnn)} | держал {item.holdDays ?? '--'} дн.
             </Typography>
           ))}
         </Box>
