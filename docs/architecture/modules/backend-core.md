@@ -18,6 +18,10 @@ but the API endpoints remain the primary backend interface for the React app.
   - `run_paper_trading`: builds `decision_log` + `decision_view`.
   - `run_signal_cycle`: live signal cycle and persistence.
   - `build_spread_series`: time series for UI charting.
+- `src/moex_carry/forward/`
+  - `ForwardTestEngine`: stateful EOD -> OPEN -> after-close paper loop.
+  - `PaperBroker`: submit/simulate/apply fills without a real broker.
+  - `JsonStateStore`: persistence for state, trades, equity, and alerts.
 
 ## Module catalog
 
@@ -67,6 +71,12 @@ but the API endpoints remain the primary backend interface for the React app.
 - Key files: `engine.py` (run_backtest_v2 + precompute), `batch.py` (feature/alpha matrices + batch scoring).
 - Outputs: `BacktestReport` with equity curve, trades, and summary metrics.
 - Notes: uses SnapshotBuilder + PortfolioRebalanceController; optional fast alpha cache when precomputed data is supplied.
+
+### `forward/`
+- Responsibilities: forward paper execution loop with state persistence.
+- Key files: `engine.py`, `broker.py`, `store.py`, `interfaces.py`.
+- Outputs: persisted state (`state.json`), trades/equity/alerts JSONL streams.
+- Notes: not wired to CLI/UI yet; uses SnapshotBuilder + PortfolioRebalanceController.
 
 ### `storage/`
 - Responsibilities: database access and persistence of signals/executions.

@@ -35,6 +35,7 @@
 - US-06 Hold to expiry or roll -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
 - US-07 Backtest review -> backtests (TC-BACK-API-001, TC-BACK-UI-001).
 - US-08 Risk/liquidity rejection -> top-pairs + unit checks (TC-TOP-API-001, TC-TOP-UI-001; tests/test_liquidity_metrics.py, tests/test_risk_gate.py).
+- US-09 Forward paper daily cycle -> unit tests: tests/test_forward_engine.py.
 
 ## UI Test Cases
 

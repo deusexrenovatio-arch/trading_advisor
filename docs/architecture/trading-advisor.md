@@ -33,6 +33,7 @@ Success criteria:
 - DecisionView: UI projection (`decision_view` schema).
 - TradingUI: operator view with filters and drilldowns to raw log.
 - BacktestEngine: replays historical data to produce comparable outputs (legacy + v2 multi-pair engine).
+- ForwardTestEngine: paper EOD -> OPEN -> after-close loop with state persistence.
 
 ## Agentic vs deterministic steps
 
@@ -50,6 +51,7 @@ Success criteria:
 | RiskGate | Deterministic | Non-negotiable constraints. |
 | DecisionView | Deterministic | Projection from `decision_log`. |
 | BacktestEngine | Deterministic | Historical replay of same logic. |
+| ForwardTestEngine | Deterministic | Paper execution loop with state persistence. |
 
 ## Data-flow diagram
 

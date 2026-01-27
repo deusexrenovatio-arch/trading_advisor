@@ -24,7 +24,7 @@ Expected:
 - Each row includes spread_pct, rtc_pct, floor_rate_annual, score_floor, score_alpha.
 - Signals list includes actionable entries with timestamp.
 - UI shows last successful recompute time.
-- snapshot_as_of and signal timestamps reflect the latest run time (current date/time).
+- snapshot_as_of and signal timestamps reflect the latest run time using ISO 8601 with timezone (e.g., 2026-01-26T18:45:00Z).
 
 ## US-03 Drill into a pair
 Actor: Operator
@@ -35,6 +35,7 @@ Steps:
 Expected:
 - Series contains spread_mid and spread_pct.
 - Entry/exit markers align with strategy rules.
+- Tooltip timestamps match the snapshot_as_of time (ISO 8601 with timezone).
 
 ## US-04 Enter a position (floor + alpha)
 Actor: Operator
@@ -80,3 +81,16 @@ Steps:
 2. Inspect skip reason and liquidity metrics.
 Expected:
 - Decision indicates SKIP_* with traceable thresholds.
+
+## US-09 Forward paper daily cycle
+Actor: Operator
+Goal: Run the forward paper loop with EOD -> OPEN -> after close persistence.
+Steps:
+1. Run the forward paper engine at EOD to create next-open orders.
+2. Run the OPEN phase to simulate fills and persist trades.
+3. Run the after-close phase to mark to market and append equity.
+Expected:
+- State store persists portfolio and open orders across restarts.
+- Trades are appended on OPEN fills.
+- Equity curve appends one point per day.
+- Alerts are emitted for missing data, wide spreads, or drawdown breaches.

@@ -29,8 +29,9 @@ Quickly validate that the UI features work after frontend changes without relyin
 - Pick the first pair from `data/output/top_pairs.csv`.
 - Call `/api/spread-series?stock=...&future=...&window_days=60`.
 - Verify fields exist and are JSON-valid:
-  - `spread`, `zscore`, `z_entry`, `z_exit`
-  - `entry_flag`, `exit_flag`, `entry_cycle`, `exit_cycle`
+  - `spread_mid`, `spread_pct`, `zscore`
+  - `entry_flag`, `exit_flag`, `trade_cycle`
+  - `trade_return_pct`, `trade_return_pct_net`, `trade_return_annual`, `trade_hold_days` (if exit events exist)
 - If cached data is missing new fields, restart backend so cache is refreshed.
 
 ### 3) Vite proxy + UI expectations
