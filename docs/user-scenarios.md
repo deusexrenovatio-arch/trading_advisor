@@ -96,3 +96,15 @@ Expected:
 - Trades are appended on OPEN fills.
 - Equity curve appends one point per day.
 - Alerts are emitted for missing data, wide spreads, or drawdown breaches.
+
+## US-10 HPO run + leaderboard
+Actor: Quant Researcher
+Goal: Optimize strategy parameters using Backtest v2 as a black box.
+Steps:
+1. Define a search space for strategy parameters (e.g., z_window, TP_pct, SL_pct).
+2. Configure walk-forward folds with embargo and choose evaluation mode (CONTINUOUS or WARMUP_THEN_FLAT).
+3. Run HPO over the folds and inspect the leaderboard.
+Expected:
+- Folds respect train/val/test boundaries and embargo gaps.
+- Objective penalizes violations and returns -INF on constraint breaches.
+- Leaderboard sorts by objective and best_config matches the top entry.

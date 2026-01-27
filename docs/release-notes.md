@@ -1,5 +1,17 @@
 # Release Notes
 
+## 2026-01-27 - HPO Module (Backtest v2 Black Box)
+
+Added
+- `src/moex_carry/hpo/` package for HPO on top of Backtest v2 (search space parsing, walk-forward folds with embargo, objective/constraints, aggregation).
+- RANDOM sampler and simplified TPE sampler.
+- Fold evaluation modes: CONTINUOUS (single run per fold, windowed metrics) and WARMUP_THEN_FLAT (warmup to reset equity).
+- Unit tests for fold generation, constraints -> -INF, leaderboard ordering/best config.
+
+Notes
+- Backtest v2 remains unchanged; HPO uses it as a black box via runtime cached runner.
+- API/CLI for HPO remain unchanged (endpoint still stub).
+
 ## 2026-01-27 - Backtest v2 + Forward API/CLI Wiring
 
 Added

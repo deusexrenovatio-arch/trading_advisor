@@ -28,6 +28,7 @@
 - forward-status -> TC-FWD-API-002
 - frontend -> TC-FE-HTTP-001
 - frontend-proxy -> TC-FE-PROXY-001
+- hpo -> TC-HPO-UNIT-001
 
 ## User Scenario Coverage (US -> acceptance/test cases)
 - US-01 Configure the strategy -> params-specs (TC-PARAMS-API-001) + unit tests: tests/test_config_resolver.py, tests/test_parameter_specs.py.
@@ -39,6 +40,7 @@
 - US-07 Backtest review -> backtests (TC-BACK-API-001, TC-BACK-UI-001).
 - US-08 Risk/liquidity rejection -> top-pairs + unit checks (TC-TOP-API-001, TC-TOP-UI-001; tests/test_liquidity_metrics.py, tests/test_risk_gate.py).
 - US-09 Forward paper daily cycle -> forward-start/forward-status (TC-FWD-API-001, TC-FWD-API-002) + unit tests: tests/test_forward_engine.py.
+- US-10 HPO run + leaderboard -> hpo (TC-HPO-UNIT-001) + unit tests: tests/hpo/test_folds.py, tests/hpo/test_objective.py, tests/hpo/test_leaderboard.py.
 
 ## UI Test Cases
 
@@ -326,6 +328,18 @@ Request:
 - GET http://127.0.0.1:5176/api/top-pairs?limit=5
 Expected:
 - JSON list returned via proxy.
+
+## Unit Test Cases
+
+### TC-HPO-UNIT-001 HPO core behavior
+Acceptance: hpo
+Automation: tests/hpo/*
+Steps:
+1. Run `pytest -q tests/hpo`.
+Expected:
+- Walk-forward folds respect embargo math.
+- Constraint violations yield -INF objective.
+- Leaderboard orders by objective and best_config matches the top trial.
 
 ## Regression Checklist (minimum)
 - /api/signals/history returns JSON (no HTML).
