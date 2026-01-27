@@ -154,6 +154,81 @@ type RefreshStatus = {
   next_run_at?: string | null
 }
 
+type ParameterSpec = {
+  key: string
+  value_type: string
+  default?: unknown
+  min_value?: number | null
+  max_value?: number | null
+  options?: unknown[] | null
+  description?: string | null
+}
+
+type BacktestEquityPoint = {
+  date: string
+  equity?: number | null
+  cash?: number | null
+  drawdown?: number | null
+  turnover?: number | null
+  positions?: number | null
+}
+
+type BacktestTrade = {
+  pair_id: string
+  stock_secid?: string | null
+  future_secid?: string | null
+  direction?: string | null
+  entry_date?: string | null
+  exit_date?: string | null
+  entry_price_stock?: number | null
+  entry_price_fut?: number | null
+  exit_price_stock?: number | null
+  exit_price_fut?: number | null
+  quantity_stock?: number | null
+  quantity_fut?: number | null
+  pnl?: number | null
+  hold_days?: number | null
+  exit_reason?: string | null
+}
+
+type BacktestReport = {
+  summary_metrics?: Record<string, unknown>
+  equity_curve?: BacktestEquityPoint[]
+  trades?: BacktestTrade[]
+  resolved_config?: Record<string, unknown>
+  warnings?: string[]
+}
+
+type ForwardStatus = {
+  run_id?: string
+  status?: string
+  state?: Record<string, unknown>
+  last_trade?: Record<string, unknown> | null
+  last_equity?: Record<string, unknown> | null
+  last_alert?: Record<string, unknown> | null
+  run_meta?: Record<string, unknown>
+}
+
+type HpoTrial = {
+  objective?: number
+  params?: Record<string, unknown>
+  fold_objectives?: number[]
+  fold_results?: unknown[]
+}
+
+type HpoResponse = {
+  status?: string
+  message?: string
+  mode?: string
+  leaderboard?: HpoTrial[]
+  trials?: HpoTrial[]
+  result?: {
+    mode?: string
+    leaderboard?: HpoTrial[]
+    trials?: HpoTrial[]
+  }
+}
+
 const AUTO_REFRESH_MS = 60_000
 const AUTO_REFRESH_LABEL = '60s'
 
@@ -226,6 +301,13 @@ const labelOverrides: Record<string, string> = {
   trade_return_pct_net: 'Trade return (net %, pre-tax)',
   trade_return_annual: 'Trade return (annual, pre-tax)',
   trade_hold_days: 'Trade hold days',
+  pnl: 'PnL',
+  entry_price_stock: 'Entry price (stock)',
+  entry_price_fut: 'Entry price (fut)',
+  exit_price_stock: 'Exit price (stock)',
+  exit_price_fut: 'Exit price (fut)',
+  quantity_stock: 'Qty (stock)',
+  quantity_fut: 'Qty (fut)',
   avg_trade_return_annual_recent: 'Avg trade return (annual, last 5)',
   sl_net: 'SL net',
   share_alpha_exits: 'Alpha exits share',
@@ -359,6 +441,143 @@ const getTableColumns = (rows: GenericRow[]): string[] => {
 
 const formatCellValue = (value: unknown, column?: string): string => formatValue(value, column)
 
+type ParamValue = string | boolean
+
+const isJsonValueType = (valueType: string) =>
+  ['list', 'dict', 'tuple', 'set'].includes(valueType)
+
+const shortenText = (value: string, limit = 120) =>
+  value.length > limit ? `${value.slice(0, limit)}...` : value
+
+const compactJson = (value: unknown): string => {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+const normalizeParamDefault = (spec: ParameterSpec): ParamValue => {
+  if (spec.value_type === 'bool') {
+    return Boolean(spec.default)
+  }
+  if (spec.default === null || spec.default === undefined) {
+    return ''
+  }
+  if (isJsonValueType(spec.value_type) || typeof spec.default === 'object') {
+    return compactJson(spec.default)
+  }
+  return String(spec.default)
+}
+
+const buildParamDefaults = (specs: ParameterSpec[]): Record<string, ParamValue> => {
+  const next: Record<string, ParamValue> = {}
+  specs.forEach((spec) => {
+    next[spec.key] = normalizeParamDefault(spec)
+  })
+  return next
+}
+
+const setNestedValue = (target: Record<string, unknown>, path: string, value: unknown) => {
+  const parts = path.split('.')
+  let cursor: Record<string, unknown> = target
+  parts.forEach((part, index) => {
+    if (index === parts.length - 1) {
+      cursor[part] = value
+      return
+    }
+    const existing = cursor[part]
+    if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
+      cursor[part] = {}
+    }
+    cursor = cursor[part] as Record<string, unknown>
+  })
+}
+
+const parseParamValue = (raw: ParamValue | undefined, spec: ParameterSpec) => {
+  const empty =
+    raw === undefined ||
+    raw === null ||
+    (typeof raw === 'string' && raw.trim().length === 0)
+  if (empty) {
+    return { value: spec.default ?? null }
+  }
+  const valueType = spec.value_type
+  if (valueType === 'bool') {
+    if (typeof raw === 'boolean') {
+      return { value: raw }
+    }
+    const normalized = String(raw).toLowerCase()
+    if (normalized === 'true' || normalized === 'false') {
+      return { value: normalized === 'true' }
+    }
+    return { value: null, error: `${spec.key}: invalid boolean` }
+  }
+  if (valueType === 'int') {
+    const parsed = Number.parseInt(String(raw), 10)
+    if (Number.isNaN(parsed)) {
+      return { value: null, error: `${spec.key}: invalid int` }
+    }
+    return { value: parsed }
+  }
+  if (valueType === 'float') {
+    const parsed = Number.parseFloat(String(raw))
+    if (Number.isNaN(parsed)) {
+      return { value: null, error: `${spec.key}: invalid float` }
+    }
+    return { value: parsed }
+  }
+  if (valueType === 'str') {
+    return { value: String(raw) }
+  }
+  if (isJsonValueType(valueType) || valueType === 'union') {
+    if (typeof raw !== 'string') {
+      return { value: raw }
+    }
+    try {
+      return { value: JSON.parse(raw) }
+    } catch {
+      return { value: null, error: `${spec.key}: invalid JSON` }
+    }
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return { value: JSON.parse(trimmed) }
+      } catch {
+        return { value: null, error: `${spec.key}: invalid JSON` }
+      }
+    }
+  }
+  return { value: raw }
+}
+
+const collectParamRequest = (
+  specs: ParameterSpec[],
+  values: Record<string, ParamValue>,
+) => {
+  const payload: Record<string, unknown> = {}
+  const errors: string[] = []
+  specs.forEach((spec) => {
+    const parsed = parseParamValue(values[spec.key], spec)
+    if (parsed.error) {
+      errors.push(parsed.error)
+      return
+    }
+    setNestedValue(payload, spec.key, parsed.value)
+  })
+  return { payload, errors }
+}
+
+const isDateColumn = (column: string) =>
+  column === 'date' ||
+  column.endsWith('_date') ||
+  column.endsWith('_at') ||
+  column.includes('timestamp')
+
 function App() {
   const [rows, setRows] = useState<DecisionView[]>([])
   const [loading, setLoading] = useState(false)
@@ -381,10 +600,31 @@ function App() {
   const [decisionActionLoading, setDecisionActionLoading] = useState(false)
   const [decisionActionSubmitting, setDecisionActionSubmitting] = useState(false)
   const [decisionActionNote, setDecisionActionNote] = useState('')
-  const [tab, setTab] = useState<'decisions' | 'top_pairs' | 'signals' | 'backtests'>('decisions')
+  const [tab, setTab] = useState<
+    'decisions' | 'top_pairs' | 'signals' | 'backtests' | 'backtest_v2' | 'forward' | 'hpo'
+  >('decisions')
   const [topPairs, setTopPairs] = useState<GenericRow[]>([])
   const [signals, setSignals] = useState<GenericRow[]>([])
   const [backtests, setBacktests] = useState<GenericRow[]>([])
+  const [paramSpecs, setParamSpecs] = useState<ParameterSpec[]>([])
+  const [paramValues, setParamValues] = useState<Record<string, ParamValue>>({})
+  const [paramFilter, setParamFilter] = useState('')
+  const [paramPreset, setParamPreset] = useState('')
+  const [paramSpecsLoading, setParamSpecsLoading] = useState(false)
+  const [paramSpecsError, setParamSpecsError] = useState<string | null>(null)
+  const [backtestPrecompute, setBacktestPrecompute] = useState(true)
+  const [backtestRunReport, setBacktestRunReport] = useState<BacktestReport | null>(null)
+  const [backtestRunLoading, setBacktestRunLoading] = useState(false)
+  const [backtestRunError, setBacktestRunError] = useState<string | null>(null)
+  const [backtestRunParseError, setBacktestRunParseError] = useState<string | null>(null)
+  const [forwardRunId, setForwardRunId] = useState('')
+  const [forwardStatus, setForwardStatus] = useState<ForwardStatus | null>(null)
+  const [forwardLoading, setForwardLoading] = useState(false)
+  const [forwardError, setForwardError] = useState<string | null>(null)
+  const [hpoSearchSpace, setHpoSearchSpace] = useState('')
+  const [hpoResponse, setHpoResponse] = useState<HpoResponse | null>(null)
+  const [hpoLoading, setHpoLoading] = useState(false)
+  const [hpoError, setHpoError] = useState<string | null>(null)
   const [signalHistory, setSignalHistory] = useState<SignalHistoryRow[]>([])
   const [quickFilter, setQuickFilter] = useState('')
   const [strategyFilter, setStrategyFilter] = useState('')
@@ -695,6 +935,133 @@ function App() {
     [],
   )
 
+  const fetchParamSpecs = useCallback(
+    async (options?: { resetValues?: boolean }) => {
+      setParamSpecsLoading(true)
+      setParamSpecsError(null)
+      const resetValues = options?.resetValues ?? false
+      try {
+        const params = new URLSearchParams()
+        const preset = paramPreset.trim()
+        if (preset) params.set('preset', preset)
+        const url = params.toString() ? `/api/params/specs?${params.toString()}` : '/api/params/specs'
+        const response = await fetch(url, { cache: 'no-store' })
+        if (!response.ok) {
+          throw new Error(`Params API error: ${response.status}`)
+        }
+        const data = (await response.json()) as ParameterSpec[]
+        setParamSpecs(data)
+        setParamValues((prev) => {
+          const defaults = buildParamDefaults(data)
+          if (resetValues || Object.keys(prev).length === 0) {
+            return defaults
+          }
+          const next: Record<string, ParamValue> = {}
+          data.forEach((spec) => {
+            next[spec.key] = spec.key in prev ? prev[spec.key] : defaults[spec.key]
+          })
+          return next
+        })
+      } catch (err) {
+        setParamSpecsError(err instanceof Error ? err.message : 'Failed to load params')
+      } finally {
+        setParamSpecsLoading(false)
+      }
+    },
+    [paramPreset],
+  )
+
+  const handleBacktestRun = useCallback(async () => {
+    setBacktestRunLoading(true)
+    setBacktestRunError(null)
+    setBacktestRunParseError(null)
+    setBacktestRunReport(null)
+    try {
+      const { payload, errors } = collectParamRequest(paramSpecs, paramValues)
+      if (errors.length) {
+        const summary = errors.slice(0, 6).join(' | ')
+        setBacktestRunParseError(
+          errors.length > 6 ? `${summary} | ... (${errors.length})` : summary,
+        )
+        return
+      }
+      const response = await fetch('/api/backtest/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request: payload, precompute: backtestPrecompute }),
+      })
+      const data = (await response.json()) as BacktestReport & { error?: string; message?: string }
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || `Backtest API error: ${response.status}`)
+      }
+      setBacktestRunReport(data)
+    } catch (err) {
+      setBacktestRunError(err instanceof Error ? err.message : 'Failed to run backtest')
+    } finally {
+      setBacktestRunLoading(false)
+    }
+  }, [backtestPrecompute, paramSpecs, paramValues])
+
+  const fetchForwardStatus = useCallback(async () => {
+    setForwardLoading(true)
+    setForwardError(null)
+    try {
+      const params = new URLSearchParams()
+      const runId = forwardRunId.trim()
+      if (runId) params.set('run_id', runId)
+      const url = params.toString()
+        ? `/api/forward/status?${params.toString()}`
+        : '/api/forward/status'
+      const response = await fetch(url, { cache: 'no-store' })
+      const data = (await response.json()) as ForwardStatus & { error?: string; message?: string }
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || `Forward API error: ${response.status}`)
+      }
+      setForwardStatus(data)
+    } catch (err) {
+      setForwardError(err instanceof Error ? err.message : 'Failed to load forward status')
+    } finally {
+      setForwardLoading(false)
+    }
+  }, [forwardRunId])
+
+  const handleHpoRun = useCallback(async () => {
+    setHpoLoading(true)
+    setHpoError(null)
+    setHpoResponse(null)
+    try {
+      const { payload, errors } = collectParamRequest(paramSpecs, paramValues)
+      if (errors.length) {
+        const summary = errors.slice(0, 6).join(' | ')
+        setHpoError(errors.length > 6 ? `${summary} | ... (${errors.length})` : summary)
+        return
+      }
+      let searchSpace: Record<string, unknown> = {}
+      if (hpoSearchSpace.trim()) {
+        try {
+          searchSpace = JSON.parse(hpoSearchSpace)
+        } catch {
+          setHpoError('Search space JSON is invalid.')
+          return
+        }
+      }
+      const response = await fetch('/api/hpo/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base: payload, search_space: searchSpace }),
+      })
+      const data = (await response.json()) as HpoResponse & { error?: string; message?: string }
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || `HPO API error: ${response.status}`)
+      }
+      setHpoResponse(data)
+    } catch (err) {
+      setHpoError(err instanceof Error ? err.message : 'Failed to run HPO')
+    } finally {
+      setHpoLoading(false)
+    }
+  }, [hpoSearchSpace, paramSpecs, paramValues])
+
   useEffect(() => {
     fetchDecisionView()
     fetchAuxData({ topPairsLimit, topPairsAll })
@@ -707,6 +1074,12 @@ function App() {
     }, AUTO_REFRESH_MS)
     return () => window.clearInterval(interval)
   }, [autoRefresh, fetchAuxData, topPairsAll, topPairsLimit])
+
+  useEffect(() => {
+    if (tab !== 'backtest_v2' && tab !== 'hpo') return
+    if (paramSpecsLoading || paramSpecs.length > 0) return
+    void fetchParamSpecs({ resetValues: true })
+  }, [fetchParamSpecs, paramSpecs.length, paramSpecsLoading, tab])
 
   const requestRecompute = useCallback(async (): Promise<boolean> => {
     setRecomputeLoading(true)
@@ -748,6 +1121,15 @@ function App() {
     await requestRecompute()
     await fetchAuxData({ topPairsLimit, topPairsAll })
   }, [fetchAuxData, requestRecompute, topPairsAll, topPairsLimit])
+
+  const handleParamValueChange = useCallback((key: string, value: ParamValue) => {
+    setParamValues((prev) => ({ ...prev, [key]: value }))
+  }, [])
+
+  const handleParamReset = useCallback(() => {
+    if (!paramSpecs.length) return
+    setParamValues(buildParamDefaults(paramSpecs))
+  }, [paramSpecs])
 
   const submitDecisionAction = useCallback(
     async (action: 'approve' | 'reject') => {
@@ -932,6 +1314,106 @@ function App() {
       ).sort(),
     [signalFilterRows],
   )
+
+  const filteredParamSpecs = useMemo(() => {
+    const query = paramFilter.trim().toLowerCase()
+    if (!query) return paramSpecs
+    return paramSpecs.filter((spec) => spec.key.toLowerCase().includes(query))
+  }, [paramFilter, paramSpecs])
+
+  const paramSections = useMemo<[string, ParameterSpec[]][]>(() => {
+    const grouped = new Map<string, ParameterSpec[]>()
+    filteredParamSpecs.forEach((spec) => {
+      const section = spec.key.split('.')[0] || 'general'
+      const list = grouped.get(section) ?? []
+      list.push(spec)
+      grouped.set(section, list)
+    })
+    return Array.from(grouped.entries())
+      .map(([section, specs]) => [
+        section,
+        specs.sort((left, right) => left.key.localeCompare(right.key)),
+      ])
+      .sort(([left], [right]) => left.localeCompare(right))
+  }, [filteredParamSpecs])
+
+  const backtestSummaryEntries = useMemo(() => {
+    const metrics = backtestRunReport?.summary_metrics
+    if (!metrics) return []
+    return Object.entries(metrics).map(([key, value]) => ({
+      key,
+      label: toTitleCase(key),
+      value,
+    }))
+  }, [backtestRunReport])
+
+  const backtestEquityRows = useMemo<GenericRow[]>(
+    () => (backtestRunReport?.equity_curve ?? []) as GenericRow[],
+    [backtestRunReport],
+  )
+
+  const backtestTradeRows = useMemo<GenericRow[]>(
+    () => (backtestRunReport?.trades ?? []) as GenericRow[],
+    [backtestRunReport],
+  )
+
+  const backtestEquityColumns = useMemo(() => {
+    const columns = getTableColumns(backtestEquityRows)
+    const preferred = ['date', 'equity', 'cash', 'drawdown', 'turnover', 'positions']
+    const ordered = preferred.filter((column) => columns.includes(column))
+    const rest = columns.filter((column) => !preferred.includes(column))
+    return [...ordered, ...rest]
+  }, [backtestEquityRows])
+
+  const backtestTradeColumns = useMemo(() => {
+    const columns = getTableColumns(backtestTradeRows)
+    const preferred = [
+      'pair_id',
+      'stock_secid',
+      'future_secid',
+      'direction',
+      'entry_date',
+      'exit_date',
+      'entry_price_stock',
+      'entry_price_fut',
+      'exit_price_stock',
+      'exit_price_fut',
+      'quantity_stock',
+      'quantity_fut',
+      'pnl',
+      'hold_days',
+      'exit_reason',
+    ]
+    const ordered = preferred.filter((column) => columns.includes(column))
+    const rest = columns.filter((column) => !preferred.includes(column))
+    return [...ordered, ...rest]
+  }, [backtestTradeRows])
+
+  const hpoLeaderboardRows = useMemo<HpoTrial[]>(() => {
+    if (!hpoResponse) return []
+    const payload = hpoResponse.result ?? hpoResponse
+    const raw = payload.leaderboard ?? payload.trials ?? []
+    if (!Array.isArray(raw)) return []
+    const mode = payload.mode ?? 'max'
+    const rows = raw.slice() as HpoTrial[]
+    if (rows.length && typeof rows[0]?.objective === 'number') {
+      rows.sort((left, right) => {
+        const leftValue = left.objective ?? Number.NEGATIVE_INFINITY
+        const rightValue = right.objective ?? Number.NEGATIVE_INFINITY
+        return mode === 'min' ? leftValue - rightValue : rightValue - leftValue
+      })
+    }
+    return rows
+  }, [hpoResponse])
+
+  const hpoLeaderboardColumns = useMemo(() => {
+    const rows = hpoLeaderboardRows as GenericRow[]
+    const columns = getTableColumns(rows)
+    const preferred = ['objective', 'params', 'fold_objectives']
+    const ordered = preferred.filter((column) => columns.includes(column))
+    const rest = columns.filter((column) => !preferred.includes(column))
+    return [...ordered, ...rest]
+  }, [hpoLeaderboardRows])
 
   const decisionColumns = useMemo<GridColDef[]>(
     () => [
@@ -1272,6 +1754,160 @@ function App() {
     </Box>
   )
 
+  const renderKeyValueGrid = (payload?: Record<string, unknown>, emptyLabel = 'No data') => {
+    const entries = Object.entries(payload ?? {}).map(([key, value]) => ({
+      key,
+      label: toTitleCase(key),
+      value,
+    }))
+    if (!entries.length) {
+      return (
+        <Typography variant="body2" color="text.secondary">
+          {emptyLabel}
+        </Typography>
+      )
+    }
+    return renderFieldGrid(entries)
+  }
+
+  const renderJsonBlock = (payload: unknown) => (
+    <Box
+      component="pre"
+      sx={{
+        margin: 0,
+        padding: 1.5,
+        borderRadius: 1,
+        backgroundColor: '#0b1020',
+        color: '#e2e8f0',
+        fontSize: '12px',
+        overflow: 'auto',
+      }}
+    >
+      {JSON.stringify(payload, null, 2)}
+    </Box>
+  )
+
+  const renderTable = (rows: GenericRow[], columns: string[], emptyLabel: string) => {
+    if (!rows.length || !columns.length) {
+      return (
+        <Typography variant="body2" color="text.secondary">
+          {emptyLabel}
+        </Typography>
+      )
+    }
+    return (
+      <TableContainer sx={{ maxHeight: '60vh' }}>
+        <Table size="small" stickyHeader>
+          <TableHead>
+            <TableRow>
+              {columns.map((column) => (
+                <TableCell key={column}>{toTitleCase(column)}</TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((row, index) => {
+              const rowKey = row.id ?? row.pair_id ?? row.date ?? `row-${index}`
+              return (
+                <TableRow key={`${String(rowKey)}-${index}`}>
+                  {columns.map((column) => (
+                    <TableCell key={`${column}-${index}`}>
+                      {isDateColumn(column)
+                        ? formatDate(String(row[column] ?? ''))
+                        : formatCellValue(row[column], column)}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    )
+  }
+
+  const renderParamInput = (spec: ParameterSpec) => {
+    const value = paramValues[spec.key]
+    const helperParts = []
+    if (spec.description) helperParts.push(spec.description)
+    helperParts.push(`type: ${spec.value_type}`)
+    if (spec.min_value !== null && spec.min_value !== undefined) {
+      helperParts.push(`min: ${spec.min_value}`)
+    }
+    if (spec.max_value !== null && spec.max_value !== undefined) {
+      helperParts.push(`max: ${spec.max_value}`)
+    }
+    if (spec.default !== undefined) {
+      const defaultLabel = spec.default === null ? 'null' : shortenText(compactJson(spec.default))
+      helperParts.push(`default: ${defaultLabel}`)
+    }
+    const helperText = helperParts.filter(Boolean).join(' | ')
+
+    if (spec.value_type === 'bool') {
+      return (
+        <Box key={spec.key}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={Boolean(value)}
+                onChange={(event) => handleParamValueChange(spec.key, event.target.checked)}
+              />
+            }
+            label={spec.key}
+          />
+          {helperText ? (
+            <Typography variant="caption" color="text.secondary">
+              {helperText}
+            </Typography>
+          ) : null}
+        </Box>
+      )
+    }
+
+    if (spec.options && spec.options.length) {
+      const stringValue = typeof value === 'string' ? value : compactJson(value)
+      return (
+        <TextField
+          key={spec.key}
+          select
+          fullWidth
+          size="small"
+          label={spec.key}
+          value={stringValue}
+          onChange={(event) => handleParamValueChange(spec.key, event.target.value)}
+          helperText={helperText}
+        >
+          {spec.options.map((option) => (
+            <MenuItem key={String(option)} value={String(option)}>
+              {String(option)}
+            </MenuItem>
+          ))}
+        </TextField>
+      )
+    }
+
+    const inputValue =
+      typeof value === 'string' ? value : value === undefined ? '' : String(value)
+    const multiline = isJsonValueType(spec.value_type) || spec.value_type === 'union'
+    const inputType =
+      spec.value_type === 'int' || spec.value_type === 'float' ? 'number' : 'text'
+
+    return (
+      <TextField
+        key={spec.key}
+        fullWidth
+        size="small"
+        label={spec.key}
+        value={inputValue}
+        onChange={(event) => handleParamValueChange(spec.key, event.target.value)}
+        helperText={helperText}
+        type={inputType}
+        multiline={multiline}
+        minRows={multiline ? 3 : undefined}
+      />
+    )
+  }
+
   return (
     <Box className="app-root">
       <Container maxWidth="xl" sx={{ py: 3 }}>
@@ -1284,6 +1920,9 @@ function App() {
             <Tab label="Top pairs" value="top_pairs" />
             <Tab label="Signals" value="signals" />
             <Tab label="Backtests" value="backtests" />
+            <Tab label="Backtest v2" value="backtest_v2" />
+            <Tab label="Forward status" value="forward" />
+            <Tab label="HPO" value="hpo" />
           </Tabs>
           {tab === 'decisions' ? (
             <>
@@ -1645,7 +2284,8 @@ function App() {
                 </Paper>
               </Stack>
             </>
-          ) : (
+          ) : null}
+          {tab === 'top_pairs' || tab === 'signals' || tab === 'backtests' ? (
             <>
               <Paper sx={{ p: 2 }}>
                 <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
@@ -2123,7 +2763,316 @@ function App() {
                 </Paper>
               ) : null}
             </>
-          )}
+          ) : null}
+          {tab === 'backtest_v2' ? (
+            <Stack spacing={2}>
+              <Paper sx={{ p: 2 }}>
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                    <TextField
+                      label="Preset (optional)"
+                      size="small"
+                      value={paramPreset}
+                      onChange={(event) => setParamPreset(event.target.value)}
+                      sx={{ minWidth: 200 }}
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={() => fetchParamSpecs({ resetValues: true })}
+                      disabled={paramSpecsLoading}
+                    >
+                      {paramSpecsLoading ? 'Loading params...' : 'Load params'}
+                    </Button>
+                    <Button
+                      variant="text"
+                      onClick={handleParamReset}
+                      disabled={!paramSpecs.length}
+                    >
+                      Reset defaults
+                    </Button>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={backtestPrecompute}
+                          onChange={(event) => setBacktestPrecompute(event.target.checked)}
+                        />
+                      }
+                      label="Precompute cache"
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      {paramSpecs.length ? `Params: ${paramSpecs.length}` : 'Params: n/a'}
+                    </Typography>
+                    {paramSpecsError ? (
+                      <Typography variant="body2" color="error">
+                        {paramSpecsError}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                  <TextField
+                    label="Filter params"
+                    size="small"
+                    value={paramFilter}
+                    onChange={(event) => setParamFilter(event.target.value)}
+                    sx={{ maxWidth: 320 }}
+                  />
+                  {paramSpecs.length ? (
+                    paramSections.length ? (
+                      paramSections.map(([section, specs], index) => (
+                        <Accordion key={section} defaultExpanded={index === 0 || section === 'test'}>
+                          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography variant="subtitle2">
+                              {toTitleCase(section)} ({specs.length})
+                            </Typography>
+                          </AccordionSummary>
+                          <AccordionDetails>
+                            <Box
+                              sx={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                gap: 2,
+                              }}
+                            >
+                              {specs.map((spec) => renderParamInput(spec))}
+                            </Box>
+                          </AccordionDetails>
+                        </Accordion>
+                      ))
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No parameters match the current filter.
+                      </Typography>
+                    )
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Load params to edit the backtest request payload.
+                    </Typography>
+                  )}
+                  <Divider />
+                  <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                    <Button
+                      variant="contained"
+                      onClick={handleBacktestRun}
+                      disabled={backtestRunLoading || !paramSpecs.length}
+                    >
+                      Run backtest
+                    </Button>
+                    {backtestRunLoading ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Running backtest...
+                      </Typography>
+                    ) : null}
+                    {backtestRunParseError ? (
+                      <Typography variant="body2" color="error">
+                        {backtestRunParseError}
+                      </Typography>
+                    ) : null}
+                    {backtestRunError ? (
+                      <Typography variant="body2" color="error">
+                        {backtestRunError}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                </Stack>
+              </Paper>
+              {backtestRunReport ? (
+                <Stack spacing={2}>
+                  <Paper sx={{ p: 2 }}>
+                    <Stack spacing={1}>
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        Summary metrics
+                      </Typography>
+                      {backtestSummaryEntries.length
+                        ? renderFieldGrid(backtestSummaryEntries)
+                        : renderKeyValueGrid({}, 'Summary metrics not available yet.')}
+                      {backtestRunReport.warnings && backtestRunReport.warnings.length ? (
+                        <Stack direction="row" spacing={1} flexWrap="wrap">
+                          {backtestRunReport.warnings.map((warning, index) => (
+                            <Chip key={`${warning}-${index}`} label={`Warning: ${warning}`} size="small" />
+                          ))}
+                        </Stack>
+                      ) : null}
+                    </Stack>
+                  </Paper>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+                      Equity curve
+                    </Typography>
+                    {renderTable(backtestEquityRows, backtestEquityColumns, 'Equity curve is empty.')}
+                  </Paper>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+                      Trades
+                    </Typography>
+                    {renderTable(backtestTradeRows, backtestTradeColumns, 'Trades list is empty.')}
+                  </Paper>
+                  {backtestRunReport.resolved_config ? (
+                    <Accordion>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography variant="subtitle2">Resolved config</Typography>
+                      </AccordionSummary>
+                      <AccordionDetails>{renderJsonBlock(backtestRunReport.resolved_config)}</AccordionDetails>
+                    </Accordion>
+                  ) : null}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Run a backtest to see summary metrics, equity curve, and trades.
+                </Typography>
+              )}
+            </Stack>
+          ) : null}
+          {tab === 'forward' ? (
+            <Stack spacing={2}>
+              <Paper sx={{ p: 2 }}>
+                <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                  <TextField
+                    label="Run id (optional)"
+                    size="small"
+                    value={forwardRunId}
+                    onChange={(event) => setForwardRunId(event.target.value)}
+                    sx={{ minWidth: 220 }}
+                  />
+                  <Button variant="contained" onClick={fetchForwardStatus} disabled={forwardLoading}>
+                    Load status
+                  </Button>
+                  {forwardLoading ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Loading status...
+                    </Typography>
+                  ) : null}
+                  {forwardError ? (
+                    <Typography variant="body2" color="error">
+                      {forwardError}
+                    </Typography>
+                  ) : null}
+                </Stack>
+              </Paper>
+              {forwardStatus ? (
+                <Stack spacing={2}>
+                  <Paper sx={{ p: 2 }}>
+                    <Stack direction="row" spacing={1} flexWrap="wrap">
+                      <Chip label={`Run: ${forwardStatus.run_id ?? 'n/a'}`} size="small" />
+                      <Chip label={`Status: ${forwardStatus.status ?? 'n/a'}`} size="small" />
+                    </Stack>
+                  </Paper>
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                    <Paper sx={{ p: 2, flex: 1 }}>
+                      <Typography variant="subtitle2" fontWeight={600}>
+                        Last equity report
+                      </Typography>
+                      {renderKeyValueGrid(forwardStatus.last_equity ?? undefined, 'No equity yet.')}
+                    </Paper>
+                    <Paper sx={{ p: 2, flex: 1 }}>
+                      <Typography variant="subtitle2" fontWeight={600}>
+                        Last trade
+                      </Typography>
+                      {renderKeyValueGrid(forwardStatus.last_trade ?? undefined, 'No trades yet.')}
+                    </Paper>
+                    <Paper sx={{ p: 2, flex: 1 }}>
+                      <Typography variant="subtitle2" fontWeight={600}>
+                        Last alert
+                      </Typography>
+                      {renderKeyValueGrid(forwardStatus.last_alert ?? undefined, 'No alerts yet.')}
+                    </Paper>
+                  </Stack>
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle2">State snapshot</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>{renderJsonBlock(forwardStatus.state ?? {})}</AccordionDetails>
+                  </Accordion>
+                  {forwardStatus.run_meta ? (
+                    <Accordion>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography variant="subtitle2">Run metadata</Typography>
+                      </AccordionSummary>
+                      <AccordionDetails>{renderJsonBlock(forwardStatus.run_meta)}</AccordionDetails>
+                    </Accordion>
+                  ) : null}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Load the forward status to see the latest report and alerts.
+                </Typography>
+              )}
+            </Stack>
+          ) : null}
+          {tab === 'hpo' ? (
+            <Stack spacing={2}>
+              <Paper sx={{ p: 2 }}>
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                    <Button variant="outlined" onClick={() => fetchParamSpecs({ resetValues: false })}>
+                      Load params
+                    </Button>
+                    <Typography variant="body2" color="text.secondary">
+                      {paramSpecs.length
+                        ? `Base params loaded: ${paramSpecs.length}`
+                        : 'Base params not loaded (defaults will be used)'}
+                    </Typography>
+                  </Stack>
+                  <TextField
+                    label="Search space (JSON)"
+                    size="small"
+                    value={hpoSearchSpace}
+                    onChange={(event) => setHpoSearchSpace(event.target.value)}
+                    placeholder='{"strategy.z_window":{"kind":"int","min_value":20,"max_value":120}}'
+                    multiline
+                    minRows={6}
+                  />
+                  <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                    <Button variant="contained" onClick={handleHpoRun} disabled={hpoLoading}>
+                      Run HPO
+                    </Button>
+                    {hpoLoading ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Running HPO...
+                      </Typography>
+                    ) : null}
+                    {hpoError ? (
+                      <Typography variant="body2" color="error">
+                        {hpoError}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                </Stack>
+              </Paper>
+              {hpoResponse ? (
+                <Stack spacing={2}>
+                  <Paper sx={{ p: 2 }}>
+                    <Stack direction="row" spacing={1} flexWrap="wrap">
+                      {hpoResponse.status ? (
+                        <Chip label={`Status: ${hpoResponse.status}`} size="small" />
+                      ) : null}
+                      {hpoResponse.message ? (
+                        <Chip label={hpoResponse.message} size="small" />
+                      ) : null}
+                    </Stack>
+                  </Paper>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+                      Leaderboard
+                    </Typography>
+                    {renderTable(
+                      hpoLeaderboardRows as GenericRow[],
+                      hpoLeaderboardColumns,
+                      'No leaderboard entries yet.',
+                    )}
+                  </Paper>
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle2">Raw HPO response</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>{renderJsonBlock(hpoResponse)}</AccordionDetails>
+                  </Accordion>
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Run HPO to see the leaderboard.
+                </Typography>
+              )}
+            </Stack>
+          ) : null}
         </Stack>
       </Container>
     </Box>
