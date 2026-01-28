@@ -19,6 +19,7 @@ from moex_carry.contracts.strategy_test import BacktestRequest, ForwardTestReque
 from moex_carry.backtest_v2.runtime import run_backtest_v2_cached, serialize_backtest_report
 from moex_carry.decision_log import load_jsonl
 from moex_carry.forward.runtime import load_forward_status, start_forward_run
+from moex_carry.hpo.runtime import load_hpo_status, start_hpo_run
 from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
@@ -614,11 +615,46 @@ def create_app(settings: AppSettings) -> Dash:
         payload = request.get_json(silent=True) or {}
         if not isinstance(payload, dict):
             return _bad_request("invalid_json")
+        precompute = _parse_bool(payload.get("precompute"))
+        if precompute is None:
+            precompute = True
+        request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else payload
+        if not isinstance(request_payload, dict):
+            return _bad_request("missing_request")
+        request_payload = {key: value for key, value in request_payload.items() if key != "precompute"}
+        optimization = request_payload.get("optimization") if isinstance(request_payload, dict) else None
+        max_trials_override = None
+        if not (isinstance(optimization, dict) and "max_trials" in optimization):
+            max_trials_override = 10
         try:
-            _ = HpoRequest.model_validate(payload)
+            hpo_request = HpoRequest.model_validate(request_payload)
         except ValidationError as exc:
             return _bad_request("validation_error", details=exc.errors())
-        return jsonify({"status": "stub", "message": "HPO endpoint not wired yet"})
+        try:
+            run_info = start_hpo_run(
+                hpo_request,
+                paths.data_dir,
+                precompute=precompute,
+                max_trials_override=max_trials_override,
+            )
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("HPO run failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+        return jsonify(run_info)
+
+    @server.route("/api/hpo/status", methods=["GET"])
+    def hpo_status_api():
+        run_id = request.args.get("run_id")
+        try:
+            status = load_hpo_status(paths.data_dir, run_id=run_id)
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("HPO status failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+        return jsonify(status)
 
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
