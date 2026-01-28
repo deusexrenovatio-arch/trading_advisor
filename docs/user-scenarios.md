@@ -108,3 +108,14 @@ Expected:
 - Folds respect train/val/test boundaries and embargo gaps.
 - Objective penalizes violations and returns -INF on constraint breaches.
 - Leaderboard sorts by objective and best_config matches the top entry.
+
+## US-11 Review decisions with server filters
+Actor: Operator
+Goal: Narrow the decisions list using server-side filters for faster reviews.
+Steps:
+1. Open Decisions tab.
+2. Set Strategy/Instrument/Risk/News filters and a Created from/to date range.
+3. Refresh.
+Expected:
+- API uses server-side filters (`strategy_type`, `primary_instrument`, `risk_state`, `news_severity`, `created_from`, `created_to`).
+- Result list updates quickly without client-side heavy filtering.

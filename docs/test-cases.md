@@ -11,6 +11,7 @@
 
 ## Acceptance Mapping (scenario -> test cases)
 - decision-view -> TC-DEC-API-001, TC-DEC-UI-001
+- decision-view-filters -> TC-DEC-API-005
 - decision-view-aggregation -> TC-DEC-API-002
 - decision-log-aggregation -> TC-DEC-API-003
 - decision-action -> TC-DEC-API-004, TC-DEC-UI-002
@@ -42,6 +43,7 @@
 - US-08 Risk/liquidity rejection -> top-pairs + unit checks (TC-TOP-API-001, TC-TOP-UI-001; tests/test_liquidity_metrics.py, tests/test_risk_gate.py).
 - US-09 Forward paper daily cycle -> forward-start/forward-status (TC-FWD-API-001, TC-FWD-API-002) + unit tests: tests/test_forward_engine.py.
 - US-10 HPO run + leaderboard -> hpo (TC-HPO-UNIT-001) + unit tests: tests/hpo/test_folds.py, tests/hpo/test_objective.py, tests/hpo/test_leaderboard.py.
+- US-11 Review decisions with server filters -> decision-view, decision-view-filters (TC-DEC-API-001, TC-DEC-API-005, TC-DEC-UI-001).
 
 ## UI Test Cases
 
@@ -66,6 +68,15 @@ Steps:
 Expected:
 - UI shows operator action status.
 - Execution request status is visible.
+
+### TC-DEC-API-005 Decision view server-side filters
+Acceptance: decision-view-filters
+Automation: scripts/acceptance_check.py
+Steps:
+1. Call `/api/decision-view` with `strategy_type`, `primary_instrument`, `risk_state`, `news_severity`, `created_from`, `created_to`.
+Expected:
+- API returns a JSON array (can be empty).
+- If rows exist, they include `decision_id` and respect filter fields.
 
 ### TC-TOP-UI-001 Top pairs filters and reload
 Acceptance: top-pairs

@@ -5,15 +5,25 @@ This document covers the React UI in `ui-web/` and the API endpoints it uses.
 
 ## UI components (`ui-web/src`)
 - `App.tsx`
-  - Tabs: Decisions, Top pairs, Signals, Backtests.
-  - Decision grid with filters (strategy, instrument, risk, news).
-  - Decision details panel (raw `decision_log` JSON).
-  - Tables for top pairs, signals, and backtests with sorting and filters.
-  - Auto-refresh toggle (60s) for Top pairs / Signals / Backtests with last-updated timestamp.
-  - Recomputed timestamp sourced from backend refresh status.
-  - Signal execution panel with execution history.
-  - Auto-refresh re-fetches API data; periodic recompute is controlled by backend
-    `ui.signal_refresh_*` settings.
+  - Orchestrates tabs and wires shared hooks/helpers.
+  - Keeps render logic thin; business logic lives in feature hooks and shared utils.
+- `features/decisions/*`
+  - `DecisionsTab`, `DecisionTable`, `DecisionDetail`, `decisionColumns`, `useDecisionView`.
+  - Server-side filters: strategy/instrument/risk/news/created range.
+- `features/market/*`
+  - `MarketTablesTab` + `useMarketTables` (Top pairs / Signals / Backtests tables, sorting, filters, details).
+  - Wrapper tabs: `features/top-pairs/TopPairsTab`, `features/signals/SignalsTab`,
+    `features/backtests/BacktestsTab`.
+- `features/backtest-run/*`
+  - `BacktestV2Tab`, `useBacktestForwardHpo` for param specs, run, and results.
+- `features/forward/*`
+  - `ForwardTab` for forward status.
+- `features/hpo/*`
+  - `HpoTab` leaderboard view and run form.
+- `shared/ui/*`
+  - Reusable UI pieces (KeyValueGrid, JsonBlock, GenericTable, ParamInput).
+- `shared/utils/*`
+  - Field/formatting helpers, date utils, param helpers, and backtest view helpers.
 - `SpreadChart.tsx`
   - Plots spread_mid and spread_pct series with entry/exit annotations.
 - `main.tsx`
