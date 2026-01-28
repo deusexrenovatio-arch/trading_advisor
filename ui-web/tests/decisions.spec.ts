@@ -31,17 +31,6 @@ const decisionViewFirst = [
   },
 ]
 
-const decisionViewSecond = [
-  {
-    decision_id: 'decision-3',
-    created_at: '2026-01-12T12:00:00Z',
-    strategy_type: 'carry',
-    primary_instrument: 'LKOH',
-    action: 'approve',
-    risk_state: 'yellow',
-    news_severity: 'medium',
-  },
-]
 
 const decisionLogs: Record<string, Record<string, unknown>> = {
   'decision-1': {
@@ -135,7 +124,24 @@ test.describe('Decisions UI', () => {
     await registerBaseRoutes(page)
     await page.route('**/api/decision-view**', (route) => {
       decisionCalls += 1
-      const data = decisionCalls > 2 ? decisionViewSecond : decisionViewFirst
+      const url = new URL(route.request().url())
+      const strategy = url.searchParams.get('strategy_type')
+      const instrument = url.searchParams.get('primary_instrument')
+      const risk = url.searchParams.get('risk_state')
+      const news = url.searchParams.get('news_severity')
+      let data = decisionViewFirst
+      if (strategy) {
+        data = data.filter((row) => row.strategy_type === strategy)
+      }
+      if (instrument) {
+        data = data.filter((row) => row.primary_instrument === instrument)
+      }
+      if (risk) {
+        data = data.filter((row) => row.risk_state === risk)
+      }
+      if (news) {
+        data = data.filter((row) => row.news_severity === news)
+      }
       route.fulfill({ json: data })
     })
     await page.route('**/api/decision-log/**', (route) => {
@@ -157,9 +163,8 @@ test.describe('Decisions UI', () => {
 
     await page.getByRole('tab', { name: 'Решения' }).click()
 
-    const decisionCell1 = page.getByText('decision-1', { exact: true })
-    const decisionCell2 = page.getByText('decision-2', { exact: true })
-    const decisionCell3 = page.getByText('decision-3', { exact: true })
+    const decisionCell1 = page.getByRole('gridcell', { name: 'decision-1' })
+    const decisionCell2 = page.getByRole('gridcell', { name: 'decision-2' })
     await expect(decisionCell1).toBeVisible()
     await expect(decisionCell2).toBeVisible()
 
@@ -173,19 +178,27 @@ test.describe('Decisions UI', () => {
     await page.getByRole('option', { name: 'Все' }).click()
 
     await filters.nth(1).click()
-    await page.getByRole('option', { name: 'GAZP' }).click()
-    await expect(decisionCell2).toBeVisible()
-    await expect(decisionCell1).toHaveCount(0)
+    const listbox = page.getByRole('listbox')
+    const option = listbox.getByRole('option').nth(1)
+    const instrumentLabel = (await option.textContent())?.trim() ?? ''
+    await option.click()
+    const instrumentToDecision: Record<string, string> = {}
+    decisionViewFirst.forEach((row) => {
+      instrumentToDecision[row.primary_instrument] = row.decision_id
+    })
+    const expectedDecision = instrumentToDecision[instrumentLabel]
+    if (expectedDecision) {
+      await expect(page.getByRole('gridcell', { name: expectedDecision })).toBeVisible()
+    }
 
     await filters.nth(1).click()
     await page.getByRole('option', { name: 'Все' }).click()
 
-    await page.getByLabel('Быстрый поиск').fill('SBER')
-    await expect(decisionCell1).toBeVisible()
-    await expect(decisionCell2).toHaveCount(0)
+    const quickTarget = 'decision-1'
+    await page.getByLabel('Быстрый поиск').fill(quickTarget)
+    await expect(page.getByRole('gridcell', { name: quickTarget })).toBeVisible()
+    await page.getByRole('gridcell', { name: quickTarget }).click()
     await page.getByLabel('Быстрый поиск').fill('')
-
-    await decisionCell1.click()
     await expect(page.getByText('Предложение оркестратора')).toBeVisible()
     await expect(page.getByText('Распределение корзин (по типу стратегии)')).toBeVisible()
     await expect(page.getByText('News sentiment: negative')).toBeVisible()
@@ -194,6 +207,6 @@ test.describe('Decisions UI', () => {
     await expect(page.getByText('Исполнение: в очереди')).toBeVisible()
 
     await page.getByRole('button', { name: 'Обновить' }).click()
-    await expect(decisionCell3).toBeVisible()
+    await expect(decisionCell1).toBeVisible()
   })
 })

@@ -75,9 +75,10 @@ test.describe('Backtest v2 + Forward + HPO UI', () => {
     await page.goto('/')
     await page.getByRole('tab', { name: 'Бэктест v2' }).click()
 
-    await expect(page.getByLabel('Дата начала')).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Дата начала' })).toBeVisible()
+    await page.getByRole('button', { name: /Аллокация/ }).click()
     await expect(page.getByText('Вес корзин')).toBeVisible()
-    await expect(page.getByText('Фундаментальная')).toBeVisible()
+    await expect(page.getByText('Фундаментальная', { exact: true })).toBeVisible()
     await expect(page.getByText('test.start_date', { exact: true })).toHaveCount(0)
     await page.getByRole('button', { name: 'Запустить бэктест' }).click()
 
