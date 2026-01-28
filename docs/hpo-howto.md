@@ -1,8 +1,7 @@
 # HPO How-To (Backtest v2 Black Box)
 
-This guide shows how to run HPO locally using the `moex_carry.hpo` module.
-The HPO runner is **not** wired to API/CLI yet (the UI calls `/api/hpo/run`, which returns a stub),
-so use Python directly for real optimization runs.
+This guide shows how to run HPO locally using the `moex_carry.hpo` module
+and the async API endpoints (`/api/hpo/run`, `/api/hpo/status`).
 
 ## Prerequisites
 - Historical candles under `data/history/candles/` (stocks + futures).
@@ -34,6 +33,23 @@ rebalance:
 ```
 
 You can reuse the same schema as `backtest_v2` requests.
+
+## 1.1) (Optional) Run via API (async)
+Start a run:
+```
+POST /api/hpo/run
+{
+  "base": { ...BacktestRequest... },
+  "search_space": { ... },
+  "cv": { ... },
+  "optimization": { "max_trials": 10 }
+}
+```
+Poll status:
+```
+GET /api/hpo/status?run_id=...
+```
+When status becomes `completed`, the response includes `result.leaderboard`.
 
 ## 2) Define search space and folds
 Search space keys use dotted paths (e.g., `strategy.z_window`).

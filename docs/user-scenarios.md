@@ -103,10 +103,14 @@ Goal: Optimize strategy parameters using Backtest v2 as a black box.
 Steps:
 1. Define a search space for strategy parameters (e.g., z_window, TP_pct, SL_pct).
 2. Configure walk-forward folds with embargo and choose evaluation mode (CONTINUOUS or WARMUP_THEN_FLAT).
-3. Run HPO over the folds and inspect the leaderboard (HPO UI tab submits `/api/hpo/run` and currently returns stub status).
+3. Start an async HPO run (HPO UI tab submits `/api/hpo/run`).
+4. Poll `/api/hpo/status` (UI auto-refresh) until status changes to completed or failed.
+5. Inspect the leaderboard when status is completed.
 Expected:
 - Folds respect train/val/test boundaries and embargo gaps.
 - Objective penalizes violations and returns -INF on constraint breaches.
+- HPO run returns run_id and progress counters.
+- Status transitions: running -> completed (or failed with error).
 - Leaderboard sorts by objective and best_config matches the top entry.
 
 ## US-11 Review decisions with server filters

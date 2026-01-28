@@ -33,7 +33,7 @@ Success criteria:
 - DecisionView: UI projection (`decision_view` schema).
 - TradingUI: operator view with filters and drilldowns to raw log.
 - BacktestEngine: replays historical data to produce comparable outputs (legacy + v2 multi-pair engine).
-- HPOEngine: hyperparameter optimization over Backtest v2 (walk-forward folds + constraints).
+- HPOEngine: hyperparameter optimization over Backtest v2 (walk-forward folds + constraints) with async run/status.
 - ForwardTestEngine: paper EOD -> OPEN -> after-close loop with state persistence.
 
 ## Agentic vs deterministic steps
@@ -119,6 +119,7 @@ flowchart LR
 - DecisionLog QC: schema validation, snapshot and feature references present.
 - Backtest QC: parity check between backtest output and `decision_log` fields.
 - Backtest v2 QC: precompute compatibility checks and deterministic batch scoring for parameter sweeps.
+- HPO QC: run_id is persisted, status transitions are monotonic (running -> completed/failed), and results are attached only on completion.
 
 Self-correction rules:
 - Retry data ingestion on transient source failures with capped attempts.
@@ -132,6 +133,7 @@ Self-correction rules:
 - QUIK unavailable: operate in read-only mode with MOEX ISS data only.
 - NewsFilter failure: default to conservative risk caps and log warning.
 - DecisionLog write failure: halt UI updates and surface error state.
+- HPO failure: mark run status as failed, persist error message, keep partial results for audit.
 
 ## Observability signals
 

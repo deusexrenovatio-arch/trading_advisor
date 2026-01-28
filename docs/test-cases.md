@@ -30,7 +30,8 @@
 - forward-status -> TC-FWD-API-002
 - frontend -> TC-FE-HTTP-001
 - frontend-proxy -> TC-FE-PROXY-001
-- hpo -> TC-HPO-UNIT-001
+- hpo -> TC-HPO-API-001, TC-HPO-UNIT-001
+- hpo-status -> TC-HPO-API-002
 
 ## User Scenario Coverage (US -> acceptance/test cases)
 - US-01 Configure the strategy -> params-specs (TC-PARAMS-API-001) + unit tests: tests/test_config_resolver.py, tests/test_parameter_specs.py.
@@ -42,7 +43,7 @@
 - US-07 Backtest review -> backtests (TC-BACK-API-001, TC-BACK-UI-001).
 - US-08 Risk/liquidity rejection -> top-pairs + unit checks (TC-TOP-API-001, TC-TOP-UI-001; tests/test_liquidity_metrics.py, tests/test_risk_gate.py).
 - US-09 Forward paper daily cycle -> forward-start/forward-status (TC-FWD-API-001, TC-FWD-API-002) + unit tests: tests/test_forward_engine.py.
-- US-10 HPO run + leaderboard -> hpo (TC-HPO-UNIT-001) + unit tests: tests/hpo/test_folds.py, tests/hpo/test_objective.py, tests/hpo/test_leaderboard.py.
+- US-10 HPO run + leaderboard -> hpo, hpo-status (TC-HPO-API-001, TC-HPO-API-002, TC-HPO-UNIT-001) + unit tests: tests/hpo/test_folds.py, tests/hpo/test_objective.py, tests/hpo/test_leaderboard.py.
 - US-11 Review decisions with server filters -> decision-view, decision-view-filters (TC-DEC-API-001, TC-DEC-API-005, TC-DEC-UI-001).
 
 ## UI Test Cases
@@ -214,7 +215,8 @@ Steps:
 1. Open HPO tab.
 2. Run HPO with a search space payload.
 Expected:
-- Leaderboard rows render with objective/params.
+- UI shows run_id/progress while status=running.
+- Leaderboard rows render with objective/params after completion.
 
 ### TC-FE-HTTP-001 UI доступен
 Acceptance: frontend
@@ -370,6 +372,22 @@ Request:
 - GET /api/forward/status
 Expected:
 - Response includes run_id and last known state.
+
+### TC-HPO-API-001 HPO run (async start)
+Acceptance: hpo
+Automation: scripts/acceptance_check.py (post_json)
+Request:
+- POST /api/hpo/run
+Expected:
+- Response includes run_id and status=running.
+
+### TC-HPO-API-002 HPO status
+Acceptance: hpo-status
+Automation: scripts/acceptance_check.py (http_status)
+Request:
+- GET /api/hpo/status
+Expected:
+- 200 OK after an HPO run is started.
 
 
 ### TC-FE-PROXY-001 Vite proxy API

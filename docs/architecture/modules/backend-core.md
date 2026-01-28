@@ -96,8 +96,9 @@ but the API endpoints remain the primary backend interface for the React app.
 ### `hpo/`
 - Responsibilities: hyperparameter search on top of Backtest v2 (black-box), walk-forward splits with embargo,
   objective/constraints, aggregation, and sampling strategies.
-- Key files: `search_space.py`, `folds.py`, `objective.py`, `runner.py`.
+- Key files: `search_space.py`, `folds.py`, `objective.py`, `runner.py`, `runtime.py` (async run/status).
 - Outputs: trial results, leaderboard, and best config selection.
+- Persistence: `data/hpo/runs/<run_id>/status.json` and `result.json` for async runs.
 
 ### `forward/`
 - Responsibilities: forward paper execution loop with state persistence.
@@ -134,7 +135,7 @@ but the API endpoints remain the primary backend interface for the React app.
   - Optional signal refresh scheduler (configurable in `ui.signal_refresh_*`).
   - Refresh endpoints: `POST /api/signals/refresh`, `GET /api/signals/refresh-status`.
   - Backtest/forward endpoints: `POST /api/backtest/run`, `POST /api/forward/start`, `GET /api/forward/status`.
-  - HPO endpoint remains stubbed: `POST /api/hpo/run` (payload validation only; uses HPO module only when wired).
+  - HPO endpoints: `POST /api/hpo/run` (async start), `GET /api/hpo/status` (status + result).
 
 ## Parallel dev workflow
 - Run backend API: `python -m moex_carry.cli ui` (serves `/api/*` on `127.0.0.1:8050`).

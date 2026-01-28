@@ -60,10 +60,17 @@ The UI expects these endpoints (served by the Python backend in
   - Logs a manual execution action.
 - `GET /api/backtests?limit=...`
   - Backtest summary metrics.
+- `POST /api/backtest/run`
+  - Runs Backtest v2 and returns full report (summary, equity, trades).
 - `GET /api/spread-series?stock=...&future=...&window_days=...&full_life=true|false`
   - Spread time series for charting.
   - `full_life=true` fetches the full contract life (current March/June futures).
   - Alpha metrics are shown in the details panel (not the main table).
+- `POST /api/hpo/run`
+  - Starts async HPO run and returns `run_id` + status.
+- `GET /api/hpo/status?run_id=...`
+  - Returns status/progress and attaches leaderboard on completion.
+  - UI polls status while `status=running`.
 
 ## Parallel dev workflow
 - Backend API (Flask) runs via `python -m moex_carry.cli ui` on `127.0.0.1:8050`.

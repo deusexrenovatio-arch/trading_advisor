@@ -77,6 +77,16 @@ Defaults:
   and `spread_history_days` (default 90) used by the alpha window.
 - Validation and AUTO resolution live in `config_resolver.py`.
 
+### HPO request + async status
+- File: `src/moex_carry/contracts/strategy_test.py`
+- `HpoRequest` wraps `base: BacktestRequest`, `search_space`, and `cv/optimization` configs.
+- Runtime endpoints:
+  - `POST /api/hpo/run` starts async HPO and returns `run_id`, `status`, `progress`.
+  - `GET /api/hpo/status?run_id=...` returns status and attaches `result` when completed.
+- Status payload (core fields):
+  - `run_id`, `status` (running|completed|failed), `progress {completed,total}`,
+    `created_at`, `started_at`, `finished_at`, optional `error`, `result`.
+
 ## Compatibility rules
 - Contracts are the source of truth for decision outputs and UI projections.
 - Configuration defaults must keep the pipeline deterministic and reproducible.

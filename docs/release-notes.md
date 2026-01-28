@@ -1,5 +1,15 @@
 # Release Notes
 
+## 2026-01-28 - HPO Async API + Status
+
+Added
+- `/api/hpo/run` wired to real HPO runs (async).
+- `/api/hpo/status` to fetch live run status + results when completed.
+- UI HPO tab shows run id and progress while polling status.
+
+Notes
+- Backtest v2 optimizations (precompute + fast alpha) are preserved.
+
 ## 2026-01-28 - UI Architecture Refactor (Feature Tabs + Shared Helpers)
 
 Added

@@ -82,8 +82,14 @@ scenarios:
     type: post_json
     scope: frontend
     url: /api/hpo/run
-    payload: {}
-    required_keys: [status]
+    payload:
+      base:
+        test:
+          start_date: 2020-01-01
+          end_date: 2020-12-31
+        universe:
+          max_pairs: 1
+    required_keys: [status, run_id]
     test_cases: [TC-HPO-UI-001]
     title: Frontend HPO proxy
     user_story: UI can submit HPO runs via proxy.
@@ -229,13 +235,28 @@ scenarios:
     type: post_json
     scope: backend
     url: /api/hpo/run
-    payload: {}
-    required_keys: [status]
+    payload:
+      base:
+        test:
+          start_date: 2020-01-01
+          end_date: 2020-12-31
+        universe:
+          max_pairs: 1
+    required_keys: [status, run_id]
     test_cases: [TC-HPO-UNIT-001]
     title: HPO run
-    user_story: Исследователь запускает HPO.
+    user_story: Researcher starts an HPO run.
     expectations:
-      - Ответ содержит статус (stub).
+      - Response includes run_id and running status.
+  - id: hpo-status
+    type: http_status
+    scope: backend
+    url: /api/hpo/status
+    test_cases: [TC-HPO-API-002]
+    title: HPO status
+    user_story: Operator checks HPO run status.
+    expectations:
+      - Endpoint returns 200 after a run is started.
   - id: spread-series
     type: spread_series
     scope: backend
