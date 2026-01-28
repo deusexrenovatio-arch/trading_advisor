@@ -8,6 +8,7 @@ import type {
 } from '../../entities/decision/types'
 import {
   fetchForwardStatus as fetchForwardStatusApi,
+  fetchHpoStatus as fetchHpoStatusApi,
   fetchParamSpecs as fetchParamSpecsApi,
   runBacktest as runBacktestApi,
   runHpo as runHpoApi,
@@ -52,6 +53,7 @@ export const useBacktestForwardHpo = ({
   const [hpoResponse, setHpoResponse] = useState<HpoResponse | null>(null)
   const [hpoLoading, setHpoLoading] = useState(false)
   const [hpoError, setHpoError] = useState<string | null>(null)
+  const [hpoRunId, setHpoRunId] = useState('')
 
   const fetchParamSpecs = useCallback(
     async (options?: { resetValues?: boolean }) => {
@@ -123,6 +125,7 @@ export const useBacktestForwardHpo = ({
     setHpoLoading(true)
     setHpoError(null)
     setHpoResponse(null)
+    setHpoRunId('')
     try {
       const { payload, errors } = collectParamRequest(paramSpecs, paramValues)
       if (errors.length) {
@@ -141,6 +144,9 @@ export const useBacktestForwardHpo = ({
       }
       const data = await runHpoApi({ base: payload, search_space: searchSpace })
       setHpoResponse(data)
+      if (data?.run_id) {
+        setHpoRunId(data.run_id)
+      }
     } catch (err) {
       setHpoError(err instanceof Error ? err.message : 'Не удалось запустить HPO')
     } finally {
@@ -163,6 +169,33 @@ export const useBacktestForwardHpo = ({
     void fetchParamSpecs({ resetValues: true })
   }, [fetchParamSpecs, paramSpecs.length, paramSpecsLoading, tab])
 
+  useEffect(() => {
+    if (!hpoRunId) return undefined
+    if (!hpoResponse || hpoResponse.status !== 'running') return undefined
+    let cancelled = false
+    const interval = window.setInterval(async () => {
+      try {
+        const data = await fetchHpoStatusApi(hpoRunId)
+        if (!cancelled) {
+          setHpoResponse(data)
+          if (data?.status && data.status !== 'running') {
+            setHpoRunId('')
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setHpoError(
+            err instanceof Error ? err.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ СЃС‚Р°С‚СѓСЃ HPO',
+          )
+        }
+      }
+    }, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [hpoRunId, hpoResponse, fetchHpoStatusApi])
+
   return {
     paramSpecs,
     paramValues,
@@ -183,6 +216,7 @@ export const useBacktestForwardHpo = ({
     hpoResponse,
     hpoLoading,
     hpoError,
+    hpoRunId,
     setParamFilter,
     setParamPreset,
     setBacktestPrecompute,

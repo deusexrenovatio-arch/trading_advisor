@@ -72,7 +72,11 @@ const HpoTab = ({
           minRows={6}
         />
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-          <Button variant="contained" onClick={onHpoRun} disabled={hpoLoading}>
+          <Button
+            variant="contained"
+            onClick={onHpoRun}
+            disabled={hpoLoading || hpoResponse?.status === 'running'}
+          >
             Запустить HPO
           </Button>
           {hpoLoading ? (
@@ -92,8 +96,19 @@ const HpoTab = ({
       <Stack spacing={2}>
         <Paper sx={{ p: 2 }}>
           <Stack direction="row" spacing={1} flexWrap="wrap">
+            {hpoResponse.run_id ? (
+              <Chip label={`Run: ${formatValue(hpoResponse.run_id, 'run_id')}`} size="small" />
+            ) : null}
             {hpoResponse.status ? (
               <Chip label={`Статус: ${formatValue(hpoResponse.status, 'status')}`} size="small" />
+            ) : null}
+            {hpoResponse.progress ? (
+              <Chip
+                label={`Прогресс: ${hpoResponse.progress.completed ?? 0}/${
+                  hpoResponse.progress.total ?? 0
+                }`}
+                size="small"
+              />
             ) : null}
             {hpoResponse.message ? <Chip label={hpoResponse.message} size="small" /> : null}
           </Stack>

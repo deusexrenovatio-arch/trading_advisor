@@ -154,3 +154,10 @@ export const runHpo = (payload: Record<string, unknown>) =>
     method: 'POST',
     body: payload,
   })
+
+export const fetchHpoStatus = (runId?: string) => {
+  const params = new URLSearchParams()
+  if (runId) params.set('run_id', runId)
+  const url = params.toString() ? `/api/hpo/status?${params.toString()}` : '/api/hpo/status'
+  return requestJson<HpoResponse>(url, { cache: 'no-store' })
+}

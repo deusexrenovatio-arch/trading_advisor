@@ -180,8 +180,17 @@ export type HpoTrial = {
 }
 
 export type HpoResponse = {
+  run_id?: string
   status?: string
   message?: string
+  created_at?: string
+  started_at?: string
+  finished_at?: string
+  progress?: {
+    completed?: number
+    total?: number
+  }
+  error?: string
   mode?: string
   leaderboard?: HpoTrial[]
   trials?: HpoTrial[]
