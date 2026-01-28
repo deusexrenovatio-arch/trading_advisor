@@ -221,6 +221,74 @@ def run(args: argparse.Namespace) -> int:
             _print_result(scenario_id, True, "ok")
             continue
 
+        if scenario.get("type") == "backtest_run":
+            pair_source = scenario.get("pair_source", "top_pairs")
+            pair_list = cache.get(pair_source)
+            if not pair_list:
+                top_pairs_url = _build_url(backend, "/api/top-pairs?limit=1")
+                ok, detail, pair_list = _get_json(top_pairs_url)
+                if not (ok and _require_list(pair_list) and pair_list):
+                    _print_result(scenario_id, False, "missing_pair_source")
+                    failures += 1
+                    continue
+            pair = pair_list[0]
+            stock = pair.get("stock")
+            future = pair.get("future")
+            if not stock or not future:
+                _print_result(scenario_id, False, "missing_pair_fields")
+                failures += 1
+                continue
+            window_days = int(scenario.get("window_days", 60))
+            series_url = _build_url(
+                backend,
+                f"/api/spread-series?stock={stock}&future={future}&window_days={window_days}",
+            )
+            ok, detail, series = _get_json(series_url)
+            if not (ok and _require_list(series) and series):
+                _print_result(scenario_id, False, "missing_spread_series")
+                failures += 1
+                continue
+            start_date = series[0].get("date")
+            end_date = series[-1].get("date")
+            if not start_date or not end_date:
+                _print_result(scenario_id, False, "missing_series_dates")
+                failures += 1
+                continue
+            payload = {
+                "test": {"start_date": start_date, "end_date": end_date},
+                "universe": {"include_stocks": [stock], "include_futures": [future], "max_pairs": 1},
+            }
+            precompute = scenario.get("precompute")
+            if precompute is not None:
+                payload["precompute"] = bool(precompute)
+            expected_status = int(scenario.get("expected_status", 200))
+            url = _build_url(backend, scenario.get("url", "/api/backtest/run"))
+            try:
+                response = requests.post(url, json=payload, timeout=30)
+            except requests.RequestException as exc:
+                _print_result(scenario_id, False, f"request_error:{exc}")
+                failures += 1
+                continue
+            if response.status_code != expected_status:
+                _print_result(scenario_id, False, f"status:{response.status_code}")
+                failures += 1
+                continue
+            try:
+                data = response.json()
+            except ValueError as exc:
+                _print_result(scenario_id, False, f"json_error:{exc}")
+                failures += 1
+                continue
+            required_keys = scenario.get("required_keys", [])
+            if required_keys and isinstance(data, dict):
+                missing = set(required_keys).difference(set(data.keys()))
+                if missing:
+                    _print_result(scenario_id, False, f"missing_keys:{sorted(missing)}")
+                    failures += 1
+                    continue
+            _print_result(scenario_id, True, "ok")
+            continue
+
         if scenario.get("type") == "history_date_range":
             history_source = scenario.get("history_source")
             history_list = cache.get(history_source) if history_source else None

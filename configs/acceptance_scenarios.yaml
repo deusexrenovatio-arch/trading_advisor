@@ -12,6 +12,18 @@ scenarios:
     expectations:
       - В списке есть идентификатор решения и время.
       - Видны action и risk_state для быстрой оценки.
+  - id: decision-view-filters
+    type: api_list
+    scope: backend
+    url: /api/decision-view?limit=5&strategy_type=arbitrage&primary_instrument=stock&risk_state=green&news_severity=low&created_from=2026-01-01&created_to=2026-12-31
+    allow_empty: true
+    required_keys: [decision_id]
+    test_cases: [TC-DEC-API-005]
+    title: Decision view server filters
+    user_story: Operator can request filtered decisions by strategy, instrument, risk, news, and date.
+    expectations:
+      - Response returns a JSON array (may be empty).
+
   - id: decision-view-aggregation
     type: api_list
     scope: backend
@@ -181,16 +193,18 @@ scenarios:
     title: Метрики бэктеста
     user_story: Пользователь видит метрики бэктеста.
   - id: backtest-run
-    type: post_json
+    type: backtest_run
     scope: backend
     url: /api/backtest/run
-    payload: {}
+    window_days: 60
+    precompute: true
     required_keys: [summary_metrics, equity_curve, trades]
     test_cases: [TC-BACK-V2-API-001, TC-BACK-V2-API-002]
     title: Backtest v2 run
-    user_story: Оператор запускает Backtest v2 через API.
+    user_story: ???????? ????????? Backtest v2 ????? API.
     expectations:
-      - Ответ содержит summary_metrics, equity_curve и trades.
+      - ????? ???????? summary_metrics, equity_curve ? trades.
+
   - id: forward-start
     type: post_json
     scope: backend
