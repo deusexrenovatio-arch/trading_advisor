@@ -104,6 +104,8 @@ function App() {
     forwardStatus,
     forwardLoading,
     forwardError,
+    hpoRequestJson,
+    hpoRequestJsonError,
     hpoSearchSpace,
     hpoResponse,
     hpoLoading,
@@ -112,6 +114,7 @@ function App() {
     setParamPreset,
     setBacktestPrecompute,
     setForwardRunId,
+    handleHpoRequestJsonChange,
     setHpoSearchSpace,
     fetchParamSpecs,
     handleParamValueChange,
@@ -351,6 +354,9 @@ function App() {
             <HpoTab
               onFetchParamSpecs={() => fetchParamSpecs({ resetValues: false })}
               paramSpecsCount={paramSpecs.length}
+              hpoRequestJson={hpoRequestJson}
+              hpoRequestJsonError={hpoRequestJsonError}
+              onHpoRequestJsonChange={handleHpoRequestJsonChange}
               hpoSearchSpace={hpoSearchSpace}
               onHpoSearchSpaceChange={setHpoSearchSpace}
               onHpoRun={handleHpoRun}

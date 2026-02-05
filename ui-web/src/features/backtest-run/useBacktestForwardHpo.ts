@@ -13,6 +13,7 @@ import {
   runBacktest as runBacktestApi,
   runHpo as runHpoApi,
 } from '../../shared/api/decisionApi'
+import { getObject } from '../../shared/utils/guards'
 import type { AppTab } from '../market/useMarketTables'
 
 type ParamRequestBuilder = (
@@ -49,11 +50,116 @@ export const useBacktestForwardHpo = ({
   const [forwardStatus, setForwardStatus] = useState<ForwardStatus | null>(null)
   const [forwardLoading, setForwardLoading] = useState(false)
   const [forwardError, setForwardError] = useState<string | null>(null)
+  const [hpoRequestJson, setHpoRequestJson] = useState('')
+  const [hpoRequestJsonError, setHpoRequestJsonError] = useState<string | null>(
+    null,
+  )
   const [hpoSearchSpace, setHpoSearchSpace] = useState('')
   const [hpoResponse, setHpoResponse] = useState<HpoResponse | null>(null)
   const [hpoLoading, setHpoLoading] = useState(false)
   const [hpoError, setHpoError] = useState<string | null>(null)
   const [hpoRunId, setHpoRunId] = useState('')
+
+  const normalizeHpoPayload = useCallback((raw: unknown) => {
+    const obj = getObject<Record<string, unknown>>(raw)
+    if (!obj) return null
+    const hasTopLevel =
+      'base' in obj || 'cv' in obj || 'optimization' in obj || 'search_space' in obj
+    return hasTopLevel ? obj : { base: obj }
+  }, [])
+
+  const mergeDefaults = useCallback(
+    (defaults: Record<string, unknown>, overrides: Record<string, unknown>) => {
+      const result: Record<string, unknown> = { ...defaults }
+      Object.entries(overrides).forEach(([key, value]) => {
+        if (value === undefined) return
+        const prev = result[key]
+        const isPlainObject =
+          value && typeof value === 'object' && !Array.isArray(value)
+        const prevIsPlain =
+          prev && typeof prev === 'object' && !Array.isArray(prev)
+        if (isPlainObject && prevIsPlain) {
+          result[key] = mergeDefaults(
+            prev as Record<string, unknown>,
+            value as Record<string, unknown>,
+          )
+        } else {
+          result[key] = value
+        }
+      })
+      return result
+    },
+    [],
+  )
+
+  const stripEmptyPayload = useCallback((value: unknown): unknown => {
+    if (value === null || value === undefined) return undefined
+    if (typeof value === 'string') {
+      return value.trim().length ? value : undefined
+    }
+    if (Array.isArray(value)) {
+      return value
+    }
+    if (typeof value === 'object') {
+      const obj = value as Record<string, unknown>
+      const next: Record<string, unknown> = {}
+      Object.entries(obj).forEach(([key, inner]) => {
+        const cleaned = stripEmptyPayload(inner)
+        if (cleaned !== undefined) {
+          next[key] = cleaned
+        }
+      })
+      return Object.keys(next).length ? next : undefined
+    }
+    return value
+  }, [])
+
+  const parseSearchSpace = useCallback(() => {
+    if (!hpoSearchSpace.trim()) return { searchSpace: {}, error: null }
+    try {
+      const parsed = JSON.parse(hpoSearchSpace)
+      const searchSpace = getObject<Record<string, unknown>>(parsed)
+      if (!searchSpace) {
+        return { searchSpace: {}, error: 'Invalid search space JSON.' }
+      }
+      return { searchSpace, error: null }
+    } catch {
+      return { searchSpace: {}, error: 'Invalid search space JSON.' }
+    }
+  }, [hpoSearchSpace])
+
+  const validateDateRange = useCallback((payload: Record<string, unknown>) => {
+    const base = getObject<Record<string, unknown>>(payload.base)
+    const test = base ? getObject<Record<string, unknown>>(base.test) : null
+    const start = test?.start_date
+    const end = test?.end_date
+    if (!start || !end) {
+      return 'Provide test.start_date and test.end_date in form or JSON request.'
+    }
+    return null
+  }, [])
+
+  const handleHpoRequestJsonChange = useCallback(
+    (value: string) => {
+      setHpoRequestJson(value)
+      if (!value.trim()) {
+        setHpoRequestJsonError(null)
+        return
+      }
+      try {
+        const parsed = JSON.parse(value)
+        const normalized = normalizeHpoPayload(parsed)
+        if (!normalized) {
+          setHpoRequestJsonError('Invalid HPO request JSON.')
+          return
+        }
+        setHpoRequestJsonError(null)
+      } catch {
+        setHpoRequestJsonError('Invalid HPO request JSON.')
+      }
+    },
+    [normalizeHpoPayload],
+  )
 
   const fetchParamSpecs = useCallback(
     async (options?: { resetValues?: boolean }) => {
@@ -133,26 +239,53 @@ export const useBacktestForwardHpo = ({
         setHpoError(errors.length > 6 ? `${summary} | ... (${errors.length})` : summary)
         return
       }
-      let searchSpace: Record<string, unknown> = {}
-      if (hpoSearchSpace.trim()) {
+      const { searchSpace, error: searchSpaceError } = parseSearchSpace()
+      if (searchSpaceError) {
+        setHpoError(searchSpaceError)
+        return
+      }
+      let requestPayload: Record<string, unknown> = {
+        base: payload,
+        search_space: searchSpace,
+      }
+      if (hpoRequestJson.trim()) {
         try {
-          searchSpace = JSON.parse(hpoSearchSpace)
+          const parsed = JSON.parse(hpoRequestJson)
+          const normalized = normalizeHpoPayload(parsed)
+          if (!normalized) {
+            setHpoError('Invalid HPO request JSON.')
+            return
+          }
+          const stripped = stripEmptyPayload(payload)
+          const defaults = getObject<Record<string, unknown>>(stripped) ?? {}
+          requestPayload = mergeDefaults(
+            {
+              base: defaults,
+              search_space: searchSpace,
+            },
+            normalized,
+          )
         } catch {
-          setHpoError('Неверный JSON пространства поиска.')
+          setHpoError('Invalid HPO request JSON.')
           return
         }
       }
-      const data = await runHpoApi({ base: payload, search_space: searchSpace })
+      const dateError = validateDateRange(requestPayload)
+      if (dateError) {
+        setHpoError(dateError)
+        return
+      }
+      const data = await runHpoApi(requestPayload)
       setHpoResponse(data)
       if (data?.run_id) {
         setHpoRunId(data.run_id)
       }
     } catch (err) {
-      setHpoError(err instanceof Error ? err.message : 'Не удалось запустить HPO')
+      setHpoError(err instanceof Error ? err.message : 'Failed to start HPO')
     } finally {
       setHpoLoading(false)
     }
-  }, [collectParamRequest, hpoSearchSpace, paramSpecs, paramValues])
+  }, [collectParamRequest, hpoRequestJson, normalizeHpoPayload, parseSearchSpace, paramSpecs, paramValues, stripEmptyPayload, mergeDefaults, validateDateRange])
 
   const handleParamValueChange = useCallback((key: string, value: ParamValue) => {
     setParamValues((prev) => ({ ...prev, [key]: value }))
@@ -212,6 +345,8 @@ export const useBacktestForwardHpo = ({
     forwardStatus,
     forwardLoading,
     forwardError,
+    hpoRequestJson,
+    hpoRequestJsonError,
     hpoSearchSpace,
     hpoResponse,
     hpoLoading,
@@ -221,6 +356,7 @@ export const useBacktestForwardHpo = ({
     setParamPreset,
     setBacktestPrecompute,
     setForwardRunId,
+    handleHpoRequestJsonChange,
     setHpoSearchSpace,
     fetchParamSpecs,
     handleParamValueChange,

@@ -17,6 +17,9 @@ import JsonBlock from '../../shared/ui/JsonBlock'
 type Props = {
   onFetchParamSpecs: () => void
   paramSpecsCount: number
+  hpoRequestJson: string
+  hpoRequestJsonError?: string | null
+  onHpoRequestJsonChange: (value: string) => void
   hpoSearchSpace: string
   onHpoSearchSpaceChange: (value: string) => void
   onHpoRun: () => void
@@ -35,6 +38,9 @@ type Props = {
 const HpoTab = ({
   onFetchParamSpecs,
   paramSpecsCount,
+  hpoRequestJson,
+  hpoRequestJsonError,
+  onHpoRequestJsonChange,
   hpoSearchSpace,
   onHpoSearchSpaceChange,
   onHpoRun,
@@ -62,6 +68,20 @@ const HpoTab = ({
               : 'Базовые параметры не загружены (будут использованы значения по умолчанию)'}
           </Typography>
         </Stack>
+        <TextField
+          label="HPO запрос (JSON)"
+          size="small"
+          value={hpoRequestJson}
+          onChange={(event) => onHpoRequestJsonChange(event.target.value)}
+          placeholder='{"base":{"test":{"start_date":"2025-10-01","end_date":"2026-01-28"}},"cv":{"test_size":0.2}}'
+          multiline
+          minRows={6}
+          error={Boolean(hpoRequestJsonError)}
+          helperText={
+            hpoRequestJsonError ||
+            'Если заполнено, JSON используется целиком; недостающие поля дополняются из формы.'
+          }
+        />
         <TextField
           label="Пространство поиска (JSON)"
           size="small"
