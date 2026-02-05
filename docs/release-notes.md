@@ -1,5 +1,16 @@
 # Release Notes
 
+## 2026-01-28 - HPO Objective Modes + Gates + Annualization
+
+Added
+- HPO supports `optimization.metric` + `optimization.mode` (max/min) with updated objective handling.
+- Entry gates now respect `strategy.z_entry_threshold`, `min_floor_score`, `min_alpha_score`.
+- Backtest v2/HPO annualization honors `rates.use_trading_days` (252 vs 365).
+- HPO UI supports full JSON request override with form defaults as fallback.
+
+Notes
+- Dividend PV remains per-stock (no change required).
+
 ## 2026-01-28 - HPO Async API + Status
 
 Added

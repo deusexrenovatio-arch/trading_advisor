@@ -19,7 +19,7 @@ This document covers the React UI in `ui-web/` and the API endpoints it uses.
 - `features/forward/*`
   - `ForwardTab` for forward status.
 - `features/hpo/*`
-  - `HpoTab` leaderboard view and run form.
+  - `HpoTab` leaderboard view and run form (JSON request + search space).
 - `shared/ui/*`
   - Reusable UI pieces (KeyValueGrid, JsonBlock, GenericTable, ParamInput).
 - `shared/utils/*`
@@ -68,6 +68,8 @@ The UI expects these endpoints (served by the Python backend in
   - Alpha metrics are shown in the details panel (not the main table).
 - `POST /api/hpo/run`
   - Starts async HPO run and returns `run_id` + status.
+  - UI supports a full JSON request override (used as source of truth);
+    missing fields are filled from the form defaults.
 - `GET /api/hpo/status?run_id=...`
   - Returns status/progress and attaches leaderboard on completion.
   - UI polls status while `status=running`.

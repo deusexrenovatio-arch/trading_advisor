@@ -74,7 +74,10 @@ Defaults:
 - File: `src/moex_carry/contracts/strategy_test.py`
 - `BacktestRequest` defines the backtest surface used by backtest v2.
 - Notable strategy fields include `H_max_days`, `TP_pct`, `SL_pct`,
-  and `spread_history_days` (default 90) used by the alpha window.
+  `spread_history_days` (default 90), plus entry gates:
+  `z_entry_threshold`, `min_floor_score`, `min_alpha_score`.
+- `rates.use_trading_days=true` switches annualization to 252 trading days
+  for ExcessAnn/Vol_ann/IR/Sharpe metrics.
 - Validation and AUTO resolution live in `config_resolver.py`.
 
 ### HPO request + async status
@@ -83,6 +86,12 @@ Defaults:
 - Runtime endpoints:
   - `POST /api/hpo/run` starts async HPO and returns `run_id`, `status`, `progress`.
   - `GET /api/hpo/status?run_id=...` returns status and attaches `result` when completed.
+- Optimization controls:
+  - `optimization.metric`: objective metric (`excess_ann`, `cagr`, `ir`, `vol_ann`, `max_dd`,
+    `avg_turnover`, `win_rate`, `profit_factor`, `avg_hold_days`, `share_alpha_exits`,
+    `r_d`, `b_d`, `ex_d`, `sharpe`).
+  - `optimization.mode`: `max` or `min` (direction for objective + leaderboard sorting).
+  - `cv.test_size`: proportion of available days used for val/test sizing (val=test).
 - Status payload (core fields):
   - `run_id`, `status` (running|completed|failed), `progress {completed,total}`,
     `created_at`, `started_at`, `finished_at`, optional `error`, `result`.

@@ -103,7 +103,9 @@ Goal: Optimize strategy parameters using Backtest v2 as a black box.
 Steps:
 1. Define a search space for strategy parameters (e.g., z_window, TP_pct, SL_pct).
 2. Configure walk-forward folds with embargo and choose evaluation mode (CONTINUOUS or WARMUP_THEN_FLAT).
+2.1 (Optional) Set optimization metric (e.g., CAGR, IR, MaxDD) and mode (max/min).
 3. Start an async HPO run (HPO UI tab submits `/api/hpo/run`).
+3.1 (Optional) Provide a full JSON request in the HPO tab; it becomes the source of truth and overrides the form.
 4. Poll `/api/hpo/status` (UI auto-refresh) until status changes to completed or failed.
 5. Inspect the leaderboard when status is completed.
 Expected:

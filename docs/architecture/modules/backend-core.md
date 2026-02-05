@@ -92,6 +92,7 @@ but the API endpoints remain the primary backend interface for the React app.
   `runtime.py` (history-backed runner + precompute cache).
 - Outputs: `BacktestReport` with equity curve, trades, and summary metrics.
 - Notes: uses SnapshotBuilder + PortfolioRebalanceController; optional fast alpha cache when precomputed data is supplied.
+- Annualization: metrics respect `rates.use_trading_days` (252 vs 365) for ExcessAnn, Vol_ann, IR, Sharpe.
 
 ### `hpo/`
 - Responsibilities: hyperparameter search on top of Backtest v2 (black-box), walk-forward splits with embargo,
@@ -99,6 +100,8 @@ but the API endpoints remain the primary backend interface for the React app.
 - Key files: `search_space.py`, `folds.py`, `objective.py`, `runner.py`, `runtime.py` (async run/status).
 - Outputs: trial results, leaderboard, and best config selection.
 - Persistence: `data/hpo/runs/<run_id>/status.json` and `result.json` for async runs.
+- Objective: supports `optimization.metric` + `optimization.mode` (max/min) and applies
+  penalty constraints for MaxDD/AvgTurnover when configured.
 
 ### `forward/`
 - Responsibilities: forward paper execution loop with state persistence.

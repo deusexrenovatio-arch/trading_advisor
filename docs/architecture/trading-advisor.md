@@ -119,7 +119,7 @@ flowchart LR
 - DecisionLog QC: schema validation, snapshot and feature references present.
 - Backtest QC: parity check between backtest output and `decision_log` fields.
 - Backtest v2 QC: precompute compatibility checks and deterministic batch scoring for parameter sweeps.
-- HPO QC: run_id is persisted, status transitions are monotonic (running -> completed/failed), and results are attached only on completion.
+- HPO QC: run_id is persisted, status transitions are monotonic (running -> completed/failed), results attach only on completion, and objective metric/mode selection is respected.
 
 Self-correction rules:
 - Retry data ingestion on transient source failures with capped attempts.

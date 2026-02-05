@@ -214,6 +214,7 @@ Automation: ui-web/tests/backtest-forward-hpo.spec.ts
 Steps:
 1. Open HPO tab.
 2. Run HPO with a search space payload.
+3. (Optional) Paste a full HPO JSON request and verify it overrides the form values.
 Expected:
 - UI shows run_id/progress while status=running.
 - Leaderboard rows render with objective/params after completion.
@@ -380,6 +381,7 @@ Request:
 - POST /api/hpo/run
 Expected:
 - Response includes run_id and status=running.
+- When `optimization.metric` and `optimization.mode` are provided, objective direction matches the mode.
 
 ### TC-HPO-API-002 HPO status
 Acceptance: hpo-status

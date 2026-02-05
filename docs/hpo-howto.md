@@ -42,7 +42,7 @@ POST /api/hpo/run
   "base": { ...BacktestRequest... },
   "search_space": { ... },
   "cv": { ... },
-  "optimization": { "max_trials": 10 }
+  "optimization": { "max_trials": 10, "metric": "excess_ann", "mode": "max" }
 }
 ```
 Poll status:
@@ -88,7 +88,7 @@ folds = build_walk_forward_folds(
 ```
 
 ## 3) Configure objective and run HPO
-Objective is:
+Objective is (default):
 
 ```
 J = ExcessAnn
@@ -98,6 +98,12 @@ J = ExcessAnn
 
 If constraints are violated, `J = -INF`. Note: `MaxDD` in metrics is negative,
 so the HPO objective uses its absolute value; set `DDmax` as a positive fraction.
+
+You can switch the metric and mode:
+- `metric`: `excess_ann`, `cagr`, `ir`, `vol_ann`, `max_dd`, `avg_turnover`,
+  `win_rate`, `profit_factor`, `avg_hold_days`, `share_alpha_exits`,
+  `r_d`, `b_d`, `ex_d`, `sharpe`.
+- `mode`: `max` or `min`.
 
 ```python
 from moex_carry.hpo import ObjectiveConfig, run_hpo
@@ -111,6 +117,8 @@ search_space = {
 }
 
 objective = ObjectiveConfig(
+    metric="excess_ann",
+    mode="max",
     lambda_dd=1.0,
     dd_max=0.2,
     lambda_to=0.5,
@@ -147,3 +155,8 @@ print(best.objective, best.params)
 - Use `precompute=True` to enable Backtest v2 precompute/fast alpha paths.
 - If `search_space` contains invalid keys, validation errors will surface from
   `BacktestRequest` during trial construction.
+- If the requested history window is short, the async runtime auto-scales fold lengths
+  (fallback split) and sets embargo to 0; `folds_meta.fallback=true` will be returned
+  in the status/result payload.
+- `rates.use_trading_days=true` switches annualization to 252 trading days
+  (affects ExcessAnn, Vol_ann, IR, Sharpe).
