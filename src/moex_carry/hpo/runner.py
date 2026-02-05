@@ -8,7 +8,7 @@ from typing import Any, Callable, Mapping
 
 from moex_carry.backtest_v2.runtime import run_backtest_v2_cached
 from moex_carry.contracts.strategy_test import BacktestRequest
-from moex_carry.hpo.objective import NEG_INF, aggregate_objectives, compute_objective, compute_window_metrics
+from moex_carry.hpo.objective import aggregate_objectives, compute_objective, compute_window_metrics, invalid_objective
 from moex_carry.hpo.search_space import parse_search_space, sample_random, sample_tpe
 from moex_carry.hpo.types import (
     AggregationMode,
@@ -46,7 +46,7 @@ def run_hpo(
     trials: list[TrialResult] = []
     for _ in range(max_trials):
         if algorithm == "TPE":
-            params = sample_tpe(space, trials, rng, mode="max")
+            params = sample_tpe(space, trials, rng, mode=objective.mode)
         else:
             params = sample_random(space, rng)
         trial = _evaluate_trial(
@@ -61,7 +61,7 @@ def run_hpo(
             backtest_runner=backtest_runner,
         )
         trials.append(trial)
-    return HpoResult(trials=trials, mode="max")
+    return HpoResult(trials=trials, mode=str(objective.mode).lower())
 
 
 def _default_backtest_runner(request: BacktestRequest, data_dir: Path, precompute: bool | None) -> Any:
@@ -95,7 +95,7 @@ def _evaluate_trial(
         )
         fold_results.append(result)
         fold_objectives.append(result.val_objective)
-    aggregated = aggregate_objectives(fold_objectives, aggregation)
+    aggregated = aggregate_objectives(fold_objectives, aggregation, objective_mode=objective.mode)
     return TrialResult(params=dict(params), objective=aggregated, fold_objectives=fold_objectives, fold_results=fold_results)
 
 
@@ -130,7 +130,7 @@ def _evaluate_fold(
     except Exception:
         val_metrics = {}
         test_metrics = None
-        val_objective = NEG_INF
+        val_objective = invalid_objective(objective.mode)
     return FoldResult(
         fold=fold,
         val_metrics=val_metrics,

@@ -7,6 +7,7 @@ from typing import Any, Literal
 AggregationMode = Literal["median", "p25", "mean"]
 Algorithm = Literal["RANDOM", "TPE"]
 EvaluationMode = Literal["WARMUP_THEN_FLAT", "CONTINUOUS"]
+ObjectiveMode = Literal["max", "min"]
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,8 @@ class WalkForwardFold:
 
 @dataclass(frozen=True)
 class ObjectiveConfig:
+    metric: str = "excess_ann"
+    mode: ObjectiveMode = "max"
     lambda_dd: float = 0.0
     dd_max: float | None = None
     lambda_to: float = 0.0

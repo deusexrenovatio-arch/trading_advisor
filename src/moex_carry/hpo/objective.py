@@ -11,34 +11,48 @@ from moex_carry.data.history_store import HistoryDataStore
 from moex_carry.domain.models import KeyRate
 from moex_carry.hpo.types import AggregationMode, ObjectiveConfig
 
-NEG_INF = float("-inf")
+INVALID_OBJECTIVE = 1e12
+NEG_INF = -INVALID_OBJECTIVE
+
+
+def invalid_objective(mode: str) -> float:
+    return NEG_INF if str(mode).lower() == "max" else INVALID_OBJECTIVE
 
 
 def compute_objective(metrics: Mapping[str, float], config: ObjectiveConfig) -> float:
-    excess_ann = _excess_ann(metrics)
+    metric_value = _metric_value(metrics, config.metric)
+    if not math.isfinite(metric_value):
+        return invalid_objective(config.mode)
     max_dd = _normalize_drawdown(metrics.get("MaxDD"))
     avg_turnover = float(metrics.get("AvgTurnover") or 0.0)
     dd_limit = _normalize_drawdown(config.dd_max) if config.dd_max is not None else None
     to_limit = float(config.to_max) if config.to_max is not None else None
     if dd_limit is not None and max_dd > dd_limit:
-        return NEG_INF
+        return invalid_objective(config.mode)
     if to_limit is not None and avg_turnover > to_limit:
-        return NEG_INF
+        return invalid_objective(config.mode)
     penalty_dd = 0.0
     penalty_to = 0.0
     if dd_limit is not None:
         penalty_dd = config.lambda_dd * max(0.0, max_dd - dd_limit)
     if to_limit is not None:
         penalty_to = config.lambda_to * max(0.0, avg_turnover - to_limit)
-    return excess_ann - penalty_dd - penalty_to
+    if str(config.mode).lower() == "min":
+        return metric_value + penalty_dd + penalty_to
+    return metric_value - penalty_dd - penalty_to
 
 
-def aggregate_objectives(values: Iterable[float], mode: AggregationMode) -> float:
+def aggregate_objectives(
+    values: Iterable[float],
+    mode: AggregationMode,
+    *,
+    objective_mode: str = "max",
+) -> float:
     values = list(values)
     if not values:
-        return NEG_INF
+        return invalid_objective(objective_mode)
     if any(not math.isfinite(value) for value in values):
-        return NEG_INF
+        return invalid_objective(objective_mode)
     if mode == "mean":
         return sum(values) / len(values)
     ordered = sorted(values)
@@ -64,6 +78,9 @@ def compute_window_metrics(
     key_rates = _load_key_rates(data_dir)
     rate_cache = _build_rate_cache([point.date for point in curve], key_rates)
     resolved = report.resolved_config or {}
+    rates_cfg = resolved.get("rates", {}) if isinstance(resolved, Mapping) else {}
+    use_trading_days = bool(rates_cfg.get("use_trading_days"))
+    annualization_days = 252.0 if use_trading_days else 365.0
     for idx in range(1, len(curve)):
         prev_equity = curve[idx - 1].equity
         equity_value = curve[idx].equity
@@ -82,6 +99,7 @@ def compute_window_metrics(
         turnover_ratios=turnover_ratios,
         trades=trades,
         initial_equity=curve[0].equity,
+        annualization_days=annualization_days,
     )
 
 
@@ -91,7 +109,44 @@ def _excess_ann(metrics: Mapping[str, float]) -> float:
     ex_d = metrics.get("ex_d")
     if ex_d is None:
         return 0.0
-    return float(ex_d) * 252.0
+    annualization = float(metrics.get("AnnualizationDays") or 252.0)
+    return float(ex_d) * annualization
+
+
+def _metric_value(metrics: Mapping[str, float], metric: str | None) -> float:
+    key = (metric or "excess_ann").strip().lower()
+    if key in {"excessann", "excess_ann", "excess"}:
+        return _excess_ann(metrics)
+    if key in {"cagr"}:
+        return float(metrics.get("CAGR") or 0.0)
+    if key in {"ir", "information_ratio"}:
+        return float(metrics.get("IR") or 0.0)
+    if key in {"vol", "vol_ann", "volatility"}:
+        return float(metrics.get("Vol_ann") or 0.0)
+    if key in {"maxdd", "max_dd", "drawdown"}:
+        return abs(float(metrics.get("MaxDD") or 0.0))
+    if key in {"avgturnover", "avg_turnover", "turnover"}:
+        return float(metrics.get("AvgTurnover") or 0.0)
+    if key in {"winrate", "win_rate"}:
+        return float(metrics.get("WinRate") or 0.0)
+    if key in {"profitfactor", "profit_factor"}:
+        return float(metrics.get("ProfitFactor") or 0.0)
+    if key in {"avgholddays", "avg_hold_days"}:
+        return float(metrics.get("AvgHoldDays") or 0.0)
+    if key in {"sharealphaexits", "share_alpha_exits"}:
+        return float(metrics.get("ShareAlphaExits") or 0.0)
+    if key in {"r_d", "daily_return"}:
+        return float(metrics.get("r_d") or 0.0)
+    if key in {"b_d", "benchmark_daily"}:
+        return float(metrics.get("b_d") or 0.0)
+    if key in {"ex_d", "excess_daily"}:
+        return float(metrics.get("ex_d") or 0.0)
+    if key in {"sharpe", "sharpe_ann", "sharpe_annual"}:
+        vol_ann = float(metrics.get("Vol_ann") or 0.0)
+        r_d = float(metrics.get("r_d") or 0.0)
+        annualization = float(metrics.get("AnnualizationDays") or 252.0)
+        return (r_d * annualization) / vol_ann if vol_ann > 0 else 0.0
+    return _excess_ann(metrics)
 
 
 def _normalize_drawdown(value: float | None) -> float:
@@ -141,6 +196,7 @@ def _compute_metrics(
     turnover_ratios: list[float],
     trades: list[Any],
     initial_equity: float,
+    annualization_days: float,
 ) -> dict[str, float]:
     equity_values = [point.equity for point in equity_curve]
     years = 0.0
@@ -155,12 +211,12 @@ def _compute_metrics(
     excess_returns = [r - b for r, b in zip(daily_returns, benchmark_returns)]
     ex_d = _mean(excess_returns)
 
-    vol_ann = _std(daily_returns) * (252.0**0.5)
+    vol_ann = _std(daily_returns) * (annualization_days**0.5)
     ir = 0.0
     if excess_returns:
         ex_std = _std(excess_returns)
         if ex_std > 0:
-            ir = _mean(excess_returns) / ex_std * (252.0**0.5)
+            ir = _mean(excess_returns) / ex_std * (annualization_days**0.5)
 
     max_dd = _max_drawdown(equity_values)
     avg_turnover = _mean(turnover_ratios)
@@ -186,6 +242,7 @@ def _compute_metrics(
         "r_d": float(r_d),
         "b_d": float(b_d),
         "ex_d": float(ex_d),
+        "ExcessAnn": float(ex_d) * float(annualization_days),
         "CAGR": float(cagr),
         "Vol_ann": float(vol_ann),
         "IR": float(ir),
@@ -195,6 +252,7 @@ def _compute_metrics(
         "ProfitFactor": float(profit_factor),
         "AvgHoldDays": float(avg_hold),
         "ShareAlphaExits": float(share_alpha_exits),
+        "AnnualizationDays": float(annualization_days),
     }
 
 

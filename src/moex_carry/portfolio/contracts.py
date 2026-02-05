@@ -31,6 +31,9 @@ class RebalanceConfig(BaseModel):
     max_pairs_held: int = 6
     cooldown_days: int = 0
     enter_min_DTE: int = 7
+    z_entry_threshold: float | None = None
+    min_floor_score: float | None = None
+    min_alpha_score: float | None = None
     block_news_severities: list[str] = Field(default_factory=list)
 
     score_threshold_mode: ScoreThresholdMode = "PERCENTILE"

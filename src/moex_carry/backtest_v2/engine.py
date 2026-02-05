@@ -499,6 +499,10 @@ def run_backtest_v2(
                 for warning in snapshot.events.warnings:
                     warnings.append(f"snapshot:{snapshot.stock_secid}:{snapshot.future_secid}:{warning}")
 
+    rates_cfg = resolved.get("rates", {}) if isinstance(resolved, Mapping) else {}
+    use_trading_days = bool(rates_cfg.get("use_trading_days"))
+    annualization_days = 252.0 if use_trading_days else 365.0
+
     metrics = _compute_metrics(
         equity_curve=equity_curve,
         daily_returns=daily_returns,
@@ -506,6 +510,7 @@ def run_backtest_v2(
         turnover_ratios=turnover_ratios,
         trades=trades,
         initial_equity=initial_equity,
+        annualization_days=annualization_days,
     )
 
     return BacktestReport(
@@ -547,6 +552,21 @@ def build_rebalance_config(resolved_config: Mapping[str, Any]) -> RebalanceConfi
         max_pairs_held=int(universe_cfg.get("max_pairs") or 6),
         cooldown_days=int(rebalance_cfg.get("cooldown_days") or 0),
         enter_min_DTE=int(strategy_cfg.get("min_DTE_entry") or 7),
+        z_entry_threshold=(
+            float(strategy_cfg.get("z_entry_threshold"))
+            if strategy_cfg.get("z_entry_threshold") is not None
+            else None
+        ),
+        min_floor_score=(
+            float(strategy_cfg.get("min_floor_score"))
+            if strategy_cfg.get("min_floor_score") is not None
+            else None
+        ),
+        min_alpha_score=(
+            float(strategy_cfg.get("min_alpha_score"))
+            if strategy_cfg.get("min_alpha_score") is not None
+            else None
+        ),
         score_threshold_mode=score_mode,
         enter_total_score_min=enter_total,
         keep_total_score_min=keep_total,
@@ -1427,6 +1447,7 @@ def _compute_metrics(
     turnover_ratios: list[float],
     trades: list[BacktestTrade],
     initial_equity: float,
+    annualization_days: float,
 ) -> dict[str, float]:
     equity_values = [point.equity for point in equity_curve]
     years = 0.0
@@ -1441,12 +1462,12 @@ def _compute_metrics(
     excess_returns = [r - b for r, b in zip(daily_returns, benchmark_returns)]
     ex_d = _mean(excess_returns)
 
-    vol_ann = _std(daily_returns) * (252.0**0.5)
+    vol_ann = _std(daily_returns) * (annualization_days**0.5)
     ir = 0.0
     if excess_returns:
         ex_std = _std(excess_returns)
         if ex_std > 0:
-            ir = _mean(excess_returns) / ex_std * (252.0**0.5)
+            ir = _mean(excess_returns) / ex_std * (annualization_days**0.5)
 
     max_dd = _max_drawdown(equity_values)
     avg_turnover = _mean(turnover_ratios)
@@ -1472,6 +1493,7 @@ def _compute_metrics(
         "r_d": float(r_d),
         "b_d": float(b_d),
         "ex_d": float(ex_d),
+        "ExcessAnn": float(ex_d) * float(annualization_days),
         "CAGR": float(cagr),
         "Vol_ann": float(vol_ann),
         "IR": float(ir),
@@ -1481,6 +1503,7 @@ def _compute_metrics(
         "ProfitFactor": float(profit_factor),
         "AvgHoldDays": float(avg_hold),
         "ShareAlphaExits": float(share_alpha_exits),
+        "AnnualizationDays": float(annualization_days),
     }
 
 

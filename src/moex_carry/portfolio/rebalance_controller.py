@@ -412,6 +412,20 @@ class PortfolioRebalanceController:
             return False
         if snapshot.dte is None or snapshot.dte < config.enter_min_DTE:
             return False
+        if config.z_entry_threshold is not None:
+            zscore = snapshot.alpha.zscore
+            if zscore is None:
+                return False
+            if float(zscore) > float(config.z_entry_threshold):
+                return False
+        if config.min_floor_score is not None:
+            score_floor = snapshot.scores.score_floor
+            if score_floor is None or float(score_floor) < float(config.min_floor_score):
+                return False
+        if config.min_alpha_score is not None:
+            score_alpha = snapshot.scores.score_alpha
+            if score_alpha is None or float(score_alpha) < float(config.min_alpha_score):
+                return False
         severity = snapshot.events.news_severity if snapshot.events is not None else None
         if severity and severity.lower() in {s.lower() for s in config.block_news_severities}:
             return False

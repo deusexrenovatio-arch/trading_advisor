@@ -170,7 +170,7 @@ class HpoCvConfig(BaseModel):
 class HpoOptimizationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    metric: str = "sharpe"
+    metric: str = "excess_ann"
     mode: Literal["max", "min"] = "max"
     max_trials: int = 50
     random_seed: int | None = None

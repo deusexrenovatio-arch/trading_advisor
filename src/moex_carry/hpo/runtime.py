@@ -126,6 +126,14 @@ def _resolve_fold_lengths(total_days: int, request: HpoRequest) -> tuple[int, in
     return train_days, val_days, test_days, step_days
 
 
+def _fallback_fold_lengths(total_days: int) -> tuple[int, int, int, int]:
+    test_days = max(5, int(total_days * 0.2))
+    val_days = test_days
+    train_days = max(5, total_days - val_days - test_days)
+    step_days = max(1, test_days)
+    return train_days, val_days, test_days, step_days
+
+
 def _build_folds(request: HpoRequest, data_dir: Path) -> tuple[list[Any], dict[str, Any]]:
     base_request = request.base
     universe = build_universe_from_request(base_request, data_dir)
@@ -138,15 +146,30 @@ def _build_folds(request: HpoRequest, data_dir: Path) -> tuple[list[Any], dict[s
     dates = data_store.get_calendar(base_request.test.start_date, base_request.test.end_date)
     if not dates:
         raise ValueError("calendar_empty")
-    train_days, val_days, test_days, step_days = _resolve_fold_lengths(len(dates), request)
+    total_days = len(dates)
+    train_days, val_days, test_days, step_days = _resolve_fold_lengths(total_days, request)
+    embargo_days = request.cv.embargo_days
     folds = build_walk_forward_folds(
         dates,
         train_days=train_days,
         val_days=val_days,
         test_days=test_days,
         step_days=step_days,
-        embargo_days=request.cv.embargo_days,
+        embargo_days=embargo_days,
     )
+    fallback_used = False
+    if not folds:
+        fallback_used = True
+        train_days, val_days, test_days, step_days = _fallback_fold_lengths(total_days)
+        embargo_days = 0
+        folds = build_walk_forward_folds(
+            dates,
+            train_days=train_days,
+            val_days=val_days,
+            test_days=test_days,
+            step_days=step_days,
+            embargo_days=embargo_days,
+        )
     if request.cv.folds and request.cv.folds > 0:
         folds = folds[: request.cv.folds]
     if not folds:
@@ -156,8 +179,9 @@ def _build_folds(request: HpoRequest, data_dir: Path) -> tuple[list[Any], dict[s
         "val_days": val_days,
         "test_days": test_days,
         "step_days": step_days,
-        "embargo_days": request.cv.embargo_days,
+        "embargo_days": embargo_days,
         "folds": len(folds),
+        "fallback": fallback_used,
     }
     return folds, meta
 
@@ -253,11 +277,15 @@ def _run_hpo_async(
     try:
         rng = random.Random(request.optimization.random_seed)
         space = parse_search_space(request.search_space)
-        objective = ObjectiveConfig()
+        mode = str(request.optimization.mode or "max").lower()
+        if mode not in {"max", "min"}:
+            mode = "max"
+        metric = str(request.optimization.metric or "excess_ann")
+        objective = ObjectiveConfig(metric=metric, mode=mode)
         trials: list[TrialResult] = []
         for idx in range(max_trials):
             if DEFAULT_ALGORITHM == "TPE":
-                params = sample_tpe(space, trials, rng, mode="max")
+                params = sample_tpe(space, trials, rng, mode=mode)
             else:
                 params = sample_random(space, rng)
             trial = _evaluate_trial(
@@ -284,7 +312,7 @@ def _run_hpo_async(
                     "message": "HPO running",
                 },
             )
-        result = HpoResult(trials=trials, mode="max")
+        result = HpoResult(trials=trials, mode=mode)
         _write_json(_result_path(run_dir), _serialize_result(result))
         status_payload = {
             "run_id": run_dir.name,
