@@ -135,6 +135,54 @@ def run(args: argparse.Namespace) -> int:
             failures += 0 if ok else 1
             continue
 
+        if scenario.get("type") == "api_object":
+            template = str(scenario.get("url_template") or scenario.get("url") or "/")
+            context: dict[str, Any] = {}
+            pair_source = scenario.get("pair_source")
+            if pair_source:
+                pair_list = cache.get(pair_source)
+                if not pair_list:
+                    source_url = scenario.get("source_url", "/api/top-pairs?limit=1")
+                    ok, detail, pair_list = _get_json(_build_url(backend, source_url))
+                    if not (ok and _require_list(pair_list) and pair_list):
+                        if allow_empty:
+                            _print_skip(scenario_id, "missing_pair_source")
+                            continue
+                        _print_result(scenario_id, False, "missing_pair_source")
+                        failures += 1
+                        continue
+                pair = pair_list[0]
+                if not isinstance(pair, dict):
+                    _print_result(scenario_id, False, "invalid_pair_source")
+                    failures += 1
+                    continue
+                context.update(pair)
+            try:
+                path = template.format(**context)
+            except KeyError as exc:
+                _print_result(scenario_id, False, f"missing_template_key:{exc}")
+                failures += 1
+                continue
+
+            url = _build_url(frontend if scope == "frontend" else backend, path)
+            ok, detail, data = _get_json(url)
+            if ok and isinstance(data, dict):
+                required_keys = scenario.get("required_keys", [])
+                if required_keys:
+                    missing = set(required_keys).difference(set(data.keys()))
+                    if missing:
+                        ok = False
+                        detail = f"missing_keys:{sorted(missing)}"
+                    else:
+                        detail = "ok"
+                else:
+                    detail = "ok"
+            else:
+                ok = False
+            _print_result(scenario_id, ok, detail)
+            failures += 0 if ok else 1
+            continue
+
         if scenario.get("type") == "decision_log_detail":
             source_url = scenario.get("source_url", "/api/decision-view?limit=1")
             ok, detail, data = _get_json(_build_url(backend, source_url))

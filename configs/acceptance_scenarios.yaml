@@ -154,6 +154,20 @@ scenarios:
     user_story: Пользователь может вручную исполнить сигнал и зафиксировать факт.
     expectations:
       - API принимает payload и возвращает статус ok.
+  - id: pretrade-check
+    type: api_object
+    scope: backend
+    pair_source: top_pairs
+    url_template: /api/pretrade/check?stock={stock}&future={future}&snapshots=1&min_hits=1&poll_sec=0
+    allow_empty: true
+    required_keys:
+      [status, ready_to_place, reasons, order_price_bands, volume_requirements, gates, hits]
+    test_cases: [TC-PRETRADE-API-001, TC-PRETRADE-UI-001]
+    title: Delayed pre-trade readiness check
+    user_story: Operator validates entry readiness for both legs before placing orders.
+    expectations:
+      - Response is a JSON object with status, reasons, and gate breakdown.
+      - Includes order price bands and volume requirements for manual verification.
   - id: signals-history
     type: api_list
     scope: backend
