@@ -80,6 +80,7 @@ spread_carry_alpha:
   SL_pct: 0.01
   z_window: 60
   z_entry_threshold: null
+  entry_price_tolerance_pct: 0.0015
   max_gross_notional: null
   max_contracts_per_pair: 1
   capital_allocated_per_trade: null

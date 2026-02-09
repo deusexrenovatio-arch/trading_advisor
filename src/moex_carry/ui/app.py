@@ -203,6 +203,17 @@ def _df_to_records(df: pd.DataFrame) -> list[dict[str, object]]:
     return [_sanitize_value(record) for record in records]
 
 
+def _merge_signal_metrics(record: dict[str, object]) -> dict[str, object]:
+    metrics = record.get("signal_metrics")
+    if not isinstance(metrics, dict):
+        return record
+    merged = dict(record)
+    for key, value in metrics.items():
+        if key not in merged:
+            merged[key] = _sanitize_value(value)
+    return merged
+
+
 def _normalize_datetime(value: datetime) -> datetime:
     if value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
@@ -719,7 +730,8 @@ def create_app(settings: AppSettings) -> Dash:
         df = load_signals(paths.data_dir)
         limit = int(request.args.get("limit", "500"))
         df = df.head(max(limit, 0)) if limit else df
-        return jsonify(_df_to_records(df))
+        records = [_merge_signal_metrics(record) for record in _df_to_records(df)]
+        return jsonify(records)
 
     @server.route("/api/signals/active", methods=["GET"])
     def signals_active_api():
@@ -748,19 +760,18 @@ def create_app(settings: AppSettings) -> Dash:
                     action = "exit"
                 else:
                     continue
-                actionable.append(
-                    {
-                        "run_id": row.run_id,
-                        "timestamp": row.timestamp.isoformat(),
-                        "stock": row.stock_secid,
-                        "future": row.future_secid,
-                        "signal_action": action,
-                        "signal_direction": row.direction,
-                        "signal_score": row.score,
-                        "signal_reasons": row.reasons,
-                        "signal_metrics": row.metrics,
-                    }
-                )
+                payload = {
+                    "run_id": row.run_id,
+                    "timestamp": row.timestamp.isoformat(),
+                    "stock": row.stock_secid,
+                    "future": row.future_secid,
+                    "signal_action": action,
+                    "signal_direction": row.direction,
+                    "signal_score": row.score,
+                    "signal_reasons": row.reasons,
+                    "signal_metrics": row.metrics,
+                }
+                actionable.append(_merge_signal_metrics(payload))
             return jsonify(actionable)
 
     @server.route("/api/signals/history", methods=["GET"])
@@ -790,8 +801,8 @@ def create_app(settings: AppSettings) -> Dash:
                 future=future,
                 action=action,
             )
-            return jsonify(
-                [
+            payload = [
+                _merge_signal_metrics(
                     {
                         "run_id": row.run_id,
                         "timestamp": row.timestamp.isoformat(),
@@ -803,9 +814,10 @@ def create_app(settings: AppSettings) -> Dash:
                         "signal_reasons": row.reasons,
                         "signal_metrics": row.metrics,
                     }
-                    for row in rows
-                ]
-            )
+                )
+                for row in rows
+            ]
+            return jsonify(payload)
 
     @server.route("/api/signals/execute", methods=["POST"])
     def signals_execute_api():
@@ -929,7 +941,10 @@ def create_app(settings: AppSettings) -> Dash:
         snapshots = min(snapshots, 12)
         min_hits = max(_parse_int(request.args.get("min_hits"), 2), 1)
         min_hits = min(min_hits, snapshots)
-        eps = max(_parse_float(request.args.get("eps"), 0.0015), 0.0001)
+        eps_default = float(
+            getattr(settings.spread_carry_alpha, "entry_price_tolerance_pct", 0.0015) or 0.0015
+        )
+        eps = max(_parse_float(request.args.get("eps"), eps_default), 0.0001)
         eps = min(eps, 0.05)
         sync_sec = max(_parse_float(request.args.get("sync_sec"), 120.0), 1.0)
         poll_sec = max(_parse_float(request.args.get("poll_sec"), 5.0), 0.0)

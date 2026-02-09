@@ -107,6 +107,7 @@ class SpreadCarryAlphaConfig(BaseModel):
 
     z_window: int = 60
     z_entry_threshold: Optional[float] = None
+    entry_price_tolerance_pct: float = 0.0015
 
     max_gross_notional: Optional[float] = None
     max_contracts_per_pair: int = 1

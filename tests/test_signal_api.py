@@ -41,7 +41,7 @@ def test_signals_history_endpoint_returns_rows(tmp_path):
                     "signal_direction": "cash_and_carry",
                     "signal_score": 0.2,
                     "signal_reasons": ["stat_confirmed"],
-                    "signal_metrics": {"zscore": 2.1},
+                    "signal_metrics": {"zscore": 2.1, "entry_spread_pct_min": 0.01},
                 }
             ],
         )
@@ -55,6 +55,8 @@ def test_signals_history_endpoint_returns_rows(tmp_path):
     assert len(data) == 1
     assert data[0]["stock"] == "AAA"
     assert data[0]["signal_action"] == "enter"
+    assert data[0]["entry_spread_pct_min"] == 0.01
+    assert data[0]["signal_metrics"]["entry_spread_pct_min"] == 0.01
 
 
 def test_signals_history_date_range_is_inclusive(tmp_path):
@@ -246,7 +248,7 @@ def test_signals_active_includes_open_positions(tmp_path):
                     "signal_direction": "cash_and_carry",
                     "signal_score": 0.1,
                     "signal_reasons": [],
-                    "signal_metrics": {},
+                    "signal_metrics": {"forecast_exit_days": 3},
                 },
                 {
                     "stock": "BBB",
@@ -284,3 +286,4 @@ def test_signals_active_includes_open_positions(tmp_path):
     assert len(data) == 2
     open_row = next(row for row in data if row["stock"] == "AAA")
     assert open_row["signal_action"] == "exit"
+    assert open_row["forecast_exit_days"] == 3

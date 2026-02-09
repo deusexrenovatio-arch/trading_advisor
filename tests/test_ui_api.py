@@ -47,6 +47,10 @@ def test_api_endpoints_return_rows(tmp_path):
                 "signal_score": 0.1,
                 "spread_pct": 0.01,
                 "floor_rate_annual": 0.12,
+                "signal_metrics": {
+                    "entry_spread_pct_min": 0.009,
+                    "tp_spread_pct_level": 0.02,
+                },
             }
         ],
     )
@@ -80,6 +84,7 @@ def test_api_endpoints_return_rows(tmp_path):
     assert isinstance(signals_data, list)
     assert len(signals_data) == 1
     assert signals_data[0]["signal_action"] == "enter"
+    assert signals_data[0]["entry_spread_pct_min"] == 0.009
 
     backtests = client.get("/api/backtests?limit=5")
     assert backtests.status_code == 200

@@ -272,6 +272,101 @@ def _evaluate_orderbook_gate(
     return len(reasons) == 0, reasons, metrics
 
 
+DEFAULT_ENTRY_PRICE_TOLERANCE_PCT = 0.0015
+
+
+def _resolve_entry_tolerance(alpha_cfg: object) -> float:
+    raw_value = getattr(
+        alpha_cfg,
+        "entry_price_tolerance_pct",
+        DEFAULT_ENTRY_PRICE_TOLERANCE_PCT,
+    )
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        value = DEFAULT_ENTRY_PRICE_TOLERANCE_PCT
+    return min(max(value, 0.0001), 0.05)
+
+
+def _build_signal_trade_plan(
+    *,
+    direction: str,
+    as_of_snapshot: date,
+    spot_mid: float,
+    future_mid: float,
+    pv_div: float,
+    spread_mid_value: float,
+    spread_pct_value: float,
+    tp_net: float,
+    sl_net: float,
+    alpha_stats: object,
+    alpha_cfg: object,
+) -> dict[str, object]:
+    entry_tolerance = _resolve_entry_tolerance(alpha_cfg)
+    stock_target = float(spot_mid)
+    future_target = float(future_mid)
+    spread_target = float(spread_mid_value)
+    direction_norm = "reverse" if str(direction).lower() == "reverse" else "cash_and_carry"
+
+    spread_band = stock_target * entry_tolerance if stock_target > 0 else abs(spread_target) * entry_tolerance
+    spread_pct_band = spread_band / stock_target if stock_target > 0 else entry_tolerance
+
+    entry_stock_min = stock_target * (1.0 - entry_tolerance)
+    entry_stock_max = stock_target * (1.0 + entry_tolerance)
+    entry_future_min = future_target * (1.0 - entry_tolerance)
+    entry_future_max = future_target * (1.0 + entry_tolerance)
+
+    direction_sign = -1.0 if direction_norm == "reverse" else 1.0
+    tp_spread_pct_level = spread_pct_value + direction_sign * float(tp_net)
+    sl_spread_pct_level = spread_pct_value - direction_sign * float(sl_net)
+    tp_spread_level = tp_spread_pct_level * stock_target
+    sl_spread_level = sl_spread_pct_level * stock_target
+
+    tp_stock_level = tp_spread_level + float(pv_div) + future_target
+    sl_stock_level = sl_spread_level + float(pv_div) + future_target
+    tp_future_level = stock_target - float(pv_div) - tp_spread_level
+    sl_future_level = stock_target - float(pv_div) - sl_spread_level
+
+    horizon_days = max(int(getattr(alpha_cfg, "H_max_days", 1) or 1), 1)
+    half_life_raw = getattr(alpha_stats, "half_life", 0.0)
+    try:
+        half_life = float(half_life_raw)
+    except (TypeError, ValueError):
+        half_life = 0.0
+    if half_life > 0:
+        forecast_exit_days = int(round(min(float(horizon_days), max(1.0, half_life))))
+        forecast_model = "half_life_capped"
+    else:
+        forecast_exit_days = horizon_days
+        forecast_model = "h_max_days"
+    forecast_exit_date = (as_of_snapshot + timedelta(days=forecast_exit_days)).isoformat()
+
+    return {
+        "entry_price_tolerance_pct": entry_tolerance,
+        "entry_stock_min": entry_stock_min,
+        "entry_stock_max": entry_stock_max,
+        "entry_future_min_per_share": entry_future_min,
+        "entry_future_max_per_share": entry_future_max,
+        "entry_spread_min": spread_target - spread_band,
+        "entry_spread_max": spread_target + spread_band,
+        "entry_spread_pct_min": spread_pct_value - spread_pct_band,
+        "entry_spread_pct_max": spread_pct_value + spread_pct_band,
+        "tp_spread_pct_level": tp_spread_pct_level,
+        "sl_spread_pct_level": sl_spread_pct_level,
+        "tp_spread_level": tp_spread_level,
+        "sl_spread_level": sl_spread_level,
+        "tp_stock_level_if_fut_const": tp_stock_level,
+        "sl_stock_level_if_fut_const": sl_stock_level,
+        "tp_future_level_if_stock_const": tp_future_level,
+        "sl_future_level_if_stock_const": sl_future_level,
+        "forecast_tp_probability": float(getattr(alpha_stats, "p_hit_tp", 0.0) or 0.0),
+        "forecast_sl_probability": float(getattr(alpha_stats, "p_hit_sl", 0.0) or 0.0),
+        "forecast_exit_days": forecast_exit_days,
+        "forecast_exit_date": forecast_exit_date,
+        "forecast_model": forecast_model,
+    }
+
+
 def compute_spread_series(
     prices: pd.DataFrame,
     expiry: date,
@@ -976,6 +1071,19 @@ def compute_pairs(
 
         spread_pct_series = series_df["spread_pct"].tolist()
         alpha_stats = alpha_metrics(spread_pct_series, horizon=alpha_cfg.H_max_days, tp=tp_net, sl=alpha_cfg.SL_pct)
+        trade_plan_metrics = _build_signal_trade_plan(
+            direction="cash_and_carry",
+            as_of_snapshot=as_of_snapshot,
+            spot_mid=spot_mid,
+            future_mid=future_mid,
+            pv_div=pv_div,
+            spread_mid_value=spread_mid_value,
+            spread_pct_value=spread_pct_value,
+            tp_net=tp_net,
+            sl_net=sl_net,
+            alpha_stats=alpha_stats,
+            alpha_cfg=alpha_cfg,
+        )
         score_floor = floor_metrics.floor_rate_annual - r_cb
         score_alpha = alpha_stats.p_hit_tp * tp_net - alpha_stats.p_hit_sl * alpha_cfg.SL_pct - rtc_pct
         penalty_liq = 0.0
@@ -1014,6 +1122,10 @@ def compute_pairs(
             "spread_pct": spread_pct_value,
             "rtc_pct": rtc_pct,
             "floor_rate_annual": floor_metrics.floor_rate_annual,
+            "tp_net": tp_net,
+            "sl_net": sl_net,
+            "p_hit_tp": alpha_stats.p_hit_tp,
+            "p_hit_sl": alpha_stats.p_hit_sl,
             "score_floor": score_floor,
             "score_alpha": score_alpha,
             "total_score": total_score,
@@ -1025,6 +1137,7 @@ def compute_pairs(
             "orderbook_fut_min_depth": orderbook_metrics["orderbook_fut_min_depth"],
             "orderbook_stock_imbalance": orderbook_metrics["orderbook_stock_imbalance"],
             "orderbook_fut_imbalance": orderbook_metrics["orderbook_fut_imbalance"],
+            **trade_plan_metrics,
         }
         stock_name = (
             instrument_map.get(mapping.stock_secid).name
@@ -1053,6 +1166,8 @@ def compute_pairs(
                 "dte": dte,
                 "p_hit_tp": alpha_stats.p_hit_tp,
                 "p_hit_sl": alpha_stats.p_hit_sl,
+                "tp_net": tp_net,
+                "sl_net": sl_net,
                 "sigma_h": alpha_stats.sigma_h,
                 "half_life": alpha_stats.half_life,
                 "spread_bps_stock": spread_bps_stock_value,
@@ -1082,6 +1197,7 @@ def compute_pairs(
                 "snapshot_id": snapshot["snapshot_id"],
                 "snapshot_hash": snapshot["hash"],
                 "snapshot_as_of": snapshot["as_of"],
+                **trade_plan_metrics,
             }
         )
 
@@ -1102,6 +1218,14 @@ def compute_pairs(
                 "signal_score",
                 "spread_pct",
                 "floor_rate_annual",
+                "entry_spread_pct_min",
+                "entry_spread_pct_max",
+                "tp_spread_pct_level",
+                "sl_spread_pct_level",
+                "forecast_exit_days",
+                "forecast_exit_date",
+                "tp_net",
+                "sl_net",
                 "signal_reasons",
                 "signal_metrics",
             ]
