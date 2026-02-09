@@ -10,6 +10,7 @@
   Typography,
 } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import type { ReactNode } from 'react'
 import type { ForwardStatus } from '../../entities/decision/types'
 import JsonBlock from '../../shared/ui/JsonBlock'
 import KeyValueGrid from '../../shared/ui/KeyValueGrid'
@@ -22,7 +23,7 @@ type Props = {
   forwardError?: string | null
   forwardStatus: ForwardStatus | null
   formatValue: (value: unknown, column?: string) => string
-  renderFieldLabel: (key: string) => string
+  renderFieldLabel: (key: string) => ReactNode
   formatCellValue: (value: unknown, column?: string) => string
 }
 

@@ -23,17 +23,18 @@ export const buildParamSections = (
     grouped.set(section, list)
   })
   const orderIndex = new Map(order.map((section, index) => [section, index]))
-  return Array.from(grouped.entries())
-    .map(([section, sectionSpecs]) => [
+  const sections = Array.from(grouped.entries()).map(
+    ([section, sectionSpecs]): [string, ParameterSpec[]] => [
       section,
       sectionSpecs.sort((left, right) => left.key.localeCompare(right.key)),
-    ])
-    .sort(([left], [right]) => {
-      const leftRank = orderIndex.get(left) ?? Number.MAX_SAFE_INTEGER
-      const rightRank = orderIndex.get(right) ?? Number.MAX_SAFE_INTEGER
-      if (leftRank !== rightRank) return leftRank - rightRank
-      return left.localeCompare(right)
-    })
+    ],
+  )
+  return sections.sort(([left], [right]) => {
+    const leftRank = orderIndex.get(left) ?? Number.MAX_SAFE_INTEGER
+    const rightRank = orderIndex.get(right) ?? Number.MAX_SAFE_INTEGER
+    if (leftRank !== rightRank) return leftRank - rightRank
+    return left.localeCompare(right)
+  })
 }
 
 export const buildBacktestEquityColumns = (rows: GenericRow[]) => {

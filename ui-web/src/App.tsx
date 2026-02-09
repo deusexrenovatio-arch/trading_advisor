@@ -1,5 +1,5 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Box, Container, FormControl, InputLabel, MenuItem, Select, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
+﻿import { useCallback, useMemo, useState } from 'react'
+import { Box, Container, Stack, Tab, Tabs, Typography } from '@mui/material'
 import type { GridRowParams } from '@mui/x-data-grid'
 import BacktestV2Tab from './features/backtest-run/BacktestV2Tab'
 import { useBacktestForwardHpo } from './features/backtest-run/useBacktestForwardHpo'
@@ -35,7 +35,6 @@ import type {
   GenericRow,
   HpoTrial,
   ParameterSpec,
-  ParamValue,
 } from './entities/decision/types'
 import './App.css'
 
@@ -127,7 +126,7 @@ function App() {
   const handleRefresh = useCallback(() => {
     fetchDecisionView()
     market.fetchAuxData()
-  }, [fetchDecisionView, market.fetchAuxData])
+  }, [fetchDecisionView, market])
 
   const filteredParamSpecs = useMemo(
     () => filterParamSpecs(paramSpecs, paramFilter),
@@ -180,7 +179,7 @@ function App() {
         formatDate,
         formatValue,
       }),
-    [formatDate, formatValue, getFieldLabel, getFieldTooltip],
+    [],
   )
 
   const handleRowClick = useCallback(

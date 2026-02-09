@@ -10,6 +10,7 @@
   Typography,
 } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import type { ReactNode } from 'react'
 import type { GenericRow, HpoResponse } from '../../entities/decision/types'
 import GenericTable from '../../shared/ui/GenericTable'
 import JsonBlock from '../../shared/ui/JsonBlock'
@@ -29,7 +30,7 @@ type Props = {
   formatValue: (value: unknown, column?: string) => string
   hpoLeaderboardRows: GenericRow[]
   hpoLeaderboardColumns: string[]
-  renderFieldLabel: (key: string) => string
+  renderFieldLabel: (key: string) => ReactNode
   formatCellValue: (value: unknown, column?: string) => string
   formatDate: (value?: string) => string
   isDateColumn: (column: string) => boolean

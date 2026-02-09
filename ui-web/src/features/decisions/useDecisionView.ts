@@ -19,6 +19,9 @@ export type DecisionActionState = {
   execution_status?: ExecutionStatus
 }
 
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0
+
 export const useDecisionView = () => {
   const [rows, setRows] = useState<DecisionView[]>([])
   const [loading, setLoading] = useState(false)
@@ -137,19 +140,19 @@ export const useDecisionView = () => {
   }, [rows, quickFilter])
 
   const strategyOptions = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.strategy_type).filter(Boolean))).sort(),
+    () => Array.from(new Set(rows.map((row) => row.strategy_type).filter(isNonEmptyString))).sort(),
     [rows],
   )
   const instrumentOptions = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.primary_instrument).filter(Boolean))).sort(),
+    () => Array.from(new Set(rows.map((row) => row.primary_instrument).filter(isNonEmptyString))).sort(),
     [rows],
   )
   const riskOptions = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.risk_state).filter(Boolean))).sort(),
+    () => Array.from(new Set(rows.map((row) => row.risk_state).filter(isNonEmptyString))).sort(),
     [rows],
   )
   const newsOptions = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.news_severity).filter(Boolean))).sort(),
+    () => Array.from(new Set(rows.map((row) => row.news_severity).filter(isNonEmptyString))).sort(),
     [rows],
   )
 

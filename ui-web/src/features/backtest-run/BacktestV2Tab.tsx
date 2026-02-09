@@ -47,7 +47,7 @@ type Props = {
   backtestTradeRows: GenericRow[]
   backtestTradeColumns: string[]
   toTitleCase: (value: string) => string
-  renderFieldLabel: (key: string) => string
+  renderFieldLabel: (key: string) => ReactNode
   formatCellValue: (value: unknown, column?: string) => string
   formatDate: (value?: string) => string
   isDateColumn: (column: string) => boolean

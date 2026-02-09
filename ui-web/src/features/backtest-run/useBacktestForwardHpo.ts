@@ -327,7 +327,7 @@ export const useBacktestForwardHpo = ({
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [hpoRunId, hpoResponse, fetchHpoStatusApi])
+  }, [hpoRunId, hpoResponse])
 
   return {
     paramSpecs,
