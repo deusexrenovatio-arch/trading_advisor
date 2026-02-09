@@ -60,6 +60,16 @@ Changed
 - Signal API contract for `signals/*` is now stabilized for legacy/incomplete rows:
   - execution-plan/model keys are always present in payload (`entry_*`, `tp/sl_*`, `forecast_*`, orderbook/model scores),
   - missing values are returned as `null` instead of absent keys.
+- `GET /api/pretrade/check` now supports strict quote gating for two-leg execution:
+  - new flag `require_live_quotes_for_legs` (default: `true`),
+  - when enabled, bid/ask absence on required execution sides blocks `ready_to_place`,
+  - response exposes dedicated quote gates/hits (`quote_pass`, `stock_quote_pass`, `fut_quote_pass`).
+- Delay-gate fallback policy is now explicit:
+  - `LAST` fallback for price hits is allowed only when `require_live_quotes_for_legs=false`.
+- Signal diagnostics now include ISS quote/depth availability fields:
+  - `orderbook_stock_quote_available`, `orderbook_fut_quote_available`,
+  - `orderbook_stock_depth_available`, `orderbook_fut_depth_available`,
+  - `orderbook_data_warnings` (e.g. `orderbook_fut_quote_missing`, `orderbook_fut_depth_missing`).
 - Added config key `spread_carry_alpha.entry_price_tolerance_pct`:
   - used for entry corridor generation in signals,
   - used as default `eps` in `GET /api/pretrade/check` when `eps` is not passed.

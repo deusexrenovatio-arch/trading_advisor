@@ -215,19 +215,34 @@ def _evaluate_orderbook_gate(
     fut_ask_depth: float | None,
     stock_quote_age_sec: float | None,
     fut_quote_age_sec: float | None,
-) -> tuple[bool, list[str], dict[str, float | bool | None]]:
+) -> tuple[bool, list[str], dict[str, object]]:
     reasons: list[str] = []
+    warnings: list[str] = []
     stock_imbalance = _depth_imbalance_ratio(stock_bid_depth, stock_ask_depth)
     fut_imbalance = _depth_imbalance_ratio(fut_bid_depth, fut_ask_depth)
     stock_min_depth = _min_depth(stock_bid_depth, stock_ask_depth)
     fut_min_depth = _min_depth(fut_bid_depth, fut_ask_depth)
+    stock_quote_available = spot_bid is not None and spot_ask is not None
+    fut_quote_available = fut_bid is not None and fut_ask is not None
+    stock_depth_available = stock_min_depth is not None
+    fut_depth_available = fut_min_depth is not None
+
+    if use_intraday:
+        if not stock_quote_available:
+            warnings.append("orderbook_stock_quote_missing")
+        if not fut_quote_available:
+            warnings.append("orderbook_fut_quote_missing")
+        if not stock_depth_available:
+            warnings.append("orderbook_stock_depth_missing")
+        if not fut_depth_available:
+            warnings.append("orderbook_fut_depth_missing")
 
     if bool(getattr(alpha_cfg, "require_live_orderbook_for_entry", False)):
         if not use_intraday:
             reasons.append("orderbook_intraday_disabled")
-        if spot_bid is None or spot_ask is None:
+        if not stock_quote_available:
             reasons.append("orderbook_stock_missing")
-        if fut_bid is None or fut_ask is None:
+        if not fut_quote_available:
             reasons.append("orderbook_fut_missing")
 
     min_stock_depth_cfg = getattr(alpha_cfg, "min_orderbook_depth_stock", None)
@@ -260,7 +275,7 @@ def _evaluate_orderbook_gate(
         if fut_imbalance is None or fut_imbalance > float(fut_imbalance_cfg):
             reasons.append("orderbook_fut_imbalance")
 
-    metrics: dict[str, float | bool | None] = {
+    metrics: dict[str, object] = {
         "orderbook_pass": len(reasons) == 0,
         "orderbook_stock_min_depth": stock_min_depth,
         "orderbook_fut_min_depth": fut_min_depth,
@@ -268,6 +283,11 @@ def _evaluate_orderbook_gate(
         "orderbook_fut_imbalance": fut_imbalance,
         "orderbook_stock_quote_age_sec": stock_quote_age_sec,
         "orderbook_fut_quote_age_sec": fut_quote_age_sec,
+        "orderbook_stock_quote_available": stock_quote_available,
+        "orderbook_fut_quote_available": fut_quote_available,
+        "orderbook_stock_depth_available": stock_depth_available,
+        "orderbook_fut_depth_available": fut_depth_available,
+        "orderbook_data_warnings": warnings,
     }
     return len(reasons) == 0, reasons, metrics
 
@@ -1137,6 +1157,11 @@ def compute_pairs(
             "orderbook_fut_min_depth": orderbook_metrics["orderbook_fut_min_depth"],
             "orderbook_stock_imbalance": orderbook_metrics["orderbook_stock_imbalance"],
             "orderbook_fut_imbalance": orderbook_metrics["orderbook_fut_imbalance"],
+            "orderbook_stock_quote_available": orderbook_metrics["orderbook_stock_quote_available"],
+            "orderbook_fut_quote_available": orderbook_metrics["orderbook_fut_quote_available"],
+            "orderbook_stock_depth_available": orderbook_metrics["orderbook_stock_depth_available"],
+            "orderbook_fut_depth_available": orderbook_metrics["orderbook_fut_depth_available"],
+            "orderbook_data_warnings": orderbook_metrics["orderbook_data_warnings"],
             **trade_plan_metrics,
         }
         stock_name = (
@@ -1180,6 +1205,11 @@ def compute_pairs(
                 "fut_quote_age_sec": fut_quote_age_sec,
                 "stock_depth_imbalance": orderbook_metrics["orderbook_stock_imbalance"],
                 "fut_depth_imbalance": orderbook_metrics["orderbook_fut_imbalance"],
+                "orderbook_stock_quote_available": orderbook_metrics["orderbook_stock_quote_available"],
+                "orderbook_fut_quote_available": orderbook_metrics["orderbook_fut_quote_available"],
+                "orderbook_stock_depth_available": orderbook_metrics["orderbook_stock_depth_available"],
+                "orderbook_fut_depth_available": orderbook_metrics["orderbook_fut_depth_available"],
+                "orderbook_data_warnings": orderbook_metrics["orderbook_data_warnings"],
                 "dollar_vol_stock": dollar_vol_stock,
                 "dollar_vol_fut": dollar_vol_fut,
                 "days_to_exit": days_exit,

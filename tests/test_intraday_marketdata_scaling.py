@@ -187,3 +187,48 @@ def test_intraday_orderbook_gate_passes_with_depth_and_age(tmp_path, monkeypatch
     row = result.iloc[0]
     assert bool(row["orderbook_pass"]) is True
     assert row["decision"] != "SKIP_ORDERBOOK"
+
+
+class _FakeMoexClientNoFutBook:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def get_marketdata(self, engine: str, market: str, board: str, secid: str):
+        if secid == "AAA":
+            return [
+                {
+                    "BID": 101.0,
+                    "OFFER": 101.1,
+                    "BIDDEPTHT": 50,
+                    "OFFERDEPTHT": 60,
+                    "SYSTIME": "2026-02-09 10:20:00",
+                    "UPDATETIME": "10:19:50",
+                }
+            ]
+        return [
+            {
+                "LAST": 1100.0,
+                "SYSTIME": "2026-02-09 10:20:00",
+                "UPDATETIME": "10:19:55",
+            }
+        ]
+
+
+def test_intraday_orderbook_diagnostics_flag_missing_fut_quote_and_depth(tmp_path, monkeypatch):
+    _prepare_intraday_fixture(tmp_path)
+    monkeypatch.setattr(pipeline, "MoexIssClient", _FakeMoexClientNoFutBook)
+    monkeypatch.setattr(pipeline, "_fetch_candles", _fake_fetch_candles)
+    monkeypatch.setattr(pipeline, "_load_dividends", lambda *_args, **_kwargs: [])
+
+    settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
+    result = pipeline.compute_pairs(settings, return_df=True, max_pairs=1, save_csv=False)
+    assert result is not None
+    assert not result.empty
+    row = result.iloc[0]
+    assert row["decision"] != "SKIP_ORDERBOOK"
+    assert bool(row["orderbook_fut_quote_available"]) is False
+    assert bool(row["orderbook_fut_depth_available"]) is False
+    warnings = row["orderbook_data_warnings"]
+    assert isinstance(warnings, list)
+    assert "orderbook_fut_quote_missing" in warnings
+    assert "orderbook_fut_depth_missing" in warnings

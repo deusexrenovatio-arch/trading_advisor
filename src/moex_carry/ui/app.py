@@ -235,6 +235,11 @@ SIGNAL_METRIC_CONTRACT_KEYS: tuple[str, ...] = (
     "orderbook_fut_quote_age_sec",
     "orderbook_stock_imbalance",
     "orderbook_fut_imbalance",
+    "orderbook_stock_quote_available",
+    "orderbook_fut_quote_available",
+    "orderbook_stock_depth_available",
+    "orderbook_fut_depth_available",
+    "orderbook_data_warnings",
     "floor_rate_annual",
     "rtc_pct",
     "spread_pct",
@@ -1004,6 +1009,9 @@ def create_app(settings: AppSettings) -> Dash:
         require_tradeflow = _parse_bool(request.args.get("require_tradeflow_for_last"))
         if require_tradeflow is None:
             require_tradeflow = False
+        require_live_quotes = _parse_bool(request.args.get("require_live_quotes_for_legs"))
+        if require_live_quotes is None:
+            require_live_quotes = True
 
         qty_fut_default = float(settings.spread_carry_alpha.max_contracts_per_pair or 1)
         qty_fut = max(_parse_float(request.args.get("qty_fut"), qty_fut_default), 0.0)
@@ -1035,6 +1043,7 @@ def create_app(settings: AppSettings) -> Dash:
                 sync_sec=sync_sec,
                 poll_sec=poll_sec,
                 require_tradeflow_for_last=require_tradeflow,
+                require_live_quotes_for_legs=require_live_quotes,
                 stock_engine=settings.moex.engine_shares,
                 stock_market=settings.moex.market_shares,
                 stock_board=settings.moex.shares_board,
@@ -1053,6 +1062,7 @@ def create_app(settings: AppSettings) -> Dash:
             "sync_sec": sync_sec,
             "poll_sec": poll_sec,
             "require_tradeflow_for_last": require_tradeflow,
+            "require_live_quotes_for_legs": require_live_quotes,
             "qty_fut": qty_fut,
             "participation_rate": participation_rate,
             "future_scale": future_scale,

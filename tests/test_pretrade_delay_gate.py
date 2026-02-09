@@ -63,6 +63,8 @@ def test_delay_gate_strict_tradeflow_blocks_missing_fut_price_hit():
     )
     assert result["ready_to_place"] is False
     assert result["status"] == "CHECK"
+    assert result["gates"]["fut_quote_pass"] is False
+    assert "fut_quote_missing" in result["reasons"]
     assert "fut_range_miss" in result["reasons"]
 
 
@@ -86,8 +88,11 @@ def test_delay_gate_practical_last_fallback_passes_with_volume_and_spread():
         sync_sec=120.0,
         poll_sec=0.0,
         require_tradeflow_for_last=False,
+        require_live_quotes_for_legs=False,
     )
     assert result["ready_to_place"] is True
     assert result["status"] == "PLACE"
+    assert result["gates"]["fut_quote_pass"] is False
+    assert "fut_quote_missing" in result["warnings"]
     assert result["gates"]["stock_volume_pass"] is True
     assert result["gates"]["fut_volume_pass"] is True

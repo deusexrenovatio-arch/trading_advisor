@@ -18,11 +18,11 @@
 - params-specs -> TC-PARAMS-API-001
 - frontend-params-specs -> TC-BACK-V2-UI-001, TC-BACK-V2-UI-002
 - top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
-- signals-active -> TC-SIG-ACT-API-001, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
+- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
 - signals-history-reasons -> TC-SIG-HIST-API-004
 - signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001
-- pretrade-check -> TC-PRETRADE-API-001, TC-PRETRADE-UI-001
+- pretrade-check -> TC-PRETRADE-API-001, TC-PRETRADE-API-002, TC-PRETRADE-UI-001
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
 - backtests -> TC-BACK-API-001, TC-BACK-UI-001
 - backtest-run -> TC-BACK-V2-API-001, TC-BACK-V2-API-002
@@ -319,6 +319,17 @@ Expected:
 - If `signal_metrics` contains execution plan values, they are also available at top level
   (e.g., `entry_spread_pct_min`, `entry_spread_pct_max`, `tp_spread_pct_level`, `sl_spread_pct_level`).
 
+### TC-SIG-ACT-API-002 Signal diagnostics for missing ISS orderbook
+Acceptance: signals-active
+Automation: tests/test_intraday_marketdata_scaling.py
+Request:
+- GET /api/signals/active
+Expected:
+- Rows expose `orderbook_stock_quote_available`, `orderbook_fut_quote_available`,
+  `orderbook_stock_depth_available`, `orderbook_fut_depth_available`.
+- If futures quote/depth is missing in ISS, `orderbook_data_warnings` contains
+  `orderbook_fut_quote_missing` and/or `orderbook_fut_depth_missing`.
+
 ### TC-SIG-CONTRACT-API-001 Signals API contract completeness
 Acceptance: signals-active, signals-history
 Automation: tests/test_signal_api.py, tests/test_ui_api.py
@@ -379,6 +390,17 @@ Request:
 Expected:
 - JSON object contains `status`, `ready_to_place`, `reasons`.
 - Response includes `order_price_bands`, `volume_requirements`, `gates`, and `hits`.
+
+### TC-PRETRADE-API-002 Strict quote gate behavior
+Acceptance: pretrade-check
+Automation: tests/test_pretrade_delay_gate.py
+Request:
+- Call delay-gate flow with missing futures bid/ask:
+  - default (`require_live_quotes_for_legs=true`)
+  - fallback mode (`require_live_quotes_for_legs=false`)
+Expected:
+- Strict mode blocks placement with `fut_quote_missing`.
+- Fallback mode allows `LAST` for price-hit checks and reports quote issue in `warnings`.
 
 ### TC-BACK-API-001 Backtests list
 Acceptance: backtests
