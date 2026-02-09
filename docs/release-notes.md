@@ -1,5 +1,70 @@
 # Release Notes
 
+## 2026-02-09 - Pre-trade Delay Gate + Orderbook Entry Gate (ISS REST)
+
+Release type
+- Minor (backward-compatible additions in API/UI and strategy gates).
+
+Added
+- New API endpoint `GET /api/pretrade/check` for delayed pre-trade readiness on two-leg stock/futures entries.
+- New backend module `src/moex_carry/pretrade/delay_gate.py` with deterministic checks:
+  - leg price bands (both legs),
+  - delayed spread band consistency,
+  - snapshot sync gate,
+  - session volume sufficiency gate.
+- Endpoint response payload now includes:
+  - `status`, `ready_to_place`, `manual_confirm_required`,
+  - `order_price_bands`, `volume_requirements`,
+  - `gates`, `hits`, `reasons`, `last_snapshot`, `params`.
+- Signals UI details panel now includes a dedicated pre-trade block with:
+  - live refresh action (`Обновить pre-trade`),
+  - status/reasons,
+  - order price bands,
+  - volume requirements,
+  - gate statuses and hit counters.
+- Acceptance updates:
+  - `configs/acceptance_scenarios.yaml`: new `pretrade-check` scenario,
+  - `docs/test-cases.md`: `TC-PRETRADE-API-001`, `TC-PRETRADE-UI-001`,
+  - `scripts/acceptance_check.py`: support for `api_object` validation type.
+
+Changed
+- Intraday market data parsing now extracts orderbook depth and quote age for both legs:
+  - `bid_depth`, `ask_depth`, `quote_age_sec`.
+- Strategy config (`SpreadCarryAlphaConfig`) now supports orderbook entry controls:
+  - `require_live_orderbook_for_entry`,
+  - min depth thresholds (stock/futures),
+  - max quote age thresholds (stock/futures),
+  - max bid/ask imbalance thresholds (stock/futures).
+- Pair pipeline now evaluates an orderbook gate during entry decisioning:
+  - new decision path `SKIP_ORDERBOOK`,
+  - reasons and metrics persisted in pair output (`orderbook_pass`, depths, ages, imbalance, `orderbook_reasons`).
+
+Fixed
+- UI typing/lint/build cleanup in tabs and shared helpers:
+  - `renderFieldLabel` now consistently supports `ReactNode` where tooltips are rendered,
+  - param section tuple typing fixed,
+  - minor hook dependency and test lint fixes.
+
+Verification
+- Backend/API tests:
+  - `tests/test_ui_api.py`
+  - `tests/test_pretrade_delay_gate.py`
+  - `tests/test_marketdata_points.py`
+  - `tests/test_intraday_marketdata_scaling.py`
+- Frontend checks:
+  - `npm --prefix ui-web run lint`
+  - `npm --prefix ui-web run build`
+  - `ui-web/tests/top-signals.spec.ts`
+  - `ui-web/tests/decisions.spec.ts`
+
+Operational notes
+- Designed for ISS REST without auth and delayed quotes; `manual_confirm_required` remains mandatory.
+- For ISS-only operations, use pre-trade gate as delayed readiness evidence, not as a replacement for terminal-side real-time verification.
+
+Rollback
+- Disable strict orderbook entry blocking by keeping `spread_carry_alpha.require_live_orderbook_for_entry: false`.
+- UI/API additions are additive; rollback can be performed by reverting this release commit.
+
 ## 2026-01-28 - HPO Objective Modes + Gates + Annualization
 
 Added
