@@ -141,6 +141,20 @@ Steps:
 Expected:
 - Updated timestamp changes after the interval.
 - Signals table refreshes without full page reload.
+- Signals table includes action fields for execution planning:
+  - `entry_spread_pct_min` / `entry_spread_pct_max`,
+  - `tp_spread_pct_level` / `sl_spread_pct_level`,
+  - `forecast_exit_days`.
+
+### TC-SIG-PLAN-UI-001 Signals trading plan columns
+Acceptance: signals-active
+Automation: ui-web/tests/top-signals.spec.ts
+Steps:
+1. Open Signals tab.
+2. Check table headers for execution-planning fields.
+Expected:
+- Table renders `entry_spread_pct_min`, `entry_spread_pct_max`, `tp_spread_pct_level`, `sl_spread_pct_level`, `forecast_exit_days`.
+- Values are formatted as percentages/days and sortable.
 
 
 ### TC-SIG-HIST-UI-001 Signals history filters and date range
@@ -297,6 +311,8 @@ Request:
 - GET /api/signals/active
 Expected:
 - signal_action only enter/exit.
+- If `signal_metrics` contains execution plan values, they are also available at top level
+  (e.g., `entry_spread_pct_min`, `entry_spread_pct_max`, `tp_spread_pct_level`, `sl_spread_pct_level`).
 
 ### TC-SIG-HIST-API-001 History list and allowed actions
 Acceptance: signals-history

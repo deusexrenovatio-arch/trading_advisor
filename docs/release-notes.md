@@ -22,6 +22,15 @@ Added
   - order price bands,
   - volume requirements,
   - gate statuses and hit counters.
+- Signal payload now includes a trading plan with actionable execution data:
+  - entry corridors for stock/futures/spread (`entry_*`),
+  - TP/SL levels by spread (`tp_spread_*`, `sl_spread_*`),
+  - projected exit horizon/date (`forecast_exit_days`, `forecast_exit_date`),
+  - TP/SL hit probabilities (`forecast_tp_probability`, `forecast_sl_probability`).
+- Signals table now highlights action-oriented columns:
+  - entry spread corridor,
+  - TP/SL spread levels,
+  - forecast exit days.
 - Acceptance updates:
   - `configs/acceptance_scenarios.yaml`: new `pretrade-check` scenario,
   - `docs/test-cases.md`: `TC-PRETRADE-API-001`, `TC-PRETRADE-UI-001`,
@@ -30,6 +39,13 @@ Added
 Changed
 - Intraday market data parsing now extracts orderbook depth and quote age for both legs:
   - `bid_depth`, `ask_depth`, `quote_age_sec`.
+- Signal APIs now expose `signal_metrics` fields at top level (while keeping nested `signal_metrics`):
+  - `GET /api/signals`
+  - `GET /api/signals/active`
+  - `GET /api/signals/history`
+- Added config key `spread_carry_alpha.entry_price_tolerance_pct`:
+  - used for entry corridor generation in signals,
+  - used as default `eps` in `GET /api/pretrade/check` when `eps` is not passed.
 - Strategy config (`SpreadCarryAlphaConfig`) now supports orderbook entry controls:
   - `require_live_orderbook_for_entry`,
   - min depth thresholds (stock/futures),
@@ -51,6 +67,8 @@ Verification
   - `tests/test_pretrade_delay_gate.py`
   - `tests/test_marketdata_points.py`
   - `tests/test_intraday_marketdata_scaling.py`
+  - `tests/test_signal_api.py`
+  - `tests/test_signal_trade_plan.py`
 - Frontend checks:
   - `npm --prefix ui-web run lint`
   - `npm --prefix ui-web run build`

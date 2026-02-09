@@ -38,7 +38,7 @@ API integration:
 ## Parameters
 - `N`: number of delayed snapshots (default 4)
 - `min_hits`: minimum positive hits for leg pass (default 2)
-- `eps`: per-leg price tolerance from target (default 0.0015 = 0.15%)
+- `eps`: per-leg price tolerance from target (default `spread_carry_alpha.entry_price_tolerance_pct`, baseline 0.0015 = 0.15%)
 - `sync_sec`: max stock/future `SYSTIME` difference per snapshot (default 120 sec)
 - `require_tradeflow_for_last`: whether fallback via `LAST` requires `NUMTRADES` increase
 - `manual_confirm_required`: always `true` in ISS mode

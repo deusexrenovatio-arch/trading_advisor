@@ -183,7 +183,7 @@ action_note, allocation, avg_hold_days, avg_trade_return_annual_recent, capital_
 - Backtest v2 summary_metrics: dynamic metrics shown in "???????? ???????" (example keys: cagr, sharpe, max_drawdown, hit_rate, turnover, share_alpha_exits, avg_hold_days).
 - Backtest v2 resolved_config: full JSON of run config (keys mirror params/specs).
 - Forward status: last_equity, last_trade, last_alert, state, run_meta (JSON objects, keys vary per run).
-- Signals: signal_metrics (object) and signal_reasons (array). signal_metrics typically include spread_pct_entry_exec, spread_pct_exit_exec, tp_net, sl_net, dte, hold_days, pnl_spread_pct, zscore, zscore_raw, spread_vol, trend_pos, trend_slope, trend_zscore, implied_rate_net, required_rate.
+- Signals: signal_metrics (object) and signal_reasons (array). signal_metrics typically include spread_pct_entry_exec, spread_pct_exit_exec, tp_net, sl_net, dte, hold_days, pnl_spread_pct, zscore, zscore_raw, spread_vol, trend_pos, trend_slope, trend_zscore, implied_rate_net, required_rate, entry_spread_pct_min, entry_spread_pct_max, tp_spread_pct_level, sl_spread_pct_level, forecast_exit_days, forecast_exit_date.
 - Decision log facts: facts[].{label,value,category,source,confidence} shown in details panel.
 
 

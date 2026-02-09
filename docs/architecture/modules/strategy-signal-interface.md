@@ -42,6 +42,11 @@ the core spread carry fields used by the floor + alpha logic:
 - `dte`
 - `tp_pct`
 - `sl_pct`
+- `entry_spread_pct_min`
+- `entry_spread_pct_max`
+- `tp_spread_pct_level`
+- `sl_spread_pct_level`
+- `forecast_exit_days`
 - `entry_reason` or `exit_reason`
 
 ### Allocation payload

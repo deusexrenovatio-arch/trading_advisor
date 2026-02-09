@@ -128,7 +128,7 @@ scenarios:
     required_keys: [run_id, timestamp, stock, future, signal_action, signal_score]
     allowed_field_values:
       signal_action: [enter, exit]
-    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001]
+    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001]
     title: Действуемые сигналы
     user_story: Пользователь получает только actionable сигналы.
     expectations:

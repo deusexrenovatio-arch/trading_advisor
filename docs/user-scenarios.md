@@ -22,7 +22,10 @@ Steps:
 Expected:
 - Pairs are ranked by total_score.
 - Each row includes spread_pct, rtc_pct, floor_rate_annual, score_floor, score_alpha.
-- Signals list includes actionable entries with timestamp.
+- Signals list includes actionable entries with timestamp and execution plan fields:
+  - entry spread corridor (`entry_spread_pct_min/max`),
+  - spread TP/SL levels (`tp_spread_pct_level`, `sl_spread_pct_level`),
+  - forecast exit horizon (`forecast_exit_days`).
 - UI shows last successful recompute time.
 - snapshot_as_of and signal timestamps reflect the latest run time using ISO 8601 with timezone (e.g., 2026-01-26T18:45:00Z).
 
