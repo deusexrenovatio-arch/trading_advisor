@@ -1,4 +1,4 @@
-﻿import { Fragment } from 'react'
+﻿import { Fragment, type ReactNode } from 'react'
 import {
   Box,
   Button,
@@ -32,7 +32,7 @@ type Props = {
   market: MarketTablesState
   autoRefreshLabel: string
   formatCellValue: (value: unknown, column?: string) => string
-  renderFieldLabel: (column: string) => string
+  renderFieldLabel: (column: string) => ReactNode
   formatDate: (value?: string) => string
   formatValue: (value: unknown, column?: string) => string
 }
@@ -274,6 +274,28 @@ const MarketTablesTab = ({
                   }))
                   .filter((field) => field.value !== null && field.value !== undefined),
               )
+              const isEntrySignal = market.isEntrySignal(row)
+              const pretradePayload = market.pretradeChecks[pairKey]
+              const pretradeSummaryEntries = pretradePayload
+                ? [
+                    {
+                      key: 'pretrade_status',
+                      value: pretradePayload.status,
+                    },
+                    {
+                      key: 'ready_to_place',
+                      value: pretradePayload.ready_to_place,
+                    },
+                    {
+                      key: 'manual_confirm_required',
+                      value: pretradePayload.manual_confirm_required,
+                    },
+                    {
+                      key: 'pretrade_checked_at',
+                      value: market.pretradeCheckedAt[pairKey],
+                    },
+                  ]
+                : []
 
               return (
                 <Fragment key={pairKey}>
@@ -358,6 +380,119 @@ const MarketTablesTab = ({
                           </Box>
                           {tab === 'signals' ? (
                             <Box>
+                              <Typography variant="subtitle2" fontWeight={600}>
+                                Pre-trade проверка (ISS)
+                              </Typography>
+                              {!isEntrySignal ? (
+                                <Typography variant="body2" color="text.secondary">
+                                  Проверка применима только к входным сигналам.
+                                </Typography>
+                              ) : (
+                                <Stack spacing={1} sx={{ mt: 1 }}>
+                                  <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                                    <Button
+                                      variant="outlined"
+                                      onClick={() => market.handleRefreshPretrade(row)}
+                                      disabled={market.pretradeLoadingKey === pairKey}
+                                    >
+                                      {market.pretradeLoadingKey === pairKey
+                                        ? 'Проверка...'
+                                        : 'Обновить pre-trade'}
+                                    </Button>
+                                  </Stack>
+                                  {market.pretradeError[pairKey] ? (
+                                    <Typography variant="body2" color="error">
+                                      {market.pretradeError[pairKey]}
+                                    </Typography>
+                                  ) : null}
+                                  {pretradePayload ? (
+                                    <>
+                                      <KeyValueGrid
+                                        entries={pretradeSummaryEntries}
+                                        renderLabel={renderFieldLabel}
+                                        renderValue={(value, key) =>
+                                          key === 'pretrade_checked_at'
+                                            ? formatDate(typeof value === 'string' ? value : undefined)
+                                            : formatCellValue(value, key)
+                                        }
+                                      />
+                                      <Box>
+                                        <Typography variant="subtitle2" fontWeight={600}>
+                                          Причины
+                                        </Typography>
+                                        {pretradePayload.reasons?.length ? (
+                                          <Typography variant="body2">
+                                            {pretradePayload.reasons
+                                              .map((reason) => formatValue(reason, 'pretrade_reasons'))
+                                              .join(', ')}
+                                          </Typography>
+                                        ) : (
+                                          <Typography variant="body2" color="text.secondary">
+                                            Нет блокирующих причин.
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                      {pretradePayload.order_price_bands ? (
+                                        <Box>
+                                          <Typography variant="subtitle2" fontWeight={600}>
+                                            Коридор цен заявки
+                                          </Typography>
+                                          <KeyValueGrid
+                                            payload={
+                                              pretradePayload.order_price_bands as Record<string, unknown>
+                                            }
+                                            renderLabel={renderFieldLabel}
+                                            renderValue={(value, key) => formatCellValue(value, key)}
+                                          />
+                                        </Box>
+                                      ) : null}
+                                      {pretradePayload.volume_requirements ? (
+                                        <Box>
+                                          <Typography variant="subtitle2" fontWeight={600}>
+                                            Требования по объёму
+                                          </Typography>
+                                          <KeyValueGrid
+                                            payload={
+                                              pretradePayload.volume_requirements as Record<string, unknown>
+                                            }
+                                            renderLabel={renderFieldLabel}
+                                            renderValue={(value, key) => formatCellValue(value, key)}
+                                          />
+                                        </Box>
+                                      ) : null}
+                                      {pretradePayload.gates ? (
+                                        <Box>
+                                          <Typography variant="subtitle2" fontWeight={600}>
+                                            Статус гейтов
+                                          </Typography>
+                                          <KeyValueGrid
+                                            payload={pretradePayload.gates as Record<string, unknown>}
+                                            renderLabel={renderFieldLabel}
+                                            renderValue={(value, key) => formatCellValue(value, key)}
+                                          />
+                                        </Box>
+                                      ) : null}
+                                      {pretradePayload.hits ? (
+                                        <Box>
+                                          <Typography variant="subtitle2" fontWeight={600}>
+                                            Hit-счётчики
+                                          </Typography>
+                                          <KeyValueGrid
+                                            payload={pretradePayload.hits as Record<string, unknown>}
+                                            renderLabel={renderFieldLabel}
+                                            renderValue={(value, key) => formatCellValue(value, key)}
+                                          />
+                                        </Box>
+                                      ) : null}
+                                    </>
+                                  ) : (
+                                    <Typography variant="body2" color="text.secondary">
+                                      Проверка ещё не выполнялась.
+                                    </Typography>
+                                  )}
+                                </Stack>
+                              )}
+                              <Box sx={{ mt: 2 }}>
                               <Typography variant="subtitle2" fontWeight={600}>
                                 Исполнить сигнал
                               </Typography>
@@ -472,6 +607,7 @@ const MarketTablesTab = ({
                                     Исполнений пока нет.
                                   </Typography>
                                 )}
+                              </Box>
                               </Box>
                             </Box>
                           ) : null}

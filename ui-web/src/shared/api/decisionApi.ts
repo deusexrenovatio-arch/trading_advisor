@@ -9,6 +9,7 @@ import type {
   HpoResponse,
   OperatorAction,
   ParameterSpec,
+  PretradeCheckResult,
   RefreshStatus,
   SignalHistoryRow,
   SpreadSeriesPoint,
@@ -125,6 +126,47 @@ export const fetchSpreadSeries = (
   params.set('window_days', String(windowDays))
   if (fullLife !== undefined) params.set('full_life', fullLife ? 'true' : 'false')
   return requestJson<SpreadSeriesPoint[]>(`/api/spread-series?${params.toString()}`, {
+    cache: 'no-store',
+  })
+}
+
+type PretradeCheckOptions = {
+  direction?: 'cash_and_carry' | 'reverse'
+  snapshots?: number
+  minHits?: number
+  eps?: number
+  syncSec?: number
+  pollSec?: number
+  qtyFut?: number
+  participationRate?: number
+  requireTradeflowForLast?: boolean
+}
+
+export const fetchPretradeCheck = (
+  stock: string,
+  future: string,
+  options: PretradeCheckOptions = {},
+) => {
+  const params = new URLSearchParams()
+  params.set('stock', stock)
+  params.set('future', future)
+  if (options.direction) params.set('direction', options.direction)
+  if (options.snapshots !== undefined) params.set('snapshots', String(options.snapshots))
+  if (options.minHits !== undefined) params.set('min_hits', String(options.minHits))
+  if (options.eps !== undefined) params.set('eps', String(options.eps))
+  if (options.syncSec !== undefined) params.set('sync_sec', String(options.syncSec))
+  if (options.pollSec !== undefined) params.set('poll_sec', String(options.pollSec))
+  if (options.qtyFut !== undefined) params.set('qty_fut', String(options.qtyFut))
+  if (options.participationRate !== undefined) {
+    params.set('participation_rate', String(options.participationRate))
+  }
+  if (options.requireTradeflowForLast !== undefined) {
+    params.set(
+      'require_tradeflow_for_last',
+      options.requireTradeflowForLast ? 'true' : 'false',
+    )
+  }
+  return requestJson<PretradeCheckResult>(`/api/pretrade/check?${params.toString()}`, {
     cache: 'no-store',
   })
 }

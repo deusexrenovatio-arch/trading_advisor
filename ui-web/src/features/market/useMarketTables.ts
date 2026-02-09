@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ExecutionRow,
   GenericRow,
+  PretradeCheckResult,
   RefreshStatus,
   SignalHistoryRow,
   SpreadSeriesPoint,
@@ -9,6 +10,7 @@ import type {
 import {
   executeSignal as executeSignalApi,
   fetchBacktests as fetchBacktestsApi,
+  fetchPretradeCheck as fetchPretradeCheckApi,
   fetchRefreshStatus as fetchRefreshStatusApi,
   fetchSignalExecutions as fetchSignalExecutionsApi,
   fetchSignalHistory as fetchSignalHistoryApi,
@@ -21,6 +23,9 @@ import { formatDateInputValue, parseDateInput } from '../../shared/utils/date'
 import { getTableColumns } from '../../shared/utils/tables'
 
 const AUTO_REFRESH_MS = 60_000
+const PRETRADE_SNAPSHOTS = 4
+const PRETRADE_MIN_HITS = 2
+const PRETRADE_POLL_SEC = 0
 
 export type MarketTab = 'top_pairs' | 'signals' | 'backtests'
 export type AppTab = MarketTab | 'decisions' | 'backtest_v2' | 'forward' | 'hpo'
@@ -65,6 +70,10 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
   const [executionLogs, setExecutionLogs] = useState<Record<string, ExecutionRow[]>>({})
   const [executionLoadingKey, setExecutionLoadingKey] = useState<string | null>(null)
   const [executionError, setExecutionError] = useState<Record<string, string>>({})
+  const [pretradeChecks, setPretradeChecks] = useState<Record<string, PretradeCheckResult>>({})
+  const [pretradeLoadingKey, setPretradeLoadingKey] = useState<string | null>(null)
+  const [pretradeError, setPretradeError] = useState<Record<string, string>>({})
+  const [pretradeCheckedAt, setPretradeCheckedAt] = useState<Record<string, string>>({})
   const [topPairsLimit, setTopPairsLimit] = useState('25')
   const [topPairsAll, setTopPairsAll] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -215,6 +224,55 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     }
   }, [])
 
+  const isEntrySignal = useCallback((row: GenericRow) => {
+    return String(row.signal_action ?? '').toLowerCase() === 'enter'
+  }, [])
+
+  const fetchPretradeCheck = useCallback(
+    async (
+      pairKey: string,
+      stock: string,
+      future: string,
+      direction: 'cash_and_carry' | 'reverse',
+      force = false,
+    ) => {
+      if (!force && pretradeChecks[pairKey]) return
+      setPretradeLoadingKey(pairKey)
+      setPretradeError((prev) => ({ ...prev, [pairKey]: '' }))
+      try {
+        const data = await fetchPretradeCheckApi(stock, future, {
+          direction,
+          snapshots: PRETRADE_SNAPSHOTS,
+          minHits: PRETRADE_MIN_HITS,
+          pollSec: PRETRADE_POLL_SEC,
+        })
+        setPretradeChecks((prev) => ({ ...prev, [pairKey]: data }))
+        setPretradeCheckedAt((prev) => ({ ...prev, [pairKey]: new Date().toISOString() }))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Не удалось загрузить pre-trade check'
+        setPretradeError((prev) => ({ ...prev, [pairKey]: message }))
+      } finally {
+        setPretradeLoadingKey(null)
+      }
+    },
+    [pretradeChecks],
+  )
+
+  const handleRefreshPretrade = useCallback(
+    (row: GenericRow) => {
+      const stock = row.stock ? String(row.stock) : ''
+      const future = row.future ? String(row.future) : ''
+      if (!stock || !future || !isEntrySignal(row)) return
+      const pairKey = `${stock}-${future}`
+      const directionValue =
+        String(row.signal_direction ?? '').toLowerCase() === 'reverse'
+          ? 'reverse'
+          : 'cash_and_carry'
+      void fetchPretradeCheck(pairKey, stock, future, directionValue, true)
+    },
+    [fetchPretradeCheck, isEntrySignal],
+  )
+
   const handleExecuteSignal = useCallback(
     async (row: GenericRow) => {
       const payload = {
@@ -291,8 +349,25 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       if (tab === 'signals' && stock && future && !executionLogs[pairKey]) {
         void fetchExecutionLog(pairKey, stock, future)
       }
+      if (tab === 'signals' && stock && future && isEntrySignal(row) && !pretradeChecks[pairKey]) {
+        const directionValue =
+          String(row.signal_direction ?? '').toLowerCase() === 'reverse'
+            ? 'reverse'
+            : 'cash_and_carry'
+        void fetchPretradeCheck(pairKey, stock, future, directionValue)
+      }
     },
-    [expandedRowKey, executionLogs, fetchExecutionLog, fetchSpreadSeries, spreadSeries, tab],
+    [
+      expandedRowKey,
+      executionLogs,
+      fetchExecutionLog,
+      fetchPretradeCheck,
+      fetchSpreadSeries,
+      isEntrySignal,
+      pretradeChecks,
+      spreadSeries,
+      tab,
+    ],
   )
 
   const onExecutionFormFieldChange = useCallback((field: keyof ExecutionForm, value: string) => {
@@ -589,9 +664,15 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     executionForm,
     onExecutionFormFieldChange,
     handleExecuteSignal,
+    isEntrySignal,
     executionError,
     executionLogs,
     executionLoadingKey,
+    pretradeChecks,
+    pretradeLoadingKey,
+    pretradeError,
+    pretradeCheckedAt,
+    handleRefreshPretrade,
     fetchAuxData,
     refreshAuxData,
     historyFrom,

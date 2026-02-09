@@ -114,6 +114,29 @@ export type RefreshStatus = {
   next_run_at?: string | null
 }
 
+export type PretradeCheckResult = {
+  status: string
+  ready_to_place: boolean
+  manual_confirm_required?: boolean
+  reasons?: string[]
+  pair?: {
+    stock: string
+    future: string
+    direction: string
+  }
+  targets?: {
+    spot_target?: number
+    future_target_per_share?: number
+    spread_target?: number
+  }
+  order_price_bands?: Record<string, number | null>
+  volume_requirements?: Record<string, number | null>
+  gates?: Record<string, boolean>
+  hits?: Record<string, number>
+  last_snapshot?: Record<string, unknown>
+  params?: Record<string, unknown>
+}
+
 export type ParameterSpec = {
   key: string
   value_type: string
