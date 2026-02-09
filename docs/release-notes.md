@@ -22,6 +22,20 @@ Added
   - order price bands,
   - volume requirements,
   - gate statuses and hit counters.
+- Signals UI detail tab now groups execution metrics into readable sections:
+  - `Контекст сигнала`,
+  - `План входа` (entry corridors),
+  - `Риск и стоп-уровни` (TP/SL),
+  - `Прогноз выхода` (horizon/date/probabilities),
+  - `Метрики модели` (curated quality subset, no raw dump).
+- Signals detail tabs are now data-driven:
+  - `Сигнал` is the default tab for Signals rows,
+  - `Обзор` / `Альфа` / `Ликвидность` are shown only when data is present for the selected row,
+  - UI shows coverage counters for plan fields and an explicit note when `entry_*` / `tp/sl` / `forecast_*` are absent in API payload.
+- Field metadata/localization improvements:
+  - entry/TP/SL/forecast labels/tooltips translated and clarified,
+  - orderbook quality fields now have labels/tooltips,
+  - pre-trade fields (`status`, price bands, gates, hits, reasons) now have readable labels + value mapping.
 - Signal payload now includes a trading plan with actionable execution data:
   - entry corridors for stock/futures/spread (`entry_*`),
   - TP/SL levels by spread (`tp_spread_*`, `sl_spread_*`),
@@ -43,6 +57,9 @@ Changed
   - `GET /api/signals`
   - `GET /api/signals/active`
   - `GET /api/signals/history`
+- Signal API contract for `signals/*` is now stabilized for legacy/incomplete rows:
+  - execution-plan/model keys are always present in payload (`entry_*`, `tp/sl_*`, `forecast_*`, orderbook/model scores),
+  - missing values are returned as `null` instead of absent keys.
 - Added config key `spread_carry_alpha.entry_price_tolerance_pct`:
   - used for entry corridor generation in signals,
   - used as default `eps` in `GET /api/pretrade/check` when `eps` is not passed.

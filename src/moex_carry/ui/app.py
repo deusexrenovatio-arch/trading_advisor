@@ -203,11 +203,62 @@ def _df_to_records(df: pd.DataFrame) -> list[dict[str, object]]:
     return [_sanitize_value(record) for record in records]
 
 
+SIGNAL_METRIC_CONTRACT_KEYS: tuple[str, ...] = (
+    "entry_price_tolerance_pct",
+    "entry_stock_min",
+    "entry_stock_max",
+    "entry_future_min_per_share",
+    "entry_future_max_per_share",
+    "entry_spread_min",
+    "entry_spread_max",
+    "entry_spread_pct_min",
+    "entry_spread_pct_max",
+    "tp_net",
+    "sl_net",
+    "tp_spread_pct_level",
+    "sl_spread_pct_level",
+    "tp_spread_level",
+    "sl_spread_level",
+    "tp_stock_level_if_fut_const",
+    "sl_stock_level_if_fut_const",
+    "tp_future_level_if_stock_const",
+    "sl_future_level_if_stock_const",
+    "forecast_tp_probability",
+    "forecast_sl_probability",
+    "forecast_exit_days",
+    "forecast_exit_date",
+    "forecast_model",
+    "orderbook_pass",
+    "orderbook_stock_min_depth",
+    "orderbook_fut_min_depth",
+    "orderbook_stock_quote_age_sec",
+    "orderbook_fut_quote_age_sec",
+    "orderbook_stock_imbalance",
+    "orderbook_fut_imbalance",
+    "floor_rate_annual",
+    "rtc_pct",
+    "spread_pct",
+    "score_floor",
+    "score_alpha",
+    "total_score",
+)
+
+
+def _normalize_signal_metrics(metrics: object) -> dict[str, object]:
+    normalized: dict[str, object]
+    if isinstance(metrics, dict):
+        normalized = {str(key): _sanitize_value(value) for key, value in metrics.items()}
+    else:
+        normalized = {}
+    for key in SIGNAL_METRIC_CONTRACT_KEYS:
+        normalized.setdefault(key, None)
+    return normalized
+
+
 def _merge_signal_metrics(record: dict[str, object]) -> dict[str, object]:
-    metrics = record.get("signal_metrics")
-    if not isinstance(metrics, dict):
-        return record
+    metrics = _normalize_signal_metrics(record.get("signal_metrics"))
     merged = dict(record)
+    merged["signal_metrics"] = metrics
     for key, value in metrics.items():
         if key not in merged:
             merged[key] = _sanitize_value(value)

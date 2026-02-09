@@ -3,7 +3,7 @@ from datetime import date
 import pandas as pd
 
 from moex_carry.config import AppSettings, DataConfig
-from moex_carry.ui.app import create_app
+from moex_carry.ui.app import SIGNAL_METRIC_CONTRACT_KEYS, create_app
 import moex_carry.ui.app as ui_app
 
 
@@ -85,6 +85,10 @@ def test_api_endpoints_return_rows(tmp_path):
     assert len(signals_data) == 1
     assert signals_data[0]["signal_action"] == "enter"
     assert signals_data[0]["entry_spread_pct_min"] == 0.009
+    assert signals_data[0]["sl_spread_pct_level"] is None
+    for key in SIGNAL_METRIC_CONTRACT_KEYS:
+        assert key in signals_data[0]
+        assert key in signals_data[0]["signal_metrics"]
 
     backtests = client.get("/api/backtests?limit=5")
     assert backtests.status_code == 200

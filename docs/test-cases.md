@@ -18,8 +18,8 @@
 - params-specs -> TC-PARAMS-API-001
 - frontend-params-specs -> TC-BACK-V2-UI-001, TC-BACK-V2-UI-002
 - top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
-- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001
-- signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
+- signals-active -> TC-SIG-ACT-API-001, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
+- signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
 - signals-history-reasons -> TC-SIG-HIST-API-004
 - signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001
 - pretrade-check -> TC-PRETRADE-API-001, TC-PRETRADE-UI-001
@@ -146,15 +146,20 @@ Expected:
   - `tp_spread_pct_level` / `sl_spread_pct_level`,
   - `forecast_exit_days`.
 
-### TC-SIG-PLAN-UI-001 Signals trading plan columns
+### TC-SIG-PLAN-UI-001 Signals trading plan layout
 Acceptance: signals-active
 Automation: ui-web/tests/top-signals.spec.ts
 Steps:
 1. Open Signals tab.
 2. Check table headers for execution-planning fields.
+3. Open Details for an active signal.
+4. Switch to detail tab `Сигнал`.
 Expected:
 - Table renders `entry_spread_pct_min`, `entry_spread_pct_max`, `tp_spread_pct_level`, `sl_spread_pct_level`, `forecast_exit_days`.
 - Values are formatted as percentages/days and sortable.
+- Detail panel groups metrics into blocks: `Контекст сигнала`, `План входа`, `Риск и стоп-уровни`, `Прогноз выхода`.
+- If plan fields are missing in API payload, UI shows explicit coverage counters and a non-blocking note (instead of empty broken tabs).
+- `Обзор` / `Альфа` / `Ликвидность` tabs in Signals details appear only when the selected signal row has data for them.
 
 
 ### TC-SIG-HIST-UI-001 Signals history filters and date range
@@ -313,6 +318,18 @@ Expected:
 - signal_action only enter/exit.
 - If `signal_metrics` contains execution plan values, they are also available at top level
   (e.g., `entry_spread_pct_min`, `entry_spread_pct_max`, `tp_spread_pct_level`, `sl_spread_pct_level`).
+
+### TC-SIG-CONTRACT-API-001 Signals API contract completeness
+Acceptance: signals-active, signals-history
+Automation: tests/test_signal_api.py, tests/test_ui_api.py
+Request:
+- GET /api/signals/active
+- GET /api/signals/history?limit=5
+- GET /api/signals?limit=5
+Expected:
+- Each row contains `signal_metrics` as an object.
+- Trading-plan/model keys are present both in `signal_metrics` and top-level payload.
+- For legacy/incomplete rows missing values are `null`, not missing keys.
 
 ### TC-SIG-HIST-API-001 History list and allowed actions
 Acceptance: signals-history

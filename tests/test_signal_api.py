@@ -8,7 +8,7 @@ from moex_carry.storage.repositories import (
     store_signal_history,
     store_signal_run,
 )
-from moex_carry.ui.app import create_app
+from moex_carry.ui.app import SIGNAL_METRIC_CONTRACT_KEYS, create_app
 
 
 def _seed_signal_run(session, run_id: str, timestamp: datetime, records: list[dict[str, object]]):
@@ -21,6 +21,14 @@ def _build_settings(tmp_path):
         data=DataConfig(data_dir=str(tmp_path)),
         database=DatabaseConfig(url=f"sqlite:///{tmp_path}/signals.db"),
     )
+
+
+def _assert_signal_metric_contract(row: dict[str, object]) -> None:
+    metrics = row.get("signal_metrics")
+    assert isinstance(metrics, dict)
+    for key in SIGNAL_METRIC_CONTRACT_KEYS:
+        assert key in row
+        assert key in metrics
 
 
 def test_signals_history_endpoint_returns_rows(tmp_path):
@@ -57,6 +65,8 @@ def test_signals_history_endpoint_returns_rows(tmp_path):
     assert data[0]["signal_action"] == "enter"
     assert data[0]["entry_spread_pct_min"] == 0.01
     assert data[0]["signal_metrics"]["entry_spread_pct_min"] == 0.01
+    _assert_signal_metric_contract(data[0])
+    assert data[0]["tp_spread_pct_level"] is None
 
 
 def test_signals_history_date_range_is_inclusive(tmp_path):
@@ -166,6 +176,8 @@ def test_signals_history_filters_by_stock_future_action(tmp_path):
     assert data[0]["stock"] == "AAA"
     assert data[0]["future"] == "AAH6"
     assert data[0]["signal_action"] == "enter"
+    _assert_signal_metric_contract(data[0])
+    assert data[0]["entry_spread_pct_min"] is None
 
 
 def test_signals_execute_endpoint_persists_execution(tmp_path):
@@ -287,3 +299,9 @@ def test_signals_active_includes_open_positions(tmp_path):
     open_row = next(row for row in data if row["stock"] == "AAA")
     assert open_row["signal_action"] == "exit"
     assert open_row["forecast_exit_days"] == 3
+    _assert_signal_metric_contract(open_row)
+
+    enter_row = next(row for row in data if row["stock"] == "BBB")
+    assert enter_row["signal_action"] == "enter"
+    _assert_signal_metric_contract(enter_row)
+    assert enter_row["entry_spread_pct_min"] is None
