@@ -68,6 +68,10 @@ export const valueLabels: Record<string, Record<string, string>> = {
     reverse: 'Реверс',
     neutral: 'Нейтрально',
   },
+  forecast_model: {
+    half_life_capped: 'Half-life capped',
+    h_max_days: 'Time-stop horizon',
+  },
   signal_reasons: {
     enter_ok: 'Вход разрешён',
     skip_floor: 'Пропуск: floor',

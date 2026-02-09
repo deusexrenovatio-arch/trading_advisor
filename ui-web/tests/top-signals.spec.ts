@@ -75,6 +75,20 @@ const activeSignals = [
     signal_action: 'enter',
     signal_direction: 'cash_and_carry',
     signal_score: 0.42,
+    spread_pct: 0.011,
+    entry_spread_pct_min: 0.009,
+    entry_spread_pct_max: 0.013,
+    tp_spread_pct_level: 0.021,
+    sl_spread_pct_level: 0.001,
+    forecast_exit_days: 5,
+    forecast_exit_date: '2026-01-17',
+    signal_metrics: {
+      entry_spread_pct_min: 0.009,
+      entry_spread_pct_max: 0.013,
+      tp_spread_pct_level: 0.021,
+      sl_spread_pct_level: 0.001,
+      forecast_exit_days: 5,
+    },
   },
   {
     run_id: 'run-1',
@@ -290,6 +304,9 @@ test.describe('Top pairs + Signals UI', () => {
     await page.goto('/')
     await page.getByRole('tab', { name: 'Сигналы' }).click()
     await expect(page.getByText('SBER')).toBeVisible()
+    const headerRow = page.locator('table thead')
+    await expect(headerRow.getByText('Entry spread min, %')).toBeVisible()
+    await expect(headerRow.getByText('SL spread level, %')).toBeVisible()
 
     await page.getByLabel('История с (ГГГГ-ММ-ДД)').fill('2026-01-12')
     await page.getByLabel('История по (ГГГГ-ММ-ДД)').fill('2026-01-12')

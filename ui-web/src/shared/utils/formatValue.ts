@@ -40,6 +40,13 @@ const percentColumns = new Set([
   'drawdown',
   'expected_net_irr',
   'spread_vol_pct',
+  'entry_price_tolerance_pct',
+  'entry_spread_pct_min',
+  'entry_spread_pct_max',
+  'tp_spread_pct_level',
+  'sl_spread_pct_level',
+  'forecast_tp_probability',
+  'forecast_sl_probability',
 ])
 
 const alreadyPercentColumns = new Set(['cycle_return_pct'])
@@ -75,6 +82,19 @@ const columnDigits: Record<string, number> = {
   turnover: 2,
   sharpe: 2,
   cost_round_trip: 2,
+  entry_stock_min: 2,
+  entry_stock_max: 2,
+  entry_future_min_per_share: 2,
+  entry_future_max_per_share: 2,
+  entry_spread_min: 4,
+  entry_spread_max: 4,
+  tp_spread_level: 4,
+  sl_spread_level: 4,
+  tp_stock_level_if_fut_const: 2,
+  sl_stock_level_if_fut_const: 2,
+  tp_future_level_if_stock_const: 2,
+  sl_future_level_if_stock_const: 2,
+  forecast_exit_days: 0,
 }
 
 export const toNumeric = (value: unknown) => {

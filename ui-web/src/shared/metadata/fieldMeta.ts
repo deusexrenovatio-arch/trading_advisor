@@ -936,6 +936,124 @@ export const fieldMeta: Record<string, FieldMeta> = {
       'Интерпретация: количество флагов качества данных.',
     digits: 0,
   },
+  entry_price_tolerance_pct: {
+    label: 'Entry tolerance, %',
+    tooltip:
+      'Formula: allowed deviation from signal targets for both legs. ' +
+      'Used to form entry corridors for stock, futures, and spread.',
+    format: 'percent',
+    digits: 2,
+  },
+  entry_stock_min: {
+    label: 'Entry stock min',
+    tooltip: 'Lower bound of acceptable stock price for entry.',
+    digits: 2,
+  },
+  entry_stock_max: {
+    label: 'Entry stock max',
+    tooltip: 'Upper bound of acceptable stock price for entry.',
+    digits: 2,
+  },
+  entry_future_min_per_share: {
+    label: 'Entry fut min/share',
+    tooltip: 'Lower bound of acceptable futures price per share for entry.',
+    digits: 2,
+  },
+  entry_future_max_per_share: {
+    label: 'Entry fut max/share',
+    tooltip: 'Upper bound of acceptable futures price per share for entry.',
+    digits: 2,
+  },
+  entry_spread_min: {
+    label: 'Entry spread min',
+    tooltip: 'Lower bound of acceptable spread level at entry.',
+    digits: 4,
+  },
+  entry_spread_max: {
+    label: 'Entry spread max',
+    tooltip: 'Upper bound of acceptable spread level at entry.',
+    digits: 4,
+  },
+  entry_spread_pct_min: {
+    label: 'Entry spread min, %',
+    tooltip: 'Lower bound of acceptable spread_pct at entry.',
+    format: 'percent',
+    digits: 2,
+  },
+  entry_spread_pct_max: {
+    label: 'Entry spread max, %',
+    tooltip: 'Upper bound of acceptable spread_pct at entry.',
+    format: 'percent',
+    digits: 2,
+  },
+  tp_spread_pct_level: {
+    label: 'TP spread level, %',
+    tooltip: 'Spread_pct level where TP exit condition is expected to trigger.',
+    format: 'percent',
+    digits: 2,
+  },
+  sl_spread_pct_level: {
+    label: 'SL spread level, %',
+    tooltip: 'Spread_pct level where SL exit condition is expected to trigger.',
+    format: 'percent',
+    digits: 2,
+  },
+  tp_spread_level: {
+    label: 'TP spread level',
+    tooltip: 'Absolute spread level where TP exit condition is expected to trigger.',
+    digits: 4,
+  },
+  sl_spread_level: {
+    label: 'SL spread level',
+    tooltip: 'Absolute spread level where SL exit condition is expected to trigger.',
+    digits: 4,
+  },
+  tp_stock_level_if_fut_const: {
+    label: 'TP stock lvl (fut const)',
+    tooltip: 'Stock level that corresponds to TP spread, assuming futures price is unchanged.',
+    digits: 2,
+  },
+  sl_stock_level_if_fut_const: {
+    label: 'SL stock lvl (fut const)',
+    tooltip: 'Stock level that corresponds to SL spread, assuming futures price is unchanged.',
+    digits: 2,
+  },
+  tp_future_level_if_stock_const: {
+    label: 'TP fut lvl (stock const)',
+    tooltip: 'Futures level that corresponds to TP spread, assuming stock price is unchanged.',
+    digits: 2,
+  },
+  sl_future_level_if_stock_const: {
+    label: 'SL fut lvl (stock const)',
+    tooltip: 'Futures level that corresponds to SL spread, assuming stock price is unchanged.',
+    digits: 2,
+  },
+  forecast_tp_probability: {
+    label: 'P(TP in H), %',
+    tooltip: 'Estimated probability of TP hit within configured horizon H.',
+    format: 'percent',
+    digits: 2,
+  },
+  forecast_sl_probability: {
+    label: 'P(SL in H), %',
+    tooltip: 'Estimated probability of SL hit within configured horizon H.',
+    format: 'percent',
+    digits: 2,
+  },
+  forecast_exit_days: {
+    label: 'Forecast exit, days',
+    tooltip: 'Estimated holding duration to expected exit.',
+    format: 'days',
+    digits: 0,
+  },
+  forecast_exit_date: {
+    label: 'Forecast exit date',
+    tooltip: 'Estimated calendar date of expected exit.',
+  },
+  forecast_model: {
+    label: 'Forecast model',
+    tooltip: 'Heuristic used to estimate forecast exit timing.',
+  },
   universe: {
     label: 'Вселенная',
   },

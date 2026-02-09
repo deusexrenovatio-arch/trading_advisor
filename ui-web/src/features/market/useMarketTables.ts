@@ -93,6 +93,16 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     note: '',
   })
   const auxFetchInFlight = useRef(false)
+  const mergeSignalMetrics = useCallback((rows: GenericRow[]) => {
+    return rows.map((row) => {
+      const metrics = row.signal_metrics
+      if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics)) return row
+      return {
+        ...(metrics as Record<string, unknown>),
+        ...row,
+      }
+    })
+  }, [])
 
   const fetchAuxData = useCallback(async () => {
     if (auxFetchInFlight.current) return
@@ -114,6 +124,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         label: string,
         result: PromiseSettledResult<GenericRow[]>,
         setter: (rows: GenericRow[]) => void,
+        transform?: (rows: GenericRow[]) => GenericRow[],
       ) => {
         if (result.status === 'rejected') {
           const message = result.reason instanceof Error ? result.reason.message : 'ошибка загрузки'
@@ -121,7 +132,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
           setter([])
           return false
         }
-        setter(result.value)
+        setter(transform ? transform(result.value) : result.value)
         return true
       }
       const parseStatus = (
@@ -148,6 +159,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         'Сигналы',
         results[1] as PromiseSettledResult<GenericRow[]>,
         setSignals,
+        mergeSignalMetrics,
       )
       parseRows('Бэктесты', results[2] as PromiseSettledResult<GenericRow[]>, setBacktests)
       parseStatus(
@@ -168,7 +180,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       setAuxLoading(false)
       auxFetchInFlight.current = false
     }
-  }, [topPairsAll, topPairsLimit])
+  }, [mergeSignalMetrics, topPairsAll, topPairsLimit])
 
   const requestRecompute = useCallback(async (): Promise<boolean> => {
     setRecomputeLoading(true)
@@ -415,7 +427,11 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         'signal_direction',
         'signal_score',
         'spread_pct',
-        'floor_rate_annual',
+        'entry_spread_pct_min',
+        'entry_spread_pct_max',
+        'tp_spread_pct_level',
+        'sl_spread_pct_level',
+        'forecast_exit_days',
       ])
     }
     return tableColumns
@@ -560,9 +576,40 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
   )
 
   const executionFields = useMemo(() => {
-    const base = ['signal_action', 'signal_direction', 'signal_score']
-    const extra = tab === 'signals' ? ['signal_reasons', 'signal_metrics'] : ['decision']
-    return [...base, ...extra]
+    if (tab !== 'signals') {
+      return ['signal_action', 'signal_direction', 'signal_score', 'decision']
+    }
+    return [
+      'signal_action',
+      'signal_direction',
+      'signal_score',
+      'entry_price_tolerance_pct',
+      'entry_stock_min',
+      'entry_stock_max',
+      'entry_future_min_per_share',
+      'entry_future_max_per_share',
+      'entry_spread_min',
+      'entry_spread_max',
+      'entry_spread_pct_min',
+      'entry_spread_pct_max',
+      'tp_net',
+      'sl_net',
+      'tp_spread_pct_level',
+      'sl_spread_pct_level',
+      'tp_spread_level',
+      'sl_spread_level',
+      'tp_stock_level_if_fut_const',
+      'sl_stock_level_if_fut_const',
+      'tp_future_level_if_stock_const',
+      'sl_future_level_if_stock_const',
+      'forecast_exit_days',
+      'forecast_exit_date',
+      'forecast_model',
+      'forecast_tp_probability',
+      'forecast_sl_probability',
+      'signal_reasons',
+      'signal_metrics',
+    ]
   }, [tab])
 
   const signalFilterRows = useMemo<GenericRow[]>(() => {
