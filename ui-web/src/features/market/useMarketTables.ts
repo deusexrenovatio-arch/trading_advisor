@@ -249,7 +249,11 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         setPretradeChecks((prev) => ({ ...prev, [pairKey]: data }))
         setPretradeCheckedAt((prev) => ({ ...prev, [pairKey]: new Date().toISOString() }))
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Не удалось загрузить pre-trade check'
+        let message = err instanceof Error ? err.message : 'Не удалось загрузить pre-trade check'
+        if (err instanceof Error && err.message.includes('404')) {
+          message =
+            'Pre-trade endpoint недоступен (404). Перезапустите backend из актуального main с --config configs/default.yaml.'
+        }
         setPretradeError((prev) => ({ ...prev, [pairKey]: message }))
       } finally {
         setPretradeLoadingKey(null)
