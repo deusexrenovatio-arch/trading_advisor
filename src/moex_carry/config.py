@@ -87,6 +87,13 @@ class SpreadCarryAlphaConfig(BaseModel):
     min_avg_dollarvol_stock: Optional[float] = None
     min_avg_dollarvol_fut: Optional[float] = None
     min_open_interest: Optional[float] = None
+    require_live_orderbook_for_entry: bool = False
+    min_orderbook_depth_stock: Optional[float] = None
+    min_orderbook_depth_fut: Optional[float] = None
+    max_orderbook_age_sec_stock: Optional[float] = None
+    max_orderbook_age_sec_fut: Optional[float] = None
+    max_orderbook_imbalance_ratio_stock: Optional[float] = None
+    max_orderbook_imbalance_ratio_fut: Optional[float] = None
     participation_rate: float = 0.1
     max_days_to_exit: Optional[float] = None
 

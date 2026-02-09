@@ -95,6 +95,9 @@ class StockMarketPoint:
     last: Optional[float]
     volume: Optional[float]
     dollar_volume: Optional[float]
+    bid_depth: Optional[float] = None
+    ask_depth: Optional[float] = None
+    quote_age_sec: Optional[float] = None
 
 
 @dataclass
@@ -106,3 +109,6 @@ class FutMarketPoint:
     last: Optional[float]
     volume: Optional[float]
     open_interest: Optional[float]
+    bid_depth: Optional[float] = None
+    ask_depth: Optional[float] = None
+    quote_age_sec: Optional[float] = None

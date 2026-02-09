@@ -17,11 +17,13 @@ from pydantic import ValidationError
 from moex_carry.config import AppSettings, resolve_paths
 from moex_carry.contracts.strategy_test import BacktestRequest, ForwardTestRequest, HpoRequest
 from moex_carry.backtest_v2.runtime import run_backtest_v2_cached, serialize_backtest_report
+from moex_carry.data.moex_iss import MoexIssClient
 from moex_carry.decision_log import load_jsonl
 from moex_carry.forward.runtime import load_forward_status, start_forward_run
 from moex_carry.hpo.runtime import load_hpo_status, start_hpo_run
 from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
+from moex_carry.pretrade.delay_gate import run_delay_gate
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_active_signals,
@@ -168,6 +170,24 @@ def _parse_bool(value: object) -> bool | None:
     return None
 
 
+def _parse_int(value: object, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_float(value: object, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _bad_request(message: str, *, details: object | None = None):
     payload = {"error": "invalid_request", "message": message}
     if details is not None:
@@ -245,6 +265,26 @@ def _parse_date_bound(raw: str, bound: str) -> datetime | None:
     except ValueError:
         return None
     return _normalize_datetime(parsed)
+
+
+def _future_scale_from_raw(path, secid: str) -> float:
+    if not path.exists():
+        return 1.0
+    try:
+        futures_df = pd.read_csv(path)
+    except Exception:
+        return 1.0
+    if futures_df.empty or "SECID" not in futures_df.columns:
+        return 1.0
+    rows = futures_df[futures_df["SECID"].astype(str) == str(secid)]
+    if rows.empty:
+        return 1.0
+    row = rows.iloc[0]
+    lot = pd.to_numeric(row.get("LOTVOLUME"), errors="coerce")
+    multiplier = pd.to_numeric(row.get("MULTIPLIER"), errors="coerce")
+    lot_value = float(lot) if pd.notna(lot) and float(lot) > 0 else 1.0
+    mult_value = float(multiplier) if pd.notna(multiplier) and float(multiplier) > 0 else 1.0
+    return lot_value * mult_value
 
 
 def _read_cache(path, ttl_minutes: int) -> list[dict[str, object]] | None:
@@ -839,6 +879,119 @@ def create_app(settings: AppSettings) -> Dash:
         records = _df_to_records(series_df)
         _write_cache(cache_path, records)
         return jsonify(records)
+
+    @server.route("/api/pretrade/check", methods=["GET"])
+    def pretrade_check_api():
+        stock = request.args.get("stock")
+        future = request.args.get("future")
+        if not stock or not future:
+            return jsonify({"error": "missing_params", "message": "stock and future are required"}), 400
+
+        top_pairs = load_top_pairs(paths.data_dir)
+        pair_row = pd.DataFrame()
+        if not top_pairs.empty and {"stock", "future"}.issubset(top_pairs.columns):
+            pair_row = top_pairs[
+                (top_pairs["stock"].astype(str) == str(stock))
+                & (top_pairs["future"].astype(str) == str(future))
+            ]
+
+        row = pair_row.iloc[0] if not pair_row.empty else None
+        default_direction = "cash_and_carry"
+        if row is not None and "signal_direction" in row and pd.notna(row.get("signal_direction")):
+            default_direction = str(row.get("signal_direction"))
+        direction = str(request.args.get("direction") or default_direction).strip().lower()
+        if direction not in {"cash_and_carry", "reverse"}:
+            return _bad_request("direction must be cash_and_carry or reverse")
+
+        spot_default = None
+        fut_default = None
+        spread_default = None
+        if row is not None:
+            spot_default = row.get("spot")
+            fut_default = row.get("future_price")
+            spread_default = row.get("spread_mid")
+
+        spot_target = _parse_float(request.args.get("spot_target"), float(spot_default) if pd.notna(spot_default) else float("nan"))
+        future_target = _parse_float(
+            request.args.get("future_target"),
+            float(fut_default) if pd.notna(fut_default) else float("nan"),
+        )
+        if math.isnan(spot_target) or math.isnan(future_target):
+            return _bad_request("spot_target and future_target are required if pair is absent in top_pairs")
+
+        spread_fallback = spot_target - future_target
+        spread_target = _parse_float(
+            request.args.get("spread_target"),
+            float(spread_default) if pd.notna(spread_default) else spread_fallback,
+        )
+
+        snapshots = max(_parse_int(request.args.get("snapshots"), 4), 1)
+        snapshots = min(snapshots, 12)
+        min_hits = max(_parse_int(request.args.get("min_hits"), 2), 1)
+        min_hits = min(min_hits, snapshots)
+        eps = max(_parse_float(request.args.get("eps"), 0.0015), 0.0001)
+        eps = min(eps, 0.05)
+        sync_sec = max(_parse_float(request.args.get("sync_sec"), 120.0), 1.0)
+        poll_sec = max(_parse_float(request.args.get("poll_sec"), 5.0), 0.0)
+        poll_sec = min(poll_sec, 15.0)
+
+        require_tradeflow = _parse_bool(request.args.get("require_tradeflow_for_last"))
+        if require_tradeflow is None:
+            require_tradeflow = False
+
+        qty_fut_default = float(settings.spread_carry_alpha.max_contracts_per_pair or 1)
+        qty_fut = max(_parse_float(request.args.get("qty_fut"), qty_fut_default), 0.0)
+        participation_default = float(settings.spread_carry_alpha.participation_rate or 0.1)
+        participation_rate = max(
+            _parse_float(request.args.get("participation_rate"), participation_default),
+            0.000001,
+        )
+        participation_rate = min(participation_rate, 1.0)
+
+        future_scale = _future_scale_from_raw(paths.data_dir / "raw" / "futures.csv", future)
+        client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+
+        try:
+            result = run_delay_gate(
+                client,
+                stock=stock,
+                future=future,
+                direction=direction,
+                spot_target=spot_target,
+                future_target=future_target,
+                spread_target=spread_target,
+                future_scale=future_scale,
+                qty_fut=qty_fut,
+                participation_rate=participation_rate,
+                snapshots=snapshots,
+                min_hits=min_hits,
+                eps=eps,
+                sync_sec=sync_sec,
+                poll_sec=poll_sec,
+                require_tradeflow_for_last=require_tradeflow,
+                stock_engine=settings.moex.engine_shares,
+                stock_market=settings.moex.market_shares,
+                stock_board=settings.moex.shares_board,
+                fut_engine=settings.moex.engine_futures,
+                fut_market=settings.moex.market_futures,
+                fut_board=settings.moex.futures_board,
+            )
+        except Exception as exc:
+            logger.exception("Pretrade delay gate failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+
+        result["params"] = {
+            "snapshots": snapshots,
+            "min_hits": min_hits,
+            "eps": eps,
+            "sync_sec": sync_sec,
+            "poll_sec": poll_sec,
+            "require_tradeflow_for_last": require_tradeflow,
+            "qty_fut": qty_fut,
+            "participation_rate": participation_rate,
+            "future_scale": future_scale,
+        }
+        return jsonify(_sanitize_value(result))
 
     app = Dash(__name__, server=server, url_base_pathname="/dash/")
     app.layout = html.Div(

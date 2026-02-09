@@ -63,6 +63,13 @@ spread_carry_alpha:
   min_avg_dollarvol_stock: null
   min_avg_dollarvol_fut: null
   min_open_interest: null
+  require_live_orderbook_for_entry: false
+  min_orderbook_depth_stock: null
+  min_orderbook_depth_fut: null
+  max_orderbook_age_sec_stock: null
+  max_orderbook_age_sec_fut: null
+  max_orderbook_imbalance_ratio_stock: null
+  max_orderbook_imbalance_ratio_fut: null
   participation_rate: 0.1
   max_days_to_exit: null
   min_DTE_entry: 7

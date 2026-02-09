@@ -185,6 +185,93 @@ def _future_price_scale(spec: ContractSpec | None) -> float:
     return scale if scale > 0 else 1.0
 
 
+def _min_depth(bid_depth: float | None, ask_depth: float | None) -> float | None:
+    if bid_depth is None or ask_depth is None:
+        return None
+    if bid_depth <= 0 or ask_depth <= 0:
+        return None
+    return min(float(bid_depth), float(ask_depth))
+
+
+def _depth_imbalance_ratio(bid_depth: float | None, ask_depth: float | None) -> float | None:
+    depth_min = _min_depth(bid_depth, ask_depth)
+    if depth_min is None:
+        return None
+    depth_max = max(float(bid_depth), float(ask_depth))
+    return depth_max / depth_min if depth_min > 0 else None
+
+
+def _evaluate_orderbook_gate(
+    alpha_cfg: object,
+    *,
+    use_intraday: bool,
+    spot_bid: float | None,
+    spot_ask: float | None,
+    fut_bid: float | None,
+    fut_ask: float | None,
+    stock_bid_depth: float | None,
+    stock_ask_depth: float | None,
+    fut_bid_depth: float | None,
+    fut_ask_depth: float | None,
+    stock_quote_age_sec: float | None,
+    fut_quote_age_sec: float | None,
+) -> tuple[bool, list[str], dict[str, float | bool | None]]:
+    reasons: list[str] = []
+    stock_imbalance = _depth_imbalance_ratio(stock_bid_depth, stock_ask_depth)
+    fut_imbalance = _depth_imbalance_ratio(fut_bid_depth, fut_ask_depth)
+    stock_min_depth = _min_depth(stock_bid_depth, stock_ask_depth)
+    fut_min_depth = _min_depth(fut_bid_depth, fut_ask_depth)
+
+    if bool(getattr(alpha_cfg, "require_live_orderbook_for_entry", False)):
+        if not use_intraday:
+            reasons.append("orderbook_intraday_disabled")
+        if spot_bid is None or spot_ask is None:
+            reasons.append("orderbook_stock_missing")
+        if fut_bid is None or fut_ask is None:
+            reasons.append("orderbook_fut_missing")
+
+    min_stock_depth_cfg = getattr(alpha_cfg, "min_orderbook_depth_stock", None)
+    if min_stock_depth_cfg is not None:
+        if stock_min_depth is None or stock_min_depth < float(min_stock_depth_cfg):
+            reasons.append("orderbook_stock_depth")
+
+    min_fut_depth_cfg = getattr(alpha_cfg, "min_orderbook_depth_fut", None)
+    if min_fut_depth_cfg is not None:
+        if fut_min_depth is None or fut_min_depth < float(min_fut_depth_cfg):
+            reasons.append("orderbook_fut_depth")
+
+    stock_age_cfg = getattr(alpha_cfg, "max_orderbook_age_sec_stock", None)
+    if stock_age_cfg is not None:
+        if stock_quote_age_sec is None or stock_quote_age_sec > float(stock_age_cfg):
+            reasons.append("orderbook_stock_stale")
+
+    fut_age_cfg = getattr(alpha_cfg, "max_orderbook_age_sec_fut", None)
+    if fut_age_cfg is not None:
+        if fut_quote_age_sec is None or fut_quote_age_sec > float(fut_age_cfg):
+            reasons.append("orderbook_fut_stale")
+
+    stock_imbalance_cfg = getattr(alpha_cfg, "max_orderbook_imbalance_ratio_stock", None)
+    if stock_imbalance_cfg is not None:
+        if stock_imbalance is None or stock_imbalance > float(stock_imbalance_cfg):
+            reasons.append("orderbook_stock_imbalance")
+
+    fut_imbalance_cfg = getattr(alpha_cfg, "max_orderbook_imbalance_ratio_fut", None)
+    if fut_imbalance_cfg is not None:
+        if fut_imbalance is None or fut_imbalance > float(fut_imbalance_cfg):
+            reasons.append("orderbook_fut_imbalance")
+
+    metrics: dict[str, float | bool | None] = {
+        "orderbook_pass": len(reasons) == 0,
+        "orderbook_stock_min_depth": stock_min_depth,
+        "orderbook_fut_min_depth": fut_min_depth,
+        "orderbook_stock_imbalance": stock_imbalance,
+        "orderbook_fut_imbalance": fut_imbalance,
+        "orderbook_stock_quote_age_sec": stock_quote_age_sec,
+        "orderbook_fut_quote_age_sec": fut_quote_age_sec,
+    }
+    return len(reasons) == 0, reasons, metrics
+
+
 def compute_spread_series(
     prices: pd.DataFrame,
     expiry: date,
@@ -714,6 +801,12 @@ def compute_pairs(
         spot_ask = None
         fut_bid = None
         fut_ask = None
+        stock_bid_depth = None
+        stock_ask_depth = None
+        fut_bid_depth = None
+        fut_ask_depth = None
+        stock_quote_age_sec = None
+        fut_quote_age_sec = None
         open_interest = None
         use_intraday = settings.strategy.intraday_marketdata and (
             requested_as_of is None or as_of_date == date.today()
@@ -730,6 +823,9 @@ def compute_pairs(
                 spot_mid = stock_point.mid or spot_mid
                 spot_bid = stock_point.bid
                 spot_ask = stock_point.ask
+                stock_bid_depth = stock_point.bid_depth
+                stock_ask_depth = stock_point.ask_depth
+                stock_quote_age_sec = stock_point.quote_age_sec
             future_quotes = client.get_marketdata(
                 settings.moex.engine_futures,
                 settings.moex.market_futures,
@@ -745,6 +841,9 @@ def compute_pairs(
                 fut_last = fut_point.last / scale if fut_point.last is not None else None
                 future_mid = fut_mid or fut_last or future_mid
                 open_interest = fut_point.open_interest
+                fut_bid_depth = fut_point.bid_depth
+                fut_ask_depth = fut_point.ask_depth
+                fut_quote_age_sec = fut_point.quote_age_sec
 
         key_rate = latest_rate(key_rates, as_of_snapshot)
         key_rate_value = key_rate.rate if key_rate else 0.0
@@ -860,6 +959,20 @@ def compute_pairs(
             min_open_interest=alpha_cfg.min_open_interest,
             max_days_to_exit=alpha_cfg.max_days_to_exit,
         )
+        orderbook_pass, orderbook_reasons, orderbook_metrics = _evaluate_orderbook_gate(
+            alpha_cfg,
+            use_intraday=use_intraday,
+            spot_bid=spot_bid,
+            spot_ask=spot_ask,
+            fut_bid=fut_bid,
+            fut_ask=fut_ask,
+            stock_bid_depth=stock_bid_depth,
+            stock_ask_depth=stock_ask_depth,
+            fut_bid_depth=fut_bid_depth,
+            fut_ask_depth=fut_ask_depth,
+            stock_quote_age_sec=stock_quote_age_sec,
+            fut_quote_age_sec=fut_quote_age_sec,
+        )
 
         spread_pct_series = series_df["spread_pct"].tolist()
         alpha_stats = alpha_metrics(spread_pct_series, horizon=alpha_cfg.H_max_days, tp=tp_net, sl=alpha_cfg.SL_pct)
@@ -883,6 +996,8 @@ def compute_pairs(
             decision = "SKIP_FLOOR"
         elif not liquidity_pass:
             decision = "SKIP_LIQUIDITY"
+        elif not orderbook_pass:
+            decision = "SKIP_ORDERBOOK"
         elif alpha_cfg.min_floor_score is not None and score_floor < alpha_cfg.min_floor_score:
             decision = "SKIP_SCORE"
         elif alpha_cfg.min_alpha_score is not None and score_alpha < alpha_cfg.min_alpha_score:
@@ -893,6 +1008,8 @@ def compute_pairs(
         signal_action = "enter" if decision == "ENTER_OK" else "hold"
         signal_direction = "cash_and_carry" if decision == "ENTER_OK" else None
         signal_reasons = [decision.lower()]
+        if decision == "SKIP_ORDERBOOK":
+            signal_reasons.extend(orderbook_reasons)
         signal_metrics = {
             "spread_pct": spread_pct_value,
             "rtc_pct": rtc_pct,
@@ -900,6 +1017,14 @@ def compute_pairs(
             "score_floor": score_floor,
             "score_alpha": score_alpha,
             "total_score": total_score,
+            "orderbook_pass": orderbook_pass,
+            "orderbook_reasons": orderbook_reasons,
+            "orderbook_stock_quote_age_sec": orderbook_metrics["orderbook_stock_quote_age_sec"],
+            "orderbook_fut_quote_age_sec": orderbook_metrics["orderbook_fut_quote_age_sec"],
+            "orderbook_stock_min_depth": orderbook_metrics["orderbook_stock_min_depth"],
+            "orderbook_fut_min_depth": orderbook_metrics["orderbook_fut_min_depth"],
+            "orderbook_stock_imbalance": orderbook_metrics["orderbook_stock_imbalance"],
+            "orderbook_fut_imbalance": orderbook_metrics["orderbook_fut_imbalance"],
         }
         stock_name = (
             instrument_map.get(mapping.stock_secid).name
@@ -924,6 +1049,7 @@ def compute_pairs(
                 "decision": decision,
                 "floor_pass": floor_metrics.floor_pass,
                 "liquidity_pass": liquidity_pass,
+                "orderbook_pass": orderbook_pass,
                 "dte": dte,
                 "p_hit_tp": alpha_stats.p_hit_tp,
                 "p_hit_sl": alpha_stats.p_hit_sl,
@@ -931,6 +1057,14 @@ def compute_pairs(
                 "half_life": alpha_stats.half_life,
                 "spread_bps_stock": spread_bps_stock_value,
                 "spread_bps_fut": spread_bps_fut_value,
+                "stock_bid_depth": stock_bid_depth,
+                "stock_ask_depth": stock_ask_depth,
+                "fut_bid_depth": fut_bid_depth,
+                "fut_ask_depth": fut_ask_depth,
+                "stock_quote_age_sec": stock_quote_age_sec,
+                "fut_quote_age_sec": fut_quote_age_sec,
+                "stock_depth_imbalance": orderbook_metrics["orderbook_stock_imbalance"],
+                "fut_depth_imbalance": orderbook_metrics["orderbook_fut_imbalance"],
                 "dollar_vol_stock": dollar_vol_stock,
                 "dollar_vol_fut": dollar_vol_fut,
                 "days_to_exit": days_exit,
@@ -944,6 +1078,7 @@ def compute_pairs(
                 "signal_score": total_score,
                 "signal_reasons": signal_reasons,
                 "signal_metrics": signal_metrics,
+                "orderbook_reasons": orderbook_reasons,
                 "snapshot_id": snapshot["snapshot_id"],
                 "snapshot_hash": snapshot["hash"],
                 "snapshot_as_of": snapshot["as_of"],
