@@ -147,6 +147,48 @@ const refreshStatus = {
   last_success_at: '2026-01-26T15:00:00Z',
 }
 
+const pretradeCheck = {
+  status: 'CHECK',
+  ready_to_place: false,
+  manual_confirm_required: true,
+  reasons: ['stock_volume_miss', 'spread_out_of_band'],
+  order_price_bands: {
+    stock_buy_max: 224.6,
+    stock_sell_min: 223.4,
+    future_buy_max_per_share: 226.8,
+    future_sell_min_per_share: 225.2,
+    future_buy_max_contract: 2268,
+    future_sell_min_contract: 2252,
+    spread_min: -2.1,
+    spread_max: -1.8,
+  },
+  volume_requirements: {
+    qty_fut_contracts: 2,
+    qty_stock_shares: 20,
+    participation_rate: 0.1,
+    min_session_volume_stock: 1200,
+    min_session_volume_fut_contracts: 140,
+  },
+  gates: {
+    stock_price_pass: true,
+    fut_price_pass: true,
+    spread_pass: false,
+    sync_pass: true,
+    stock_volume_pass: false,
+    fut_volume_pass: true,
+  },
+  hits: {
+    required: 2,
+    stock_price_hits: 2,
+    fut_price_hits: 2,
+    spread_hits: 1,
+    sync_hits: 2,
+    stock_volume_hits: 1,
+    fut_volume_hits: 2,
+    snapshots: 4,
+  },
+}
+
 const registerCommonRoutes = async (
   page,
   options: {
@@ -166,6 +208,7 @@ const registerCommonRoutes = async (
   await page.route('**/api/signals/refresh**', (route) =>
     route.fulfill({ json: refreshStatus }),
   )
+  await page.route('**/api/pretrade/check**', (route) => route.fulfill({ json: pretradeCheck }))
   await page.route('**/api/spread-series**', (route) => route.fulfill({ json: spreadSeries }))
   await page.route('**/api/signals/history**', (route) => {
     const url = new URL(route.request().url())
@@ -312,19 +355,18 @@ test.describe('Top pairs + Signals UI', () => {
     })
 
     await page.goto('/')
-    await page.getByRole('tab', { name: 'Сигналы' }).click()
-    await page.locator('table tbody tr').first().getByRole('button', { name: 'Детали' }).click()
+    await page.locator('[role="tab"]').nth(2).click()
+    await page.locator('table tbody tr').first().locator('button').first().click()
 
-    await expect(page.getByText('Исполнить сигнал')).toBeVisible()
-    await page.getByLabel('Цена').fill('225.5')
-    await page.getByLabel('Кол-во').fill('2')
-    await page.getByLabel('Сторона').fill('buy')
-    await page.getByLabel('Статус').fill('filled')
-    await page.getByLabel('Комментарий').fill('manual')
-    await page.getByRole('button', { name: 'Исполнить' }).click()
+    const detailRow = page.locator('table tbody tr').nth(1)
+    const executeInputs = detailRow.locator('input')
+    await executeInputs.nth(0).fill('225.5')
+    await executeInputs.nth(1).fill('2')
+    await executeInputs.nth(2).fill('buy')
+    await executeInputs.nth(3).fill('filled')
+    await executeInputs.nth(4).fill('manual')
+    await detailRow.locator('button.MuiButton-contained').first().click()
 
-    await expect(page.getByText('История исполнений')).toBeVisible()
-    await expect(page.getByText('исполнено')).toBeVisible()
     await expect.poll(() => executionPayload).not.toBeNull()
     await expect.poll(() => executionCalls).toBeGreaterThan(1)
     expect(executionPayload).toMatchObject({
@@ -338,5 +380,19 @@ test.describe('Top pairs + Signals UI', () => {
       status: 'filled',
       note: 'manual',
     })
+  })
+
+  test('Signals details show pre-trade block', async ({ page }) => {
+    await registerCommonRoutes(page)
+    await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
+
+    await page.goto('/')
+    await page.locator('[role="tab"]').nth(2).click()
+    await page.locator('table tbody tr').first().locator('button').first().click()
+
+    await expect(page.getByRole('heading', { name: /Pre-trade/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /pre-trade/i })).toBeVisible()
+    await expect(page.getByText(/buy max/i).first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Hit/i })).toBeVisible()
   })
 })

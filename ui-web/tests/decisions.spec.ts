@@ -208,5 +208,6 @@ test.describe('Decisions UI', () => {
 
     await page.getByRole('button', { name: 'Обновить' }).click()
     await expect(decisionCell1).toBeVisible()
+    expect(decisionCalls).toBeGreaterThan(0)
   })
 })

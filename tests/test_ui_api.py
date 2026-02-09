@@ -117,3 +117,78 @@ def test_spread_series_endpoint_uses_builder(tmp_path, monkeypatch):
     assert data[0]["date"] == "2024-01-01"
     assert data[0]["spread_pct"] == 0.02
     assert data[0]["entry_flag"] is True
+
+
+class _FakeMoexClientPretrade:
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def get_marketdata(self, _engine: str, _market: str, _board: str, secid: str):
+        if secid == "AAA":
+            return [
+                {
+                    "BID": 100.0,
+                    "OFFER": 100.1,
+                    "LAST": 100.05,
+                    "VOLTODAY": 1000,
+                    "NUMTRADES": 2000,
+                    "SYSTIME": "2026-02-09 16:40:00",
+                }
+            ]
+        return [
+            {
+                "BID": 1010.0,
+                "OFFER": 1012.0,
+                "LAST": 1011.0,
+                "VOLTODAY": 100,
+                "NUMTRADES": 1000,
+                "SYSTIME": "2026-02-09 16:40:30",
+            }
+        ]
+
+
+def test_pretrade_check_endpoint_returns_price_bands_and_volume_gate(tmp_path, monkeypatch):
+    output_dir = tmp_path / "output"
+    raw_dir = tmp_path / "raw"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    _write_csv(
+        output_dir / "top_pairs.csv",
+        [
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "spot": 100.0,
+                "future_price": 101.0,
+                "spread_mid": -1.0,
+                "signal_direction": "cash_and_carry",
+            }
+        ],
+    )
+    _write_csv(
+        raw_dir / "futures.csv",
+        [
+            {
+                "SECID": "AAH6",
+                "LOTVOLUME": 10,
+                "MULTIPLIER": 1,
+            }
+        ],
+    )
+    monkeypatch.setattr(ui_app, "MoexIssClient", _FakeMoexClientPretrade)
+
+    settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get(
+        "/api/pretrade/check?stock=AAA&future=AAH6&snapshots=1&min_hits=1&poll_sec=0"
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "PLACE"
+    assert payload["ready_to_place"] is True
+    assert payload["gates"]["stock_volume_pass"] is True
+    assert payload["gates"]["fut_volume_pass"] is True
+    assert "order_price_bands" in payload
+    assert "future_sell_min_contract" in payload["order_price_bands"]
