@@ -2,6 +2,7 @@
 import {
   Box,
   Button,
+  Chip,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -25,6 +26,81 @@ import {
 import SpreadChart from '../../SpreadChart'
 import KeyValueGrid from '../../shared/ui/KeyValueGrid'
 import type { MarketTablesState, MarketTab } from './useMarketTables'
+
+const SIGNAL_MODEL_PRIMARY_KEYS = new Set([
+  'orderbook_pass',
+  'orderbook_stock_quote_available',
+  'orderbook_fut_quote_available',
+  'orderbook_stock_depth_available',
+  'orderbook_fut_depth_available',
+  'orderbook_data_warnings',
+])
+
+const PRETRADE_PRIMARY_GATE_KEYS = [
+  'quote_pass',
+  'stock_quote_pass',
+  'fut_quote_pass',
+  'stock_price_pass',
+  'fut_price_pass',
+  'spread_pass',
+  'sync_pass',
+  'stock_volume_pass',
+  'fut_volume_pass',
+]
+
+const PRETRADE_PRIMARY_HIT_KEYS = [
+  'required',
+  'snapshots',
+  'stock_quote_hits',
+  'fut_quote_hits',
+  'stock_price_hits',
+  'fut_price_hits',
+  'spread_hits',
+  'sync_hits',
+  'stock_volume_hits',
+  'fut_volume_hits',
+]
+
+const PRETRADE_GATE_CHIPS = [
+  { key: 'quote_pass', label: 'Котировки' },
+  { key: 'stock_price_pass', label: 'Акция' },
+  { key: 'fut_price_pass', label: 'Фьючерс' },
+  { key: 'spread_pass', label: 'Спред' },
+  { key: 'sync_pass', label: 'Синхронность' },
+  { key: 'stock_volume_pass', label: 'Объём акции' },
+  { key: 'fut_volume_pass', label: 'Объём фьючерса' },
+] as const
+
+const toOrderedEntries = (
+  payload: Record<string, unknown> | undefined,
+  orderedKeys: string[],
+  excludeKeys?: Set<string>,
+) => {
+  if (!payload) return []
+  const entries = orderedKeys
+    .filter((key) => key in payload)
+    .map((key) => ({ key, value: payload[key] }))
+
+  const seen = new Set(entries.map((entry) => entry.key))
+  const rest = Object.entries(payload)
+    .filter(([key]) => !seen.has(key))
+    .filter(([key]) => (excludeKeys ? !excludeKeys.has(key) : true))
+    .map(([key, value]) => ({ key, value }))
+
+  return [...entries, ...rest]
+}
+
+const gateChipColor = (value: unknown): 'success' | 'error' | 'default' => {
+  if (value === true) return 'success'
+  if (value === false) return 'error'
+  return 'default'
+}
+
+const gateChipStatus = (value: unknown) => {
+  if (value === true) return 'OK'
+  if (value === false) return 'FAIL'
+  return 'N/A'
+}
 
 
 type Props = {
@@ -98,7 +174,7 @@ const MarketTablesTab = ({
                 <MenuItem value="">Все</MenuItem>
                 {market.tableSignalOptions.map((item) => (
                   <MenuItem key={item} value={item}>
-                    {formatValue(item, 'signal_action')}
+                    {formatValue(item, tab === 'signals' ? 'signal_action_effective' : 'signal_action')}
                   </MenuItem>
                 ))}
               </Select>
@@ -234,46 +310,38 @@ const MarketTablesTab = ({
               const pairKey =
                 (row.stock && row.future ? `${row.stock}-${row.future}` : null) ?? String(row.id)
               const isExpanded = market.expandedRowKey === pairKey
-              const snapshotEntries = market.stripDuplicates(
-                market.snapshotFields
+              const buildEntries = (keys: string[], stripVisible = true) => {
+                const entries = keys
                   .map((key) => ({
                     key,
                     value: row[key],
                   }))
-                  .filter((field) => field.value !== null && field.value !== undefined),
+                  .filter((field) => field.value !== null && field.value !== undefined)
+                return stripVisible ? market.stripDuplicates(entries) : entries
+              }
+              const snapshotEntries = buildEntries(market.snapshotFields)
+              const overviewEntries = buildEntries(market.overviewFields)
+              const alphaEntries = buildEntries(market.alphaFields)
+              const liquidityEntries = buildEntries(market.liquidityFields)
+              const executionEntries = buildEntries(market.executionFields)
+              const signalContextEntries = buildEntries(market.signalContextFields, false)
+              const signalEntryEntries = buildEntries(market.signalEntryFields, false)
+              const signalRiskEntries = buildEntries(market.signalRiskFields, false)
+              const signalForecastEntries = buildEntries(market.signalForecastFields, false)
+              const signalModelEntries = buildEntries(market.signalModelFields, false)
+              const signalModelPrimaryEntries = signalModelEntries.filter((entry) =>
+                SIGNAL_MODEL_PRIMARY_KEYS.has(entry.key),
               )
-              const overviewEntries = market.stripDuplicates(
-                market.overviewFields
-                  .map((key) => ({
-                    key,
-                    value: row[key],
-                  }))
-                  .filter((field) => field.value !== null && field.value !== undefined),
+              const signalModelTechnicalEntries = signalModelEntries.filter(
+                (entry) => !SIGNAL_MODEL_PRIMARY_KEYS.has(entry.key),
               )
-              const alphaEntries = market.stripDuplicates(
-                market.alphaFields
-                  .map((key) => ({
-                    key,
-                    value: row[key],
-                  }))
-                  .filter((field) => field.value !== null && field.value !== undefined),
-              )
-              const liquidityEntries = market.stripDuplicates(
-                market.liquidityFields
-                  .map((key) => ({
-                    key,
-                    value: row[key],
-                  }))
-                  .filter((field) => field.value !== null && field.value !== undefined),
-              )
-              const executionEntries = market.stripDuplicates(
-                market.executionFields
-                  .map((key) => ({
-                    key,
-                    value: row[key],
-                  }))
-                  .filter((field) => field.value !== null && field.value !== undefined),
-              )
+              const hasSignalPlanData =
+                signalEntryEntries.length > 0 ||
+                signalRiskEntries.length > 0 ||
+                signalForecastEntries.length > 0
+              const showOverviewTab = tab !== 'signals' || overviewEntries.length > 0
+              const showAlphaTab = tab !== 'signals' || alphaEntries.length > 0
+              const showLiquidityTab = tab !== 'signals' || liquidityEntries.length > 0
               const isEntrySignal = market.isEntrySignal(row)
               const pretradePayload = market.pretradeChecks[pairKey]
               const pretradeSummaryEntries = pretradePayload
@@ -296,6 +364,51 @@ const MarketTablesTab = ({
                     },
                   ]
                 : []
+              const pretradeGatePayload = pretradePayload?.gates as Record<string, unknown> | undefined
+              const pretradeHitPayload = pretradePayload?.hits as Record<string, unknown> | undefined
+              const primaryGateEntries = toOrderedEntries(pretradeGatePayload, PRETRADE_PRIMARY_GATE_KEYS)
+              const primaryGateKeys = new Set(primaryGateEntries.map((entry) => entry.key))
+              const diagnosticGateEntries = Object.entries(pretradeGatePayload ?? {})
+                .filter(([key]) => !primaryGateKeys.has(key))
+                .map(([key, value]) => ({ key, value }))
+              const hitEntries = toOrderedEntries(pretradeHitPayload, PRETRADE_PRIMARY_HIT_KEYS)
+              const pretradeGateMap = new Map(primaryGateEntries.map((entry) => [entry.key, entry.value]))
+              const isPretradePending =
+                isEntrySignal &&
+                market.pretradeLoadingKey === pairKey
+              const isPretradeMissing =
+                isEntrySignal &&
+                !pretradePayload &&
+                !market.pretradeError[pairKey] &&
+                !isPretradePending
+              const isPretradeBlocked =
+                isEntrySignal &&
+                Boolean(pretradePayload) &&
+                !pretradePayload.ready_to_place
+              const signalActionRaw = String(row.signal_action ?? '').toLowerCase()
+              const signalActionEffective =
+                String(row.signal_action_effective ?? '').toLowerCase() ||
+                (!isEntrySignal
+                  ? signalActionRaw || 'hold'
+                  : isPretradePending || isPretradeMissing || Boolean(market.pretradeError[pairKey])
+                    ? 'check_pretrade'
+                    : isPretradeBlocked
+                      ? 'hold_pretrade'
+                      : 'enter')
+              const effectiveSignalEntries = [
+                { key: 'signal_action_effective', value: signalActionEffective },
+                ...(pretradePayload?.status ? [{ key: 'pretrade_status', value: pretradePayload.status }] : []),
+                ...(market.pretradeCheckedAt[pairKey]
+                  ? [{ key: 'pretrade_checked_at', value: market.pretradeCheckedAt[pairKey] }]
+                  : []),
+              ]
+              const executionBlockedReason = !isEntrySignal
+                ? ''
+                : signalActionEffective === 'hold_pretrade'
+                  ? 'Вход заблокирован pre-trade ограничениями.'
+                  : signalActionEffective === 'check_pretrade'
+                    ? 'Сначала подтвердите pre-trade проверку.'
+                    : ''
 
               return (
                 <Fragment key={pairKey}>
@@ -327,10 +440,11 @@ const MarketTablesTab = ({
                           </Box>
                           <Box>
                             <Tabs value={market.detailTab} onChange={(_, value) => market.setDetailTab(value)}>
-                              <Tab label="Обзор" value="overview" />
-                              <Tab label="Альфа" value="alpha" />
-                              <Tab label="Ликвидность" value="liquidity" />
-                              <Tab label="Исполнение" value="execution" />
+                              {tab === 'signals' ? <Tab label="Сигнал" value="execution" /> : null}
+                              {showOverviewTab ? <Tab label="Обзор" value="overview" /> : null}
+                              {showAlphaTab ? <Tab label="Альфа" value="alpha" /> : null}
+                              {showLiquidityTab ? <Tab label="Ликвидность" value="liquidity" /> : null}
+                              {tab !== 'signals' ? <Tab label="Исполнение" value="execution" /> : null}
                             </Tabs>
                             {market.detailTab === 'overview' && overviewEntries.length ? (
                               <KeyValueGrid
@@ -353,12 +467,137 @@ const MarketTablesTab = ({
                                 renderValue={(value, key) => formatCellValue(value, key)}
                               />
                             ) : null}
-                            {market.detailTab === 'execution' && executionEntries.length ? (
-                              <KeyValueGrid
-                                entries={executionEntries}
-                                renderLabel={renderFieldLabel}
-                                renderValue={(value, key) => formatCellValue(value, key)}
-                              />
+                            {market.detailTab === 'execution' ? (
+                              tab === 'signals' ? (
+                                <Stack spacing={2} sx={{ mt: 1 }}>
+                                  <Typography variant="body2" color="text.secondary">
+                                    Покрытие полей: вход {signalEntryEntries.length}/
+                                    {market.signalEntryFields.length}, риск {signalRiskEntries.length}/
+                                    {market.signalRiskFields.length}, прогноз {signalForecastEntries.length}/
+                                    {market.signalForecastFields.length}
+                                  </Typography>
+                                  <Box>
+                                    <Typography variant="subtitle2" fontWeight={600}>
+                                      Контекст сигнала
+                                    </Typography>
+                                    <KeyValueGrid
+                                      entries={signalContextEntries}
+                                      renderLabel={renderFieldLabel}
+                                      renderValue={(value, key) => formatCellValue(value, key)}
+                                    />
+                                  </Box>
+                                  <Box>
+                                    <Typography variant="subtitle2" fontWeight={600}>
+                                      Итоговый сигнал
+                                    </Typography>
+                                    <KeyValueGrid
+                                      entries={effectiveSignalEntries}
+                                      renderLabel={renderFieldLabel}
+                                      renderValue={(value, key) =>
+                                        key === 'pretrade_checked_at'
+                                          ? formatDate(typeof value === 'string' ? value : undefined)
+                                          : formatCellValue(value, key)
+                                      }
+                                    />
+                                    {isEntrySignal ? (
+                                      primaryGateEntries.length ? (
+                                        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                                          {PRETRADE_GATE_CHIPS.map((chip) => (
+                                            <Chip
+                                              key={chip.key}
+                                              size="small"
+                                              variant="outlined"
+                                              color={gateChipColor(pretradeGateMap.get(chip.key))}
+                                              label={`${chip.label}: ${gateChipStatus(pretradeGateMap.get(chip.key))}`}
+                                            />
+                                          ))}
+                                        </Stack>
+                                      ) : (
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                          Выполните pre-trade проверку, чтобы подтвердить исполнимость входа.
+                                        </Typography>
+                                      )
+                                    ) : null}
+                                  </Box>
+                                  {signalEntryEntries.length ? (
+                                    <Box>
+                                      <Typography variant="subtitle2" fontWeight={600}>
+                                        План входа
+                                      </Typography>
+                                      <KeyValueGrid
+                                        entries={signalEntryEntries}
+                                        renderLabel={renderFieldLabel}
+                                        renderValue={(value, key) => formatCellValue(value, key)}
+                                      />
+                                    </Box>
+                                  ) : null}
+                                  {signalRiskEntries.length ? (
+                                    <Box>
+                                      <Typography variant="subtitle2" fontWeight={600}>
+                                        Риск и стоп-уровни
+                                      </Typography>
+                                      <KeyValueGrid
+                                        entries={signalRiskEntries}
+                                        renderLabel={renderFieldLabel}
+                                        renderValue={(value, key) => formatCellValue(value, key)}
+                                      />
+                                    </Box>
+                                  ) : null}
+                                  {signalForecastEntries.length ? (
+                                    <Box>
+                                      <Typography variant="subtitle2" fontWeight={600}>
+                                        Прогноз выхода
+                                      </Typography>
+                                      <KeyValueGrid
+                                        entries={signalForecastEntries}
+                                        renderLabel={renderFieldLabel}
+                                        renderValue={(value, key) => formatCellValue(value, key)}
+                                      />
+                                    </Box>
+                                  ) : null}
+                                  {!hasSignalPlanData ? (
+                                    <Typography variant="body2" color="text.secondary">
+                                      Плановые поля (`entry_*`, `tp/sl`, `forecast_*`) не переданы API в этом запуске.
+                                    </Typography>
+                                  ) : null}
+                                  {signalModelPrimaryEntries.length ? (
+                                    <Box>
+                                      <Typography variant="subtitle2" fontWeight={600}>
+                                        Проверки исполнимости
+                                      </Typography>
+                                      <KeyValueGrid
+                                        entries={signalModelPrimaryEntries}
+                                        renderLabel={renderFieldLabel}
+                                        renderValue={(value, key) => formatCellValue(value, key)}
+                                      />
+                                    </Box>
+                                  ) : null}
+                                  {signalModelTechnicalEntries.length ? (
+                                    <Box component="details" sx={{ mt: 1 }}>
+                                      <Box component="summary" sx={{ cursor: 'pointer' }}>
+                                        <Typography variant="subtitle2" fontWeight={600} component="span">
+                                          Технические метрики модели
+                                        </Typography>
+                                      </Box>
+                                      <KeyValueGrid
+                                        entries={signalModelTechnicalEntries}
+                                        renderLabel={renderFieldLabel}
+                                        renderValue={(value, key) => formatCellValue(value, key)}
+                                      />
+                                    </Box>
+                                  ) : null}
+                                </Stack>
+                              ) : executionEntries.length ? (
+                                <KeyValueGrid
+                                  entries={executionEntries}
+                                  renderLabel={renderFieldLabel}
+                                  renderValue={(value, key) => formatCellValue(value, key)}
+                                />
+                              ) : (
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                  Нет данных по исполнению.
+                                </Typography>
+                              )
                             ) : null}
                           </Box>
                           <Box>
@@ -418,17 +657,17 @@ const MarketTablesTab = ({
                                       />
                                       <Box>
                                         <Typography variant="subtitle2" fontWeight={600}>
-                                          Причины
+                                          Решение по pre-trade
                                         </Typography>
                                         {pretradePayload.reasons?.length ? (
-                                          <Typography variant="body2">
+                                          <Typography variant="body2" color="error.main">
                                             {pretradePayload.reasons
                                               .map((reason) => formatValue(reason, 'pretrade_reasons'))
                                               .join(', ')}
                                           </Typography>
                                         ) : (
                                           <Typography variant="body2" color="text.secondary">
-                                            Нет блокирующих причин.
+                                            Блокирующие причины не обнаружены.
                                           </Typography>
                                         )}
                                       </Box>
@@ -449,7 +688,7 @@ const MarketTablesTab = ({
                                       {pretradePayload.volume_requirements ? (
                                         <Box>
                                           <Typography variant="subtitle2" fontWeight={600}>
-                                            Требования по объёму
+                                            Объём и размер заявки
                                           </Typography>
                                           <KeyValueGrid
                                             payload={
@@ -460,28 +699,68 @@ const MarketTablesTab = ({
                                           />
                                         </Box>
                                       ) : null}
-                                      {pretradePayload.gates ? (
-                                        <Box>
-                                          <Typography variant="subtitle2" fontWeight={600}>
-                                            Статус гейтов
-                                          </Typography>
-                                          <KeyValueGrid
-                                            payload={pretradePayload.gates as Record<string, unknown>}
-                                            renderLabel={renderFieldLabel}
-                                            renderValue={(value, key) => formatCellValue(value, key)}
-                                          />
-                                        </Box>
-                                      ) : null}
-                                      {pretradePayload.hits ? (
-                                        <Box>
-                                          <Typography variant="subtitle2" fontWeight={600}>
-                                            Hit-счётчики
-                                          </Typography>
-                                          <KeyValueGrid
-                                            payload={pretradePayload.hits as Record<string, unknown>}
-                                            renderLabel={renderFieldLabel}
-                                            renderValue={(value, key) => formatCellValue(value, key)}
-                                          />
+                                      {diagnosticGateEntries.length ||
+                                      hitEntries.length ||
+                                      pretradePayload.last_snapshot ||
+                                      pretradePayload.params ? (
+                                        <Box component="details" sx={{ mt: 1 }}>
+                                          <Box component="summary" sx={{ cursor: 'pointer' }}>
+                                            <Typography variant="subtitle2" fontWeight={600} component="span">
+                                              Расширенная диагностика
+                                            </Typography>
+                                          </Box>
+                                          <Stack spacing={1} sx={{ mt: 1 }}>
+                                            {hitEntries.length ? (
+                                              <Box>
+                                                <Typography variant="subtitle2" fontWeight={600}>
+                                                  Счётчики снапшотов
+                                                </Typography>
+                                                <KeyValueGrid
+                                                  entries={hitEntries}
+                                                  renderLabel={renderFieldLabel}
+                                                  renderValue={(value, key) => formatCellValue(value, key)}
+                                                />
+                                              </Box>
+                                            ) : null}
+                                            {diagnosticGateEntries.length ? (
+                                              <Box>
+                                                <Typography variant="subtitle2" fontWeight={600}>
+                                                  Дополнительные гейты
+                                                </Typography>
+                                                <KeyValueGrid
+                                                  entries={diagnosticGateEntries}
+                                                  renderLabel={renderFieldLabel}
+                                                  renderValue={(value, key) => formatCellValue(value, key)}
+                                                />
+                                              </Box>
+                                            ) : null}
+                                            {pretradePayload.last_snapshot ? (
+                                              <Box>
+                                                <Typography variant="subtitle2" fontWeight={600}>
+                                                  Последний снапшот ISS
+                                                </Typography>
+                                                <KeyValueGrid
+                                                  payload={
+                                                    pretradePayload.last_snapshot as Record<string, unknown>
+                                                  }
+                                                  renderLabel={renderFieldLabel}
+                                                  renderValue={(value, key) => formatCellValue(value, key)}
+                                                />
+                                              </Box>
+                                            ) : null}
+                                            {pretradePayload.params ? (
+                                              <Box>
+                                                <Typography variant="subtitle2" fontWeight={600}>
+                                                  Параметры проверки
+                                                </Typography>
+                                                <KeyValueGrid
+                                                  payload={pretradePayload.params as Record<string, unknown>}
+                                                  renderLabel={renderFieldLabel}
+                                                  renderValue={(value, key) => formatCellValue(value, key)}
+                                                />
+                                              </Box>
+                                            ) : null}
+                                          </Stack>
                                         </Box>
                                       ) : null}
                                     </>
@@ -496,6 +775,11 @@ const MarketTablesTab = ({
                               <Typography variant="subtitle2" fontWeight={600}>
                                 Исполнить сигнал
                               </Typography>
+                              {executionBlockedReason ? (
+                                <Typography variant="body2" color="warning.main" sx={{ mt: 0.5 }}>
+                                  {executionBlockedReason}
+                                </Typography>
+                              ) : null}
                               <Stack direction="row" spacing={2} flexWrap="wrap">
                                 <TextField
                                   label="Цена"
@@ -542,7 +826,11 @@ const MarketTablesTab = ({
                                   }
                                   sx={{ minWidth: 240 }}
                                 />
-                                <Button variant="contained" onClick={() => market.handleExecuteSignal(row)}>
+                                <Button
+                                  variant="contained"
+                                  onClick={() => market.handleExecuteSignal(row)}
+                                  disabled={Boolean(executionBlockedReason)}
+                                >
                                   Исполнить
                                 </Button>
                               </Stack>

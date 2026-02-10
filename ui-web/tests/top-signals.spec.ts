@@ -76,6 +76,10 @@ const activeSignals = [
     signal_direction: 'cash_and_carry',
     signal_score: 0.42,
     spread_pct: 0.011,
+    entry_stock_min: 298.2,
+    entry_stock_max: 301.8,
+    entry_future_min_per_share: 307.4,
+    entry_future_max_per_share: 311.0,
     entry_spread_pct_min: 0.009,
     entry_spread_pct_max: 0.013,
     tp_spread_pct_level: 0.021,
@@ -83,6 +87,10 @@ const activeSignals = [
     forecast_exit_days: 5,
     forecast_exit_date: '2026-01-17',
     signal_metrics: {
+      entry_stock_min: 298.2,
+      entry_stock_max: 301.8,
+      entry_future_min_per_share: 307.4,
+      entry_future_max_per_share: 311.0,
       entry_spread_pct_min: 0.009,
       entry_spread_pct_max: 0.013,
       tp_spread_pct_level: 0.021,
@@ -184,6 +192,9 @@ const pretradeCheck = {
     min_session_volume_fut_contracts: 140,
   },
   gates: {
+    quote_pass: true,
+    stock_quote_pass: true,
+    fut_quote_pass: true,
     stock_price_pass: true,
     fut_price_pass: true,
     spread_pass: false,
@@ -193,6 +204,8 @@ const pretradeCheck = {
   },
   hits: {
     required: 2,
+    stock_quote_hits: 2,
+    fut_quote_hits: 2,
     stock_price_hits: 2,
     fut_price_hits: 2,
     spread_hits: 1,
@@ -200,6 +213,24 @@ const pretradeCheck = {
     stock_volume_hits: 1,
     fut_volume_hits: 2,
     snapshots: 4,
+  },
+}
+
+const pretradeCheckReady = {
+  ...pretradeCheck,
+  status: 'PLACE',
+  ready_to_place: true,
+  manual_confirm_required: false,
+  reasons: [],
+  gates: {
+    ...pretradeCheck.gates,
+    spread_pass: true,
+    stock_volume_pass: true,
+  },
+  hits: {
+    ...pretradeCheck.hits,
+    spread_hits: 2,
+    stock_volume_hits: 2,
   },
 }
 
@@ -304,9 +335,17 @@ test.describe('Top pairs + Signals UI', () => {
     await page.goto('/')
     await page.getByRole('tab', { name: 'Сигналы' }).click()
     await expect(page.getByText('SBER')).toBeVisible()
+    await expect.poll(async () => {
+      const rowText = await page.locator('table tbody tr').first().innerText()
+      return (
+        rowText.includes('Ожидает pre-trade проверки') ||
+        rowText.includes('Вход заблокирован pre-trade')
+      )
+    }).toBeTruthy()
     const headerRow = page.locator('table thead')
-    await expect(headerRow.getByText('Entry spread min, %')).toBeVisible()
-    await expect(headerRow.getByText('SL spread level, %')).toBeVisible()
+    await expect(headerRow.getByText('Вход акция min')).toBeVisible()
+    await expect(headerRow.getByText('Вход фьючерс min/акц.')).toBeVisible()
+    await expect(headerRow.getByText('SL уровень спреда, %')).toBeVisible()
 
     await page.getByLabel('История с (ГГГГ-ММ-ДД)').fill('2026-01-12')
     await page.getByLabel('История по (ГГГГ-ММ-ДД)').fill('2026-01-12')
@@ -361,6 +400,7 @@ test.describe('Top pairs + Signals UI', () => {
     let executionCalls = 0
     await registerCommonRoutes(page)
     await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
+    await page.route('**/api/pretrade/check**', (route) => route.fulfill({ json: pretradeCheckReady }))
     await page.route('**/api/signals/execute', async (route) => {
       executionPayload = route.request().postDataJSON()
       await route.fulfill({ json: { status: 'ok' } })
@@ -406,10 +446,20 @@ test.describe('Top pairs + Signals UI', () => {
     await page.goto('/')
     await page.locator('[role="tab"]').nth(2).click()
     await page.locator('table tbody tr').first().locator('button').first().click()
+    await page.getByRole('tab', { name: 'Сигнал', exact: true }).click()
 
-    await expect(page.getByRole('heading', { name: /Pre-trade/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /pre-trade/i })).toBeVisible()
-    await expect(page.getByText(/buy max/i).first()).toBeVisible()
-    await expect(page.getByRole('heading', { name: /Hit/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Итоговый сигнал' })).toBeVisible()
+    await expect(page.getByText('Котировки: OK')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Pre-trade проверка (ISS)' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Обновить pre-trade' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Коридор цен заявки' })).toBeVisible()
+    await expect(page.getByText('Расширенная диагностика')).toBeVisible()
+    await page.getByText('Расширенная диагностика').click()
+    await expect(page.getByRole('heading', { name: 'Счётчики снапшотов' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Контекст сигнала' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'План входа' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Риск и стоп-уровни' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Прогноз выхода' })).toBeVisible()
   })
 })
+

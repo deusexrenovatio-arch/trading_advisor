@@ -26,6 +26,10 @@ const AUTO_REFRESH_MS = 60_000
 const PRETRADE_SNAPSHOTS = 4
 const PRETRADE_MIN_HITS = 2
 const PRETRADE_POLL_SEC = 0
+const PRETRADE_PREFETCH_LIMIT = 12
+const SIGNAL_ACTION_ENTER = 'enter'
+const SIGNAL_ACTION_HOLD_PRETRADE = 'hold_pretrade'
+const SIGNAL_ACTION_CHECK_PRETRADE = 'check_pretrade'
 
 export type MarketTab = 'top_pairs' | 'signals' | 'backtests'
 export type AppTab = MarketTab | 'decisions' | 'backtest_v2' | 'forward' | 'hpo'
@@ -102,6 +106,22 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         ...row,
       }
     })
+  }, [])
+
+  const toEffectiveSignalAction = useCallback(
+    (row: GenericRow) => {
+      if (tab !== 'signals') return String(row.signal_action ?? '').toLowerCase()
+      return String(row.signal_action_effective ?? row.signal_action ?? '').toLowerCase()
+    },
+    [tab],
+  )
+
+  const toHistorySignalAction = useCallback((action: string) => {
+    if (!action) return undefined
+    if (action === SIGNAL_ACTION_HOLD_PRETRADE || action === SIGNAL_ACTION_CHECK_PRETRADE) {
+      return SIGNAL_ACTION_ENTER
+    }
+    return action
   }, [])
 
   const fetchAuxData = useCallback(async () => {
@@ -206,13 +226,14 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     setHistoryLoading(true)
     setHistoryError(null)
     try {
+      const historyActionFilter = toHistorySignalAction(tableSignalFilter || '')
       const data = await fetchSignalHistoryApi(
         historyFrom || undefined,
         historyTo || undefined,
         500,
         tableStockFilter || undefined,
         tableFutureFilter || undefined,
-        tableSignalFilter || undefined,
+        historyActionFilter,
       )
       setSignalHistory(data)
     } catch (err) {
@@ -220,7 +241,14 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     } finally {
       setHistoryLoading(false)
     }
-  }, [historyFrom, historyTo, tableFutureFilter, tableSignalFilter, tableStockFilter])
+  }, [
+    historyFrom,
+    historyTo,
+    tableFutureFilter,
+    tableSignalFilter,
+    tableStockFilter,
+    toHistorySignalAction,
+  ])
 
   const fetchExecutionLog = useCallback(async (pairKey: string, stock: string, future: string) => {
     setExecutionLoadingKey(pairKey)
@@ -237,8 +265,28 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
   }, [])
 
   const isEntrySignal = useCallback((row: GenericRow) => {
-    return String(row.signal_action ?? '').toLowerCase() === 'enter'
+    return String(row.signal_action ?? '').toLowerCase() === SIGNAL_ACTION_ENTER
   }, [])
+
+  const resolveEffectiveSignalAction = useCallback(
+    (row: GenericRow): string => {
+      const action = String(row.signal_action ?? '').toLowerCase()
+      if (action !== SIGNAL_ACTION_ENTER) return action || 'hold'
+
+      const stock = row.stock ? String(row.stock) : ''
+      const future = row.future ? String(row.future) : ''
+      if (!stock || !future) return SIGNAL_ACTION_CHECK_PRETRADE
+
+      const pairKey = `${stock}-${future}`
+      if (pretradeLoadingKey === pairKey) return SIGNAL_ACTION_CHECK_PRETRADE
+      if (pretradeError[pairKey]) return SIGNAL_ACTION_CHECK_PRETRADE
+
+      const pretrade = pretradeChecks[pairKey]
+      if (!pretrade) return SIGNAL_ACTION_CHECK_PRETRADE
+      return pretrade.ready_to_place ? SIGNAL_ACTION_ENTER : SIGNAL_ACTION_HOLD_PRETRADE
+    },
+    [pretradeChecks, pretradeError, pretradeLoadingKey],
+  )
 
   const fetchPretradeCheck = useCallback(
     async (
@@ -356,7 +404,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         return
       }
       setExpandedRowKey(pairKey)
-      setDetailTab('overview')
+      setDetailTab(tab === 'signals' ? 'execution' : 'overview')
       const stock = row.stock ? String(row.stock) : ''
       const future = row.future ? String(row.future) : ''
       if (stock && future && !spreadSeries[pairKey]) {
@@ -392,10 +440,15 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
 
   const tableRows = useMemo<GenericRow[]>(() => {
     if (tab === 'top_pairs') return topPairs
-    if (tab === 'signals') return signals
+    if (tab === 'signals') {
+      return signals.map((row) => ({
+        ...row,
+        signal_action_effective: resolveEffectiveSignalAction(row),
+      }))
+    }
     if (tab === 'backtests') return backtests
     return []
-  }, [tab, topPairs, signals, backtests])
+  }, [tab, topPairs, signals, backtests, resolveEffectiveSignalAction])
 
   const tableColumns = useMemo(() => getTableColumns(tableRows), [tableRows])
   const tableVisibleColumns = useMemo(() => {
@@ -423,12 +476,13 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         'timestamp',
         'stock',
         'future',
-        'signal_action',
+        'signal_action_effective',
         'signal_direction',
         'signal_score',
-        'spread_pct',
-        'entry_spread_pct_min',
-        'entry_spread_pct_max',
+        'entry_stock_min',
+        'entry_stock_max',
+        'entry_future_min_per_share',
+        'entry_future_max_per_share',
         'tp_spread_pct_level',
         'sl_spread_pct_level',
         'forecast_exit_days',
@@ -470,7 +524,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       if (tab === 'top_pairs' || tab === 'signals') {
         if (tableStockFilter && String(row.stock ?? '') !== tableStockFilter) return false
         if (tableFutureFilter && String(row.future ?? '') !== tableFutureFilter) return false
-        if (tableSignalFilter && String(row.signal_action ?? '') !== tableSignalFilter) return false
+        if (tableSignalFilter && toEffectiveSignalAction(row) !== tableSignalFilter) return false
       }
       if (query && !JSON.stringify(row).toLowerCase().includes(query)) return false
       return true
@@ -482,6 +536,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     tableStockFilter,
     tableFutureFilter,
     tableSignalFilter,
+    toEffectiveSignalAction,
   ])
 
   const sortedTableRows = useMemo<GenericRow[]>(() => {
@@ -492,11 +547,46 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     return tableSortDirection === 'asc' ? sorted : sorted.reverse()
   }, [compareValues, filteredTableRows, tableSortDirection, tableSortKey])
 
+  useEffect(() => {
+    if (tab !== 'signals') return
+    if (pretradeLoadingKey) return
+
+    const candidate = sortedTableRows.slice(0, PRETRADE_PREFETCH_LIMIT).find((row) => {
+      if (!isEntrySignal(row)) return false
+      const stock = row.stock ? String(row.stock) : ''
+      const future = row.future ? String(row.future) : ''
+      if (!stock || !future) return false
+      const pairKey = `${stock}-${future}`
+      if (pretradeChecks[pairKey]) return false
+      if (pretradeError[pairKey]) return false
+      return true
+    })
+
+    if (!candidate) return
+
+    const stock = String(candidate.stock ?? '')
+    const future = String(candidate.future ?? '')
+    if (!stock || !future) return
+    const pairKey = `${stock}-${future}`
+    const directionValue =
+      String(candidate.signal_direction ?? '').toLowerCase() === 'reverse' ? 'reverse' : 'cash_and_carry'
+    void fetchPretradeCheck(pairKey, stock, future, directionValue)
+  }, [
+    fetchPretradeCheck,
+    isEntrySignal,
+    pretradeChecks,
+    pretradeError,
+    pretradeLoadingKey,
+    sortedTableRows,
+    tab,
+  ])
+
   const filteredSignalHistory = useMemo(() => {
     if (!signalHistory.length) return []
     const query = tableFilter.trim().toLowerCase()
     const fromTs = parseDateInput(historyFrom, 'start')
     const toTs = parseDateInput(historyTo, 'end')
+    const historyActionFilter = toHistorySignalAction(tableSignalFilter || '')
     return signalHistory.filter((row) => {
       const rowTs = Date.parse(row.timestamp)
       if ((fromTs !== null || toTs !== null) && Number.isNaN(rowTs)) return false
@@ -504,7 +594,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       if (toTs !== null && rowTs > toTs) return false
       if (tableStockFilter && String(row.stock ?? '') !== tableStockFilter) return false
       if (tableFutureFilter && String(row.future ?? '') !== tableFutureFilter) return false
-      if (tableSignalFilter && String(row.signal_action ?? '') !== tableSignalFilter) return false
+      if (historyActionFilter && String(row.signal_action ?? '') !== historyActionFilter) return false
       if (query && !JSON.stringify(row).toLowerCase().includes(query)) return false
       return true
     })
@@ -516,6 +606,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     tableSignalFilter,
     historyFrom,
     historyTo,
+    toHistorySignalAction,
   ])
 
   const showPairDetails = tab === 'top_pairs' || tab === 'signals'
@@ -575,14 +666,13 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     [],
   )
 
-  const executionFields = useMemo(() => {
-    if (tab !== 'signals') {
-      return ['signal_action', 'signal_direction', 'signal_score', 'decision']
-    }
-    return [
-      'signal_action',
-      'signal_direction',
-      'signal_score',
+  const signalContextFields = useMemo(
+    () => ['signal_action', 'signal_direction', 'signal_score', 'decision', 'signal_reasons'],
+    [],
+  )
+
+  const signalEntryFields = useMemo(
+    () => [
       'entry_price_tolerance_pct',
       'entry_stock_min',
       'entry_stock_max',
@@ -592,6 +682,12 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       'entry_spread_max',
       'entry_spread_pct_min',
       'entry_spread_pct_max',
+    ],
+    [],
+  )
+
+  const signalRiskFields = useMemo(
+    () => [
       'tp_net',
       'sl_net',
       'tp_spread_pct_level',
@@ -602,15 +698,51 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       'sl_stock_level_if_fut_const',
       'tp_future_level_if_stock_const',
       'sl_future_level_if_stock_const',
+    ],
+    [],
+  )
+
+  const signalForecastFields = useMemo(
+    () => [
       'forecast_exit_days',
       'forecast_exit_date',
       'forecast_model',
       'forecast_tp_probability',
       'forecast_sl_probability',
-      'signal_reasons',
-      'signal_metrics',
-    ]
-  }, [tab])
+    ],
+    [],
+  )
+
+  const signalModelFields = useMemo(
+    () => [
+      'orderbook_pass',
+      'orderbook_stock_quote_available',
+      'orderbook_fut_quote_available',
+      'orderbook_stock_depth_available',
+      'orderbook_fut_depth_available',
+      'orderbook_data_warnings',
+      'orderbook_stock_min_depth',
+      'orderbook_fut_min_depth',
+      'orderbook_stock_quote_age_sec',
+      'orderbook_fut_quote_age_sec',
+      'orderbook_stock_imbalance',
+      'orderbook_fut_imbalance',
+      'floor_rate_annual',
+      'rtc_pct',
+      'spread_pct',
+      'score_floor',
+      'score_alpha',
+      'total_score',
+    ],
+    [],
+  )
+
+  const executionFields = useMemo(() => {
+    if (tab !== 'signals') {
+      return ['signal_action', 'signal_direction', 'signal_score', 'decision']
+    }
+    return signalContextFields
+  }, [signalContextFields, tab])
 
   const signalFilterRows = useMemo<GenericRow[]>(() => {
     if (tab !== 'signals') return tableRows
@@ -634,13 +766,14 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
   const tableSignalOptions = useMemo(
     () =>
       Array.from(
-        new Set(signalFilterRows.map((row) => row.signal_action).filter(Boolean).map(String)),
+        new Set(signalFilterRows.map((row) => toEffectiveSignalAction(row)).filter(Boolean).map(String)),
       ).sort(),
-    [signalFilterRows],
+    [signalFilterRows, toEffectiveSignalAction],
   )
 
   useEffect(() => {
     setExpandedRowKey(null)
+    setDetailTab(tab === 'signals' ? 'execution' : 'overview')
     setTableStockFilter('')
     setTableFutureFilter('')
     setTableSignalFilter('')
@@ -708,6 +841,11 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     overviewFields,
     alphaFields,
     liquidityFields,
+    signalContextFields,
+    signalEntryFields,
+    signalRiskFields,
+    signalForecastFields,
+    signalModelFields,
     executionFields,
     spreadError,
     spreadLoadingKey,

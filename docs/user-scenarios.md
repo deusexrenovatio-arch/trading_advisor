@@ -19,6 +19,7 @@ Steps:
 2. Open Top pairs and Signals views.
 3. Click Reload to trigger recompute and refresh rankings and signals.
 4. Open pair Details to confirm snapshot_as_of and signal timestamps.
+5. In Signals details, open tab `Сигнал` and check grouped trading plan blocks.
 Expected:
 - Pairs are ranked by total_score.
 - Each row includes spread_pct, rtc_pct, floor_rate_annual, score_floor, score_alpha.
@@ -26,6 +27,12 @@ Expected:
   - entry spread corridor (`entry_spread_pct_min/max`),
   - spread TP/SL levels (`tp_spread_pct_level`, `sl_spread_pct_level`),
   - forecast exit horizon (`forecast_exit_days`).
+- Signal details show grouped plan sections:
+  - `Контекст сигнала`,
+  - `План входа`,
+  - `Риск и стоп-уровни`,
+  - `Прогноз выхода`.
+- If API does not provide plan fields (`entry_*`, `tp/sl`, `forecast_*`) for a row, the UI shows a coverage hint and keeps the screen readable without empty/broken tabs.
 - UI shows last successful recompute time.
 - snapshot_as_of and signal timestamps reflect the latest run time using ISO 8601 with timezone (e.g., 2026-01-26T18:45:00Z).
 

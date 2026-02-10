@@ -197,7 +197,7 @@ def test_pretrade_check_endpoint_returns_price_bands_and_volume_gate(tmp_path, m
     payload = response.get_json()
     assert payload["status"] == "PLACE"
     assert payload["ready_to_place"] is True
-    assert payload["params"]["require_live_quotes_for_legs"] is True
+    assert "require_live_quotes_for_legs" not in payload["params"]
     assert payload["gates"]["quote_pass"] is True
     assert payload["gates"]["fut_quote_pass"] is True
     assert payload["gates"]["stock_volume_pass"] is True

@@ -42,7 +42,7 @@ Added
   - projected exit horizon/date (`forecast_exit_days`, `forecast_exit_date`),
   - TP/SL hit probabilities (`forecast_tp_probability`, `forecast_sl_probability`).
 - Signals table now highlights action-oriented columns:
-  - entry spread corridor,
+  - entry price corridors for stock and futures,
   - TP/SL spread levels,
   - forecast exit days.
 - Acceptance updates:
@@ -60,12 +60,9 @@ Changed
 - Signal API contract for `signals/*` is now stabilized for legacy/incomplete rows:
   - execution-plan/model keys are always present in payload (`entry_*`, `tp/sl_*`, `forecast_*`, orderbook/model scores),
   - missing values are returned as `null` instead of absent keys.
-- `GET /api/pretrade/check` now supports strict quote gating for two-leg execution:
-  - new flag `require_live_quotes_for_legs` (default: `true`),
-  - when enabled, bid/ask absence on required execution sides blocks `ready_to_place`,
+- `GET /api/pretrade/check` enforces strict quote gating for two-leg execution:
+  - bid/ask absence on required execution sides blocks `ready_to_place`,
   - response exposes dedicated quote gates/hits (`quote_pass`, `stock_quote_pass`, `fut_quote_pass`).
-- Delay-gate fallback policy is now explicit:
-  - `LAST` fallback for price hits is allowed only when `require_live_quotes_for_legs=false`.
 - Signal diagnostics now include ISS quote/depth availability fields:
   - `orderbook_stock_quote_available`, `orderbook_fut_quote_available`,
   - `orderbook_stock_depth_available`, `orderbook_fut_depth_available`,
@@ -81,6 +78,26 @@ Changed
 - Pair pipeline now evaluates an orderbook gate during entry decisioning:
   - new decision path `SKIP_ORDERBOOK`,
   - reasons and metrics persisted in pair output (`orderbook_pass`, depths, ages, imbalance, `orderbook_reasons`).
+- Signals UI pre-trade block is now de-noised:
+  - default view shows only decision-critical items (status, reasons, critical gates, order corridor, volume requirements),
+  - detailed counters/snapshots/params moved into collapsible `Расширенная диагностика`.
+- Signals detail tab now renders `Итоговый сигнал` before `План входа`:
+  - includes compact pre-trade status chips for two-leg entry readiness,
+  - computes effective action with pre-trade constraints (`enter`, `hold_pretrade`, `check_pretrade`).
+- Signals list (`Сигналы`) now shows effective action in the main `Сигнал` column before opening details:
+  - value reflects pre-trade state (`Вход разрешен`, `Вход заблокирован pre-trade`, `Ожидает pre-trade проверки`),
+  - pre-trade checks are prefetched in background for top rows.
+  - top toolbar filter `Сигнал` is aligned with these effective statuses.
+- Signal execution UX now enforces pre-trade readiness:
+  - entry-side `Исполнить` is disabled until pre-trade confirms `ready_to_place=true`.
+- Signals UI model block is split into:
+  - `Проверки исполнимости` (quote/depth availability and gate pass),
+  - collapsible `Технические метрики модели` for secondary diagnostics.
+- Localization coverage expanded for new delayed/orderbook fields:
+  - `quote_pass`, `stock_quote_pass`, `fut_quote_pass`,
+  - `stock_quote_hits`, `fut_quote_hits`,
+  - `orderbook_*_quote_available`, `orderbook_*_depth_available`, `orderbook_data_warnings`,
+  - pre-trade reasons `stock_quote_missing`, `fut_quote_missing`.
 
 Fixed
 - UI typing/lint/build cleanup in tabs and shared helpers:

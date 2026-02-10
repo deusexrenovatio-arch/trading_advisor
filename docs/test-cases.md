@@ -141,8 +141,10 @@ Steps:
 Expected:
 - Updated timestamp changes after the interval.
 - Signals table refreshes without full page reload.
+- Main `Сигнал` column reflects effective action with pre-trade constraints even before opening details.
 - Signals table includes action fields for execution planning:
-  - `entry_spread_pct_min` / `entry_spread_pct_max`,
+  - `entry_stock_min` / `entry_stock_max`,
+  - `entry_future_min_per_share` / `entry_future_max_per_share`,
   - `tp_spread_pct_level` / `sl_spread_pct_level`,
   - `forecast_exit_days`.
 
@@ -155,9 +157,10 @@ Steps:
 3. Open Details for an active signal.
 4. Switch to detail tab `Сигнал`.
 Expected:
-- Table renders `entry_spread_pct_min`, `entry_spread_pct_max`, `tp_spread_pct_level`, `sl_spread_pct_level`, `forecast_exit_days`.
-- Values are formatted as percentages/days and sortable.
-- Detail panel groups metrics into blocks: `Контекст сигнала`, `План входа`, `Риск и стоп-уровни`, `Прогноз выхода`.
+- Table renders `entry_stock_min`, `entry_stock_max`, `entry_future_min_per_share`, `entry_future_max_per_share`, `tp_spread_pct_level`, `sl_spread_pct_level`, `forecast_exit_days`.
+- Entry columns are rendered as concrete prices; risk/forecast columns keep percent/days formatting where applicable.
+- Detail panel groups metrics into blocks: `Контекст сигнала`, `Итоговый сигнал`, `План входа`, `Риск и стоп-уровни`, `Прогноз выхода`.
+- `Итоговый сигнал` расположен выше `Плана входа` и учитывает pre-trade (`hold_pretrade`/`check_pretrade` для входа при ограничениях).
 - If plan fields are missing in API payload, UI shows explicit coverage counters and a non-blocking note (instead of empty broken tabs).
 - `Обзор` / `Альфа` / `Ликвидность` tabs in Signals details appear only when the selected signal row has data for them.
 
@@ -171,6 +174,7 @@ Steps:
 3. Apply Stock/Future/Signal filters.
 Expected:
 - History rows match date range and selected filters.
+- `Сигнал` filter in Signals tab uses effective statuses from main table; for history API it maps pre-trade statuses to `enter`.
 
 ### TC-SIG-HIST-UI-002 Signals history filters without active signals
 Acceptance: signals-history
@@ -196,10 +200,13 @@ Automation: ui-web/tests/top-signals.spec.ts
 Steps:
 1. Open Details for an active `enter` signal in Signals tab.
 2. Verify pre-trade panel is shown.
-3. Verify order price bands, volume requirements, gates, and hits are rendered.
+3. Verify visible blocks: summary status, blocking reasons, critical entry gates, order corridor, volume requirements.
+4. Expand `Расширенная диагностика` and verify snapshot counters are rendered.
 Expected:
 - Panel displays current status and reasons.
 - Operator sees both-leg constraints before manual order placement.
+- Technical diagnostics are available on demand and do not overload default view.
+- Button `Исполнить` для входного сигнала недоступна, пока pre-trade не подтверждает `ready_to_place=true`.
 
 ### TC-BACK-UI-001 Backtests table renders
 Acceptance: backtests
@@ -395,12 +402,9 @@ Expected:
 Acceptance: pretrade-check
 Automation: tests/test_pretrade_delay_gate.py
 Request:
-- Call delay-gate flow with missing futures bid/ask:
-  - default (`require_live_quotes_for_legs=true`)
-  - fallback mode (`require_live_quotes_for_legs=false`)
+- Call delay-gate flow with missing futures bid/ask.
 Expected:
-- Strict mode blocks placement with `fut_quote_missing`.
-- Fallback mode allows `LAST` for price-hit checks and reports quote issue in `warnings`.
+- Placement is blocked with `fut_quote_missing` regardless of tradeflow fallback settings.
 
 ### TC-BACK-API-001 Backtests list
 Acceptance: backtests

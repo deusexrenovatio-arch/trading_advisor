@@ -39,24 +39,13 @@ def _future_price(value: float | None, scale: float) -> float | None:
     return value / scale
 
 
-def _hit_with_fallback(
-    primary: float | None,
-    fallback_last: float | None,
+def _hit_by_quote(
+    quote_price: float | None,
     predicate,
-    *,
-    require_tradeflow: bool,
-    tradeflow: bool,
-    allow_last_fallback: bool,
 ) -> bool:
-    if primary is not None:
-        return bool(predicate(primary))
-    if not allow_last_fallback:
+    if quote_price is None:
         return False
-    if fallback_last is None:
-        return False
-    if require_tradeflow and not tradeflow:
-        return False
-    return bool(predicate(fallback_last))
+    return bool(predicate(quote_price))
 
 
 def _collect_snapshots(
@@ -105,8 +94,6 @@ def run_delay_gate(
     eps: float = 0.0015,
     sync_sec: float = 120.0,
     poll_sec: float = 5.0,
-    require_tradeflow_for_last: bool = False,
-    require_live_quotes_for_legs: bool = True,
     stock_engine: str = "stock",
     stock_market: str = "shares",
     stock_board: str = "TQBR",
@@ -151,8 +138,6 @@ def run_delay_gate(
     stock_volume_hits = 0
     fut_volume_hits = 0
 
-    prev_stock_numtrades: float | None = None
-    prev_fut_numtrades: float | None = None
     last_snapshot_view: dict[str, Any] = {}
 
     for snapshot in snapshots_data:
@@ -171,20 +156,6 @@ def run_delay_gate(
 
         stock_numtrades = _to_float(raw_stock.get("NUMTRADES"))
         fut_numtrades = _to_float(raw_fut.get("NUMTRADES"))
-        stock_tradeflow = (
-            prev_stock_numtrades is not None
-            and stock_numtrades is not None
-            and stock_numtrades > prev_stock_numtrades
-        )
-        fut_tradeflow = (
-            prev_fut_numtrades is not None
-            and fut_numtrades is not None
-            and fut_numtrades > prev_fut_numtrades
-        )
-        if stock_numtrades is not None:
-            prev_stock_numtrades = stock_numtrades
-        if fut_numtrades is not None:
-            prev_fut_numtrades = fut_numtrades
 
         stock_time = _to_datetime(raw_stock.get("SYSTIME"))
         fut_time = _to_datetime(raw_fut.get("SYSTIME"))
@@ -195,42 +166,26 @@ def run_delay_gate(
         if direction == "reverse":
             stock_quote_available = stock_bid is not None
             fut_quote_available = fut_ask is not None
-            stock_leg_hit = _hit_with_fallback(
+            stock_leg_hit = _hit_by_quote(
                 stock_bid,
-                stock_last,
                 lambda value: value >= stock_sell_min,
-                require_tradeflow=require_tradeflow_for_last,
-                tradeflow=stock_tradeflow,
-                allow_last_fallback=not require_live_quotes_for_legs,
             )
-            fut_leg_hit = _hit_with_fallback(
+            fut_leg_hit = _hit_by_quote(
                 fut_ask,
-                fut_last,
                 lambda value: value <= fut_buy_max,
-                require_tradeflow=require_tradeflow_for_last,
-                tradeflow=fut_tradeflow,
-                allow_last_fallback=not require_live_quotes_for_legs,
             )
             stock_exec = stock_bid if stock_bid is not None else stock_last
             fut_exec = fut_ask if fut_ask is not None else fut_last
         else:
             stock_quote_available = stock_ask is not None
             fut_quote_available = fut_bid is not None
-            stock_leg_hit = _hit_with_fallback(
+            stock_leg_hit = _hit_by_quote(
                 stock_ask,
-                stock_last,
                 lambda value: value <= stock_buy_max,
-                require_tradeflow=require_tradeflow_for_last,
-                tradeflow=stock_tradeflow,
-                allow_last_fallback=not require_live_quotes_for_legs,
             )
-            fut_leg_hit = _hit_with_fallback(
+            fut_leg_hit = _hit_by_quote(
                 fut_bid,
-                fut_last,
                 lambda value: value >= fut_sell_min,
-                require_tradeflow=require_tradeflow_for_last,
-                tradeflow=fut_tradeflow,
-                allow_last_fallback=not require_live_quotes_for_legs,
             )
             stock_exec = stock_ask if stock_ask is not None else stock_last
             fut_exec = fut_bid if fut_bid is not None else fut_last
@@ -287,7 +242,7 @@ def run_delay_gate(
     quote_pass = stock_quote_pass and fut_quote_pass
 
     ready_to_place = (
-        (quote_pass or (not require_live_quotes_for_legs))
+        quote_pass
         and
         stock_price_pass
         and fut_price_pass
@@ -298,17 +253,10 @@ def run_delay_gate(
     )
 
     reasons: list[str] = []
-    warnings: list[str] = []
     if not stock_quote_pass:
-        if require_live_quotes_for_legs:
-            reasons.append("stock_quote_missing")
-        else:
-            warnings.append("stock_quote_missing")
+        reasons.append("stock_quote_missing")
     if not fut_quote_pass:
-        if require_live_quotes_for_legs:
-            reasons.append("fut_quote_missing")
-        else:
-            warnings.append("fut_quote_missing")
+        reasons.append("fut_quote_missing")
     if not stock_price_pass:
         reasons.append("stock_range_miss")
     if not fut_price_pass:
@@ -377,7 +325,6 @@ def run_delay_gate(
             "snapshots": len(snapshots_data),
         },
         "reasons": reasons,
-        "warnings": warnings,
         "last_snapshot": last_snapshot_view,
     }
 
