@@ -101,6 +101,7 @@ export type ExecutionRow = {
   price?: number | null
   quantity?: number | null
   side?: string | null
+  order_id?: string | null
   status?: string | null
   note?: string | null
 }

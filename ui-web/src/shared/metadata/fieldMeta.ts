@@ -784,8 +784,8 @@ export const fieldMeta: Record<string, FieldMeta> = {
     digits: 0,
   },
   side: {
-    label: 'Сторона',
-    tooltip: 'Buy/Sell сторона сделки.',
+    label: 'Нога сделки',
+    tooltip: 'Нога исполнения (акция/фьючерс) или направление buy/sell для старых записей.',
   },
   note: {
     label: 'Комментарий',

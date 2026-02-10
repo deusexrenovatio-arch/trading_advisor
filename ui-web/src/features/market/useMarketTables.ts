@@ -30,6 +30,9 @@ const PRETRADE_PREFETCH_LIMIT = 12
 const SIGNAL_ACTION_ENTER = 'enter'
 const SIGNAL_ACTION_HOLD_PRETRADE = 'hold_pretrade'
 const SIGNAL_ACTION_CHECK_PRETRADE = 'check_pretrade'
+const SIGNAL_ACTION_HOLD_OPEN = 'hold_open'
+const EXECUTION_LEG_STOCK = 'stock'
+const EXECUTION_LEG_FUTURE = 'future'
 
 export type MarketTab = 'top_pairs' | 'signals' | 'backtests'
 export type AppTab = MarketTab | 'decisions' | 'backtest_v2' | 'forward' | 'hpo'
@@ -38,8 +41,36 @@ export type ExecutionForm = {
   price: string
   quantity: string
   side: string
-  status: string
   note: string
+}
+
+type PendingExecutionOrder = {
+  orderId: string
+  legs: Set<string>
+}
+
+const normalizeExecutionLeg = (value: string) => {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === EXECUTION_LEG_STOCK || normalized === 'акция') return EXECUTION_LEG_STOCK
+  if (normalized === EXECUTION_LEG_FUTURE || normalized === 'фьючерс') return EXECUTION_LEG_FUTURE
+  return ''
+}
+
+const normalizeExecutionAction = (value: unknown) => {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (normalized === 'exit') return 'exit'
+  if (normalized === SIGNAL_ACTION_ENTER || normalized === SIGNAL_ACTION_HOLD_OPEN || normalized === 'hold') {
+    return SIGNAL_ACTION_ENTER
+  }
+  return SIGNAL_ACTION_ENTER
+}
+
+const createExecutionOrderId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  const randomPart = Math.random().toString(36).slice(2, 10)
+  return `exec-${Date.now()}-${randomPart}`
 }
 
 type Params = {
@@ -93,9 +124,9 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     price: '',
     quantity: '',
     side: '',
-    status: '',
     note: '',
   })
+  const pendingExecutionOrdersRef = useRef<Record<string, PendingExecutionOrder>>({})
   const auxFetchInFlight = useRef(false)
   const mergeSignalMetrics = useCallback((rows: GenericRow[]) => {
     return rows.map((row) => {
@@ -120,6 +151,9 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     if (!action) return undefined
     if (action === SIGNAL_ACTION_HOLD_PRETRADE || action === SIGNAL_ACTION_CHECK_PRETRADE) {
       return SIGNAL_ACTION_ENTER
+    }
+    if (action === SIGNAL_ACTION_HOLD_OPEN) {
+      return 'hold'
     }
     return action
   }, [])
@@ -339,19 +373,54 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
 
   const handleExecuteSignal = useCallback(
     async (row: GenericRow) => {
+      const stock = row.stock ? String(row.stock) : ''
+      const future = row.future ? String(row.future) : ''
+      const pairKey = stock && future ? `${stock}-${future}` : null
+      const actionKey = normalizeExecutionAction(row.signal_action)
+      const pendingKey = pairKey ? `${pairKey}:${actionKey}` : null
+      const normalizedLeg = normalizeExecutionLeg(executionForm.side)
+      const isTwoLegCandidate =
+        Boolean(stock) &&
+        Boolean(future) &&
+        (normalizedLeg === EXECUTION_LEG_STOCK || normalizedLeg === EXECUTION_LEG_FUTURE)
+
+      let orderId: string | null = null
+      let pendingOrderAfterExecute: PendingExecutionOrder | null = null
+      if (isTwoLegCandidate && pendingKey) {
+        const pendingMap = pendingExecutionOrdersRef.current
+        const current = pendingMap[pendingKey]
+        const shouldStartNewOrder =
+          !current || current.legs.has(normalizedLeg) || current.legs.size >= 2
+        const nextOrder: PendingExecutionOrder = shouldStartNewOrder
+          ? { orderId: createExecutionOrderId(), legs: new Set<string>() }
+          : { orderId: current.orderId, legs: new Set(current.legs) }
+        nextOrder.legs.add(normalizedLeg)
+        orderId = nextOrder.orderId
+        pendingOrderAfterExecute = nextOrder
+      }
+
       const payload = {
         stock: row.stock,
         future: row.future,
         direction: row.signal_direction,
-        action: row.signal_action,
+        action: actionKey,
         price: executionForm.price ? Number(executionForm.price) : null,
         quantity: executionForm.quantity ? Number(executionForm.quantity) : null,
-        side: executionForm.side || null,
-        status: executionForm.status || null,
+        side: normalizedLeg || executionForm.side || null,
+        order_id: orderId,
         note: executionForm.note || null,
       }
       await executeSignalApi(payload)
-      const pairKey = row.stock && row.future ? `${row.stock}-${row.future}` : null
+      if (pendingKey && normalizedLeg && pendingOrderAfterExecute) {
+        const isLinkedTwoLegOrder =
+          pendingOrderAfterExecute.legs.has(EXECUTION_LEG_STOCK) &&
+          pendingOrderAfterExecute.legs.has(EXECUTION_LEG_FUTURE)
+        if (isLinkedTwoLegOrder) {
+          delete pendingExecutionOrdersRef.current[pendingKey]
+        } else {
+          pendingExecutionOrdersRef.current[pendingKey] = pendingOrderAfterExecute
+        }
+      }
       if (pairKey) {
         void fetchExecutionLog(pairKey, String(row.stock), String(row.future))
       }
@@ -359,7 +428,6 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         price: '',
         quantity: '',
         side: '',
-        status: '',
         note: '',
       })
     },
@@ -609,6 +677,31 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     toHistorySignalAction,
   ])
 
+  const openSignalRows = useMemo<GenericRow[]>(() => {
+    if (tab !== 'signals') return []
+    const isOpenRow = (row: GenericRow) => {
+      if (row.position_open === true) return true
+      if (String(row.position_state ?? '').toLowerCase() === 'open') return true
+      return toEffectiveSignalAction(row) === SIGNAL_ACTION_HOLD_OPEN
+    }
+
+    const latestByPair = new Map<string, GenericRow>()
+    for (const row of tableRows) {
+      if (!isOpenRow(row)) continue
+      const stock = row.stock ? String(row.stock) : ''
+      const future = row.future ? String(row.future) : ''
+      if (!stock || !future) continue
+      const key = `${stock}-${future}`
+      const previous = latestByPair.get(key)
+      if (!previous || String(previous.timestamp ?? '') < String(row.timestamp ?? '')) {
+        latestByPair.set(key, row)
+      }
+    }
+    return Array.from(latestByPair.values()).sort((left, right) =>
+      String(right.timestamp ?? '').localeCompare(String(left.timestamp ?? '')),
+    )
+  }, [tab, tableRows, toEffectiveSignalAction])
+
   const showPairDetails = tab === 'top_pairs' || tab === 'signals'
 
   const snapshotFields = useMemo(
@@ -777,6 +870,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     setTableStockFilter('')
     setTableFutureFilter('')
     setTableSignalFilter('')
+    pendingExecutionOrdersRef.current = {}
   }, [tab])
 
   useEffect(() => {
@@ -873,6 +967,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     historyError,
     signalHistory,
     filteredSignalHistory,
+    openSignalRows,
     sortedTableRows,
     stripDuplicates,
   }

@@ -150,6 +150,13 @@ export const formatValue = (value: unknown, column?: string): string => {
   if (typeof value === 'boolean') {
     return value ? 'Да' : 'Нет'
   }
+  if (column === 'status') {
+    if (typeof value === 'string') {
+      const mapped = getValueLabel(column, value)
+      return mapped ?? value
+    }
+    if (typeof value === 'number') return String(value)
+  }
   if (typeof value === 'string') {
     const mapped = getValueLabel(column, value)
     if (mapped) return mapped

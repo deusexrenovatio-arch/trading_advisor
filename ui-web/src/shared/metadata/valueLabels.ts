@@ -62,6 +62,7 @@ export const valueLabels: Record<string, Record<string, string>> = {
     enter: 'Вход',
     exit: 'Выход',
     hold: 'Держать',
+    hold_open: 'Open position (hold)',
   },
   signal_action_effective: {
     enter: 'Вход разрешен',
@@ -69,6 +70,7 @@ export const valueLabels: Record<string, Record<string, string>> = {
     hold: 'Держать',
     hold_pretrade: 'Вход заблокирован pre-trade',
     check_pretrade: 'Ожидает pre-trade проверки',
+    hold_open: 'Open position (hold)',
   },
   signal_direction: {
     cash_and_carry: 'Кэш-энд-кэрри',
@@ -163,6 +165,10 @@ export const valueLabels: Record<string, Record<string, string>> = {
   side: {
     buy: 'Покупка',
     sell: 'Продажа',
+    stock: 'Акция',
+    future: 'Фьючерс',
+    'акция': 'Акция',
+    'фьючерс': 'Фьючерс',
   },
   exit_reason: {
     TP: 'TP',

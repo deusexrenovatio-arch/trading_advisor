@@ -71,6 +71,12 @@ const PRETRADE_GATE_CHIPS = [
   { key: 'fut_volume_pass', label: 'Объём фьючерса' },
 ] as const
 
+const EXECUTION_SIDE_OPTIONS = [
+  { value: '', label: 'Не выбрано' },
+  { value: 'stock', label: 'Акция' },
+  { value: 'future', label: 'Фьючерс' },
+] as const
+
 const toOrderedEntries = (
   payload: Record<string, unknown> | undefined,
   orderedKeys: string[],
@@ -283,6 +289,31 @@ const MarketTablesTab = ({
         </Stack>
       </Paper>
     ) : null}
+    {tab === 'signals' && market.openSignalRows.length ? (
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle2" fontWeight={600}>
+          Открытые позиции ({market.openSignalRows.length})
+        </Typography>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+          {market.openSignalRows.map((row) => {
+            const stock = row.stock ? String(row.stock) : ''
+            const future = row.future ? String(row.future) : ''
+            const pairLabel = stock && future ? `${stock}/${future}` : 'Пара'
+            const action = String(
+              row.signal_action_effective ?? row.signal_action ?? 'hold_open',
+            ).toLowerCase()
+            return (
+              <Chip
+                key={`${stock}-${future}-${String(row.timestamp ?? '')}`}
+                color="warning"
+                variant="outlined"
+                label={`${pairLabel}: ${formatValue(action, 'signal_action_effective')}`}
+              />
+            )
+          })}
+        </Stack>
+      </Paper>
+    ) : null}
     <Paper sx={{ p: 2 }}>
       <TableContainer sx={{ maxHeight: '68vh' }}>
         <Table size="small" stickyHeader>
@@ -409,10 +440,18 @@ const MarketTablesTab = ({
                   : signalActionEffective === 'check_pretrade'
                     ? 'Сначала подтвердите pre-trade проверку.'
                     : ''
+              const isOpenPosition =
+                row.position_open === true || String(row.position_state ?? '').toLowerCase() === 'open'
 
               return (
                 <Fragment key={pairKey}>
-                  <TableRow>
+                  <TableRow
+                    sx={
+                      tab === 'signals' && isOpenPosition
+                        ? { backgroundColor: 'rgba(255, 183, 77, 0.12)' }
+                        : undefined
+                    }
+                  >
                     {market.showPairDetails ? (
                       <TableCell>
                         <Button size="small" onClick={() => market.handleToggleDetails(row)}>
@@ -499,6 +538,15 @@ const MarketTablesTab = ({
                                           : formatCellValue(value, key)
                                       }
                                     />
+                                    {isOpenPosition ? (
+                                      <Chip
+                                        size="small"
+                                        color="warning"
+                                        variant="outlined"
+                                        label="Позиция открыта"
+                                        sx={{ mt: 1 }}
+                                      />
+                                    ) : null}
                                     {isEntrySignal ? (
                                       primaryGateEntries.length ? (
                                         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
@@ -799,24 +847,25 @@ const MarketTablesTab = ({
                                   }
                                   sx={{ minWidth: 120 }}
                                 />
-                                <TextField
-                                  label="Сторона"
-                                  size="small"
-                                  value={market.executionForm.side}
-                                  onChange={(event) =>
-                                    market.onExecutionFormFieldChange('side', event.target.value)
-                                  }
-                                  sx={{ minWidth: 120 }}
-                                />
-                                <TextField
-                                  label="Статус"
-                                  size="small"
-                                  value={market.executionForm.status}
-                                  onChange={(event) =>
-                                    market.onExecutionFormFieldChange('status', event.target.value)
-                                  }
-                                  sx={{ minWidth: 120 }}
-                                />
+                                <FormControl size="small" sx={{ minWidth: 160 }}>
+                                  <InputLabel>Нога сделки</InputLabel>
+                                  <Select
+                                    label="Нога сделки"
+                                    value={market.executionForm.side}
+                                    onChange={(event) =>
+                                      market.onExecutionFormFieldChange(
+                                        'side',
+                                        String(event.target.value),
+                                      )
+                                    }
+                                  >
+                                    {EXECUTION_SIDE_OPTIONS.map((item) => (
+                                      <MenuItem key={item.value || 'empty'} value={item.value}>
+                                        {item.label}
+                                      </MenuItem>
+                                    ))}
+                                  </Select>
+                                </FormControl>
                                 <TextField
                                   label="Комментарий"
                                   size="small"
@@ -858,7 +907,6 @@ const MarketTablesTab = ({
                                           'price',
                                           'quantity',
                                           'side',
-                                          'status',
                                           'note',
                                         ].map((col) => (
                                           <TableCell key={col}>{renderFieldLabel(col)}</TableCell>
@@ -881,9 +929,6 @@ const MarketTablesTab = ({
                                           </TableCell>
                                           <TableCell>
                                             {formatValue(entry.side ?? '', 'side')}
-                                          </TableCell>
-                                          <TableCell>
-                                            {formatValue(entry.status ?? '', 'status')}
                                           </TableCell>
                                           <TableCell>{entry.note ?? ''}</TableCell>
                                         </TableRow>
