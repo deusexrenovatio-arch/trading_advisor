@@ -160,6 +160,7 @@ def store_signal_execution(
             price=payload.get("price"),
             quantity=payload.get("quantity"),
             side=payload.get("side"),
+            order_id=payload.get("order_id"),
             status=payload.get("status"),
             note=payload.get("note"),
         )

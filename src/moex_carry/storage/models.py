@@ -115,6 +115,7 @@ class SignalExecutionModel(Base):
     price: Mapped[float | None] = mapped_column(Float, nullable=True)
     quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     side: Mapped[str | None] = mapped_column(String, nullable=True)
+    order_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     status: Mapped[str | None] = mapped_column(String, nullable=True)
     note: Mapped[str | None] = mapped_column(String, nullable=True)
 

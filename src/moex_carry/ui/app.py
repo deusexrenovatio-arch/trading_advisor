@@ -393,6 +393,57 @@ def _normalize_datetime(value: datetime) -> datetime:
     return value
 
 
+def _normalize_execution_leg(value: object) -> str:
+    if value is None:
+        return "other"
+    raw = str(value).strip().lower()
+    if not raw:
+        return "other"
+    if raw in {"stock", "spot", "cash", "equity", "акция"}:
+        return "stock"
+    if raw in {"future", "futures", "fut", "фьючерс", "фьючерсы"}:
+        return "future"
+    return "other"
+
+
+def _normalize_execution_action(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in {"exit", "close"}:
+        return "exit"
+    if raw in {"enter", "open", "hold_open", "hold"}:
+        # hold_open in execution logs is treated as opening/maintaining leg exposure.
+        return "enter"
+    return raw or "enter"
+
+
+def _normalize_order_id(value: object) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    return raw or None
+
+
+def _decrement_leg_bucket(open_legs: dict[str, int], preferred: str) -> None:
+    if preferred in open_legs and int(open_legs.get(preferred, 0)) > 0:
+        open_legs[preferred] = int(open_legs.get(preferred, 0)) - 1
+        return
+    if int(open_legs.get("other", 0)) > 0:
+        open_legs["other"] = int(open_legs.get("other", 0)) - 1
+        return
+    if int(open_legs.get("stock", 0)) >= int(open_legs.get("future", 0)):
+        if int(open_legs.get("stock", 0)) > 0:
+            open_legs["stock"] = int(open_legs.get("stock", 0)) - 1
+            return
+        if int(open_legs.get("future", 0)) > 0:
+            open_legs["future"] = int(open_legs.get("future", 0)) - 1
+            return
+    if int(open_legs.get("future", 0)) > 0:
+        open_legs["future"] = int(open_legs.get("future", 0)) - 1
+        return
+    if int(open_legs.get("stock", 0)) > 0:
+        open_legs["stock"] = int(open_legs.get("stock", 0)) - 1
+
+
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -914,23 +965,133 @@ def create_app(settings: AppSettings) -> Dash:
                 return jsonify([])
             rows = load_active_signals(session, latest.run_id)
             executions = load_open_executions(session)
-            latest_exec: dict[tuple[str, str], object] = {}
+            position_state: dict[tuple[str, str], dict[str, object]] = {}
             for exec_row in sorted(executions, key=lambda item: item.timestamp):
                 key = (exec_row.stock_secid, exec_row.future_secid)
-                latest_exec[key] = exec_row
+                state = position_state.setdefault(
+                    key,
+                    {
+                        "enter_count": 0,
+                        "exit_count": 0,
+                        "net_executions": 0,
+                        "last_execution_at": None,
+                        "direction": None,
+                        "open_legs": {"stock": 0, "future": 0, "other": 0},
+                        "enter_orders": set(),
+                        "exit_orders": set(),
+                        "order_legs": {},
+                    },
+                )
+                action = _normalize_execution_action(exec_row.action)
+                if action not in {"enter", "exit"}:
+                    continue
+                leg = _normalize_execution_leg(exec_row.side)
+                order_id = _normalize_order_id(getattr(exec_row, "order_id", None))
+                if order_id is None:
+                    order_id = f"legacy-{exec_row.id}"
+
+                open_legs_raw = state.get("open_legs")
+                if isinstance(open_legs_raw, dict):
+                    open_legs = {
+                        "stock": int(open_legs_raw.get("stock", 0) or 0),
+                        "future": int(open_legs_raw.get("future", 0) or 0),
+                        "other": int(open_legs_raw.get("other", 0) or 0),
+                    }
+                else:
+                    open_legs = {"stock": 0, "future": 0, "other": 0}
+
+                order_legs_raw = state.get("order_legs")
+                order_legs: dict[tuple[str, str], set[str]]
+                if isinstance(order_legs_raw, dict):
+                    order_legs = {}
+                    for order_key, value in order_legs_raw.items():
+                        if (
+                            isinstance(order_key, tuple)
+                            and len(order_key) == 2
+                            and isinstance(order_key[0], str)
+                            and isinstance(order_key[1], str)
+                            and isinstance(value, set)
+                        ):
+                            order_legs[order_key] = set(str(item) for item in value)
+                else:
+                    order_legs = {}
+                group_key = (action, order_id)
+                group_legs = order_legs.setdefault(group_key, set())
+                group_legs.add(leg)
+                state["order_legs"] = order_legs
+
+                enter_orders_raw = state.get("enter_orders")
+                enter_orders = set(enter_orders_raw) if isinstance(enter_orders_raw, set) else set()
+                exit_orders_raw = state.get("exit_orders")
+                exit_orders = set(exit_orders_raw) if isinstance(exit_orders_raw, set) else set()
+
+                if action == "enter":
+                    state["enter_count"] = int(state["enter_count"]) + 1
+                    state["net_executions"] = int(state["net_executions"]) + 1
+                    open_legs[leg] = int(open_legs.get(leg, 0)) + 1
+                    enter_orders.add(order_id)
+                elif action == "exit":
+                    state["exit_count"] = int(state["exit_count"]) + 1
+                    state["net_executions"] = max(int(state["net_executions"]) - 1, 0)
+                    _decrement_leg_bucket(open_legs, leg)
+                    exit_orders.add(order_id)
+                state["open_legs"] = open_legs
+                state["enter_orders"] = enter_orders
+                state["exit_orders"] = exit_orders
+                state["open_leg_total"] = int(open_legs["stock"] + open_legs["future"] + open_legs["other"])
+                state["open_leg_imbalance"] = int(open_legs["stock"]) != int(open_legs["future"])
+                state["last_execution_at"] = exec_row.timestamp
+                if exec_row.direction is not None:
+                    state["direction"] = exec_row.direction
+
+            for state in position_state.values():
+                enter_orders = state.get("enter_orders")
+                exit_orders = state.get("exit_orders")
+                order_legs = state.get("order_legs")
+                enter_order_count = len(enter_orders) if isinstance(enter_orders, set) else 0
+                exit_order_count = len(exit_orders) if isinstance(exit_orders, set) else 0
+                linked_two_leg_orders = 0
+                partial_leg_orders = 0
+                if isinstance(order_legs, dict):
+                    for legs in order_legs.values():
+                        if not isinstance(legs, set):
+                            continue
+                        normalized_legs = {str(leg) for leg in legs}
+                        dual_leg = "stock" in normalized_legs and "future" in normalized_legs
+                        single_leg = (
+                            ("stock" in normalized_legs) ^ ("future" in normalized_legs)
+                        )
+                        if dual_leg:
+                            linked_two_leg_orders += 1
+                        elif single_leg:
+                            partial_leg_orders += 1
+                state["enter_order_count"] = enter_order_count
+                state["exit_order_count"] = exit_order_count
+                state["net_orders"] = max(enter_order_count - exit_order_count, 0)
+                state["linked_two_leg_orders"] = linked_two_leg_orders
+                state["partial_leg_orders"] = partial_leg_orders
+
             open_pairs = {
-                key
-                for key, exec_row in latest_exec.items()
-                if str(exec_row.action).lower() != "exit"
+                key for key, state in position_state.items() if int(state.get("open_leg_total") or 0) > 0
             }
+            rows_by_pair = {(row.stock_secid, row.future_secid): row for row in rows}
             actionable: list[dict[str, object]] = []
             for row in rows:
                 key = (row.stock_secid, row.future_secid)
+                state = position_state.get(key, {})
                 is_open = key in open_pairs
+                open_legs_raw = state.get("open_legs")
+                open_legs = (
+                    open_legs_raw
+                    if isinstance(open_legs_raw, dict)
+                    else {"stock": 0, "future": 0, "other": 0}
+                )
                 if row.action == "enter" and not is_open:
                     action = "enter"
                 elif row.action == "exit" and is_open:
                     action = "exit"
+                elif is_open:
+                    action = "hold_open"
                 else:
                     continue
                 payload = {
@@ -943,8 +1104,76 @@ def create_app(settings: AppSettings) -> Dash:
                     "signal_score": row.score,
                     "signal_reasons": row.reasons,
                     "signal_metrics": row.metrics,
+                    "position_open": is_open,
+                    "position_state": "open" if is_open else "flat",
+                    "position_enter_count": int(state.get("enter_count") or 0),
+                    "position_exit_count": int(state.get("exit_count") or 0),
+                    "position_net_executions": int(state.get("net_executions") or 0),
+                    "position_enter_order_count": int(state.get("enter_order_count") or 0),
+                    "position_exit_order_count": int(state.get("exit_order_count") or 0),
+                    "position_net_orders": int(state.get("net_orders") or 0),
+                    "position_linked_two_leg_orders": int(state.get("linked_two_leg_orders") or 0),
+                    "position_partial_leg_orders": int(state.get("partial_leg_orders") or 0),
+                    "position_open_stock_legs": int(open_legs.get("stock") or 0),
+                    "position_open_future_legs": int(open_legs.get("future") or 0),
+                    "position_open_other_legs": int(open_legs.get("other") or 0),
+                    "position_open_leg_total": int(state.get("open_leg_total") or 0),
+                    "position_leg_imbalance": bool(state.get("open_leg_imbalance")),
+                    "position_last_execution_at": (
+                        state["last_execution_at"].isoformat()
+                        if isinstance(state.get("last_execution_at"), datetime)
+                        else None
+                    ),
                 }
                 actionable.append(_merge_signal_metrics(payload))
+
+            missing_open_pairs = open_pairs.difference(rows_by_pair.keys())
+            for stock, future in sorted(missing_open_pairs):
+                state = position_state.get((stock, future), {})
+                open_legs_raw = state.get("open_legs")
+                open_legs = (
+                    open_legs_raw
+                    if isinstance(open_legs_raw, dict)
+                    else {"stock": 0, "future": 0, "other": 0}
+                )
+                last_execution_at = state.get("last_execution_at")
+                if isinstance(last_execution_at, datetime):
+                    timestamp_value = last_execution_at.isoformat()
+                else:
+                    timestamp_value = latest.as_of.isoformat()
+                payload = {
+                    "run_id": latest.run_id,
+                    "timestamp": timestamp_value,
+                    "stock": stock,
+                    "future": future,
+                    "signal_action": "hold_open",
+                    "signal_direction": state.get("direction"),
+                    "signal_score": 0.0,
+                    "signal_reasons": ["position_open_no_active_signal"],
+                    "signal_metrics": {},
+                    "position_open": True,
+                    "position_state": "open",
+                    "position_enter_count": int(state.get("enter_count") or 0),
+                    "position_exit_count": int(state.get("exit_count") or 0),
+                    "position_net_executions": int(state.get("net_executions") or 0),
+                    "position_enter_order_count": int(state.get("enter_order_count") or 0),
+                    "position_exit_order_count": int(state.get("exit_order_count") or 0),
+                    "position_net_orders": int(state.get("net_orders") or 0),
+                    "position_linked_two_leg_orders": int(state.get("linked_two_leg_orders") or 0),
+                    "position_partial_leg_orders": int(state.get("partial_leg_orders") or 0),
+                    "position_open_stock_legs": int(open_legs.get("stock") or 0),
+                    "position_open_future_legs": int(open_legs.get("future") or 0),
+                    "position_open_other_legs": int(open_legs.get("other") or 0),
+                    "position_open_leg_total": int(state.get("open_leg_total") or 0),
+                    "position_leg_imbalance": bool(state.get("open_leg_imbalance")),
+                    "position_last_execution_at": (
+                        last_execution_at.isoformat() if isinstance(last_execution_at, datetime) else None
+                    ),
+                }
+                actionable.append(_merge_signal_metrics(payload))
+
+            actionable.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
+            actionable.sort(key=lambda item: 0 if bool(item.get("position_open")) else 1)
             return jsonify(actionable)
 
     @server.route("/api/signals/history", methods=["GET"])
@@ -995,10 +1224,20 @@ def create_app(settings: AppSettings) -> Dash:
     @server.route("/api/signals/execute", methods=["POST"])
     def signals_execute_api():
         payload = request.get_json(silent=True) or {}
+        normalized_action = _normalize_execution_action(payload.get("action"))
+        payload["action"] = normalized_action
+        order_id = _normalize_order_id(payload.get("order_id"))
+        if order_id is None:
+            side = _normalize_execution_leg(payload.get("side"))
+            stock = str(payload.get("stock") or "").strip()
+            future = str(payload.get("future") or "").strip()
+            if side in {"stock", "future"} and stock and future:
+                order_id = f"{stock}-{future}-{normalized_action}-{uuid.uuid4().hex[:10]}"
+        payload["order_id"] = order_id
         payload["timestamp"] = datetime.now(timezone.utc)
         with session_factory() as session:
             store_signal_execution(session, payload["timestamp"], payload)
-        return jsonify({"status": "ok"})
+        return jsonify({"status": "ok", "order_id": order_id})
 
     @server.route("/api/signals/executions", methods=["GET"])
     def signals_executions_api():
@@ -1014,10 +1253,11 @@ def create_app(settings: AppSettings) -> Dash:
                         "stock": row.stock_secid,
                         "future": row.future_secid,
                         "direction": row.direction,
-                        "action": row.action,
+                        "action": _normalize_execution_action(row.action),
                         "price": row.price,
                         "quantity": row.quantity,
                         "side": row.side,
+                        "order_id": row.order_id,
                         "status": row.status,
                         "note": row.note,
                     }
