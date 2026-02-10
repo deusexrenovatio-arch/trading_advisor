@@ -4,7 +4,8 @@
 Defines pre-trade readiness checks for stock-futures spread entries when market data comes from MOEX ISS REST with delayed quotes.
 
 Objective:
-- confirm that both legs had executable price presence in the required range, even with delay;
+- confirm stock-leg executable presence in required range for manual-drive operation;
+- keep futures/spread/sync checks as diagnostics for operator awareness;
 - keep manual broker-side verification mandatory before order placement.
 
 ## Constraints (ISS REST without auth)
@@ -63,24 +64,36 @@ Shared:
 - quote availability gate:
   - `stock_quote_pass = stock_quote_hits >= min_hits`
   - `fut_quote_pass = fut_quote_hits >= min_hits`
-  - `quote_pass = stock_quote_pass && fut_quote_pass`
-- final:
+  - `quote_pass_strict = stock_quote_pass && fut_quote_pass` (diagnostic only)
+  - `quote_pass = stock_quote_pass` (blocking gate in ISS manual-drive mode)
+- final (ISS manual-drive mode):
   - volume gate:
     - `stock_volume_pass = stock_volume_hits >= min_hits`
-    - `fut_volume_pass = fut_volume_hits >= min_hits`
-  - `ready_to_place = quote_pass && stock_leg_pass && fut_leg_pass && sync_pass && spread_pass && stock_volume_pass && fut_volume_pass`
+    - `fut_volume_pass = fut_volume_hits >= min_hits` (diagnostic only)
+  - `ready_to_place = quote_pass && stock_leg_pass && stock_volume_pass`
   - `manual_confirm_required = true`
+  - futures-related checks (`fut_*`, `spread_pass`, `sync_pass`) are returned as advisory diagnostics and do not block `ready_to_place`.
 
 ## Decision mapping
 - if no candidate -> `WAIT`
-- if candidate and `ready_to_place=false` -> `CHECK` with reasons:
+- if candidate and `ready_to_place=false` -> `CHECK` with blocking reasons:
   - `stock_quote_missing`
-  - `fut_quote_missing`
   - `stock_range_miss`
+  - `stock_volume_miss`
+- advisory diagnostics are returned separately:
+  - `fut_quote_missing`
   - `fut_range_miss`
   - `snapshot_unsynced`
   - `spread_out_of_band`
+  - `fut_volume_miss`
 - if candidate and `ready_to_place=true` -> `PLACE`
+
+## Transport fail-open (ISS connectivity issues)
+- If ISS request fails by transport error (`SSLError`, `ConnectionError`, `Timeout`) and `ui.pretrade_fail_open_on_transport_error=true`:
+  - endpoint still returns `200` with `status=PLACE`, `ready_to_place=true`, `manual_confirm_required=true`;
+  - payload includes `degraded=true` and `advisory_reasons=["iss_transport_error"]`;
+  - diagnostic message is returned in `diagnostics.transport_error`;
+  - this mode is only for manual-drive continuity and does not replace terminal-side quote validation.
 
 ## Live validation (MOEX ISS REST, 2026-02-09)
 Validation time:
@@ -95,9 +108,10 @@ Scenario (strict):
 - result: `ready_to_place = 0/4`
 - main fail reason: `fut_quote_missing` and `fut_range_miss`
 - observation: futures `BID/OFFER` were missing in ISS snapshots.
+- note: this is a strict two-leg baseline. Current ISS manual-drive policy treats these as advisory diagnostics.
 
 ## Operational recommendation (ISS-only mode)
 - Keep `manual_confirm_required=true`.
-- Use strict quote gating as default even in ISS-only mode.
-- If futures quote is absent in ISS, do not place by signal and keep manual terminal verification as the only source of actionable price.
-- When real-time feed becomes available, keep the same strict policy and tighten orderbook checks by both legs.
+- Use stock-leg blocking + futures diagnostics in ISS manual-drive mode.
+- If futures quote is absent in ISS, allow operator flow but require terminal-side confirmation before sending orders.
+- When real-time feed becomes available, switch back to strict two-leg blocking policy.

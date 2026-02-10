@@ -1,5 +1,8 @@
 # User Scenarios
 
+Reference:
+- End-to-end operator flow for `Signals` is documented in `docs/signals-business-process.md`.
+
 ## US-01 Configure the strategy
 Actor: Operator
 Goal: Define rates, costs, and risk limits for StockFuturesSpreadCarryAlpha.

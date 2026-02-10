@@ -1,5 +1,81 @@
 # Release Notes
 
+## 2026-02-10 - MOEX ISS IP Fallback (VPN-friendly transport resilience)
+
+Changed
+- Added connector-level ISS fallback by IP in `MoexIssClient` for transport failures:
+  - primary path: configured `moex.base_url` (usually `https://iss.moex.com`),
+  - fallback path: `moex.fallback_ips` with HTTPS `Host/SNI` pinned to original host,
+  - triggers only on transport errors (`SSLError`, `ConnectionError`, `Timeout`).
+- Fast-fallback behavior improved to reduce UI latency under broken primary route:
+  - with configured `fallback_ips`, primary transport path is tried once per request (no long retry chain before fallback),
+  - failover state is cached per host for a cooldown window, so subsequent requests skip slow primary probes and go directly to fallback.
+- Fallback is wired into all main backend flows:
+  - data fetch/history,
+  - pair/signal/backtest pipelines,
+  - pre-trade API checks.
+- New config key:
+  - `moex.fallback_ips` (default now includes `85.118.181.8`).
+
+Tests
+- Added ISS client tests for:
+  - fallback after primary TLS transport failure,
+  - host-level failover reuse across client instances,
+  - no fallback on non-retryable HTTP errors (`404`).
+
+## 2026-02-10 - Pre-trade Transport Fail-Open for ISS Manual Mode
+
+Changed
+- `GET /api/pretrade/check` no longer returns `500` on ISS transport failures (`SSLError`, `ConnectionError`, `Timeout`) when `ui.pretrade_fail_open_on_transport_error=true`.
+- Endpoint now returns a degraded manual-drive payload:
+  - `status=PLACE`, `ready_to_place=true`, `manual_confirm_required=true`,
+  - `degraded=true`,
+  - `advisory_reasons` includes `iss_transport_error`,
+  - `diagnostics.transport_error` contains connector error text.
+- Payload shape remains actionable (`pair`, `targets`, `order_price_bands`, `volume_requirements`, `params`) so Signals UI keeps working without transport-error hard blocking.
+
+Tests
+- Added `tests/test_ui_api.py::test_pretrade_check_endpoint_fail_opens_on_iss_transport_error`.
+
+## 2026-02-10 - MOEX ISS Transport Retry Hardening
+
+Changed
+- Hardened MOEX ISS connector against transient transport failures (including SSL EOF errors):
+  - retries on `SSLError`, `ConnectionError`, `Timeout`,
+  - retries on retryable HTTP statuses (`408`, `425`, `429`, `500`, `502`, `503`, `504`),
+  - exponential backoff with configurable caps.
+- Added MOEX connector config keys:
+  - `moex.request_max_retries`
+  - `moex.request_retry_backoff_sec`
+  - `moex.request_retry_max_backoff_sec`
+- Updated client initialization paths to pass retry settings from config:
+  - data fetch/history/pipeline/pre-trade endpoints.
+
+Tests
+- Added retry tests for ISS client:
+  - SSL EOF then success,
+  - HTTP 503 retry then success,
+  - no retry on HTTP 404.
+
+## 2026-02-10 - Pre-trade ISS Manual-Drive Policy (futures gates advisory)
+
+Changed
+- `GET /api/pretrade/check` now uses ISS manual-drive blocking policy for entry readiness:
+  - `ready_to_place` is blocked only by stock-leg gates (`stock_quote_pass`, `stock_price_pass`, `stock_volume_pass`).
+  - futures/spread/sync gates remain computed and returned as diagnostics, but do not block execution.
+- Pre-trade payload now includes:
+  - `gate_policy` with `blocking_gates` and `advisory_gates`,
+  - `quote_pass_strict` (strict two-leg quote diagnostic),
+  - `advisory_reasons` for non-blocking futures/sync/spread issues.
+
+Tests
+- Updated: `tests/test_pretrade_delay_gate.py`
+- Verified: `tests/test_ui_api.py`
+
+Operational notes
+- This mode is for ISS delayed/manual-drive operations.
+- When live feed is available, switch to strict two-leg blocking policy.
+
 ## 2026-02-09 - Pre-trade Delay Gate + Orderbook Entry Gate (ISS REST)
 
 Release type
