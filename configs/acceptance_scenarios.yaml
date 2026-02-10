@@ -127,13 +127,13 @@ scenarios:
     require_non_empty: false
     required_keys: [run_id, timestamp, stock, future, signal_action, signal_score]
     allowed_field_values:
-      signal_action: [enter, exit]
+      signal_action: [enter, exit, hold_open]
     test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001]
-    title: Действуемые сигналы
-    user_story: Пользователь получает только actionable сигналы.
+    title: Active signals
+    user_story: User receives only actionable signals.
     expectations:
-      - В action только enter/exit.
-      - Сигнал содержит идентификаторы пары и score.
+      - Action includes only enter/exit.
+      - Signal includes pair identifiers and score.
   - id: signals-execute
     type: post_json
     scope: backend
@@ -145,15 +145,15 @@ scenarios:
       action: enter
       price: 100.5
       quantity: 1
-      side: buy
-      status: filled
+      side: stock
       note: acceptance
-    required_keys: [status]
-    test_cases: [TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001]
-    title: Исполнение сигнала
-    user_story: Пользователь может вручную исполнить сигнал и зафиксировать факт.
+    required_keys: [status, order_id]
+    test_cases: [TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002]
+    title: Execute signal
+    user_story: User can manually execute a signal and record the fact.
     expectations:
-      - API принимает payload и возвращает статус ok.
+      - API accepts payload and returns status ok.
+      - order_id is returned for side=stock|future to link legs of one order.
   - id: pretrade-check
     type: api_object
     scope: backend

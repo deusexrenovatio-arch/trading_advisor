@@ -33,7 +33,7 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 | 3. Pre-trade Check | Trigger `Refresh pre-trade` if needed | Call `/api/pretrade/check`, evaluate two-leg gates, return `ready_to_place` | Pre-trade payload (`status`, `gates`, `hits`, `reasons`) |
 | 4. Entry Decision | Compare app output with terminal quotes | Resolve effective action: `enter` or `hold_pretrade` or `check_pretrade` | Effective status in main `Signal` column |
 | 5. Entry Execution | Submit both legs manually | Allow `Execute` only when entry is not pre-trade blocked | `signal_executions` rows with action `enter` |
-| 6. Active Monitoring | Re-open details for open pair | Show risk/forecast/model checks and new signal updates | New `signal_history` rows per cycle |
+| 6. Active Monitoring | Re-open details for open pair | Keep open pair visible in `Signals` and show risk/forecast/model checks/new updates | New `signal_history` rows per cycle + `signal_executions` open state |
 | 7. Exit Trigger | React to `exit` signal and reason | Surface reason (`tp`, `sl`, `time`, `expiry`) and supporting metrics | Exit reason in `signal_reasons` / `signal_metrics` |
 | 8. Exit Execution | Close both legs manually | Persist exit action and update actionable view | `signal_executions` rows with action `exit` |
 | 9. Audit | Review full lifecycle for pair | Provide history of signals + executions for replay | `signal_history` + `signal_executions` |
@@ -43,7 +43,7 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 ### US-SIG-01 Review actionability before opening details
 - As an operator, I want the top-level signal status to already include pre-trade constraints.
 - Acceptance:
-  - `Signal` column shows `enter`, `hold_pretrade`, `check_pretrade`, or `exit`.
+  - `Signal` column shows `enter`, `hold_pretrade`, `check_pretrade`, `hold_open`, or `exit`.
   - Entry rows without pre-trade payload are not shown as final `enter`.
 
 ### US-SIG-02 Validate two-leg entry readiness
@@ -57,11 +57,13 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 - As an operator, I want each execution step captured for later audit.
 - Acceptance:
   - Entry `Execute` writes a row to `signal_executions`.
-  - Stored fields include pair, direction, action, price, quantity, side, status, note, timestamp.
+  - Stored fields include pair, direction, action, price, quantity, side, order_id, note, timestamp.
+  - For two-leg execution, both legs can be linked by one `order_id`; one-leg execution remains valid with a single row.
 
 ### US-SIG-04 Monitor open position until exit condition
 - As an operator, I want clear transition from monitoring to exit-ready behavior.
 - Acceptance:
+  - If a pair has an open position (entered and not closed), it remains visible in `Signals` with explicit status `hold_open` until closure.
   - Ongoing refresh updates reasons/metrics in `signal_history`.
   - Exit rationale is visible in details and not hidden in raw payload only.
 

@@ -21,7 +21,7 @@
 - signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
 - signals-history-reasons -> TC-SIG-HIST-API-004
-- signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001
+- signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002
 - pretrade-check -> TC-PRETRADE-API-001, TC-PRETRADE-API-002, TC-PRETRADE-UI-001
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
 - backtests -> TC-BACK-API-001, TC-BACK-UI-001
@@ -38,7 +38,7 @@
 - US-01 Configure the strategy -> params-specs (TC-PARAMS-API-001) + unit tests: tests/test_config_resolver.py, tests/test_parameter_specs.py.
 - US-02 Daily scan of pairs -> top-pairs, signals-active, signals-history, frontend, frontend-proxy (TC-TOP-*, TC-SIG-ACT-*, TC-SIG-HIST-*, TC-FE-*).
 - US-03 Drill into a pair -> spread-series + top-pairs details (TC-SPREAD-API-001, TC-SPREAD-UI-001, TC-TOP-UI-002).
-- US-04 Enter a position -> signals-execute + pretrade-check + decision-action (TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-PRETRADE-API-001, TC-PRETRADE-UI-001, TC-DEC-API-004, TC-DEC-UI-002).
+- US-04 Enter a position -> signals-execute + pretrade-check + decision-action (TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002, TC-PRETRADE-API-001, TC-PRETRADE-UI-001, TC-DEC-API-004, TC-DEC-UI-002).
 - US-05 Early exit (alpha) -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
 - US-06 Hold to expiry or roll -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
 - US-07 Backtest review -> backtests (TC-BACK-API-001, TC-BACK-UI-001).
@@ -142,6 +142,7 @@ Expected:
 - Updated timestamp changes after the interval.
 - Signals table refreshes without full page reload.
 - Main `Сигнал` column reflects effective action with pre-trade constraints even before opening details.
+- Open positions remain visible with explicit `hold_open` status until an `exit` is logged.
 - Signals table includes action fields for execution planning:
   - `entry_stock_min` / `entry_stock_max`,
   - `entry_future_min_per_share` / `entry_future_max_per_share`,
@@ -192,7 +193,20 @@ Steps:
 1. Open Details for an active signal.
 2. Fill Execute form and submit.
 Expected:
+- Form contains `Цена`, `Кол-во`, `Нога сделки`, `Комментарий` (without manual status field).
 - Execution history updates with submitted entry.
+
+### TC-SIG-EXEC-UI-002 Link two legs by one order_id
+Acceptance: signals-execute
+Automation: ui-web/tests/top-signals.spec.ts
+Steps:
+1. Open Details for an active signal.
+2. Submit first leg (`stock`).
+3. Submit second leg (`future`) for the same pair and action.
+Expected:
+- Both requests are accepted.
+- API payload contains `order_id`.
+- `order_id` is identical for both legs, enabling linked two-leg execution tracking.
 
 ### TC-PRETRADE-UI-001 Signals pre-trade panel
 Acceptance: pretrade-check
@@ -322,7 +336,7 @@ Automation: scripts/acceptance_check.py (signals-active)
 Request:
 - GET /api/signals/active
 Expected:
-- signal_action only enter/exit.
+- signal_action only `enter`/`exit`/`hold_open` (`hold_open` is used for open, not yet closed positions).
 - If `signal_metrics` contains execution plan values, they are also available at top level
   (e.g., `entry_spread_pct_min`, `entry_spread_pct_max`, `tp_spread_pct_level`, `sl_spread_pct_level`).
 
@@ -387,7 +401,8 @@ Automation: scripts/acceptance_check.py (post_json)
 Request:
 - POST /api/signals/execute
 Expected:
-- 200 OK with JSON response containing status.
+- 200 OK with JSON response containing `status`.
+- For legged execution (`side=stock|future`) response also includes generated or passed `order_id`.
 
 ### TC-PRETRADE-API-001 Pre-trade check endpoint
 Acceptance: pretrade-check

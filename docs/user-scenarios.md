@@ -36,6 +36,7 @@ Expected:
   - `Риск и стоп-уровни`,
   - `Прогноз выхода`.
 - If API does not provide plan fields (`entry_*`, `tp/sl`, `forecast_*`) for a row, the UI shows a coverage hint and keeps the screen readable without empty/broken tabs.
+- If a pair is entered and not yet closed, `Signals` keeps this pair visible with explicit `hold_open` status.
 - UI shows last successful recompute time.
 - snapshot_as_of and signal timestamps reflect the latest run time using ISO 8601 with timezone (e.g., 2026-01-26T18:45:00Z).
 
