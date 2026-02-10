@@ -239,41 +239,56 @@ def run_delay_gate(
     fut_quote_pass = fut_quote_hits >= required_hits
     stock_volume_pass = stock_volume_hits >= required_hits
     fut_volume_pass = fut_volume_hits >= required_hits
-    quote_pass = stock_quote_pass and fut_quote_pass
+    # Manual-drive policy for delayed ISS mode:
+    # stock-leg checks block entry; futures/spread/sync checks stay diagnostic.
+    quote_pass_strict = stock_quote_pass and fut_quote_pass
+    quote_pass = stock_quote_pass
 
     ready_to_place = (
         quote_pass
-        and
-        stock_price_pass
-        and fut_price_pass
-        and spread_pass
-        and sync_pass
+        and stock_price_pass
         and stock_volume_pass
-        and fut_volume_pass
     )
 
     reasons: list[str] = []
     if not stock_quote_pass:
         reasons.append("stock_quote_missing")
-    if not fut_quote_pass:
-        reasons.append("fut_quote_missing")
     if not stock_price_pass:
         reasons.append("stock_range_miss")
-    if not fut_price_pass:
-        reasons.append("fut_range_miss")
-    if not spread_pass:
-        reasons.append("spread_out_of_band")
-    if not sync_pass:
-        reasons.append("snapshot_unsynced")
     if not stock_volume_pass:
         reasons.append("stock_volume_miss")
+
+    advisory_reasons: list[str] = []
+    if not fut_quote_pass:
+        advisory_reasons.append("fut_quote_missing")
+    if not fut_price_pass:
+        advisory_reasons.append("fut_range_miss")
+    if not spread_pass:
+        advisory_reasons.append("spread_out_of_band")
+    if not sync_pass:
+        advisory_reasons.append("snapshot_unsynced")
     if not fut_volume_pass:
-        reasons.append("fut_volume_miss")
+        advisory_reasons.append("fut_volume_miss")
 
     return {
         "status": "PLACE" if ready_to_place else "CHECK",
         "ready_to_place": ready_to_place,
         "manual_confirm_required": True,
+        "gate_policy": {
+            "mode": "iss_manual_drive",
+            "blocking_gates": [
+                "stock_quote_pass",
+                "stock_price_pass",
+                "stock_volume_pass",
+            ],
+            "advisory_gates": [
+                "fut_quote_pass",
+                "fut_price_pass",
+                "spread_pass",
+                "sync_pass",
+                "fut_volume_pass",
+            ],
+        },
         "pair": {
             "stock": stock,
             "future": future,
@@ -303,6 +318,7 @@ def run_delay_gate(
         },
         "gates": {
             "quote_pass": quote_pass,
+            "quote_pass_strict": quote_pass_strict,
             "stock_quote_pass": stock_quote_pass,
             "fut_quote_pass": fut_quote_pass,
             "stock_price_pass": stock_price_pass,
@@ -325,6 +341,7 @@ def run_delay_gate(
             "snapshots": len(snapshots_data),
         },
         "reasons": reasons,
+        "advisory_reasons": advisory_reasons,
         "last_snapshot": last_snapshot_view,
     }
 

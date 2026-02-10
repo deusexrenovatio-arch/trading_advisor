@@ -40,7 +40,7 @@ def _frame(stock_numtrades: int, fut_numtrades: int):
     }
 
 
-def test_delay_gate_strict_tradeflow_blocks_missing_fut_price_hit():
+def test_delay_gate_iss_manual_drive_keeps_ready_when_fut_quotes_missing():
     frames = [_frame(10, 10), _frame(10, 10), _frame(10, 10)]
     client = _FakeMoexClientSequence("AAA", "AAH6", frames)
     result = run_delay_gate(
@@ -60,14 +60,17 @@ def test_delay_gate_strict_tradeflow_blocks_missing_fut_price_hit():
         sync_sec=120.0,
         poll_sec=0.0,
     )
-    assert result["ready_to_place"] is False
-    assert result["status"] == "CHECK"
+    assert result["ready_to_place"] is True
+    assert result["status"] == "PLACE"
+    assert result["gates"]["quote_pass"] is True
+    assert result["gates"]["quote_pass_strict"] is False
     assert result["gates"]["fut_quote_pass"] is False
-    assert "fut_quote_missing" in result["reasons"]
-    assert "fut_range_miss" in result["reasons"]
+    assert "fut_quote_missing" in result["advisory_reasons"]
+    assert "fut_range_miss" in result["advisory_reasons"]
+    assert "fut_quote_missing" not in result["reasons"]
 
 
-def test_delay_gate_blocks_missing_fut_quotes_even_without_tradeflow_requirement():
+def test_delay_gate_returns_advisory_fut_issues_without_blocking_entry():
     frames = [_frame(10, 10), _frame(10, 10), _frame(10, 10)]
     client = _FakeMoexClientSequence("AAA", "AAH6", frames)
     result = run_delay_gate(
@@ -87,10 +90,12 @@ def test_delay_gate_blocks_missing_fut_quotes_even_without_tradeflow_requirement
         sync_sec=120.0,
         poll_sec=0.0,
     )
-    assert result["ready_to_place"] is False
-    assert result["status"] == "CHECK"
-    assert result["gates"]["quote_pass"] is False
+    assert result["ready_to_place"] is True
+    assert result["status"] == "PLACE"
+    assert result["gates"]["quote_pass"] is True
+    assert result["gates"]["quote_pass_strict"] is False
     assert result["gates"]["fut_quote_pass"] is False
-    assert "fut_quote_missing" in result["reasons"]
+    assert "fut_quote_missing" in result["advisory_reasons"]
+    assert "fut_quote_missing" not in result["reasons"]
     assert result["gates"]["stock_volume_pass"] is True
     assert result["gates"]["fut_volume_pass"] is True
