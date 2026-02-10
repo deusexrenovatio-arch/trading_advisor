@@ -1,5 +1,7 @@
 moex:
   base_url: "https://iss.moex.com"
+  fallback_ips:
+    - "85.118.181.8"
   engine_shares: "stock"
   market_shares: "shares"
   shares_board: "TQBR"
@@ -7,6 +9,9 @@ moex:
   market_futures: "forts"
   futures_board: "RFUD"
   request_timeout_sec: 20
+  request_max_retries: 3
+  request_retry_backoff_sec: 0.5
+  request_retry_max_backoff_sec: 4.0
 
 cbr:
   base_url: "https://www.cbr.ru"
@@ -120,6 +125,7 @@ ui:
   signal_refresh_timezone: null
   signal_refresh_max_pairs: null
   signal_refresh_save_csv: true
+  pretrade_fail_open_on_transport_error: true
 
 data:
   data_dir: "./data"

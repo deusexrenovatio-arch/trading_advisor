@@ -1,6 +1,7 @@
 from datetime import date
 
 import pandas as pd
+import requests
 
 from moex_carry.config import AppSettings, DataConfig
 from moex_carry.ui.app import SIGNAL_METRIC_CONTRACT_KEYS, create_app
@@ -156,6 +157,14 @@ class _FakeMoexClientPretrade:
         ]
 
 
+class _FakeMoexClientPretradeTransportFail:
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def get_marketdata(self, _engine: str, _market: str, _board: str, _secid: str):
+        raise requests.exceptions.SSLError("UNEXPECTED_EOF_WHILE_READING")
+
+
 def test_pretrade_check_endpoint_returns_price_bands_and_volume_gate(tmp_path, monkeypatch):
     output_dir = tmp_path / "output"
     raw_dir = tmp_path / "raw"
@@ -202,5 +211,54 @@ def test_pretrade_check_endpoint_returns_price_bands_and_volume_gate(tmp_path, m
     assert payload["gates"]["fut_quote_pass"] is True
     assert payload["gates"]["stock_volume_pass"] is True
     assert payload["gates"]["fut_volume_pass"] is True
+    assert "order_price_bands" in payload
+    assert "future_sell_min_contract" in payload["order_price_bands"]
+
+
+def test_pretrade_check_endpoint_fail_opens_on_iss_transport_error(tmp_path, monkeypatch):
+    output_dir = tmp_path / "output"
+    raw_dir = tmp_path / "raw"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    _write_csv(
+        output_dir / "top_pairs.csv",
+        [
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "spot": 100.0,
+                "future_price": 101.0,
+                "spread_mid": -1.0,
+                "signal_direction": "cash_and_carry",
+            }
+        ],
+    )
+    _write_csv(
+        raw_dir / "futures.csv",
+        [
+            {
+                "SECID": "AAH6",
+                "LOTVOLUME": 10,
+                "MULTIPLIER": 1,
+            }
+        ],
+    )
+    monkeypatch.setattr(ui_app, "MoexIssClient", _FakeMoexClientPretradeTransportFail)
+
+    settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get(
+        "/api/pretrade/check?stock=AAA&future=AAH6&snapshots=1&min_hits=1&poll_sec=0"
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "PLACE"
+    assert payload["ready_to_place"] is True
+    assert payload["manual_confirm_required"] is True
+    assert payload["degraded"] is True
+    assert payload["gate_policy"]["mode"] == "iss_manual_drive_transport_fail_open"
+    assert "iss_transport_error" in payload["advisory_reasons"]
     assert "order_price_bands" in payload
     assert "future_sell_min_contract" in payload["order_price_bands"]

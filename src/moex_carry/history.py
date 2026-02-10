@@ -40,7 +40,14 @@ def collect_history(
         end_date = date.today()
 
     kinds = _normalize_kinds(kind)
-    client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+    client = MoexIssClient(
+        settings.moex.base_url,
+        settings.moex.request_timeout_sec,
+        max_retries=settings.moex.request_max_retries,
+        retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+        retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+        fallback_ips=settings.moex.fallback_ips,
+    )
 
     for dataset in kinds:
         secids = _load_or_fetch_secids(dataset, paths.data_dir, client, settings)

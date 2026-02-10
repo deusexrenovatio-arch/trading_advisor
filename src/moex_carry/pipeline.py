@@ -68,7 +68,14 @@ def fetch_data(settings: AppSettings, max_shares: int | None = None) -> None:
     paths = resolve_paths(settings)
     dirs = _data_paths(paths.data_dir)
 
-    client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+    client = MoexIssClient(
+        settings.moex.base_url,
+        settings.moex.request_timeout_sec,
+        max_retries=settings.moex.request_max_retries,
+        retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+        retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+        fallback_ips=settings.moex.fallback_ips,
+    )
     print("[fetch] Downloading MOEX shares list...", flush=True)
     shares: list[dict[str, object]] = []
     limit = max_shares if max_shares and max_shares > 0 else None
@@ -747,7 +754,14 @@ def build_spread_series(
     else:
         lookback_days = max(int(window_days), 1)
         lookback = today - timedelta(days=lookback_days)
-    client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+    client = MoexIssClient(
+        settings.moex.base_url,
+        settings.moex.request_timeout_sec,
+        max_retries=settings.moex.request_max_retries,
+        retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+        retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+        fallback_ips=settings.moex.fallback_ips,
+    )
 
     stock_candles = _fetch_candles(
         client,
@@ -827,7 +841,14 @@ def compute_pairs(
     future_spec_map = {spec.secid: spec for spec in futures_specs}
 
     key_rates = _load_key_rates(dirs["raw"] / "key_rates.csv")
-    client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+    client = MoexIssClient(
+        settings.moex.base_url,
+        settings.moex.request_timeout_sec,
+        max_retries=settings.moex.request_max_retries,
+        retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+        retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+        fallback_ips=settings.moex.fallback_ips,
+    )
 
     requested_as_of = as_of
     as_of_date = requested_as_of or date.today()
@@ -1283,7 +1304,14 @@ def run_backtest(settings: AppSettings) -> BacktestResult | None:
     future_spec_map = {spec.secid: spec for spec in _parse_contract_specs(futures_df)}
     future_spec = future_spec_map.get(future_secid)
     future_scale = _future_price_scale(future_spec)
-    client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+    client = MoexIssClient(
+        settings.moex.base_url,
+        settings.moex.request_timeout_sec,
+        max_retries=settings.moex.request_max_retries,
+        retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+        retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+        fallback_ips=settings.moex.fallback_ips,
+    )
     today = date.today()
     lookback_days = max(settings.data.backtest_lookback_days, 1)
     lookback = today - timedelta(days=lookback_days)

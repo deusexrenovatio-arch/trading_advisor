@@ -9,6 +9,7 @@ from datetime import datetime, time as dt_time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+import requests
 from dash import Dash, Input, Output, State, dash_table, dcc, html
 from dash.dash_table.Format import Format, Scheme, Trim
 from flask import Flask, jsonify, request
@@ -193,6 +194,122 @@ def _bad_request(message: str, *, details: object | None = None):
     if details is not None:
         payload["details"] = details
     return jsonify(payload), 400
+
+
+_TRANSPORT_ERROR_TYPES = (
+    requests.exceptions.SSLError,
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+)
+
+
+def _iter_exception_chain(exc: BaseException):
+    current: BaseException | None = exc
+    visited: set[int] = set()
+    while current is not None:
+        key = id(current)
+        if key in visited:
+            break
+        visited.add(key)
+        yield current
+        current = current.__cause__ if current.__cause__ is not None else current.__context__
+
+
+def _is_iss_transport_error(exc: BaseException) -> bool:
+    for item in _iter_exception_chain(exc):
+        if isinstance(item, _TRANSPORT_ERROR_TYPES):
+            return True
+        if isinstance(item, requests.exceptions.RequestException):
+            response = getattr(item, "response", None)
+            if response is None:
+                return True
+    return False
+
+
+def _build_pretrade_fail_open_result(
+    *,
+    stock: str,
+    future: str,
+    direction: str,
+    spot_target: float,
+    future_target: float,
+    spread_target: float,
+    eps: float,
+    future_scale: float,
+    qty_fut: float,
+    participation_rate: float,
+    min_hits: int,
+    error_text: str,
+) -> dict[str, object]:
+    stock_buy_max = float(spot_target) * (1.0 + float(eps))
+    stock_sell_min = float(spot_target) * (1.0 - float(eps))
+    fut_buy_max = float(future_target) * (1.0 + float(eps))
+    fut_sell_min = float(future_target) * (1.0 - float(eps))
+    spread_band = float(spot_target) * float(eps)
+    spread_min = float(spread_target) - spread_band
+    spread_max = float(spread_target) + spread_band
+
+    qty_stock = max(float(future_scale), 1.0) * float(qty_fut)
+    min_session_volume_stock = qty_stock / float(participation_rate)
+    min_session_volume_fut = float(qty_fut) / float(participation_rate)
+
+    return {
+        "status": "PLACE",
+        "ready_to_place": True,
+        "manual_confirm_required": True,
+        "degraded": True,
+        "gate_policy": {
+            "mode": "iss_manual_drive_transport_fail_open",
+            "blocking_gates": [],
+            "advisory_gates": [
+                "stock_quote_pass",
+                "fut_quote_pass",
+                "stock_price_pass",
+                "fut_price_pass",
+                "spread_pass",
+                "sync_pass",
+                "stock_volume_pass",
+                "fut_volume_pass",
+            ],
+        },
+        "pair": {
+            "stock": stock,
+            "future": future,
+            "direction": direction,
+        },
+        "targets": {
+            "spot_target": float(spot_target),
+            "future_target_per_share": float(future_target),
+            "spread_target": float(spread_target),
+        },
+        "order_price_bands": {
+            "stock_buy_max": stock_buy_max,
+            "stock_sell_min": stock_sell_min,
+            "future_buy_max_per_share": fut_buy_max,
+            "future_sell_min_per_share": fut_sell_min,
+            "future_buy_max_contract": fut_buy_max * float(future_scale),
+            "future_sell_min_contract": fut_sell_min * float(future_scale),
+            "spread_min": spread_min,
+            "spread_max": spread_max,
+        },
+        "volume_requirements": {
+            "qty_fut_contracts": float(qty_fut),
+            "qty_stock_shares": qty_stock,
+            "participation_rate": float(participation_rate),
+            "min_session_volume_stock": min_session_volume_stock,
+            "min_session_volume_fut_contracts": min_session_volume_fut,
+        },
+        "gates": {},
+        "hits": {
+            "required": int(max(min_hits, 1)),
+            "snapshots": 0,
+        },
+        "reasons": [],
+        "advisory_reasons": ["iss_transport_error"],
+        "diagnostics": {
+            "transport_error": error_text,
+        },
+    }
 
 
 def _df_to_records(df: pd.DataFrame) -> list[dict[str, object]]:
@@ -1016,7 +1133,14 @@ def create_app(settings: AppSettings) -> Dash:
         participation_rate = min(participation_rate, 1.0)
 
         future_scale = _future_scale_from_raw(paths.data_dir / "raw" / "futures.csv", future)
-        client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+        client = MoexIssClient(
+            settings.moex.base_url,
+            settings.moex.request_timeout_sec,
+            max_retries=settings.moex.request_max_retries,
+            retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+            retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+            fallback_ips=settings.moex.fallback_ips,
+        )
 
         try:
             result = run_delay_gate(
@@ -1043,8 +1167,28 @@ def create_app(settings: AppSettings) -> Dash:
                 fut_board=settings.moex.futures_board,
             )
         except Exception as exc:
-            logger.exception("Pretrade delay gate failed")
-            return jsonify({"error": "server_error", "message": str(exc)}), 500
+            if settings.ui.pretrade_fail_open_on_transport_error and _is_iss_transport_error(exc):
+                logger.warning(
+                    "Pretrade delay gate transport failure; returning fail-open response",
+                    exc_info=True,
+                )
+                result = _build_pretrade_fail_open_result(
+                    stock=stock,
+                    future=future,
+                    direction=direction,
+                    spot_target=spot_target,
+                    future_target=future_target,
+                    spread_target=spread_target,
+                    eps=eps,
+                    future_scale=future_scale,
+                    qty_fut=qty_fut,
+                    participation_rate=participation_rate,
+                    min_hits=min_hits,
+                    error_text=str(exc),
+                )
+            else:
+                logger.exception("Pretrade delay gate failed")
+                return jsonify({"error": "server_error", "message": str(exc)}), 500
 
         result["params"] = {
             "snapshots": snapshots,

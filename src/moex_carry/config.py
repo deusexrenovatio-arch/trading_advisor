@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class MoexIssConfig(BaseModel):
     base_url: str = "https://iss.moex.com"
+    fallback_ips: list[str] = []
     engine_shares: str = "stock"
     market_shares: str = "shares"
     shares_board: str = "TQBR"
@@ -18,6 +19,9 @@ class MoexIssConfig(BaseModel):
     market_futures: str = "forts"
     futures_board: str = "RFUD"
     request_timeout_sec: int = 20
+    request_max_retries: int = 3
+    request_retry_backoff_sec: float = 0.5
+    request_retry_max_backoff_sec: float = 4.0
 
 
 class CbrConfig(BaseModel):
@@ -153,6 +157,7 @@ class UiConfig(BaseModel):
     signal_refresh_timezone: Optional[str] = None
     signal_refresh_max_pairs: Optional[int] = None
     signal_refresh_save_csv: bool = True
+    pretrade_fail_open_on_transport_error: bool = True
 
 
 class DataConfig(BaseModel):
