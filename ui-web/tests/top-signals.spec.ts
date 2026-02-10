@@ -109,6 +109,21 @@ const activeSignals = [
   },
 ]
 
+const activeSignalsWithOpenPosition = [
+  {
+    ...activeSignals[0],
+    stock: 'AFKS',
+    future: 'AKH6',
+    signal_action: 'hold_open',
+    signal_action_effective: 'hold_open',
+    signal_score: 0.51,
+    position_open: true,
+    position_state: 'open',
+    position_net_executions: 2,
+  },
+  activeSignals[1],
+]
+
 const historyAll = [
   {
     run_id: 'run-1',
@@ -140,8 +155,8 @@ const executionRow = {
   action: 'enter',
   price: 225.5,
   quantity: 2,
-  side: 'buy',
-  status: 'filled',
+  side: 'future',
+  order_id: 'ord-enter-1',
   note: 'manual',
 }
 
@@ -339,7 +354,9 @@ test.describe('Top pairs + Signals UI', () => {
       const rowText = await page.locator('table tbody tr').first().innerText()
       return (
         rowText.includes('Ожидает pre-trade проверки') ||
-        rowText.includes('Вход заблокирован pre-trade')
+        rowText.includes('Вход заблокирован pre-trade') ||
+        rowText.includes('РћР¶РёРґР°РµС‚ pre-trade РїСЂРѕРІРµСЂРєРё') ||
+        rowText.includes('Р’С…РѕРґ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅ pre-trade')
       )
     }).toBeTruthy()
     const headerRow = page.locator('table thead')
@@ -416,12 +433,11 @@ test.describe('Top pairs + Signals UI', () => {
     await page.locator('table tbody tr').first().locator('button').first().click()
 
     const detailRow = page.locator('table tbody tr').nth(1)
-    const executeInputs = detailRow.locator('input')
-    await executeInputs.nth(0).fill('225.5')
-    await executeInputs.nth(1).fill('2')
-    await executeInputs.nth(2).fill('buy')
-    await executeInputs.nth(3).fill('filled')
-    await executeInputs.nth(4).fill('manual')
+    await detailRow.getByRole('textbox', { name: 'Цена' }).fill('225.5')
+    await detailRow.getByRole('textbox', { name: 'Кол-во' }).fill('2')
+    await detailRow.locator('[role="combobox"]').first().click()
+    await page.getByRole('option').nth(2).click()
+    await detailRow.getByRole('textbox', { name: 'Комментарий' }).fill('manual')
     await detailRow.locator('button.MuiButton-contained').first().click()
 
     await expect.poll(() => executionPayload).not.toBeNull()
@@ -433,10 +449,88 @@ test.describe('Top pairs + Signals UI', () => {
       direction: 'cash_and_carry',
       price: 225.5,
       quantity: 2,
-      side: 'buy',
-      status: 'filled',
+      side: 'future',
       note: 'manual',
     })
+    expect(executionPayload.order_id).toEqual(expect.any(String))
+  })
+
+  test('Signals execute links two legs into one order', async ({ page }) => {
+    const executionPayloads: Array<Record<string, unknown>> = []
+    await registerCommonRoutes(page)
+    await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
+    await page.route('**/api/pretrade/check**', (route) => route.fulfill({ json: pretradeCheckReady }))
+    await page.route('**/api/signals/execute', async (route) => {
+      executionPayloads.push(route.request().postDataJSON() as Record<string, unknown>)
+      await route.fulfill({ json: { status: 'ok' } })
+    })
+    await page.route('**/api/signals/executions**', (route) => route.fulfill({ json: [] }))
+
+    await page.goto('/')
+    await page.locator('[role="tab"]').nth(2).click()
+    await page.locator('table tbody tr').first().locator('button').first().click()
+
+    const detailRow = page.locator('table tbody tr').nth(1)
+    await detailRow.getByRole('textbox').nth(0).fill('225.5')
+    await detailRow.getByRole('textbox').nth(1).fill('2')
+    await detailRow.locator('[role="combobox"]').first().click()
+    await page.getByRole('option').nth(1).click()
+    await detailRow.locator('button.MuiButton-contained').first().click()
+
+    await detailRow.getByRole('textbox').nth(0).fill('225.5')
+    await detailRow.getByRole('textbox').nth(1).fill('2')
+    await detailRow.locator('[role="combobox"]').first().click()
+    await page.getByRole('option').nth(2).click()
+    await detailRow.locator('button.MuiButton-contained').first().click()
+
+    await expect.poll(() => executionPayloads.length).toBe(2)
+    expect(executionPayloads[0]?.order_id).toEqual(expect.any(String))
+    expect(executionPayloads[1]?.order_id).toEqual(executionPayloads[0]?.order_id)
+    expect(executionPayloads[0]?.side).toBe('stock')
+    expect(executionPayloads[1]?.side).toBe('future')
+  })
+
+  test('Signals execute from hold_open row posts enter action', async ({ page }) => {
+    let executionPayload: Record<string, unknown> | null = null
+    await registerCommonRoutes(page, {
+      activeSignalsOverride: activeSignalsWithOpenPosition,
+    })
+    await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
+    await page.route('**/api/signals/execute', async (route) => {
+      executionPayload = route.request().postDataJSON() as Record<string, unknown>
+      await route.fulfill({ json: { status: 'ok' } })
+    })
+    await page.route('**/api/signals/executions**', (route) => route.fulfill({ json: [] }))
+
+    await page.goto('/')
+    await page.locator('[role="tab"]').nth(2).click()
+    await page.locator('table tbody tr').first().locator('button').first().click()
+
+    const detailRow = page.locator('table tbody tr').nth(1)
+    await detailRow.getByRole('textbox').nth(0).fill('13332')
+    await detailRow.getByRole('textbox').nth(1).fill('1')
+    await detailRow.locator('[role="combobox"]').first().click()
+    await page.getByRole('option').nth(2).click()
+    await detailRow.locator('button.MuiButton-contained').first().click()
+
+    await expect.poll(() => executionPayload).not.toBeNull()
+    expect(executionPayload?.action).toBe('enter')
+    expect(executionPayload?.order_id).toEqual(expect.any(String))
+  })
+
+  test('Signals shows open position pairs explicitly', async ({ page }) => {
+    await registerCommonRoutes(page, {
+      activeSignalsOverride: activeSignalsWithOpenPosition,
+    })
+    await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
+
+    await page.goto('/')
+    await page.locator('[role="tab"]').nth(2).click()
+
+    await expect(page.getByText('Открытые позиции (1)')).toBeVisible()
+    await expect(page.getByText(/AFKS\/AKH6:/)).toBeVisible()
+    await expect(page.getByRole('cell', { name: 'AFKS' })).toBeVisible()
+    await expect(page.getByText(/Open position \(hold\)|Позиция открыта/i).first()).toBeVisible()
   })
 
   test('Signals details show pre-trade block', async ({ page }) => {
@@ -462,4 +556,3 @@ test.describe('Top pairs + Signals UI', () => {
     await expect(page.getByRole('heading', { name: 'Прогноз выхода' })).toBeVisible()
   })
 })
-
