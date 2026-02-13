@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date, datetime
 import sys
 from typing import Any
 
@@ -42,6 +43,18 @@ def _first_object(items: list[Any]) -> dict[str, Any] | None:
         if isinstance(item, dict):
             return item
     return None
+
+
+def _json_compatible(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_compatible(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_compatible(item) for item in value]
+    return value
 
 
 def _check_non_empty(name: str, data: list[Any], allow_empty: bool) -> tuple[bool, str]:
@@ -196,7 +209,7 @@ def run(args: argparse.Namespace) -> int:
                 _print_result(scenario_id, False, "invalid_payload")
                 failures += 1
                 continue
-            payload = dict(payload_raw)
+            payload = _json_compatible(dict(payload_raw))
             if not str(payload.get("idempotency_key") or "").strip():
                 payload["idempotency_key"] = f"acceptance-{scenario_id}-{signal_id}"
 
@@ -380,6 +393,7 @@ def run(args: argparse.Namespace) -> int:
             template = scenario.get("url_template", "/api/decisions/{decision_id}/action")
             url = _build_url(backend, template.format(decision_id=decision_id))
             payload = scenario.get("payload", {})
+            payload = _json_compatible(payload)
             try:
                 response = requests.post(url, json=payload, timeout=10)
             except requests.RequestException as exc:
@@ -461,7 +475,7 @@ def run(args: argparse.Namespace) -> int:
             expected_status = int(scenario.get("expected_status", 200))
             url = _build_url(backend, scenario.get("url", "/api/backtest/run"))
             try:
-                response = requests.post(url, json=payload, timeout=30)
+                response = requests.post(url, json=_json_compatible(payload), timeout=30)
             except requests.RequestException as exc:
                 _print_result(scenario_id, False, f"request_error:{exc}")
                 failures += 1
@@ -537,6 +551,7 @@ def run(args: argparse.Namespace) -> int:
         if scenario.get("type") == "post_json":
             url = _build_url(frontend if scope == "frontend" else backend, scenario.get("url", "/"))
             payload = scenario.get("payload", {})
+            payload = _json_compatible(payload)
             expected_status = int(scenario.get("expected_status", 200))
             try:
                 response = requests.post(url, json=payload, timeout=10)
