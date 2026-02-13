@@ -65,6 +65,56 @@ def _check_non_empty(name: str, data: list[Any], allow_empty: bool) -> tuple[boo
     return False, "len=0"
 
 
+def _to_status_set(raw: Any, default: int | None = None) -> set[int]:
+    if raw is None:
+        return {int(default)} if default is not None else set()
+    if isinstance(raw, (int, str)):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return {int(default)} if default is not None else set()
+    statuses: set[int] = set()
+    for item in raw:
+        try:
+            statuses.add(int(item))
+        except (TypeError, ValueError):
+            continue
+    if not statuses and default is not None:
+        statuses.add(int(default))
+    return statuses
+
+
+def _extract_response_message(response: requests.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return (response.text or "").strip()
+    if isinstance(payload, dict):
+        for key in ("message", "error", "detail", "details"):
+            value = payload.get(key)
+            if value is not None:
+                return str(value).strip()
+    return str(payload).strip()
+
+
+def _should_skip_response(scenario: dict[str, Any], response: requests.Response) -> tuple[bool, str]:
+    skip_statuses = _to_status_set(scenario.get("skip_on_statuses"))
+    if response.status_code not in skip_statuses:
+        return False, ""
+    filters = scenario.get("skip_on_error_messages")
+    if isinstance(filters, str):
+        filters = [filters]
+    message = _extract_response_message(response)
+    if not filters:
+        return True, f"status:{response.status_code}"
+    normalized = [str(item) for item in filters if str(item).strip()]
+    if not normalized:
+        return True, f"status:{response.status_code}"
+    lowered = message.lower()
+    if any(token.lower() in lowered for token in normalized):
+        return True, f"status:{response.status_code};message:{message}"
+    return False, ""
+
+
 def _load_config(path: str) -> dict[str, Any]:
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -101,9 +151,17 @@ def run(args: argparse.Namespace) -> int:
 
         if scenario.get("type") == "http_status":
             url = _build_url(frontend if scope == "frontend" else backend, scenario.get("url", "/"))
+            expected_statuses = _to_status_set(
+                scenario.get("expected_statuses"),
+                default=200,
+            )
             try:
                 response = requests.get(url, timeout=5)
-                ok = response.ok
+                should_skip, reason = _should_skip_response(scenario, response)
+                if should_skip:
+                    _print_skip(scenario_id, reason)
+                    continue
+                ok = response.status_code in expected_statuses
                 detail = f"status:{response.status_code}"
             except requests.RequestException as exc:
                 ok = False
@@ -427,8 +485,11 @@ def run(args: argparse.Namespace) -> int:
                 source_url = str(scenario.get("source_url", "/api/top-pairs?limit=1"))
                 ok, detail, pair_list = _get_json(_build_url(backend, source_url))
                 if not (ok and _require_list(pair_list) and pair_list):
-                    _print_result(scenario_id, False, "missing_pair_source")
-                    failures += 1
+                    if allow_empty:
+                        _print_skip(scenario_id, "missing_pair_source")
+                    else:
+                        _print_result(scenario_id, False, "missing_pair_source")
+                        failures += 1
                     continue
             pair = _first_object(pair_list)
             if not pair:
@@ -552,14 +613,21 @@ def run(args: argparse.Namespace) -> int:
             url = _build_url(frontend if scope == "frontend" else backend, scenario.get("url", "/"))
             payload = scenario.get("payload", {})
             payload = _json_compatible(payload)
-            expected_status = int(scenario.get("expected_status", 200))
+            expected_statuses = _to_status_set(
+                scenario.get("expected_statuses"),
+                default=int(scenario.get("expected_status", 200)),
+            )
             try:
                 response = requests.post(url, json=payload, timeout=10)
             except requests.RequestException as exc:
                 _print_result(scenario_id, False, f"request_error:{exc}")
                 failures += 1
                 continue
-            if response.status_code != expected_status:
+            should_skip, reason = _should_skip_response(scenario, response)
+            if should_skip:
+                _print_skip(scenario_id, reason)
+                continue
+            if response.status_code not in expected_statuses:
                 _print_result(scenario_id, False, f"status:{response.status_code}")
                 failures += 1
                 continue

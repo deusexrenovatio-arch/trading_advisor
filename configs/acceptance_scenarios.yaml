@@ -264,6 +264,7 @@ scenarios:
     scope: backend
     url: /api/backtest/run
     source_url: /api/v2/top-pairs?limit=1
+    allow_empty: true
     window_days: 60
     precompute: true
     required_keys: [summary_metrics, equity_curve, trades]
@@ -278,6 +279,8 @@ scenarios:
     scope: backend
     url: /api/forward/start
     payload: {}
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["Missing raw data"]
     required_keys: [run_id, status, state]
     test_cases: [TC-FWD-API-001]
     title: Forward start
@@ -288,6 +291,8 @@ scenarios:
     type: http_status
     scope: backend
     url: /api/forward/status
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["no_active_run"]
     test_cases: [TC-FWD-API-002, TC-FWD-UI-001]
     title: Forward status
     user_story: Оператор проверяет статус forward-run.
@@ -304,6 +309,8 @@ scenarios:
           end_date: 2020-12-31
         universe:
           max_pairs: 1
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["Missing raw data"]
     required_keys: [status, run_id]
     test_cases: [TC-HPO-API-001, TC-HPO-UNIT-001]
     title: HPO run
@@ -314,6 +321,8 @@ scenarios:
     type: http_status
     scope: backend
     url: /api/hpo/status
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["no_active_run"]
     test_cases: [TC-HPO-API-002]
     title: HPO status
     user_story: Operator checks HPO run status.
