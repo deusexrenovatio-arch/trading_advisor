@@ -26,13 +26,14 @@
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
 - backtests -> TC-BACK-API-001, TC-BACK-UI-001
 - backtest-run -> TC-BACK-V2-API-001, TC-BACK-V2-API-002
-- spread-series -> TC-SPREAD-API-001, TC-SPREAD-UI-001
+- spread-series -> TC-SPREAD-API-001, TC-SPREAD-UI-001, TC-SPREAD-UI-002
 - forward-start -> TC-FWD-API-001
 - forward-status -> TC-FWD-API-002
 - frontend -> TC-FE-HTTP-001
 - frontend-proxy -> TC-FE-PROXY-001
 - hpo -> TC-HPO-API-001, TC-HPO-UNIT-001
 - hpo-status -> TC-HPO-API-002
+- unified-minute-runtime -> TC-UNI-API-001, TC-UNI-API-002, TC-PERF-GATE-MAN-001
 
 ## User Scenario Coverage (US -> acceptance/test cases)
 - US-01 Configure the strategy -> params-specs (TC-PARAMS-API-001) + unit tests: tests/test_config_resolver.py, tests/test_parameter_specs.py.
@@ -46,6 +47,7 @@
 - US-09 Forward paper daily cycle -> forward-start/forward-status (TC-FWD-API-001, TC-FWD-API-002) + unit tests: tests/test_forward_engine.py.
 - US-10 HPO run + leaderboard -> hpo, hpo-status (TC-HPO-API-001, TC-HPO-API-002, TC-HPO-UNIT-001) + unit tests: tests/hpo/test_folds.py, tests/hpo/test_objective.py, tests/hpo/test_leaderboard.py.
 - US-11 Review decisions with server filters -> decision-view, decision-view-filters (TC-DEC-API-001, TC-DEC-API-005, TC-DEC-UI-001).
+- US-12 Unified minute-first market tables -> unified-minute-runtime + top-pairs/signals/backtests/spread-series + performance/stack gates (TC-UNI-API-001, TC-UNI-API-002, TC-PERF-GATE-MAN-001, TC-PERF-ARCH-UNIT-001, TC-TOP-API-001, TC-BACK-API-001, TC-SPREAD-API-001).
 
 ## UI Test Cases
 
@@ -130,6 +132,17 @@ Steps:
 2. Click Details on a row.
 Expected:
 - Spread chart renders with spread_mid and spread_pct data.
+
+### TC-SPREAD-UI-002 Spread chart timeframe switch (1D/1H/5m)
+Acceptance: spread-series
+Automation: ui-web/tests/top-signals.spec.ts
+Steps:
+1. Open Top pairs.
+2. Click Details on a row.
+3. Switch timeframe between `1 час`, `5 минут`, and `1 день`.
+Expected:
+- Chart stays rendered after each switch.
+- Candle summary updates for selected timeframe.
 
 ### TC-SIG-ACT-UI-001 Active signals auto refresh
 Acceptance: signals-active
@@ -453,6 +466,40 @@ Request:
 Expected:
 - Fields spread_mid, spread_pct, entry/exit flags.
 
+### TC-UNI-API-001 Unified runtime endpoints
+Acceptance: unified-minute-runtime
+Automation: tests/test_ui_unified_runtime.py
+Request:
+- GET /api/top-pairs?limit=5
+- GET /api/signals?limit=5
+- GET /api/backtests?limit=5
+Expected:
+- Endpoints return non-empty arrays from unified minute replay when preload cache is available.
+- Payload keeps backward-compatible field names (`stock`, `future`, `signal_action`, `signal_metrics`).
+
+### TC-UNI-API-002 Unified refresh path
+Acceptance: unified-minute-runtime
+Automation: tests/test_ui_unified_runtime.py
+Request:
+- POST /api/signals/refresh
+Expected:
+- Response status is `ok`.
+- `engine` equals `unified_minute_replay`.
+- Signal run is persisted without calling legacy pipeline.
+
+### TC-PERF-GATE-MAN-001 Minute runtime performance gate (cold/warm)
+Acceptance: unified-minute-runtime
+Automation: manual (benchmark scripts + acceptance note update)
+Steps:
+1. Run warmup with `scripts/prewarm_intraday_cache.py`.
+2. Run benchmark on fixed dataset/pairs for both `DAILY_EOD` and `INTRADAY_MINUTE`.
+3. Measure cold and warm times separately and capture cache mode + hardware profile.
+4. Record results in `docs/acceptance/minute-first-acceptance-2026-02-12.md` (or newer acceptance note).
+Expected:
+- Report includes baseline and candidate for cold and warm profiles.
+- Cache mode is explicit (`readonly`/`readwrite`/`refresh`).
+- Warm minute runtime and cold SLO gates are clearly marked pass/fail.
+
 ### TC-FWD-API-001 Forward start
 Acceptance: forward-start
 Automation: tests/test_backtest_forward_api.py
@@ -506,6 +553,15 @@ Expected:
 - Walk-forward folds respect embargo math.
 - Constraint violations yield -INF objective.
 - Leaderboard orders by objective and best_config matches the top trial.
+
+### TC-PERF-ARCH-UNIT-001 Compute stack policy for hot paths
+Acceptance: unified-minute-runtime
+Automation: tests/backtest_v2/test_compute_stack_policy.py
+Steps:
+1. Run `pytest -q tests/backtest_v2/test_compute_stack_policy.py`.
+Expected:
+- Hot-path modules (`backtest_v2/batch.py`, `analytics/alpha.py`) do not import pandas.
+- Vectorized entrypoints for matrix scoring and alpha kernels are available and deterministic on sample input.
 
 ## Regression Checklist (minimum)
 - /api/signals/history returns JSON (no HTML).

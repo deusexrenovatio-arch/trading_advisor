@@ -1,5 +1,145 @@
 # Release Notes
 
+## 2026-02-12 - Unified Minute-First Runtime for Market UI Endpoints
+
+Changed
+- Market UI endpoints now use unified minute replay runtime (with compatibility fallback):
+  - `GET /api/top-pairs`
+  - `GET /api/signals`
+  - `GET /api/backtests`
+  - `GET /api/spread-series`
+- `POST /api/signals/refresh` now supports unified refresh path:
+  - computes snapshot via minute replay,
+  - persists `signal_run` + `signal_history`,
+  - returns `engine=unified_minute_replay`.
+- Added UI runtime settings:
+  - `ui.use_unified_signal_engine`
+  - `ui.unified_allow_legacy_fallback`
+  - `ui.unified_snapshot_ttl_sec`
+  - `ui.unified_pair_workers`
+  - `ui.unified_front_only`
+  - `ui.unified_front_roll_days`
+- Default config switched to unified runtime in `configs/default.yaml`.
+
+Added
+- New module:
+  - `src/moex_carry/ui/unified_runtime.py`
+  - front-pair selection, replay cache, unified snapshot building, spread-series building.
+
+Tests
+- Added unified runtime/API tests:
+  - `tests/test_ui_unified_runtime.py`.
+- Re-ran compatibility/regression suite:
+  - `tests/test_ui_api.py`
+  - `tests/test_backtest_forward_api.py`
+  - `tests/test_signal_replay_core.py`
+  - `tests/test_signal_replay_golden_parity.py`
+
+## 2026-02-12 - Unified Minute-First Execution Model (Backtest v2)
+
+Changed
+- Added execution mode contract to backtest request:
+  - `execution.mode` with values:
+    - `INTRADAY_MINUTE` (default),
+    - `DAILY_COMMON_MINUTE`,
+    - `DAILY_EOD`,
+    - `DAILY_NEXT_OPEN`.
+  - `execution.price_source`,
+  - `execution.common_minute_anchor`.
+- Added minute execution controls in strategy contract:
+  - `entry_price_tolerance_pct` (fallback),
+  - `entry_stock_tolerance_pct`,
+  - `entry_future_tolerance_pct`,
+  - `entry_spread_tolerance_pct`,
+  - `signal_cutoff_before_day_end_minutes`.
+- Added business validation:
+  - `strategy.execution_lag_minutes >= 20` in `INTRADAY_MINUTE`.
+- Added warning behavior:
+  - `common_minute_anchor` is ignored in `INTRADAY_MINUTE`.
+- Added new `signal_replay` module:
+  - canonical day cutoff,
+  - split-tolerance execution band override,
+  - minute replay wrapper around causal execution logic.
+- Integrated minute execution quality overlay into `backtest_v2`:
+  - auto-load minute series from preload cache / intraday series files,
+  - compute fill-quality summary in minute mode.
+- Added warm-cache memoization for minute fill-quality summary in `backtest_v2.runtime`
+  to avoid repeated minute replay cost on identical requests.
+- `/api/backtest/run` response is backward compatible and now includes optional:
+  - `fill_quality_summary`,
+  - `execution_model`.
+- Updated UI Backtest tab to render:
+  - execution model details,
+  - minute fill-quality summary (when available).
+
+Added
+- Canonical spec doc:
+  - `docs/architecture/modules/minute-replay-canon-v1.md`.
+
+Tests
+- Added replay-core tests:
+  - `tests/test_signal_replay_core.py`.
+- Added golden parity test over 5 real minute fixtures:
+  - `tests/test_signal_replay_golden_parity.py`.
+- Extended resolver tests for minute constraints/warnings.
+- Extended API test assertions for new optional backtest fields.
+
+## 2026-02-11 - MOEX Connector VPN Fixes (Force Fallback + Candles Pagination)
+
+Changed
+- Added `moex.force_fallback` config (enabled in default config) to bypass primary host and route ISS requests directly via `moex.fallback_ips` for VPN environments.
+- Extended fallback trigger logic in `MoexIssClient`:
+  - fallback now activates not only on transport errors, but also on retryable HTTP statuses from primary path (`408`, `425`, `429`, `500`, `502`, `503`, `504`).
+- Fixed `get_candles` pagination:
+  - candles are now loaded page-by-page via `start/limit` (previously only first page could be read),
+  - added duplicate-page guard to prevent infinite pagination loops when upstream ignores `start`.
+- Updated all ad-hoc analysis scripts to use the same MOEX retry/fallback settings as the main pipeline.
+
+Tests
+- Added ISS client tests for:
+  - fallback on retryable primary HTTP error,
+  - force-fallback mode (primary skipped),
+  - candles pagination (cursor-driven and start/limit fallback),
+  - repeated-page pagination guard.
+
+## 2026-02-10 - Causal Execution Replay (D+1) and Operational Annual Target
+
+Changed
+- Spread-series strategy replay switched to causal execution model:
+  - signal on day `D`, earliest submit on `D+1`,
+  - fill only on common executable timestamps for both legs,
+  - configurable `execution_max_wait_minutes` timeout window.
+- Added replay controls to `spread_carry_alpha` config:
+  - `signal_exec_lag_days`,
+  - `execution_lag_minutes`,
+  - `execution_max_wait_minutes`,
+  - `force_exit_policy`,
+  - `force_exit_penalty_bps`,
+  - `annual_target_threshold`.
+- Added forced-exit handling for timeout scenarios (`next_anchor` / `market_worse`).
+- Added operational execution lifecycle fields in spread series:
+  - `entry_signal_day`, `entry_submit_ts`, `entry_fill_ts`, `entry_wait_minutes`,
+  - `exit_signal_day`, `exit_submit_ts`, `exit_fill_ts`, `exit_wait_minutes`,
+  - `entry_fill_status`, `exit_fill_status`, `exit_forced`, `unfilled_reason`.
+- Added annual target metrics:
+  - `trade_return_annual_fill_to_fill`,
+  - `trade_return_annual_operational`,
+  - `annual_target_threshold`,
+  - `annual_target_pass`.
+- Added aggregate execution-quality fields in top-pairs/signals:
+  - `avg_trade_return_annual_operational_recent`,
+  - `share_target_pass`,
+  - `unfilled_entry_rate`,
+  - `unfilled_exit_rate`,
+  - `forced_exit_rate`.
+- Updated UI formatting/metadata and spread chart summary to display operational annual results and target pass.
+
+Tests
+- Added replay tests:
+  - `tests/test_execution_replay.py::test_replay_is_causal_d_plus_one_for_entry_and_exit`,
+  - `tests/test_execution_replay.py::test_replay_marks_entry_unfilled_when_timeout_expires`,
+  - `tests/test_execution_replay.py::test_replay_forces_exit_after_timeout_when_policy_enabled`.
+
 ## 2026-02-10 - MOEX ISS IP Fallback (VPN-friendly transport resilience)
 
 Changed

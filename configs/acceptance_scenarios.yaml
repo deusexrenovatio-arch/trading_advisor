@@ -281,7 +281,7 @@ scenarios:
       - spread_pct
       - entry_flag
       - exit_flag
-    test_cases: [TC-SPREAD-API-001, TC-SPREAD-UI-001]
+    test_cases: [TC-SPREAD-API-001, TC-SPREAD-UI-001, TC-SPREAD-UI-002]
     title: График спреда
     user_story: Пользователь видит данные для графика спреда.
   - id: frontend
@@ -299,3 +299,14 @@ scenarios:
     test_cases: [TC-FE-PROXY-001]
     title: Прокси API
     user_story: UI получает данные через proxy.
+  - id: unified-minute-runtime
+    type: api_list
+    scope: backend
+    url: /api/top-pairs?limit=5
+    require_non_empty: false
+    required_keys: [stock, future, signal_action, signal_score]
+    test_cases: [TC-UNI-API-001, TC-UNI-API-002, TC-PERF-GATE-MAN-001, TC-PERF-ARCH-UNIT-001]
+    title: Unified minute-first market runtime
+    user_story: Backend market tables are served by unified minute replay runtime with compatibility fields.
+    expectations:
+      - Endpoints return compatible payloads for top-pairs/signals/backtests and support refresh via unified engine.
