@@ -187,7 +187,15 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = load_settings(args.config)
-    client = MoexIssClient(settings.moex.base_url, settings.moex.request_timeout_sec)
+    client = MoexIssClient(
+        settings.moex.base_url,
+        settings.moex.request_timeout_sec,
+        max_retries=settings.moex.request_max_retries,
+        retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+        retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+        fallback_ips=settings.moex.fallback_ips,
+        force_fallback=settings.moex.force_fallback,
+    )
 
     futures_df = pd.read_csv("data/raw/futures.csv")
     specs = {spec.secid: spec for spec in _parse_contract_specs(futures_df)}
