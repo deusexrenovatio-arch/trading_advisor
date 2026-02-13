@@ -529,12 +529,14 @@ Expected:
 
 ### TC-SIG-EXEC-API-001 Execute signal endpoint
 Acceptance: signals-execute
-Automation: scripts/acceptance_check.py (post_json)
+Automation: scripts/acceptance_check.py (signal_action)
 Request:
-- POST /api/signals/execute
+- GET /api/v2/signals/active?limit=5 (resolve `signal_id`)
+- POST /api/v2/signals/{signal_id}/actions (`action=enter`)
 Expected:
-- 200 OK with JSON response containing `status`.
-- For legged execution (`side=stock|future`) response also includes generated or passed `order_id`.
+- Action response contains `status`, `signal_id`, `entity_ref`, and `fail_closed`.
+- Allowed outcomes for smoke: `ok`, `duplicate`, or `blocked` (with reason fields).
+- Scenario is skipped (not failed) when no active rows are available.
 
 ### TC-SIG-EXEC-API-002 Execute signal v1 adapter idempotency
 Acceptance: signals-execute
@@ -545,6 +547,7 @@ Expected:
 - First request returns `status=ok`.
 - Repeated request returns `status=duplicate`.
 - Only one execution row is persisted for the same key.
+- Compatibility target: keep v1 adapter stable for transition period while v2 is primary.
 
 ### TC-SIG-EXEC-API-003 Fail-closed entry block in degraded/unconfirmed pretrade
 Acceptance: signals-execute

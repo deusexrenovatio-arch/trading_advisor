@@ -158,25 +158,33 @@ scenarios:
       - Scenario resolves signal_id from active feed and sends an action.
       - Response contains status and action/audit references.
   - id: signals-execute
-    type: post_json
+    type: signal_action
     scope: backend
-    url: /api/signals/execute
+    active_url: /api/v2/signals/active?limit=5
+    url_template: /api/v2/signals/{signal_id}/actions
+    allow_empty: true
+    expected_http_statuses: [200, 409]
     payload:
-      stock: AAA
-      future: AAH6
-      direction: cash_and_carry
       action: enter
+      source: ui
+      actor_id: acceptance
+      reason_code: acceptance_enter
+      idempotency_key: acceptance-signals-enter-v2
       price: 100.5
       quantity: 1
       side: stock
-      note: acceptance
-    required_keys: [status, order_id]
+      comment: acceptance
+    required_keys: [status, signal_id, action, entity_ref, fail_closed]
+    required_keys_by_status:
+      ok: [execution_event_id]
+      blocked: [reason_code, message]
+    allowed_response_status: [ok, duplicate, blocked]
     test_cases: [TC-SIG-EXEC-API-001, TC-SIG-EXEC-API-002, TC-SIG-EXEC-API-003, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002]
     title: Execute signal
     user_story: User can manually execute a signal and record the fact.
     expectations:
-      - API accepts payload and returns status ok.
-      - order_id is returned for side=stock|future to link legs of one order.
+      - Scenario resolves signal_id from active feed and submits enter action to v2 endpoint.
+      - Response returns status and execution references; blocked path includes explicit reason.
   - id: auto-unwind-policy-v2
     type: post_json
     scope: backend

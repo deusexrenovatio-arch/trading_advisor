@@ -22,6 +22,8 @@ Changed
   - `configs/acceptance_scenarios.yaml` now uses `/api/v2/decisions/view`, `/api/v2/top-pairs`,
     `/api/v2/signals/active`, `/api/v2/signals/history`.
   - Added dynamic scenario `signals-action-v2` (`active -> /api/v2/signals/{signal_id}/actions`).
+  - `signals-execute` acceptance switched from v1 `/api/signals/execute` to
+    v2 `active -> /api/v2/signals/{signal_id}/actions` with `ok|duplicate|blocked` outcomes.
   - `scripts/acceptance_check.py` now supports `signal_action` and parameterized source/url templates
     for `spread_series`, `backtest_run`, and `history_date_range`.
 - Acceptance documentation updated:
