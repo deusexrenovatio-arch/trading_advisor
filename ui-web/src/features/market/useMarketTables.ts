@@ -40,6 +40,11 @@ const AUTO_REFRESH_MS = 60_000
 const PRETRADE_SNAPSHOTS = 4
 const PRETRADE_MIN_HITS = 2
 const PRETRADE_POLL_SEC = 0
+const SIGNALS_EXECUTION_PROFILE = {
+  entryStockTolerancePct: 0.02,
+  entryFutureTolerancePct: 0.025,
+  entrySpreadTolerancePct: 0.03,
+} as const
 const EXECUTION_LEG_STOCK = 'stock'
 const EXECUTION_LEG_FUTURE = 'future'
 
