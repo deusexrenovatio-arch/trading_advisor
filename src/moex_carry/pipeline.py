@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-import importlib
 from pathlib import Path
 from typing import Iterable
 import time
@@ -38,13 +37,18 @@ from moex_carry.data import CbrKeyRateClient, MoexIssClient, build_fut_point, bu
 from moex_carry.data.cbr_rates import latest_rate
 from moex_carry.data.dividends import apply_overrides, load_dividends
 from moex_carry.decision_log import DecisionLogStore, build_decision_view, build_snapshot
-from moex_carry.domain.decision import NewsItem, RiskProfile
+from moex_carry.domain.decision import RiskProfile
 from moex_carry.domain.models import ContractSpec, DividendEvent, Instrument, KeyRate
 from moex_carry.execution.model import build_execution_prices
-from moex_carry.news_live_bridge import load_news_gate_items
+from moex_carry.news import (
+    default_tag_rows,
+    fetch_rss_news,
+    link_news_item,
+    run_dual_model_inference,
+    run_news_gate,
+)
 from moex_carry.selection.ranking import score_pairs_alpha
 from moex_carry.selection.universe import build_pair_mappings
-from moex_carry.strategy.news_filter import apply_news_filter
 from moex_carry.strategy.overall_strategy import aggregate_strategy_signals, strategy_signal_to_dict
 from moex_carry.strategy.orchestrator import build_portfolio_proposal
 from moex_carry.strategy.risk_gate import evaluate_risk_profile
@@ -54,6 +58,13 @@ from moex_carry.backtest.engine import BacktestResult, backtest_pair
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     delete_signal_history_run,
+    load_news_items,
+    load_primary_news_scores,
+    upsert_news_entity_links,
+    upsert_news_impact_scores,
+    upsert_news_item_tags,
+    upsert_news_items,
+    upsert_news_tags,
     store_signal_history,
     store_signal_run,
 )
@@ -65,11 +76,6 @@ def _data_paths(base_dir: Path) -> dict[str, Path]:
     raw_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     return {"raw": raw_dir, "output": output_dir}
-
-
-def _load_unified_runtime_module():
-    # Local dynamic load keeps pipeline free from a direct static dependency edge.
-    return importlib.import_module("moex_carry.unified_runtime")
 
 
 def fetch_data(settings: AppSettings, max_shares: int | None = None) -> None:
@@ -857,48 +863,6 @@ def _apply_spread_carry_signals(
     if force_exit_policy not in {"next_anchor", "market_worse"}:
         force_exit_policy = "next_anchor"
     entry_tolerance = max(float(getattr(alpha_cfg, "entry_price_tolerance_pct", 0.0015) or 0.0015), 0.0)
-    entry_stock_tolerance_raw = getattr(alpha_cfg, "entry_stock_tolerance_pct", None)
-    entry_future_tolerance_raw = getattr(alpha_cfg, "entry_future_tolerance_pct", None)
-    entry_stock_tolerance = max(
-        float(entry_stock_tolerance_raw if entry_stock_tolerance_raw is not None else entry_tolerance),
-        0.0,
-    )
-    entry_future_tolerance = max(
-        float(entry_future_tolerance_raw if entry_future_tolerance_raw is not None else entry_tolerance),
-        0.0,
-    )
-    sequential_entry_enabled = bool(getattr(alpha_cfg, "sequential_entry_enabled", False))
-    sequential_entry_first_leg_raw = str(getattr(alpha_cfg, "sequential_entry_first_leg", "future") or "future")
-    sequential_entry_first_leg = (
-        sequential_entry_first_leg_raw.strip().lower()
-        if sequential_entry_first_leg_raw.strip().lower() in {"stock", "future"}
-        else "future"
-    )
-    sequential_entry_second_leg_wait = max(
-        int(getattr(alpha_cfg, "sequential_entry_second_leg_max_wait_minutes", 5) or 0),
-        0,
-    )
-    sequential_entry_unwind_penalty_bps = max(
-        float(getattr(alpha_cfg, "sequential_entry_unwind_penalty_bps", 0.0) or 0.0),
-        0.0,
-    )
-    sequential_exit_enabled = bool(getattr(alpha_cfg, "sequential_exit_enabled", False))
-    sequential_exit_first_leg_raw = str(getattr(alpha_cfg, "sequential_exit_first_leg", "future") or "future")
-    sequential_exit_first_leg = (
-        sequential_exit_first_leg_raw.strip().lower()
-        if sequential_exit_first_leg_raw.strip().lower() in {"stock", "future"}
-        else "future"
-    )
-    sequential_exit_second_leg_wait = max(
-        int(getattr(alpha_cfg, "sequential_exit_second_leg_max_wait_minutes", 5) or 0),
-        0,
-    )
-    sequential_exit_force_penalty_raw = getattr(alpha_cfg, "sequential_exit_force_penalty_bps", None)
-    sequential_exit_force_penalty_bps = (
-        force_exit_penalty_bps
-        if sequential_exit_force_penalty_raw is None
-        else max(float(sequential_exit_force_penalty_raw or 0.0), 0.0)
-    )
     year_basis = _day_count_basis(alpha_cfg.day_count)
     annual_target_override_raw = getattr(alpha_cfg, "annual_target_threshold", None)
     try:
@@ -909,84 +873,6 @@ def _apply_spread_carry_signals(
         )
     except (TypeError, ValueError):
         annual_target_override = None
-
-    def _opposite_leg(leg: str) -> str:
-        return "stock" if leg == "future" else "future"
-
-    def _leg_tolerance(leg: str) -> float:
-        return entry_stock_tolerance if leg == "stock" else entry_future_tolerance
-
-    def _leg_band_ok(
-        *,
-        leg: str,
-        target_spot: float,
-        target_future: float,
-        spot_now: float,
-        future_now: float,
-    ) -> bool:
-        if leg == "stock":
-            if target_spot <= 0:
-                return False
-            band = target_spot * _leg_tolerance("stock")
-            return abs(spot_now - target_spot) <= band
-        if target_future <= 0:
-            return False
-        band = target_future * _leg_tolerance("future")
-        return abs(future_now - target_future) <= band
-
-    def _entry_leg_exec(*, direction: str, leg: str, exec_prices: object) -> float:
-        if leg == "stock":
-            return (
-                float(exec_prices.stock_sell)
-                if direction == "reverse"
-                else float(exec_prices.stock_buy)
-            )
-        return (
-            float(exec_prices.fut_buy)
-            if direction == "reverse"
-            else float(exec_prices.fut_sell)
-        )
-
-    def _entry_unwind_leg_exec(
-        *,
-        direction: str,
-        leg: str,
-        exec_prices: object,
-        penalty: float,
-    ) -> float:
-        if leg == "stock":
-            return (
-                float(exec_prices.stock_buy) * (1.0 + penalty)
-                if direction == "reverse"
-                else float(exec_prices.stock_sell) * (1.0 - penalty)
-            )
-        return (
-            float(exec_prices.fut_sell) * (1.0 - penalty)
-            if direction == "reverse"
-            else float(exec_prices.fut_buy) * (1.0 + penalty)
-        )
-
-    def _exit_leg_exec(
-        *,
-        direction: str,
-        leg: str,
-        exec_prices: object,
-        penalty: float,
-    ) -> float:
-        if leg == "stock":
-            return (
-                float(exec_prices.stock_buy) * (1.0 + penalty)
-                if direction == "reverse"
-                else float(exec_prices.stock_sell) * (1.0 - penalty)
-            )
-        return (
-            float(exec_prices.fut_sell) * (1.0 - penalty)
-            if direction == "reverse"
-            else float(exec_prices.fut_buy) * (1.0 + penalty)
-        )
-
-    def _leg_fee(*, leg: str, stock_fee: float, fut_fee: float) -> float:
-        return float(stock_fee) if leg == "stock" else float(fut_fee)
 
     series_dates = [_as_date(value) for value in series_df["date"]]
     series_exec_ts = [
@@ -1206,340 +1092,95 @@ def _apply_spread_carry_signals(
             submit_ts = pending_entry["submit_ts"]
             deadline_ts = pending_entry["deadline_ts"]
             if isinstance(submit_ts, datetime) and isinstance(deadline_ts, datetime):
-                target_spot = float(pending_entry["target_spot"])
-                target_future = float(pending_entry["target_future"])
-                target_spread = float(pending_entry["target_spread"])
-                direction = str(pending_entry.get("direction", "cash_and_carry"))
-                sequential_entry = bool(pending_entry.get("sequential_enabled"))
-                if row_ts >= submit_ts and not sequential_entry:
-                    if row_ts > deadline_ts:
-                        if 0 <= signal_idx < n:
-                            entry_fill_statuses[signal_idx] = "entry_unfilled"
-                            unfilled_reasons[signal_idx] = "entry_timeout"
-                        pending_entry = None
-                    elif _execution_band_ok(
-                        target_spot=target_spot,
-                        target_future=target_future,
-                        target_spread=target_spread,
-                        spot_now=spot_mid,
-                        future_now=future_mid,
-                        spread_now=spread_mid_value,
-                        tolerance=entry_tolerance,
-                    ):
-                        if direction == "reverse":
-                            entry_spot_exec = float(exec_prices.stock_sell)
-                            entry_fut_exec = float(exec_prices.fut_buy)
-                            entry_spread_value = spread_pct_exit_exec
-                        else:
-                            entry_spot_exec = float(exec_prices.stock_buy)
-                            entry_fut_exec = float(exec_prices.fut_sell)
-                            entry_spread_value = spread_pct_entry_exec
-                        wait_mins = max((row_ts - submit_ts).total_seconds() / 60.0, 0.0)
-                        current_cycle += 1
-                        open_position = {
-                            "cycle_id": current_cycle,
-                            "direction": direction,
-                            "entry_signal_day": pending_entry["signal_day"],
-                            "entry_signal_ts": pending_entry["signal_ts"],
-                            "entry_submit_ts": submit_ts,
-                            "entry_fill_ts": row_ts,
-                            "entry_wait_minutes": wait_mins,
-                            "entry_spot_exec": entry_spot_exec,
-                            "entry_fut_exec": entry_fut_exec,
-                            "entry_spread_pct_exec": entry_spread_value,
-                            "entry_stock_fee": float(stock_fee),
-                            "entry_fut_fee": float(fut_fee),
-                            "r_fund_entry": float(pending_entry["r_fund_entry"]),
-                            "annual_target_threshold": (
-                                annual_target_override
-                                if annual_target_override is not None
-                                else float(pending_entry["r_cb_entry"])
-                            ),
-                        }
-                        entry_flags[idx] = True
-                        trade_cycles[idx] = current_cycle
-                        entry_spread_pcts[idx] = entry_spread_value
-                        for target_idx in {signal_idx, idx}:
-                            if 0 <= target_idx < n:
-                                entry_signal_days[target_idx] = str(pending_entry["signal_day"])
-                                entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
-                                entry_fill_tss[target_idx] = _iso_or_none(row_ts)
-                                entry_wait_minutes[target_idx] = wait_mins
-                                entry_fill_statuses[target_idx] = "filled"
-                        pending_entry = None
-                elif row_ts >= submit_ts and sequential_entry:
-                    leg_state = str(pending_entry.get("leg_state") or "waiting_first")
-                    first_leg = str(pending_entry.get("first_leg") or sequential_entry_first_leg).lower()
-                    if first_leg not in {"stock", "future"}:
-                        first_leg = "future"
-                    second_leg = _opposite_leg(first_leg)
-                    if leg_state == "waiting_first":
-                        if row_ts > deadline_ts:
-                            if 0 <= signal_idx < n:
-                                entry_fill_statuses[signal_idx] = "entry_unfilled"
-                                unfilled_reasons[signal_idx] = "entry_timeout"
-                            pending_entry = None
-                        elif _leg_band_ok(
-                            leg=first_leg,
-                            target_spot=target_spot,
-                            target_future=target_future,
-                            spot_now=spot_mid,
-                            future_now=future_mid,
-                        ):
-                            first_exec = _entry_leg_exec(
-                                direction=direction,
-                                leg=first_leg,
-                                exec_prices=exec_prices,
-                            )
-                            first_fee = _leg_fee(
-                                leg=first_leg,
-                                stock_fee=float(stock_fee),
-                                fut_fee=float(fut_fee),
-                            )
-                            second_deadline = min(
-                                deadline_ts,
-                                row_ts + timedelta(minutes=int(pending_entry.get("second_leg_max_wait_minutes") or 0)),
-                            )
-                            pending_entry["leg_state"] = "waiting_second"
-                            pending_entry["first_leg"] = first_leg
-                            pending_entry["first_leg_exec"] = first_exec
-                            pending_entry["first_leg_fee"] = first_fee
-                            pending_entry["first_leg_fill_ts"] = row_ts
-                            pending_entry["second_leg_deadline_ts"] = second_deadline
-                            leg_state = "waiting_second"
-                    if pending_entry is not None and leg_state == "waiting_second":
-                        second_deadline_ts = pending_entry.get("second_leg_deadline_ts")
-                        if not isinstance(second_deadline_ts, datetime):
-                            second_deadline_ts = deadline_ts
-                        if row_ts > second_deadline_ts:
-                            _entry_unwind_leg_exec(
-                                direction=direction,
-                                leg=first_leg,
-                                exec_prices=exec_prices,
-                                penalty=sequential_entry_unwind_penalty_bps / 10000.0,
-                            )
-                            if 0 <= signal_idx < n:
-                                entry_fill_statuses[signal_idx] = "entry_unfilled"
-                                unfilled_reasons[signal_idx] = "entry_second_leg_timeout_unwound"
-                            pending_entry = None
-                        elif _leg_band_ok(
-                            leg=second_leg,
-                            target_spot=target_spot,
-                            target_future=target_future,
-                            spot_now=spot_mid,
-                            future_now=future_mid,
-                        ):
-                            second_exec = _entry_leg_exec(
-                                direction=direction,
-                                leg=second_leg,
-                                exec_prices=exec_prices,
-                            )
-                            second_fee = _leg_fee(
-                                leg=second_leg,
-                                stock_fee=float(stock_fee),
-                                fut_fee=float(fut_fee),
-                            )
-                            first_exec = float(pending_entry.get("first_leg_exec") or 0.0)
-                            first_fee = float(pending_entry.get("first_leg_fee") or 0.0)
-                            if first_leg == "stock":
-                                entry_spot_exec = first_exec
-                                entry_fut_exec = second_exec
-                                entry_stock_fee = first_fee
-                                entry_fut_fee = second_fee
-                            else:
-                                entry_spot_exec = second_exec
-                                entry_fut_exec = first_exec
-                                entry_stock_fee = second_fee
-                                entry_fut_fee = first_fee
-                            entry_spread_value = (
-                                spread_pct_exit_exec if direction == "reverse" else spread_pct_entry_exec
-                            )
-                            wait_mins = max((row_ts - submit_ts).total_seconds() / 60.0, 0.0)
-                            current_cycle += 1
-                            open_position = {
-                                "cycle_id": current_cycle,
-                                "direction": direction,
-                                "entry_signal_day": pending_entry["signal_day"],
-                                "entry_signal_ts": pending_entry["signal_ts"],
-                                "entry_submit_ts": submit_ts,
-                                "entry_fill_ts": row_ts,
-                                "entry_wait_minutes": wait_mins,
-                                "entry_spot_exec": entry_spot_exec,
-                                "entry_fut_exec": entry_fut_exec,
-                                "entry_spread_pct_exec": entry_spread_value,
-                                "entry_stock_fee": entry_stock_fee,
-                                "entry_fut_fee": entry_fut_fee,
-                                "r_fund_entry": float(pending_entry["r_fund_entry"]),
-                                "annual_target_threshold": (
-                                    annual_target_override
-                                    if annual_target_override is not None
-                                    else float(pending_entry["r_cb_entry"])
-                                ),
-                            }
-                            entry_flags[idx] = True
-                            trade_cycles[idx] = current_cycle
-                            entry_spread_pcts[idx] = entry_spread_value
-                            for target_idx in {signal_idx, idx}:
-                                if 0 <= target_idx < n:
-                                    entry_signal_days[target_idx] = str(pending_entry["signal_day"])
-                                    entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
-                                    entry_fill_tss[target_idx] = _iso_or_none(row_ts)
-                                    entry_wait_minutes[target_idx] = wait_mins
-                                    entry_fill_statuses[target_idx] = "filled"
-                            pending_entry = None
+                if row_ts > deadline_ts:
+                    if 0 <= signal_idx < n:
+                        entry_fill_statuses[signal_idx] = "entry_unfilled"
+                        unfilled_reasons[signal_idx] = "entry_timeout"
+                    pending_entry = None
+                elif row_ts >= submit_ts and _execution_band_ok(
+                    target_spot=float(pending_entry["target_spot"]),
+                    target_future=float(pending_entry["target_future"]),
+                    target_spread=float(pending_entry["target_spread"]),
+                    spot_now=spot_mid,
+                    future_now=future_mid,
+                    spread_now=spread_mid_value,
+                    tolerance=entry_tolerance,
+                ):
+                    direction = str(pending_entry.get("direction", "cash_and_carry"))
+                    if direction == "reverse":
+                        entry_spot_exec = float(exec_prices.stock_sell)
+                        entry_fut_exec = float(exec_prices.fut_buy)
+                        entry_spread_value = spread_pct_exit_exec
+                    else:
+                        entry_spot_exec = float(exec_prices.stock_buy)
+                        entry_fut_exec = float(exec_prices.fut_sell)
+                        entry_spread_value = spread_pct_entry_exec
+                    wait_mins = max((row_ts - submit_ts).total_seconds() / 60.0, 0.0)
+                    current_cycle += 1
+                    open_position = {
+                        "cycle_id": current_cycle,
+                        "direction": direction,
+                        "entry_signal_day": pending_entry["signal_day"],
+                        "entry_signal_ts": pending_entry["signal_ts"],
+                        "entry_submit_ts": submit_ts,
+                        "entry_fill_ts": row_ts,
+                        "entry_wait_minutes": wait_mins,
+                        "entry_spot_exec": entry_spot_exec,
+                        "entry_fut_exec": entry_fut_exec,
+                        "entry_spread_pct_exec": entry_spread_value,
+                        "entry_stock_fee": float(stock_fee),
+                        "entry_fut_fee": float(fut_fee),
+                        "r_fund_entry": float(pending_entry["r_fund_entry"]),
+                        "annual_target_threshold": (
+                            annual_target_override
+                            if annual_target_override is not None
+                            else float(pending_entry["r_cb_entry"])
+                        ),
+                    }
+                    entry_flags[idx] = True
+                    trade_cycles[idx] = current_cycle
+                    entry_spread_pcts[idx] = entry_spread_value
+                    for target_idx in {signal_idx, idx}:
+                        if 0 <= target_idx < n:
+                            entry_signal_days[target_idx] = str(pending_entry["signal_day"])
+                            entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
+                            entry_fill_tss[target_idx] = _iso_or_none(row_ts)
+                            entry_wait_minutes[target_idx] = wait_mins
+                            entry_fill_statuses[target_idx] = "filled"
+                    pending_entry = None
 
         if pending_exit is not None and open_position is not None:
             signal_idx = int(pending_exit["signal_index"])
             submit_ts = pending_exit["submit_ts"]
             deadline_ts = pending_exit["deadline_ts"]
             if isinstance(submit_ts, datetime) and isinstance(deadline_ts, datetime) and row_ts >= submit_ts:
-                target_spot = float(pending_exit["target_spot"])
-                target_future = float(pending_exit["target_future"])
-                target_spread = float(pending_exit["target_spread"])
-                direction = str(open_position.get("direction", "cash_and_carry"))
-                sequential_exit = bool(pending_exit.get("sequential_enabled"))
-                close_now = False
-                forced = False
-                forced_reason = "exit_timeout_forced"
-                exit_spot_exec = 0.0
-                exit_fut_exec = 0.0
-                exit_stock_fee = float(stock_fee)
-                exit_fut_fee = float(fut_fee)
-
-                if not sequential_exit:
-                    timed_out = row_ts > deadline_ts
-                    band_ok = _execution_band_ok(
-                        target_spot=target_spot,
-                        target_future=target_future,
-                        target_spread=target_spread,
-                        spot_now=spot_mid,
-                        future_now=future_mid,
-                        spread_now=spread_mid_value,
-                        tolerance=entry_tolerance,
+                timed_out = row_ts > deadline_ts
+                band_ok = _execution_band_ok(
+                    target_spot=float(pending_exit["target_spot"]),
+                    target_future=float(pending_exit["target_future"]),
+                    target_spread=float(pending_exit["target_spread"]),
+                    spot_now=spot_mid,
+                    future_now=future_mid,
+                    spread_now=spread_mid_value,
+                    tolerance=entry_tolerance,
+                )
+                if band_ok or timed_out:
+                    forced = timed_out
+                    penalty = (
+                        force_exit_penalty_bps / 10000.0
+                        if forced and force_exit_policy == "market_worse"
+                        else 0.0
                     )
-                    if band_ok or timed_out:
-                        forced = timed_out
-                        penalty = (
-                            force_exit_penalty_bps / 10000.0
-                            if forced and force_exit_policy == "market_worse"
-                            else 0.0
-                        )
-                        exit_spot_exec = _exit_leg_exec(
-                            direction=direction,
-                            leg="stock",
-                            exec_prices=exec_prices,
-                            penalty=penalty,
-                        )
-                        exit_fut_exec = _exit_leg_exec(
-                            direction=direction,
-                            leg="future",
-                            exec_prices=exec_prices,
-                            penalty=penalty,
-                        )
-                        close_now = True
-                else:
-                    leg_state = str(pending_exit.get("leg_state") or "waiting_first")
-                    first_leg = str(pending_exit.get("first_leg") or sequential_exit_first_leg).lower()
-                    if first_leg not in {"stock", "future"}:
-                        first_leg = "future"
-                    second_leg = _opposite_leg(first_leg)
-                    if leg_state == "waiting_first":
-                        if row_ts > deadline_ts:
-                            forced = True
-                            penalty = (
-                                sequential_exit_force_penalty_bps / 10000.0
-                                if force_exit_policy == "market_worse"
-                                else 0.0
-                            )
-                            exit_spot_exec = _exit_leg_exec(
-                                direction=direction,
-                                leg="stock",
-                                exec_prices=exec_prices,
-                                penalty=penalty,
-                            )
-                            exit_fut_exec = _exit_leg_exec(
-                                direction=direction,
-                                leg="future",
-                                exec_prices=exec_prices,
-                                penalty=penalty,
-                            )
-                            close_now = True
-                        elif _leg_band_ok(
-                            leg=first_leg,
-                            target_spot=target_spot,
-                            target_future=target_future,
-                            spot_now=spot_mid,
-                            future_now=future_mid,
-                        ):
-                            first_exec = _exit_leg_exec(
-                                direction=direction,
-                                leg=first_leg,
-                                exec_prices=exec_prices,
-                                penalty=0.0,
-                            )
-                            first_fee = _leg_fee(
-                                leg=first_leg,
-                                stock_fee=float(stock_fee),
-                                fut_fee=float(fut_fee),
-                            )
-                            second_deadline = min(
-                                deadline_ts,
-                                row_ts + timedelta(minutes=int(pending_exit.get("second_leg_max_wait_minutes") or 0)),
-                            )
-                            pending_exit["leg_state"] = "waiting_second"
-                            pending_exit["first_leg"] = first_leg
-                            pending_exit["first_leg_exec"] = first_exec
-                            pending_exit["first_leg_fee"] = first_fee
-                            pending_exit["first_leg_fill_ts"] = row_ts
-                            pending_exit["second_leg_deadline_ts"] = second_deadline
-                            leg_state = "waiting_second"
-                    if pending_exit is not None and leg_state == "waiting_second":
-                        second_deadline_ts = pending_exit.get("second_leg_deadline_ts")
-                        if not isinstance(second_deadline_ts, datetime):
-                            second_deadline_ts = deadline_ts
-                        second_forced = row_ts > second_deadline_ts
-                        if second_forced or _leg_band_ok(
-                            leg=second_leg,
-                            target_spot=target_spot,
-                            target_future=target_future,
-                            spot_now=spot_mid,
-                            future_now=future_mid,
-                        ):
-                            forced = bool(second_forced)
-                            if forced:
-                                forced_reason = "exit_second_leg_timeout_forced"
-                            penalty = (
-                                sequential_exit_force_penalty_bps / 10000.0
-                                if forced and force_exit_policy == "market_worse"
-                                else 0.0
-                            )
-                            second_exec = _exit_leg_exec(
-                                direction=direction,
-                                leg=second_leg,
-                                exec_prices=exec_prices,
-                                penalty=penalty,
-                            )
-                            second_fee = _leg_fee(
-                                leg=second_leg,
-                                stock_fee=float(stock_fee),
-                                fut_fee=float(fut_fee),
-                            )
-                            first_exec = float(pending_exit.get("first_leg_exec") or 0.0)
-                            first_fee = float(pending_exit.get("first_leg_fee") or 0.0)
-                            if first_leg == "stock":
-                                exit_spot_exec = first_exec
-                                exit_fut_exec = second_exec
-                                exit_stock_fee = first_fee
-                                exit_fut_fee = second_fee
-                            else:
-                                exit_spot_exec = second_exec
-                                exit_fut_exec = first_exec
-                                exit_stock_fee = second_fee
-                                exit_fut_fee = first_fee
-                            close_now = True
+                    direction = str(open_position.get("direction", "cash_and_carry"))
+                    if direction == "reverse":
+                        exit_spot_exec = float(exec_prices.stock_buy) * (1.0 + penalty)
+                        exit_fut_exec = float(exec_prices.fut_sell) * (1.0 - penalty)
+                        exit_spread_value = spread_pct_entry_exec
+                    else:
+                        exit_spot_exec = float(exec_prices.stock_sell) * (1.0 - penalty)
+                        exit_fut_exec = float(exec_prices.fut_buy) * (1.0 + penalty)
+                        exit_spread_value = spread_pct_exit_exec
 
-                if close_now:
-                    exit_spread_value = spread_pct_entry_exec if direction == "reverse" else spread_pct_exit_exec
                     entry_fill_ts = open_position["entry_fill_ts"]
                     entry_signal_day = open_position["entry_signal_day"]
                     if isinstance(entry_fill_ts, datetime) and isinstance(entry_signal_day, date):
@@ -1567,8 +1208,8 @@ def _apply_spread_carry_signals(
                         fees_total = (
                             float(open_position["entry_stock_fee"])
                             + float(open_position["entry_fut_fee"])
-                            + float(exit_stock_fee)
-                            + float(exit_fut_fee)
+                            + float(stock_fee)
+                            + float(fut_fee)
                         )
                         trade_pnl = stock_leg + fut_leg + dividend_cash - funding_cost - fees_total
                         base_spot = abs(float(open_position["entry_spot_exec"]))
@@ -1639,8 +1280,8 @@ def _apply_spread_carry_signals(
                                 exit_forced_flags[target_idx] = forced
                         if forced:
                             if 0 <= signal_idx < n:
-                                unfilled_reasons[signal_idx] = forced_reason
-                            unfilled_reasons[idx] = forced_reason
+                                unfilled_reasons[signal_idx] = "exit_timeout_forced"
+                            unfilled_reasons[idx] = "exit_timeout_forced"
 
                     pending_exit = None
                     open_position = None
@@ -1672,10 +1313,6 @@ def _apply_spread_carry_signals(
                         "target_spread": spread_mid_value,
                         "r_fund_entry": r_fund,
                         "r_cb_entry": r_cb,
-                        "sequential_enabled": sequential_entry_enabled,
-                        "first_leg": sequential_entry_first_leg,
-                        "second_leg_max_wait_minutes": sequential_entry_second_leg_wait,
-                        "leg_state": "waiting_first",
                     }
                     entry_submit_tss[idx] = _iso_or_none(submit_ts)
                     entry_fill_statuses[idx] = "pending"
@@ -1720,10 +1357,6 @@ def _apply_spread_carry_signals(
                         "target_future": future_mid,
                         "target_spread": spread_mid_value,
                         "reason": exit_reason,
-                        "sequential_enabled": sequential_exit_enabled,
-                        "first_leg": sequential_exit_first_leg,
-                        "second_leg_max_wait_minutes": sequential_exit_second_leg_wait,
-                        "leg_state": "waiting_first",
                     }
                     exit_submit_tss[idx] = _iso_or_none(submit_ts)
                     exit_fill_statuses[idx] = "pending"
@@ -2187,32 +1820,6 @@ def compute_pairs(
             alpha_stats=alpha_stats,
             alpha_cfg=alpha_cfg,
         )
-        seq_entry_enabled = bool(getattr(alpha_cfg, "sequential_entry_enabled", False))
-        seq_entry_first_leg = str(getattr(alpha_cfg, "sequential_entry_first_leg", "future") or "future")
-        if seq_entry_first_leg.strip().lower() not in {"stock", "future"}:
-            seq_entry_first_leg = "future"
-        seq_entry_second_leg_wait = max(
-            int(getattr(alpha_cfg, "sequential_entry_second_leg_max_wait_minutes", 5) or 0),
-            0,
-        )
-        seq_entry_unwind_penalty = max(
-            float(getattr(alpha_cfg, "sequential_entry_unwind_penalty_bps", 0.0) or 0.0),
-            0.0,
-        )
-        seq_exit_enabled = bool(getattr(alpha_cfg, "sequential_exit_enabled", False))
-        seq_exit_first_leg = str(getattr(alpha_cfg, "sequential_exit_first_leg", "future") or "future")
-        if seq_exit_first_leg.strip().lower() not in {"stock", "future"}:
-            seq_exit_first_leg = "future"
-        seq_exit_second_leg_wait = max(
-            int(getattr(alpha_cfg, "sequential_exit_second_leg_max_wait_minutes", 5) or 0),
-            0,
-        )
-        seq_exit_penalty_raw = getattr(alpha_cfg, "sequential_exit_force_penalty_bps", None)
-        seq_exit_force_penalty = (
-            max(float(getattr(alpha_cfg, "force_exit_penalty_bps", 0.0) or 0.0), 0.0)
-            if seq_exit_penalty_raw is None
-            else max(float(seq_exit_penalty_raw or 0.0), 0.0)
-        )
         score_floor = floor_metrics.floor_rate_annual - r_cb
         score_alpha = alpha_stats.p_hit_tp * tp_net - alpha_stats.p_hit_sl * alpha_cfg.SL_pct - rtc_pct
         penalty_liq = 0.0
@@ -2258,16 +1865,6 @@ def compute_pairs(
             "score_floor": score_floor,
             "score_alpha": score_alpha,
             "total_score": total_score,
-            "entry_execution_protocol": "sequential" if seq_entry_enabled else "atomic",
-            "sequential_entry_enabled": seq_entry_enabled,
-            "sequential_entry_first_leg": seq_entry_first_leg,
-            "sequential_entry_second_leg_max_wait_minutes": seq_entry_second_leg_wait,
-            "sequential_entry_unwind_penalty_bps": seq_entry_unwind_penalty,
-            "exit_execution_protocol": "sequential" if seq_exit_enabled else "atomic",
-            "sequential_exit_enabled": seq_exit_enabled,
-            "sequential_exit_first_leg": seq_exit_first_leg,
-            "sequential_exit_second_leg_max_wait_minutes": seq_exit_second_leg_wait,
-            "sequential_exit_force_penalty_bps": seq_exit_force_penalty,
             "orderbook_pass": orderbook_pass,
             "orderbook_reasons": orderbook_reasons,
             "orderbook_stock_quote_age_sec": orderbook_metrics["orderbook_stock_quote_age_sec"],
@@ -2639,16 +2236,105 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     allocations = proposal["allocations"]
     risk_profile = _risk_profile_from_settings(settings)
     risk_gate = evaluate_risk_profile(risk_profile, allocations)
-    try:
-        news_items: list[NewsItem] = load_news_gate_items(settings)
-    except Exception:
-        news_items = []
-    news_gate = apply_news_filter(
-        news_items,
-        lookback_minutes=settings.news_filter.lookback_minutes,
-        block_severity_threshold=settings.news_filter.block_severity_threshold,
-        reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
-    )
+    with session_factory() as session:
+        upsert_news_tags(session, default_tag_rows())
+        if settings.news_ingest.enabled and settings.news_ingest.rss_urls:
+            ingested_rows = fetch_rss_news(
+                settings.news_ingest.rss_urls,
+                max_items=settings.news_ingest.max_items_per_run,
+            )
+            if ingested_rows:
+                upsert_news_items(session, ingested_rows)
+
+        recent_news_rows = load_news_items(
+            session,
+            limit=max(settings.news_ingest.max_items_per_run, 300),
+        )
+        entity_rows: list[dict[str, object]] = []
+        tag_rows: list[dict[str, object]] = []
+        score_rows: list[dict[str, object]] = []
+        for news_row in recent_news_rows:
+            news_id = str(news_row.get("news_id") or "").strip()
+            if not news_id:
+                continue
+            linking = link_news_item(
+                news_id=news_id,
+                title=str(news_row.get("title") or ""),
+                content=str(news_row.get("content") or ""),
+            )
+            primary_id = linking.primary_commodity_id or "UNKNOWN"
+            entity_rows.append(
+                {
+                    "news_id": news_id,
+                    "entity_type": "commodity",
+                    "entity_id": primary_id,
+                    "ticker": primary_id if primary_id != "UNKNOWN" else None,
+                    "link_confidence": linking.confidence,
+                    "link_stage": linking.resolution_stage,
+                }
+            )
+            for secondary_id in linking.secondary_commodity_ids:
+                entity_rows.append(
+                    {
+                        "news_id": news_id,
+                        "entity_type": "commodity",
+                        "entity_id": secondary_id,
+                        "ticker": secondary_id,
+                        "link_confidence": max(linking.confidence - 0.1, 0.0),
+                        "link_stage": linking.resolution_stage,
+                    }
+                )
+            for tag_code in linking.tag_codes:
+                tag_rows.append(
+                    {
+                        "news_id": news_id,
+                        "tag_code": tag_code,
+                        "score": linking.confidence,
+                    }
+                )
+            if settings.ui.ff_news_model_advisory_enabled or settings.ui.ff_news_bridge_enabled:
+                text = " ".join(
+                    [
+                        str(news_row.get("title") or ""),
+                        str(news_row.get("content") or ""),
+                    ]
+                ).strip()
+                if text:
+                    score_rows.extend(
+                        run_dual_model_inference(
+                            news_id=news_id,
+                            text=text,
+                            enabled_models=settings.news_models.enabled_models,
+                            finbert_model_name=settings.news_models.finbert_model_name,
+                            nli_model_name=settings.news_models.nli_model_name,
+                            model_version=settings.news_models.model_version,
+                        )
+                    )
+        if entity_rows:
+            upsert_news_entity_links(session, entity_rows)
+        if tag_rows:
+            upsert_news_item_tags(session, tag_rows)
+        if score_rows:
+            upsert_news_impact_scores(session, score_rows)
+
+        primary_models = [settings.news_models.primary_model] + list(settings.news_models.enabled_models)
+        score_by_news = load_primary_news_scores(
+            session,
+            news_ids=[str(row.get("news_id") or "") for row in recent_news_rows],
+            preferred_models=primary_models,
+        )
+        news_gate = run_news_gate(
+            recent_news_rows if settings.ui.ff_news_bridge_enabled else [],
+            score_by_news=score_by_news,
+            lookback_minutes=settings.news_filter.lookback_minutes,
+            block_severity_threshold=settings.news_filter.block_severity_threshold,
+            reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
+        )
+        matched_score_rows = [
+            score_by_news[item.item_id]
+            for item in news_gate.matched_items
+            if item.item_id in score_by_news
+        ]
     futures_path = dirs["raw"] / "futures.csv"
     futures_df = pd.read_csv(futures_path) if futures_path.exists() else pd.DataFrame()
     future_spec_map = {spec.secid: spec for spec in _parse_contract_specs(futures_df)} if not futures_df.empty else {}
@@ -2721,6 +2407,22 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
             "severity": news_gate.highest_severity,
             "headline_count": len(news_gate.matched_items),
             "summary": news_gate.action,
+            "headline": news_gate.matched_items[0].title if news_gate.matched_items else "news_signal",
+            "news_event_ids": [item.item_id for item in news_gate.matched_items],
+            "model_scores": [
+                {
+                    "news_id": str(score.get("news_id") or ""),
+                    "model_id": str(score.get("model_id") or ""),
+                    "direction": str(score.get("direction") or "neutral"),
+                    "prob_up": float(score.get("prob_up") or 0.0),
+                    "prob_down": float(score.get("prob_down") or 0.0),
+                    "prob_neutral": float(score.get("prob_neutral") or 0.0),
+                    "impact_score": float(score.get("impact_score") or 0.0),
+                }
+                for score in matched_score_rows
+            ],
+            "model_selected": settings.news_models.primary_model,
+            "gate_action": news_gate.action,
         },
         "portfolio_proposal": proposal,
         "risk_checks": [
@@ -2775,8 +2477,9 @@ def run_signal_cycle(
         if ranked.empty:
             return pd.DataFrame()
         if save_csv:
-            unified_runtime = _load_unified_runtime_module()
-            unified_runtime.persist_snapshot_to_csv(snapshot, paths.data_dir)
+            from moex_carry.unified_runtime import persist_snapshot_to_csv
+
+            persist_snapshot_to_csv(snapshot, paths.data_dir)
 
         import uuid
 
@@ -2859,7 +2562,7 @@ def backfill_signal_history(
             data_dir=paths.data_dir,
             max_pairs=resolved_max_pairs,
         )
-        unified_runtime = _load_unified_runtime_module()
+        from moex_carry.unified_runtime import persist_snapshot_to_csv
 
         engine = create_engine_from_settings(settings)
         init_db(engine)
@@ -2880,7 +2583,7 @@ def backfill_signal_history(
                 if ranked.empty:
                     continue
                 if save_csv_latest and offset == 0:
-                    unified_runtime.persist_snapshot_to_csv(snapshot, paths.data_dir)
+                    persist_snapshot_to_csv(snapshot, paths.data_dir)
                 run_id = f"signal-run-{as_of_date:%Y%m%d}"
                 if as_of_date == today:
                     as_of_dt = datetime.now(timezone.utc)
@@ -3009,9 +2712,9 @@ def _run_unified_incremental_ingest(
     if not bool(getattr(settings.ui, "incremental_replay_enabled", True)):
         return None
     from moex_carry.minute_ingest.runner import run_incremental_minute_ingest
+    from moex_carry.unified_runtime import list_unified_ingest_pairs
 
-    unified_runtime = _load_unified_runtime_module()
-    ingest_pairs = unified_runtime.list_unified_ingest_pairs(
+    ingest_pairs = list_unified_ingest_pairs(
         settings,
         data_dir,
         max_pairs=max_pairs,
@@ -3035,8 +2738,9 @@ def _build_unified_snapshot(
     as_of: date | None,
     ingest_cycle=None,
 ):
-    unified_runtime = _load_unified_runtime_module()
-    return unified_runtime.build_unified_market_snapshot(
+    from moex_carry.unified_runtime import build_unified_market_snapshot
+
+    return build_unified_market_snapshot(
         settings,
         data_dir,
         force=False,

@@ -101,9 +101,20 @@ def build_decision_view(decision_log: dict[str, Any]) -> dict[str, Any]:
     if allocations:
         primary_instrument = allocations[0].get("instrument", "")
     news_severity = "low"
+    news_summary: dict[str, Any] | None = None
     news_context = decision_log.get("news_context") or {}
     if isinstance(news_context, dict):
         news_severity = news_context.get("severity", news_severity)
+        gate_action_raw = str(news_context.get("gate_action") or news_context.get("summary") or "").strip().lower()
+        gate_action = gate_action_raw if gate_action_raw in {"allow", "reduce", "block"} else None
+        news_summary = {
+            "gate_action": gate_action,
+            "headline_count": int(news_context.get("headline_count") or 0),
+            "model_selected": news_context.get("model_selected"),
+            "news_event_ids": news_context.get("news_event_ids") or [],
+        }
+        if gate_action is None:
+            news_summary.pop("gate_action", None)
     decision = decision_log.get("decision", {})
     risk_state = decision.get("risk_state", "green")
     reasons = decision.get("reasons", [])
@@ -178,6 +189,8 @@ def build_decision_view(decision_log: dict[str, Any]) -> dict[str, Any]:
         "backtest_metrics": decision_log.get("backtest_metrics", {}),
         "links": links,
     }
+    if news_summary is not None:
+        view["news_summary"] = news_summary
     if aggregation_summary:
         view["aggregation_summary"] = aggregation_summary
     if proposal_summary and proposal_summary.get("type"):

@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from sqlalchemy import Date, DateTime, Float, Integer, JSON, String
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
 
@@ -165,3 +174,106 @@ class DecisionViewProjectionModel(Base):
     news_severity: Mapped[str | None] = mapped_column(String, nullable=True)
     payload: Mapped[dict] = mapped_column(JSON)
     updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsItemModel(Base):
+    __tablename__ = "news_items"
+
+    news_id: Mapped[str] = mapped_column(String, primary_key=True)
+    source: Mapped[str] = mapped_column(String, index=True)
+    url: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    title: Mapped[str] = mapped_column(String)
+    content: Mapped[str | None] = mapped_column(String, nullable=True)
+    language: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    published_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    ingested_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    hash: Mapped[str] = mapped_column(String, unique=True, index=True)
+
+
+class NewsEntityLinkModel(Base):
+    __tablename__ = "news_entity_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "news_id",
+            "entity_type",
+            "entity_id",
+            "ticker",
+            "link_stage",
+            name="uq_news_entity_link",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    news_id: Mapped[str] = mapped_column(String, index=True)
+    entity_type: Mapped[str] = mapped_column(String, index=True)
+    entity_id: Mapped[str] = mapped_column(String, index=True)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    link_confidence: Mapped[float] = mapped_column(Float)
+    link_stage: Mapped[str] = mapped_column(String, index=True)
+
+
+class NewsTagModel(Base):
+    __tablename__ = "news_tags"
+
+    tag_code: Mapped[str] = mapped_column(String, primary_key=True)
+    tag_name: Mapped[str] = mapped_column(String)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class NewsItemTagModel(Base):
+    __tablename__ = "news_item_tags"
+
+    news_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tag_code: Mapped[str] = mapped_column(String, primary_key=True)
+    score: Mapped[float] = mapped_column(Float)
+
+
+class NewsImpactScoreModel(Base):
+    __tablename__ = "news_impact_scores"
+    __table_args__ = (
+        UniqueConstraint(
+            "news_id",
+            "model_id",
+            "model_version",
+            name="uq_news_impact_score_model",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    news_id: Mapped[str] = mapped_column(String, index=True)
+    model_id: Mapped[str] = mapped_column(String, index=True)
+    model_version: Mapped[str] = mapped_column(String)
+    direction: Mapped[str] = mapped_column(String, index=True)
+    prob_up: Mapped[float] = mapped_column(Float)
+    prob_down: Mapped[float] = mapped_column(Float)
+    prob_neutral: Mapped[float] = mapped_column(Float)
+    impact_score: Mapped[float] = mapped_column(Float, index=True)
+    calibrated: Mapped[bool] = mapped_column(Boolean, default=False)
+    inference_ts: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsSignalLinkModel(Base):
+    __tablename__ = "news_signal_links"
+
+    link_id: Mapped[str] = mapped_column(String, primary_key=True)
+    news_id: Mapped[str] = mapped_column(String, index=True)
+    signal_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    decision_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    link_type: Mapped[str] = mapped_column(String, index=True)
+    window_start: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    window_end: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    gate_action: Mapped[str] = mapped_column(String, index=True)
+    source: Mapped[str] = mapped_column(String, default="runtime")
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsBacktestReportModel(Base):
+    __tablename__ = "news_backtest_reports"
+
+    run_id: Mapped[str] = mapped_column(String, primary_key=True)
+    period_from: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    period_to: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    horizon: Mapped[str] = mapped_column(String, index=True)
+    model_id: Mapped[str] = mapped_column(String, index=True)
+    metrics_json: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
