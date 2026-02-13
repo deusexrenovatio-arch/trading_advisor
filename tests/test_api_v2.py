@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
 from moex_carry.contracts.strategy_test import BacktestRequest, HpoRequest
+from moex_carry.storage import models as db_models
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
+    upsert_news_entity_links,
+    upsert_news_impact_scores,
+    upsert_news_item_tags,
+    upsert_news_items,
+    upsert_news_tags,
     load_signal_executions,
     store_signal_execution,
     store_signal_history,
@@ -22,6 +28,7 @@ def _build_settings(
     *,
     ff_db_projection_source: bool = False,
     ff_fail_closed_execution: bool = False,
+    ff_news_bridge_enabled: bool = False,
     auto_unwind_timeout_sec: int = 600,
     max_api_payload_bytes: int = 262144,
 ):
@@ -31,6 +38,8 @@ def _build_settings(
         ui=UiConfig(
             ff_db_projection_source=ff_db_projection_source,
             ff_fail_closed_execution=ff_fail_closed_execution,
+            ff_news_bridge_enabled=ff_news_bridge_enabled,
+            ff_news_model_advisory_enabled=ff_news_bridge_enabled,
             auto_unwind_timeout_sec=auto_unwind_timeout_sec,
             max_api_payload_bytes=max_api_payload_bytes,
         ),
@@ -63,6 +72,120 @@ def _seed_signal_history(session, run_id: str):
             }
         ],
     )
+
+
+def _seed_news_runtime(session):
+    now = datetime.utcnow()
+    published_at = now.replace(microsecond=0)
+    ingested_at = published_at
+    inference_ts = published_at
+    upsert_news_tags(
+        session,
+        [
+            {"tag_code": "SUP_DEC", "tag_name": "Supply Decrease", "description": "Supply cut"},
+            {"tag_code": "GEO_POL", "tag_name": "Geopolitics", "description": "Geopolitical"},
+        ],
+    )
+    upsert_news_items(
+        session,
+        [
+            {
+                "news_id": "news-1",
+                "source": "Reuters",
+                "url": "https://example.com/news-1",
+                "title": "Supply cut supports oil",
+                "content": "OPEC signals production cut.",
+                "language": "en",
+                "published_at": published_at.isoformat() + "Z",
+                "ingested_at": ingested_at.isoformat() + "Z",
+                "hash": "hash-news-1",
+            }
+        ],
+    )
+    upsert_news_entity_links(
+        session,
+        [
+            {
+                "news_id": "news-1",
+                "entity_type": "instrument",
+                "entity_id": "AAA",
+                "ticker": "AAA",
+                "link_confidence": 0.9,
+                "link_stage": "dictionary",
+            }
+        ],
+    )
+    upsert_news_item_tags(
+        session,
+        [
+            {"news_id": "news-1", "tag_code": "SUP_DEC", "score": 0.9},
+            {"news_id": "news-1", "tag_code": "GEO_POL", "score": 0.7},
+        ],
+    )
+    upsert_news_impact_scores(
+        session,
+        [
+            {
+                "news_id": "news-1",
+                "model_id": "finbert",
+                "model_version": "v1",
+                "direction": "up",
+                "prob_up": 0.82,
+                "prob_down": 0.08,
+                "prob_neutral": 0.10,
+                "impact_score": 0.85,
+                "calibrated": False,
+                "inference_ts": inference_ts.isoformat() + "Z",
+            },
+            {
+                "news_id": "news-1",
+                "model_id": "nli",
+                "model_version": "v1",
+                "direction": "up",
+                "prob_up": 0.75,
+                "prob_down": 0.12,
+                "prob_neutral": 0.13,
+                "impact_score": 0.78,
+                "calibrated": False,
+                "inference_ts": (inference_ts + timedelta(seconds=1)).isoformat() + "Z",
+            },
+        ],
+    )
+
+
+def _seed_quotes_for_news(session):
+    now = datetime.utcnow().replace(microsecond=0)
+    session.add(
+        db_models.QuoteModel(
+            secid="AAA",
+            timestamp=now - timedelta(minutes=1),
+            bid=99.5,
+            ask=100.5,
+            last=100.0,
+            volume=1000.0,
+        )
+    )
+    session.add(
+        db_models.QuoteModel(
+            secid="AAA",
+            timestamp=now + timedelta(hours=1, minutes=5),
+            bid=101.0,
+            ask=102.0,
+            last=101.5,
+            volume=1200.0,
+        )
+    )
+    session.add(
+        db_models.QuoteModel(
+            secid="AAA",
+            timestamp=now + timedelta(days=1, minutes=5),
+            bid=102.0,
+            ask=103.0,
+            last=102.5,
+            volume=1300.0,
+        )
+    )
+    session.commit()
 
 
 def test_v2_signals_active_and_actions_idempotency(tmp_path):
@@ -1021,6 +1144,69 @@ def test_v2_decision_view_and_news_feed(tmp_path):
     assert len(news_rows) == 1
     assert news_rows[0]["severity"] == "high"
     assert news_rows[0]["entity_links"][0]["ticker"] == "SBER"
+
+
+def test_v2_news_feed_and_signals_active_sql_bridge(tmp_path):
+    settings = _build_settings(tmp_path, ff_news_bridge_enabled=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-news-bridge")
+        _seed_news_runtime(session)
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    news_response = client.get("/api/v2/news/feed?ticker=AAA&limit=10")
+    assert news_response.status_code == 200
+    news_rows = news_response.get_json()
+    assert isinstance(news_rows, list)
+    assert len(news_rows) >= 1
+    first_news = news_rows[0]
+    assert first_news["news_id"] == "news-1"
+    assert first_news["source"] == "Reuters"
+    assert "SUP_DEC" in first_news["tags"]
+    assert len(first_news["model_scores"]) >= 2
+
+    active_response = client.get("/api/v2/signals/active")
+    assert active_response.status_code == 200
+    active_rows = active_response.get_json()
+    assert isinstance(active_rows, list)
+    assert len(active_rows) == 1
+    row = active_rows[0]
+    assert row["news_ref"]["total_events"] >= 1
+    assert row["news_gate_action"] in {"allow", "reduce", "block"}
+    assert isinstance(row["matched_news_event_ids"], list)
+    assert len(row["matched_news_event_ids"]) >= 1
+
+
+def test_v2_news_research_backtest_and_compare_endpoints(tmp_path):
+    settings = _build_settings(tmp_path, ff_news_bridge_enabled=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_news_runtime(session)
+        _seed_quotes_for_news(session)
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    backtest = client.get("/api/v2/research/news/backtest?model_id=finbert&horizon=1h")
+    assert backtest.status_code == 200
+    backtest_payload = backtest.get_json()
+    assert backtest_payload["model_id"] == "finbert"
+    assert "metrics" in backtest_payload
+    assert "run_id" in backtest_payload
+
+    compare = client.get("/api/v2/research/news/models/compare?horizon=1h")
+    assert compare.status_code == 200
+    compare_payload = compare.get_json()
+    assert "reports" in compare_payload
+    assert isinstance(compare_payload["reports"], list)
+    assert "winner" in compare_payload
+    assert "recent_reports" in compare_payload
 
 
 def test_v2_decision_view_uses_db_projection_source(tmp_path):

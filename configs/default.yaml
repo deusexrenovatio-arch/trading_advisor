@@ -55,14 +55,6 @@ spread_carry_alpha:
   execution_max_wait_minutes: 360
   force_exit_policy: "next_anchor"
   force_exit_penalty_bps: 0.0
-  sequential_entry_enabled: false
-  sequential_entry_first_leg: "future"
-  sequential_entry_second_leg_max_wait_minutes: 5
-  sequential_entry_unwind_penalty_bps: 0.0
-  sequential_exit_enabled: false
-  sequential_exit_first_leg: "future"
-  sequential_exit_second_leg_max_wait_minutes: 5
-  sequential_exit_force_penalty_bps: null
   annual_target_threshold: null
   r_cb_annual: null
   r_fund_annual: 0.0
@@ -122,7 +114,7 @@ spread_carry_alpha:
   min_alpha_score: null
   min_total_score: null
   ranking_primary_metric: "avg_trade_return_annual_operational_recent"
-  allowed_expiry_months: [3, 6]
+  allowed_expiry_months: [3, 6, 9, 12]
   allowed_expiry_years: [2026]
 
 aggregation:
@@ -143,9 +135,6 @@ ui:
   port: 8050
   signal_refresh_enabled: true
   signal_refresh_interval_sec: 60
-  signal_refresh_singleton: true
-  signal_refresh_lease_sec: 180
-  signal_refresh_lease_renew_sec: 30
   signal_refresh_daily_time: null
   signal_refresh_timezone: null
   signal_refresh_max_pairs: 1000
@@ -157,20 +146,21 @@ ui:
   pretrade_fail_open_on_transport_error: true
   ff_db_projection_source: false
   ff_fail_closed_execution: false
+  ff_news_bridge_enabled: false
+  ff_news_model_advisory_enabled: false
+  ff_news_model_decision_weight_enabled: false
   auto_unwind_timeout_sec: 600
   use_unified_signal_engine: true
   unified_allow_legacy_fallback: true
   unified_snapshot_ttl_sec: 120
   unified_pair_workers: null
-  unified_pair_replay_cache_max: 64
-  unified_front_only: false
+  unified_front_only: true
   unified_front_roll_days: 7
   require_score_gate_by_default: true
   require_score_gate_top_pairs_by_default: false
-  max_api_payload_bytes: 262144
 
 telegram:
-  enabled: true
+  enabled: false
   bot_token: null
   backend_base_url: "http://127.0.0.1:8050"
   allowed_user_ids: []
@@ -182,14 +172,6 @@ telegram:
   daily_healthcheck_time_local: "09:00"
   state_path: "./data/telegram/bot_state.json"
   ui_base_url: null
-  shock_alerts_enabled: true
-  shock_feed_path: "./data/output/shock_alerts/live_shocks.csv"
-  shock_primary_min_z: 2.5
-  shock_aftershock_min_z: 2.0
-  shock_topic_reopen_after_hours: 168
-  shock_aftershock_cooldown_minutes: 60
-  shock_max_alerts_per_cycle: 20
-  shock_sent_fingerprint_ttl_hours: 504
 
 data:
   data_dir: "./data"
@@ -217,12 +199,24 @@ risk_profile:
   slippage_tolerance_ticks: 2
 
 news_filter:
-  live_ingest_enabled: true
-  live_db_url: "sqlite:///./data/news_livecheck_ng.db"
-  live_min_impact_score: 0.35
-  live_min_confidence: 0.9
-  live_max_items: 200
   lookback_minutes: 180
   block_severity_threshold: "high"
   reduce_severity_threshold: "medium"
-  sources: []
+  sources:
+    - "trusted-feed"
+
+news_ingest:
+  enabled: false
+  rss_urls: []
+  max_items_per_run: 100
+
+news_models:
+  enabled_models: ["finbert", "nli"]
+  primary_model: "finbert"
+  finbert_model_name: "ProsusAI/finbert"
+  nli_model_name: "facebook/bart-large-mnli"
+  multilingual_nli_model_name: "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
+  model_version: "v1"
+  calibration_mode: "none"
+  epsilon_default: 0.0005
+  horizons: ["1h", "4h", "1d", "5d"]

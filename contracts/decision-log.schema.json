@@ -407,7 +407,36 @@
           "enum": ["low", "medium", "high", "critical"]
         },
         "headline_count": { "type": "integer" },
-        "summary": { "type": "string" }
+        "summary": { "type": "string" },
+        "headline": { "type": "string" },
+        "news_event_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "model_scores": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "news_id": { "type": "string" },
+              "model_id": { "type": "string" },
+              "direction": {
+                "type": "string",
+                "enum": ["up", "down", "neutral"]
+              },
+              "prob_up": { "type": "number" },
+              "prob_down": { "type": "number" },
+              "prob_neutral": { "type": "number" },
+              "impact_score": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "model_selected": { "type": "string" },
+        "gate_action": {
+          "type": "string",
+          "enum": ["allow", "reduce", "block"]
+        }
       },
       "additionalProperties": false
     },

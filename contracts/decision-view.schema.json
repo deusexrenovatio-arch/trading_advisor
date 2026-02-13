@@ -53,6 +53,22 @@
       "type": "string",
       "enum": ["low", "medium", "high", "critical"]
     },
+    "news_summary": {
+      "type": "object",
+      "properties": {
+        "gate_action": {
+          "type": "string",
+          "enum": ["allow", "reduce", "block"]
+        },
+        "headline_count": { "type": "integer" },
+        "model_selected": { "type": "string" },
+        "news_event_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
     "cost_summary": {
       "type": "object",
       "required": ["round_trip_cost", "break_even_ticks"],

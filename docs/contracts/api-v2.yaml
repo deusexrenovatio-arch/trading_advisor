@@ -344,9 +344,81 @@ paths:
           schema:
             type: string
             format: date-time
+        - in: query
+          name: limit
+          schema:
+            type: integer
       responses:
         '200':
           description: News events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NewsEventV2'
+  /research/news/models/compare:
+    get:
+      summary: Compare FinBERT and NLI OOS quality on common protocol.
+      parameters:
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: horizon
+          schema:
+            type: string
+        - in: query
+          name: epsilon
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Model comparison report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsModelCompareV2'
+  /research/news/backtest:
+    get:
+      summary: Run leakage-safe news impact backtest metrics for selected model.
+      parameters:
+        - in: query
+          name: model_id
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: horizon
+          schema:
+            type: string
+        - in: query
+          name: epsilon
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Backtest report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsBacktestV2'
   /research/backtests/run:
     post:
       summary: Run backtest v2 in experiment envelope.
@@ -461,6 +533,28 @@ components:
           type: boolean
         entry_range_eligible:
           type: boolean
+        news_ref:
+          type: object
+          properties:
+            total_events:
+              type: integer
+            latest_published_at:
+              type: string
+              format: date-time
+              nullable: true
+          additionalProperties: false
+        news_gate_action:
+          type: string
+          enum: [allow, reduce, block]
+          nullable: true
+        matched_news_event_ids:
+          type: array
+          items:
+            type: string
+        news_severity:
+          type: string
+          enum: [low, medium, high, critical]
+          nullable: true
         gate_results:
           type: array
           items:
@@ -1277,6 +1371,134 @@ components:
           $ref: '#/components/schemas/DecisionRefV2'
         execution_ref:
           $ref: '#/components/schemas/ExecutionRefV2'
+    NewsModelScoreV2:
+      type: object
+      properties:
+        model_id:
+          type: string
+        model_version:
+          type: string
+        direction:
+          type: string
+          enum: [up, down, neutral]
+        prob_up:
+          type: number
+        prob_down:
+          type: number
+        prob_neutral:
+          type: number
+        impact_score:
+          type: number
+        calibrated:
+          type: boolean
+        inference_ts:
+          type: string
+          format: date-time
+    NewsSignalRefV2:
+      type: object
+      properties:
+        signal_id:
+          type: string
+          nullable: true
+        decision_id:
+          type: string
+          nullable: true
+        link_type:
+          type: string
+        gate_action:
+          type: string
+          enum: [allow, reduce, block]
+    NewsEventV2:
+      type: object
+      properties:
+        news_event_id:
+          type: string
+        news_id:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        ingested_at:
+          type: string
+          format: date-time
+          nullable: true
+        source:
+          type: string
+        language:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        headline:
+          type: string
+        summary:
+          type: string
+        headline_count:
+          type: integer
+        decision_ref:
+          $ref: '#/components/schemas/DecisionRefV2'
+        entity_links:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityRef'
+        tags:
+          type: array
+          items:
+            type: string
+        model_scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewsModelScoreV2'
+        signal_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewsSignalRefV2'
+    NewsBacktestV2:
+      type: object
+      additionalProperties: true
+      properties:
+        model_id:
+          type: string
+        horizon:
+          type: string
+        period:
+          type: object
+          additionalProperties: true
+        sample_count:
+          type: integer
+        epsilon:
+          type: number
+        metrics:
+          type: object
+          additionalProperties: true
+        slices:
+          type: object
+          additionalProperties: true
+    NewsModelCompareV2:
+      type: object
+      additionalProperties: true
+      properties:
+        horizon:
+          type: string
+        period:
+          type: object
+          additionalProperties: true
+        epsilon:
+          type: number
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewsBacktestV2'
+        winner:
+          type: object
+          additionalProperties: true
+        audit:
+          type: object
+          additionalProperties: true
     SignalActionRequestV2:
       type: object
       required: [action, idempotency_key]

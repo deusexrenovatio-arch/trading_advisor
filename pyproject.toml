@@ -20,6 +20,16 @@ dependencies = [
   "dash>=2.16",
   "plotly>=5.20",
   "python-dateutil>=2.8",
+  "feedparser>=6.0",
+  "trafilatura>=1.8",
+  "beautifulsoup4>=4.12",
+  "dateparser>=1.2",
+  "transformers>=4.45",
+  "tokenizers>=0.20",
+  "datasets>=2.21",
+  "onnxruntime>=1.19",
+  "optimum>=1.22",
+  "scikit-learn>=1.5",
 ]
 
 [project.scripts]

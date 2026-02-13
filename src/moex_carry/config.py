@@ -194,6 +194,9 @@ class UiConfig(BaseModel):
     pretrade_fail_open_on_transport_error: bool = True
     ff_db_projection_source: bool = False
     ff_fail_closed_execution: bool = False
+    ff_news_bridge_enabled: bool = False
+    ff_news_model_advisory_enabled: bool = False
+    ff_news_model_decision_weight_enabled: bool = False
     auto_unwind_timeout_sec: int = 600
     use_unified_signal_engine: bool = True
     unified_allow_legacy_fallback: bool = True
@@ -272,6 +275,24 @@ class NewsFilterConfig(BaseModel):
     sources: list[str] = []
 
 
+class NewsIngestConfig(BaseModel):
+    enabled: bool = False
+    rss_urls: list[str] = []
+    max_items_per_run: int = 100
+
+
+class NewsModelsConfig(BaseModel):
+    enabled_models: list[str] = ["finbert", "nli"]
+    primary_model: str = "finbert"
+    finbert_model_name: str = "ProsusAI/finbert"
+    nli_model_name: str = "facebook/bart-large-mnli"
+    multilingual_nli_model_name: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
+    model_version: str = "v1"
+    calibration_mode: str = "none"
+    epsilon_default: float = 0.0005
+    horizons: list[str] = ["1h", "4h", "1d", "5d"]
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="MOEX_CARRY_",
@@ -293,6 +314,8 @@ class AppSettings(BaseSettings):
     environment: EnvironmentConfig = EnvironmentConfig()
     risk_profile: RiskProfileConfig = RiskProfileConfig()
     news_filter: NewsFilterConfig = NewsFilterConfig()
+    news_ingest: NewsIngestConfig = NewsIngestConfig()
+    news_models: NewsModelsConfig = NewsModelsConfig()
 
 
 def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

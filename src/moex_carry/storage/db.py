@@ -199,3 +199,17 @@ def init_db(engine) -> None:
     _deduplicate_signal_execution_idempotency(engine)
     _ensure_signal_execution_idempotency_index(engine)
     _normalize_signal_execution_action_values(engine)
+
+
+def _ensure_sqlite_parent_dir(url: str) -> None:
+    raw = str(url or "").strip()
+    prefix = "sqlite:///"
+    if not raw.startswith(prefix):
+        return
+    path_part = raw.removeprefix(prefix).strip()
+    if not path_part or path_part == ":memory:":
+        return
+    db_path = Path(path_part)
+    if not db_path.is_absolute():
+        db_path = Path.cwd() / db_path
+    db_path.parent.mkdir(parents=True, exist_ok=True)
