@@ -1412,6 +1412,9 @@ def _build_cost_model(
 
 def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     paths = resolve_paths(settings)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
     dirs = _data_paths(paths.data_dir)
     top_pairs_path = dirs["output"] / "top_pairs.csv"
     if use_existing and top_pairs_path.exists():
@@ -1628,7 +1631,7 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
         "decision_view_id": decision_view_id,
     }
     decision_view = build_decision_view(decision_log)
-    store = DecisionLogStore(paths.data_dir)
+    store = DecisionLogStore(paths.data_dir, session_factory=session_factory)
     store.append(decision_log, decision_view)
 
 
