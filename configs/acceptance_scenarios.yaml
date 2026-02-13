@@ -115,14 +115,13 @@ scenarios:
         total_score,
         decision
       ]
-    forbid_keys: [signal_reasons, signal_metrics]
     cache_as: top_pairs
-    test_cases: [TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004]
+    test_cases: [TC-TOP-API-001, TC-TOP-API-002, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004]
     title: Top pairs table (floor + alpha)
     user_story: Operator reviews ranked pairs with floor + alpha metrics.
     expectations:
       - Ranking uses total_score for ordering.
-      - Response excludes signal_reasons and signal_metrics.
+      - Response supports optional `require_score_gate=true|false` filtering.
   - id: signals-active
     type: api_list
     scope: backend
@@ -339,7 +338,7 @@ scenarios:
       - spread_pct
       - entry_flag
       - exit_flag
-    test_cases: [TC-SPREAD-API-001, TC-SPREAD-UI-001]
+    test_cases: [TC-SPREAD-API-001, TC-SPREAD-UI-001, TC-SPREAD-UI-002]
     title: График спреда
     user_story: Пользователь видит данные для графика спреда.
   - id: news-feed-v2
@@ -399,3 +398,14 @@ scenarios:
     test_cases: [TC-FE-PROXY-001]
     title: Прокси API
     user_story: UI получает данные через proxy.
+  - id: unified-minute-runtime
+    type: api_list
+    scope: backend
+    url: /api/top-pairs?limit=5
+    require_non_empty: false
+    required_keys: [stock, future, signal_action, signal_score]
+    test_cases: [TC-UNI-API-001, TC-UNI-API-002, TC-UNI-API-003, TC-PERF-GATE-MAN-001, TC-PERF-ARCH-UNIT-001]
+    title: Unified minute-first market runtime
+    user_story: Backend market tables are served by unified minute replay runtime with compatibility fields.
+    expectations:
+      - Endpoints return compatible payloads for top-pairs/signals/backtests and support refresh via unified engine.

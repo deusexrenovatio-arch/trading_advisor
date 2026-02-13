@@ -12,6 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class MoexIssConfig(BaseModel):
     base_url: str = "https://iss.moex.com"
     fallback_ips: list[str] = []
+    force_fallback: bool = False
     engine_shares: str = "stock"
     market_shares: str = "shares"
     shares_board: str = "TQBR"
@@ -63,6 +64,18 @@ class StrategyConfig(BaseModel):
 class SpreadCarryAlphaConfig(BaseModel):
     day_count: str = "ACT/365"
     use_trading_days: bool = False
+    # Price source for spread strategy/backtest inputs:
+    # - daily_close: end-of-day candle close (legacy behavior)
+    # - common_minute_close: last/first common minute close between stock/future per day
+    price_source: str = "daily_close"
+    common_minute_anchor: str = "last"
+    # 0 enables same-day submission at signal_ts + execution_lag_minutes.
+    signal_exec_lag_days: int = 1
+    execution_lag_minutes: int = 1
+    execution_max_wait_minutes: int = 1440
+    force_exit_policy: str = "next_anchor"
+    force_exit_penalty_bps: float = 0.0
+    annual_target_threshold: Optional[float] = None
 
     r_cb_annual: Optional[float] = None
     r_fund_annual: Optional[float] = None
@@ -112,6 +125,10 @@ class SpreadCarryAlphaConfig(BaseModel):
     z_window: int = 60
     z_entry_threshold: Optional[float] = None
     entry_price_tolerance_pct: float = 0.0015
+    entry_stock_tolerance_pct: Optional[float] = None
+    entry_future_tolerance_pct: Optional[float] = None
+    entry_spread_tolerance_pct: Optional[float] = None
+    signal_cutoff_before_day_end_minutes: int = 0
 
     max_gross_notional: Optional[float] = None
     max_contracts_per_pair: int = 1
@@ -129,6 +146,7 @@ class SpreadCarryAlphaConfig(BaseModel):
     min_floor_score: Optional[float] = None
     min_alpha_score: Optional[float] = None
     min_total_score: Optional[float] = None
+    ranking_primary_metric: str = "avg_trade_return_annual_operational_recent"
     allowed_expiry_months: Optional[list[int]] = None
     allowed_expiry_years: Optional[list[int]] = None
 
@@ -161,6 +179,14 @@ class UiConfig(BaseModel):
     ff_db_projection_source: bool = False
     ff_fail_closed_execution: bool = False
     auto_unwind_timeout_sec: int = 600
+    use_unified_signal_engine: bool = True
+    unified_allow_legacy_fallback: bool = True
+    unified_snapshot_ttl_sec: int = 120
+    unified_pair_workers: int = 4
+    unified_front_only: bool = True
+    unified_front_roll_days: int = 7
+    require_score_gate_by_default: bool = True
+    require_score_gate_top_pairs_by_default: bool = False
 
 
 class DataConfig(BaseModel):
@@ -235,14 +261,17 @@ def _default_config_path() -> Path:
 
 def load_settings(config_path: Optional[str] = None) -> AppSettings:
     config_data: dict[str, Any] = {}
-    path: Optional[Path] = None
+    default_path = _default_config_path()
+    config_paths: list[Path] = []
+
+    if default_path.exists():
+        config_paths.append(default_path)
     if config_path:
-        path = Path(config_path)
-    else:
-        default_path = _default_config_path()
-        if default_path.exists():
-            path = default_path
-    if path and path.exists():
+        override_path = Path(config_path)
+        if override_path.exists():
+            config_paths.append(override_path)
+
+    for path in config_paths:
         with path.open("r", encoding="utf-8") as handle:
             yaml_data = yaml.safe_load(handle) or {}
         if isinstance(yaml_data, dict):

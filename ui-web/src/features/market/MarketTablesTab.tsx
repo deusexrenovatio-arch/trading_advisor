@@ -1,4 +1,4 @@
-﻿import { Fragment, type ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import {
   Box,
   Button,
@@ -269,7 +269,7 @@ const MarketTablesTab = ({
       <SignalQueuePanel openSignalRows={market.openSignalRows} formatValue={formatValue} />
     ) : null}
     <Paper sx={{ p: 2 }}>
-      <TableContainer sx={{ maxHeight: '68vh' }}>
+      <TableContainer sx={{ maxHeight: '68vh', overflowX: 'auto' }}>
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
@@ -400,8 +400,19 @@ const MarketTablesTab = ({
                   </TableRow>
                   {market.showPairDetails && isExpanded ? (
                     <TableRow>
-                      <TableCell colSpan={market.tableVisibleColumns.length + 1}>
-                        <Stack spacing={2}>
+                      <TableCell
+                        colSpan={market.tableVisibleColumns.length + 1}
+                        sx={{ p: 2, minWidth: 0 }}
+                      >
+                        <Box
+                          sx={{
+                            width: 'min(100%, calc(100vw - 120px))',
+                            maxWidth: '100%',
+                            minWidth: 0,
+                            overflowX: 'hidden',
+                          }}
+                        >
+                          <Stack spacing={2}>
                           <Box>
                             <Typography variant="subtitle2" fontWeight={600}>
                               Снимок
@@ -552,7 +563,7 @@ const MarketTablesTab = ({
                               )
                             ) : null}
                           </Box>
-                          <Box>
+                          <Box sx={{ minWidth: 0, maxWidth: '100%', width: '100%', overflowX: 'hidden' }}>
                             <Typography variant="subtitle2" fontWeight={600}>
                               График спреда (жизнь контракта)
                             </Typography>
@@ -602,7 +613,8 @@ const MarketTablesTab = ({
                               />
                             </Box>
                           ) : null}
-                        </Stack>
+                          </Stack>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ) : null}

@@ -91,6 +91,7 @@ export type DecisionLog = Record<string, unknown>
 export type GenericRow = Record<string, unknown>
 export type SpreadSeriesPoint = {
   date: string
+  exec_ts?: string | null
   spread_mid?: number | null
   spread_pct?: number | null
   spread?: number | null
@@ -111,7 +112,23 @@ export type SpreadSeriesPoint = {
   trade_pnl_cash?: number | null
   trade_return_pct_net?: number | null
   trade_return_annual?: number | null
+  trade_return_annual_fill_to_fill?: number | null
+  trade_return_annual_operational?: number | null
+  annual_target_threshold?: number | null
+  annual_target_pass?: boolean | null
   trade_hold_days?: number | null
+  entry_signal_day?: string | null
+  entry_submit_ts?: string | null
+  entry_fill_ts?: string | null
+  entry_wait_minutes?: number | null
+  exit_signal_day?: string | null
+  exit_submit_ts?: string | null
+  exit_fill_ts?: string | null
+  exit_wait_minutes?: number | null
+  entry_fill_status?: string | null
+  exit_fill_status?: string | null
+  exit_forced?: boolean | null
+  unfilled_reason?: string | null
   zscore?: number | null
 }
 export type SignalHistoryRow = {
@@ -217,6 +234,8 @@ export type BacktestReport = {
   trades?: BacktestTrade[]
   resolved_config?: Record<string, unknown>
   warnings?: string[]
+  fill_quality_summary?: Record<string, unknown> | null
+  execution_model?: Record<string, unknown> | null
 }
 
 export type ForwardStatus = {

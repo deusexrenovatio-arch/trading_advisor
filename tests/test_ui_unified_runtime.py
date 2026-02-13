@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+from datetime import date, timedelta
+from pathlib import Path
+
+import pandas as pd
+
+from moex_carry.config import AppSettings, DataConfig, SpreadCarryAlphaConfig, UiConfig
+from moex_carry.ui.app import create_app
+from moex_carry.ui.unified_runtime import (
+    build_unified_market_snapshot,
+    build_unified_spread_series,
+)
+
+
+def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+
+def _seed_unified_fixture(tmp_path: Path) -> None:
+    _write_csv(
+        tmp_path / "raw" / "shares.csv",
+        [
+            {"SECID": "AAA", "SHORTNAME": "Alpha", "CURRENCYID": "RUB", "BOARDID": "TQBR"},
+        ],
+    )
+    _write_csv(
+        tmp_path / "raw" / "futures.csv",
+        [
+            {
+                "SECID": "AAH6",
+                "ASSETCODE": "AAA",
+                "LASTTRADEDATE": "2026-03-19",
+                "LOTVOLUME": 1,
+                "MINSTEP": 0.01,
+                "MULTIPLIER": 1,
+            },
+            {
+                "SECID": "AAM6",
+                "ASSETCODE": "AAA",
+                "LASTTRADEDATE": "2026-06-18",
+                "LOTVOLUME": 1,
+                "MINSTEP": 0.01,
+                "MULTIPLIER": 1,
+            },
+        ],
+    )
+    _write_csv(
+        tmp_path / "raw" / "key_rates.csv",
+        [
+            {"date": "2026-01-01", "rate": 0.1},
+            {"date": "2026-01-02", "rate": 0.1},
+        ],
+    )
+
+    base_rows: list[dict[str, object]] = []
+    start = date(2026, 1, 2)
+    for idx in range(40):
+        day = start + timedelta(days=idx)
+        if day.weekday() >= 5:
+            continue
+        for minute_offset in (0, 30):
+            spot = 100.0 + idx * 0.1
+            future = 101.0 + idx * 0.1
+            ts = pd.Timestamp(day.isoformat()) + pd.Timedelta(hours=10, minutes=minute_offset)
+            spread = spot - future
+            base_rows.append(
+                {
+                    "date": day.isoformat(),
+                    "spot_mid": spot,
+                    "future_mid": future,
+                    "pv_div": 0.0,
+                    "div_sum": 0.0,
+                    "spread_mid": spread,
+                    "spread_pct": spread / spot if spot else 0.0,
+                    "exec_ts": ts.isoformat(sep=" "),
+                    "spot_volume": 1000.0,
+                    "future_volume": 800.0,
+                }
+            )
+    series = pd.DataFrame(base_rows)
+    cache_payload = {
+        "schema_version": 1,
+        "series_base": series,
+        "dividends": [],
+    }
+    cache_dir = tmp_path / "output" / "intraday_preload_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    pd.to_pickle(
+        cache_payload,
+        cache_dir / "AAA_AAH6_2025-01-01_2026-12-31_fixture.pkl",
+    )
+
+
+def _settings(tmp_path: Path, *, allow_legacy_fallback: bool) -> AppSettings:
+    alpha = SpreadCarryAlphaConfig(
+        price_source="common_minute_close",
+        common_minute_anchor="last",
+        signal_exec_lag_days=0,
+        execution_lag_minutes=30,
+        execution_max_wait_minutes=360,
+        entry_price_tolerance_pct=0.02,
+        annual_target_threshold=0.0,
+        r_cb_annual=0.0,
+        r_fund_annual=0.0,
+        r_disc_annual=0.0,
+        min_DTE_entry=1,
+        close_buffer_days=0,
+        H_max_days=20,
+        TP_pct=0.01,
+        SL_pct=0.01,
+        allowed_expiry_months=[3, 6, 9, 12],
+        allowed_expiry_years=[2026],
+    )
+    ui = UiConfig(
+        use_unified_signal_engine=True,
+        unified_allow_legacy_fallback=allow_legacy_fallback,
+        unified_snapshot_ttl_sec=300,
+        unified_pair_workers=1,
+        unified_front_only=True,
+        unified_front_roll_days=7,
+        require_score_gate_by_default=False,
+    )
+    return AppSettings(
+        data=DataConfig(data_dir=str(tmp_path), compute_lookback_days=120),
+        spread_carry_alpha=alpha,
+        ui=ui,
+    )
+
+
+def test_unified_runtime_selects_front_pair_and_builds_snapshot(tmp_path):
+    _seed_unified_fixture(tmp_path)
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+    snapshot = build_unified_market_snapshot(
+        settings,
+        tmp_path,
+        force=True,
+        ttl_sec=60,
+        as_of=date(2026, 2, 12),
+    )
+    assert not snapshot.top_pairs.empty
+    assert not snapshot.signals.empty
+    assert not snapshot.backtests.empty
+    assert snapshot.top_pairs.iloc[0]["future"] == "AAH6"
+    assert snapshot.signals.iloc[0]["stock"] == "AAA"
+    assert isinstance(snapshot.signals.iloc[0]["signal_metrics"], dict)
+
+
+def test_unified_spread_series_and_api_endpoints(tmp_path):
+    _seed_unified_fixture(tmp_path)
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+
+    spread = build_unified_spread_series(
+        settings,
+        tmp_path,
+        stock="AAA",
+        future="AAH6",
+        window_days=60,
+        full_life=False,
+        ttl_sec=60,
+    )
+    assert not spread.empty
+    assert "spread_mid" in spread.columns
+    assert "signal_action" in spread.columns
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    top_pairs = client.get("/api/top-pairs?limit=5")
+    assert top_pairs.status_code == 200
+    top_pairs_data = top_pairs.get_json()
+    assert isinstance(top_pairs_data, list)
+    assert top_pairs_data
+    assert top_pairs_data[0]["stock"] == "AAA"
+    assert top_pairs_data[0]["future"] == "AAH6"
+    assert top_pairs_data[0]["score_model"] == "probabilistic_edge_v1"
+    assert "score_exec_probability" in top_pairs_data[0]
+    assert "score_earn_probability" in top_pairs_data[0]
+    assert "score_gate_pass" in top_pairs_data[0]
+    assert isinstance(top_pairs_data[0]["signal_metrics"], dict)
+    assert "score_exec_probability" in top_pairs_data[0]["signal_metrics"]
+
+    signals = client.get("/api/signals?limit=5")
+    assert signals.status_code == 200
+    signals_data = signals.get_json()
+    assert isinstance(signals_data, list)
+    assert signals_data
+    assert signals_data[0]["stock"] == "AAA"
+    assert "signal_metrics" in signals_data[0]
+
+    backtests = client.get("/api/backtests?limit=5")
+    assert backtests.status_code == 200
+    backtests_data = backtests.get_json()
+    assert isinstance(backtests_data, list)
+    assert backtests_data
+    assert backtests_data[0]["stock"] == "AAA"
+
+    spread_api = client.get("/api/spread-series?stock=AAA&future=AAH6&window_days=60")
+    assert spread_api.status_code == 200
+    spread_payload = spread_api.get_json()
+    assert isinstance(spread_payload, list)
+    assert spread_payload
+    assert "spread_mid" in spread_payload[0]
+
+    refresh = client.post("/api/signals/refresh")
+    assert refresh.status_code == 200
+    status_payload = refresh.get_json()
+    assert status_payload["status"] == "ok"
+    assert status_payload["engine"] == "unified_minute_replay"
+    assert int(status_payload["rows"]) >= 0
+
+    history = client.get("/api/signals/history?limit=5")
+    assert history.status_code == 200
+    history_data = history.get_json()
+    assert isinstance(history_data, list)
+    assert history_data
+    assert "signal_reasons" in history_data[0]
+    assert "signal_metrics" in history_data[0]
+    assert "trades_closed" in history_data[0]

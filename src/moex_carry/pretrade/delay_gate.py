@@ -92,6 +92,9 @@ def run_delay_gate(
     snapshots: int = 4,
     min_hits: int = 2,
     eps: float = 0.0015,
+    stock_eps: float | None = None,
+    future_eps: float | None = None,
+    spread_eps: float | None = None,
     sync_sec: float = 120.0,
     poll_sec: float = 5.0,
     stock_engine: str = "stock",
@@ -115,11 +118,16 @@ def run_delay_gate(
         fut_board=fut_board,
     )
 
-    stock_buy_max = float(spot_target) * (1.0 + float(eps))
-    stock_sell_min = float(spot_target) * (1.0 - float(eps))
-    fut_buy_max = float(future_target) * (1.0 + float(eps))
-    fut_sell_min = float(future_target) * (1.0 - float(eps))
-    spread_band = float(spot_target) * float(eps)
+    eps_base = max(float(eps), 0.0)
+    stock_eps_value = max(float(stock_eps if stock_eps is not None else eps_base), 0.0)
+    future_eps_value = max(float(future_eps if future_eps is not None else eps_base), 0.0)
+    spread_eps_value = max(float(spread_eps if spread_eps is not None else eps_base), 0.0)
+
+    stock_buy_max = float(spot_target) * (1.0 + stock_eps_value)
+    stock_sell_min = float(spot_target) * (1.0 - stock_eps_value)
+    fut_buy_max = float(future_target) * (1.0 + future_eps_value)
+    fut_sell_min = float(future_target) * (1.0 - future_eps_value)
+    spread_band = float(spot_target) * spread_eps_value
     spread_min = float(spread_target) - spread_band
     spread_max = float(spread_target) + spread_band
 

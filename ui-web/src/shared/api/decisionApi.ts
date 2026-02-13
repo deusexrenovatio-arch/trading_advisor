@@ -145,6 +145,9 @@ type PretradeCheckOptions = {
   snapshots?: number
   minHits?: number
   eps?: number
+  stockEps?: number
+  futureEps?: number
+  spreadEps?: number
   syncSec?: number
   pollSec?: number
   qtyFut?: number
@@ -166,6 +169,9 @@ export const fetchPretradeCheck = (
       snapshots: options.snapshots,
       min_hits: options.minHits,
       eps: options.eps,
+      stock_eps: options.stockEps,
+      future_eps: options.futureEps,
+      spread_eps: options.spreadEps,
       sync_sec: options.syncSec,
       poll_sec: options.pollSec,
       qty_fut: options.qtyFut,

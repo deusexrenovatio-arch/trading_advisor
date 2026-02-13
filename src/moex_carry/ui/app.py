@@ -50,7 +50,9 @@ from moex_carry.storage.repositories import (
     load_open_executions,
     load_signal_executions,
     load_signal_history,
+    store_signal_history,
     store_signal_execution,
+    store_signal_run,
 )
 from moex_carry.ui.data import (
     load_backtest_summary,
@@ -58,6 +60,12 @@ from moex_carry.ui.data import (
     load_decision_view,
     load_signals,
     load_top_pairs,
+)
+from moex_carry.ui.unified_runtime import (
+    UnifiedMarketSnapshot,
+    build_unified_market_snapshot,
+    build_unified_spread_series,
+    persist_snapshot_to_csv,
 )
 
 
@@ -80,7 +88,7 @@ BASE_TABLE_STYLE = {
 }
 
 
-_CACHE_VERSION = "v4"
+_CACHE_VERSION = "v5"
 _V1_DEPRECATION_SUNSET_HTTP = "Wed, 01 Jul 2026 00:00:00 GMT"
 _V1_DEPRECATION_SUNSET_DATE = "2026-07-01"
 
@@ -191,6 +199,45 @@ def _parse_bool(value: object) -> bool | None:
     return None
 
 
+def _coerce_bool(value: object, *, default: bool) -> bool:
+    parsed = _parse_bool(value)
+    if parsed is None:
+        return bool(default)
+    return parsed
+
+
+def _default_require_score_gate_for_signals(settings: AppSettings) -> bool:
+    return bool(getattr(settings.ui, "require_score_gate_by_default", True))
+
+
+def _default_require_score_gate_for_top_pairs(settings: AppSettings) -> bool:
+    # Top-pairs should reflect historical ranking by default.
+    return bool(settings.ui.require_score_gate_top_pairs_by_default)
+
+
+def _resolve_require_score_gate(value: object, *, default: bool) -> bool:
+    return _coerce_bool(value, default=default)
+
+
+def _apply_score_gate_filter(df: pd.DataFrame, *, require_score_gate: bool) -> pd.DataFrame:
+    if not require_score_gate or df.empty or "score_gate_pass" not in df.columns:
+        return df
+    gate_mask = df["score_gate_pass"].map(lambda value: _coerce_bool(value, default=False))
+    return df.loc[gate_mask].copy()
+
+
+def _record_score_gate_pass(record: dict[str, object]) -> bool:
+    direct = _parse_bool(record.get("score_gate_pass"))
+    if direct is not None:
+        return bool(direct)
+    metrics = record.get("signal_metrics")
+    if isinstance(metrics, dict):
+        nested = _parse_bool(metrics.get("score_gate_pass"))
+        if nested is not None:
+            return bool(nested)
+    return False
+
+
 def _parse_int(value: object, default: int) -> int:
     if value is None:
         return default
@@ -255,17 +302,20 @@ def _build_pretrade_fail_open_result(
     future_target: float,
     spread_target: float,
     eps: float,
+    stock_eps: float,
+    future_eps: float,
+    spread_eps: float,
     future_scale: float,
     qty_fut: float,
     participation_rate: float,
     min_hits: int,
     error_text: str,
 ) -> dict[str, object]:
-    stock_buy_max = float(spot_target) * (1.0 + float(eps))
-    stock_sell_min = float(spot_target) * (1.0 - float(eps))
-    fut_buy_max = float(future_target) * (1.0 + float(eps))
-    fut_sell_min = float(future_target) * (1.0 - float(eps))
-    spread_band = float(spot_target) * float(eps)
+    stock_buy_max = float(spot_target) * (1.0 + float(stock_eps))
+    stock_sell_min = float(spot_target) * (1.0 - float(stock_eps))
+    fut_buy_max = float(future_target) * (1.0 + float(future_eps))
+    fut_sell_min = float(future_target) * (1.0 - float(future_eps))
+    spread_band = float(spot_target) * float(spread_eps)
     spread_min = float(spread_target) - spread_band
     spread_max = float(spread_target) + spread_band
 
@@ -328,6 +378,10 @@ def _build_pretrade_fail_open_result(
         "advisory_reasons": ["iss_transport_error"],
         "diagnostics": {
             "transport_error": error_text,
+            "eps": float(eps),
+            "stock_eps": float(stock_eps),
+            "future_eps": float(future_eps),
+            "spread_eps": float(spread_eps),
         },
     }
 
@@ -338,6 +392,23 @@ def _df_to_records(df: pd.DataFrame) -> list[dict[str, object]]:
     cleaned = df.astype(object).where(pd.notna(df), None)
     records = cleaned.to_dict("records")
     return [_sanitize_value(record) for record in records]
+
+
+def _stringify_datetime_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    result = df.copy()
+    for column in result.columns:
+        if "date" in str(column).lower():
+            converted = pd.to_datetime(result[column], errors="coerce")
+            if converted.notna().any():
+                result[column] = converted.dt.strftime("%Y-%m-%d")
+                continue
+        if "ts" in str(column).lower() or "time" in str(column).lower():
+            converted = pd.to_datetime(result[column], errors="coerce")
+            if converted.notna().any():
+                result[column] = converted.dt.strftime("%Y-%m-%d %H:%M:%S")
+    return result
 
 
 SIGNAL_METRIC_CONTRACT_KEYS: tuple[str, ...] = (
@@ -380,9 +451,24 @@ SIGNAL_METRIC_CONTRACT_KEYS: tuple[str, ...] = (
     "floor_rate_annual",
     "rtc_pct",
     "spread_pct",
+    "score_model",
+    "score_target_annual",
     "score_floor",
+    "score_floor_excess_annual",
     "score_alpha",
+    "score_edge_raw_annual",
+    "score_exec_probability",
+    "score_earn_probability",
+    "score_gate_exec_threshold",
+    "score_gate_earn_threshold",
+    "score_gate_pass",
     "total_score",
+    "avg_trade_return_annual_recent",
+    "avg_trade_return_annual_operational_recent",
+    "share_target_pass",
+    "unfilled_entry_rate",
+    "unfilled_exit_rate",
+    "forced_exit_rate",
 )
 
 
@@ -838,6 +924,67 @@ def create_app(settings: AppSettings) -> Dash:
     refresh_lock = threading.Lock()
     refresh_stop = threading.Event()
 
+    def _unified_ttl_sec() -> int:
+        return max(int(getattr(settings.ui, "unified_snapshot_ttl_sec", 120) or 0), 1)
+
+    def _resolved_unified_max_pairs(fallback: int | None = None) -> int | None:
+        configured = settings.ui.signal_refresh_max_pairs
+        if configured is not None and int(configured) > 0:
+            return int(configured)
+        strategy_max = int(settings.strategy.max_pairs or 0)
+        if strategy_max > 0:
+            return strategy_max
+        if fallback is not None and int(fallback) > 0:
+            return int(fallback)
+        return None
+
+    def _unified_snapshot(max_pairs: int | None, *, force: bool = False) -> UnifiedMarketSnapshot:
+        return build_unified_market_snapshot(
+            settings,
+            paths.data_dir,
+            force=force,
+            ttl_sec=_unified_ttl_sec(),
+            max_pairs=max_pairs,
+        )
+
+    def _persist_unified_signal_run(max_pairs: int | None) -> int:
+        snapshot = _unified_snapshot(max_pairs=max_pairs, force=True)
+        require_score_gate_signals = _default_require_score_gate_for_signals(settings)
+        signals_all = snapshot.signals.copy()
+        top_pairs = snapshot.top_pairs.copy()
+        signals_actionable = _apply_score_gate_filter(
+            signals_all.copy(),
+            require_score_gate=require_score_gate_signals,
+        )
+        filtered_snapshot = UnifiedMarketSnapshot(
+            created_at=snapshot.created_at,
+            top_pairs=top_pairs,
+            signals=signals_all,
+            backtests=snapshot.backtests.copy(),
+            warnings=list(snapshot.warnings),
+            errors=list(snapshot.errors),
+        )
+        if settings.ui.signal_refresh_save_csv:
+            persist_snapshot_to_csv(filtered_snapshot, paths.data_dir)
+        run_id = f"signal-run-{uuid.uuid4().hex[:8]}"
+        as_of = datetime.now(timezone.utc)
+        params = {
+            "max_pairs": max_pairs,
+            "engine": "unified_minute_replay",
+            "require_score_gate_signals": require_score_gate_signals,
+            "require_score_gate_top_pairs": False,
+            "signals_total": int(len(signals_all)),
+            "signals_actionable": int(len(signals_actionable)),
+            "warnings": list(snapshot.warnings),
+            "errors": list(snapshot.errors),
+        }
+        records = signals_all.to_dict("records") if not signals_all.empty else []
+        with session_factory() as session:
+            store_signal_run(session, run_id, as_of, params)
+            if records:
+                store_signal_history(session, run_id, as_of, records)
+        return int(len(signals_actionable))
+
     def _run_signal_refresh(trigger: str, force: bool = False) -> bool:
         if not refresh_enabled and not force:
             refresh_state["status"] = "disabled"
@@ -852,11 +999,19 @@ def create_app(settings: AppSettings) -> Dash:
             refresh_state["last_started_at"] = _iso_now()
             refresh_state["last_error"] = None
             try:
-                run_signal_cycle(
-                    settings,
-                    max_pairs=settings.ui.signal_refresh_max_pairs,
-                    save_csv=settings.ui.signal_refresh_save_csv,
-                )
+                if settings.ui.use_unified_signal_engine:
+                    rows = _persist_unified_signal_run(
+                        _resolved_unified_max_pairs(settings.ui.signal_refresh_max_pairs)
+                    )
+                    refresh_state["rows"] = int(rows)
+                    refresh_state["engine"] = "unified_minute_replay"
+                else:
+                    run_signal_cycle(
+                        settings,
+                        max_pairs=settings.ui.signal_refresh_max_pairs,
+                        save_csv=settings.ui.signal_refresh_save_csv,
+                    )
+                    refresh_state["engine"] = "legacy_pipeline"
                 refresh_state["last_success_at"] = _iso_now()
                 refresh_state["status"] = "ok"
             except Exception as exc:
@@ -1585,7 +1740,25 @@ def create_app(settings: AppSettings) -> Dash:
     @server.route("/api/v2/top-pairs", methods=["GET"])
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
-        df = load_top_pairs(paths.data_dir)
+        all_pairs = request.args.get("all", "").lower() in {"1", "true", "yes"}
+        require_score_gate = _resolve_require_score_gate(
+            request.args.get("require_score_gate"),
+            default=_default_require_score_gate_for_top_pairs(settings),
+        )
+        limit = int(request.args.get("limit", "500"))
+        df = pd.DataFrame()
+        if settings.ui.use_unified_signal_engine:
+            try:
+                max_pairs = None if all_pairs else _resolved_unified_max_pairs(limit)
+                snapshot = _unified_snapshot(max_pairs=max_pairs, force=False)
+                df = snapshot.top_pairs.copy()
+            except Exception:
+                logger.exception("Unified top-pairs failed")
+                if not settings.ui.unified_allow_legacy_fallback:
+                    return jsonify({"error": "server_error", "message": "unified_top_pairs_failed"}), 500
+        if df.empty and settings.ui.unified_allow_legacy_fallback:
+            df = load_top_pairs(paths.data_dir)
+        df = _apply_score_gate_filter(df, require_score_gate=require_score_gate)
         if not df.empty and "signal_score_norm" not in df.columns:
             if {"zscore", "implied_rate_net", "required_rate"}.issubset(df.columns):
                 z_entry = settings.strategy.z_entry
@@ -1594,16 +1767,30 @@ def create_app(settings: AppSettings) -> Dash:
                 rate_gap = (df["implied_rate_net"] - df["required_rate"]).abs()
                 rate_component = rate_gap / implied_buffer if implied_buffer else 0.0
                 df["signal_score_norm"] = 0.5 * (z_component + rate_component)
-        df = df.drop(columns=["signal_reasons", "signal_metrics"], errors="ignore")
-        all_pairs = request.args.get("all", "").lower() in {"1", "true", "yes"}
         if not all_pairs:
-            limit = int(request.args.get("limit", "500"))
             df = df.head(max(limit, 0)) if limit else df
-        return jsonify(_df_to_records(df))
+        records = [_merge_signal_metrics(record) for record in _df_to_records(df)]
+        return jsonify(records)
 
     @server.route("/api/signals", methods=["GET"])
     def signals_api():
-        df = load_signals(paths.data_dir)
+        df = pd.DataFrame()
+        require_score_gate = _resolve_require_score_gate(
+            request.args.get("require_score_gate"),
+            default=_default_require_score_gate_for_signals(settings),
+        )
+        if settings.ui.use_unified_signal_engine:
+            limit = int(request.args.get("limit", "500"))
+            try:
+                snapshot = _unified_snapshot(max_pairs=_resolved_unified_max_pairs(limit), force=False)
+                df = snapshot.signals.copy()
+            except Exception:
+                logger.exception("Unified signals failed")
+                if not settings.ui.unified_allow_legacy_fallback:
+                    return jsonify({"error": "server_error", "message": "unified_signals_failed"}), 500
+        if df.empty and settings.ui.unified_allow_legacy_fallback:
+            df = load_signals(paths.data_dir)
+        df = _apply_score_gate_filter(df, require_score_gate=require_score_gate)
         limit = int(request.args.get("limit", "500"))
         df = df.head(max(limit, 0)) if limit else df
         records = [_merge_signal_metrics(record) for record in _df_to_records(df)]
@@ -1611,6 +1798,10 @@ def create_app(settings: AppSettings) -> Dash:
 
     @server.route("/api/signals/active", methods=["GET"])
     def signals_active_api():
+        require_score_gate = _resolve_require_score_gate(
+            request.args.get("require_score_gate"),
+            default=_default_require_score_gate_for_signals(settings),
+        )
         with session_factory() as session:
             latest = load_latest_signal_run(session)
             if not latest:
@@ -1823,6 +2014,13 @@ def create_app(settings: AppSettings) -> Dash:
                     ),
                 }
                 actionable.append(_merge_signal_metrics(payload))
+
+            if require_score_gate:
+                actionable = [
+                    row
+                    for row in actionable
+                    if bool(row.get("position_open")) or _record_score_gate_pass(row)
+                ]
 
             actionable.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
             actionable.sort(key=lambda item: 0 if bool(item.get("position_open")) else 1)
@@ -2479,7 +2677,18 @@ def create_app(settings: AppSettings) -> Dash:
 
     @server.route("/api/backtests", methods=["GET"])
     def backtests_api():
-        df = load_backtest_summary(paths.data_dir)
+        df = pd.DataFrame()
+        if settings.ui.use_unified_signal_engine:
+            limit = int(request.args.get("limit", "500"))
+            try:
+                snapshot = _unified_snapshot(max_pairs=_resolved_unified_max_pairs(limit), force=False)
+                df = snapshot.backtests.copy()
+            except Exception:
+                logger.exception("Unified backtests failed")
+                if not settings.ui.unified_allow_legacy_fallback:
+                    return jsonify({"error": "server_error", "message": "unified_backtests_failed"}), 500
+        if df.empty and settings.ui.unified_allow_legacy_fallback:
+            df = load_backtest_summary(paths.data_dir)
         limit = int(request.args.get("limit", "500"))
         df = df.head(max(limit, 0)) if limit else df
         return jsonify(_df_to_records(df))
@@ -2609,13 +2818,29 @@ def create_app(settings: AppSettings) -> Dash:
         if cached is not None:
             return jsonify(cached)
 
-        series_df = build_spread_series(
-            settings, stock, future, window_days=window_days, full_life=full_life
-        )
+        series_df = pd.DataFrame()
+        if settings.ui.use_unified_signal_engine:
+            try:
+                series_df = build_unified_spread_series(
+                    settings,
+                    paths.data_dir,
+                    stock=stock,
+                    future=future,
+                    window_days=window_days,
+                    full_life=full_life,
+                    ttl_sec=_unified_ttl_sec(),
+                )
+            except Exception:
+                logger.exception("Unified spread-series failed")
+                if not settings.ui.unified_allow_legacy_fallback:
+                    return jsonify({"error": "server_error", "message": "unified_spread_series_failed"}), 500
+        if series_df.empty and settings.ui.unified_allow_legacy_fallback:
+            series_df = build_spread_series(
+                settings, stock, future, window_days=window_days, full_life=full_life
+            )
         if series_df.empty:
             return jsonify([])
-        series_df = series_df.copy()
-        series_df["date"] = pd.to_datetime(series_df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+        series_df = _stringify_datetime_columns(series_df)
         records = _df_to_records(series_df)
         _write_cache(cache_path, records)
         return jsonify(records)
@@ -2678,11 +2903,27 @@ def create_app(settings: AppSettings) -> Dash:
         snapshots = min(snapshots, 12)
         min_hits = max(_parse_int(payload.get("min_hits"), 2), 1)
         min_hits = min(min_hits, snapshots)
+        alpha_cfg = settings.spread_carry_alpha
         eps_default = float(
-            getattr(settings.spread_carry_alpha, "entry_price_tolerance_pct", 0.0015) or 0.0015
+            getattr(alpha_cfg, "entry_price_tolerance_pct", 0.0015) or 0.0015
+        )
+        stock_eps_default = float(
+            getattr(alpha_cfg, "entry_stock_tolerance_pct", None) or eps_default
+        )
+        future_eps_default = float(
+            getattr(alpha_cfg, "entry_future_tolerance_pct", None) or eps_default
+        )
+        spread_eps_default = float(
+            getattr(alpha_cfg, "entry_spread_tolerance_pct", None) or eps_default
         )
         eps = max(_parse_float(payload.get("eps"), eps_default), 0.0001)
         eps = min(eps, 0.05)
+        stock_eps = max(_parse_float(payload.get("stock_eps"), stock_eps_default), 0.0001)
+        stock_eps = min(stock_eps, 0.05)
+        future_eps = max(_parse_float(payload.get("future_eps"), future_eps_default), 0.0001)
+        future_eps = min(future_eps, 0.05)
+        spread_eps = max(_parse_float(payload.get("spread_eps"), spread_eps_default), 0.0001)
+        spread_eps = min(spread_eps, 0.05)
         sync_sec = max(_parse_float(payload.get("sync_sec"), 120.0), 1.0)
         poll_sec = max(_parse_float(payload.get("poll_sec"), 5.0), 0.0)
         poll_sec = min(poll_sec, 15.0)
@@ -2704,6 +2945,7 @@ def create_app(settings: AppSettings) -> Dash:
             retry_backoff_sec=settings.moex.request_retry_backoff_sec,
             retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
             fallback_ips=settings.moex.fallback_ips,
+            force_fallback=settings.moex.force_fallback,
         )
 
         try:
@@ -2721,6 +2963,9 @@ def create_app(settings: AppSettings) -> Dash:
                 snapshots=snapshots,
                 min_hits=min_hits,
                 eps=eps,
+                stock_eps=stock_eps,
+                future_eps=future_eps,
+                spread_eps=spread_eps,
                 sync_sec=sync_sec,
                 poll_sec=poll_sec,
                 stock_engine=settings.moex.engine_shares,
@@ -2744,6 +2989,9 @@ def create_app(settings: AppSettings) -> Dash:
                     future_target=future_target,
                     spread_target=spread_target,
                     eps=eps,
+                    stock_eps=stock_eps,
+                    future_eps=future_eps,
+                    spread_eps=spread_eps,
                     future_scale=future_scale,
                     qty_fut=qty_fut,
                     participation_rate=participation_rate,
@@ -2765,6 +3013,11 @@ def create_app(settings: AppSettings) -> Dash:
             future_scale=future_scale,
         )
         enriched = enrich_pretrade_result(result, params=runtime_params)
+        params = enriched.get("params")
+        if isinstance(params, dict):
+            params["stock_eps"] = stock_eps
+            params["future_eps"] = future_eps
+            params["spread_eps"] = spread_eps
         return jsonify(_sanitize_value(enriched))
 
     @server.route("/api/pretrade/check", methods=["GET"])
@@ -2904,9 +3157,37 @@ def create_app(settings: AppSettings) -> Dash:
         Input("refresh", "n_intervals"),
     )
     def _refresh(_):
-        top_pairs = load_top_pairs(paths.data_dir)
-        signals = load_signals(paths.data_dir)
-        backtest = load_backtest_summary(paths.data_dir)
+        if settings.ui.use_unified_signal_engine:
+            try:
+                snapshot = _unified_snapshot(
+                    max_pairs=_resolved_unified_max_pairs(settings.ui.signal_refresh_max_pairs),
+                    force=False,
+                )
+                top_pairs = _apply_score_gate_filter(
+                    snapshot.top_pairs.copy(),
+                    require_score_gate=_default_require_score_gate_for_top_pairs(settings),
+                )
+                signals = _apply_score_gate_filter(
+                    snapshot.signals.copy(),
+                    require_score_gate=_default_require_score_gate_for_signals(settings),
+                )
+                backtest = snapshot.backtests.copy()
+            except Exception:
+                logger.exception("Unified Dash refresh failed")
+                top_pairs = pd.DataFrame()
+                signals = pd.DataFrame()
+                backtest = pd.DataFrame()
+            if settings.ui.unified_allow_legacy_fallback:
+                if top_pairs.empty:
+                    top_pairs = load_top_pairs(paths.data_dir)
+                if signals.empty:
+                    signals = load_signals(paths.data_dir)
+                if backtest.empty:
+                    backtest = load_backtest_summary(paths.data_dir)
+        else:
+            top_pairs = load_top_pairs(paths.data_dir)
+            signals = load_signals(paths.data_dir)
+            backtest = load_backtest_summary(paths.data_dir)
         return (
             top_pairs.to_dict("records"),
             _table_columns(top_pairs),

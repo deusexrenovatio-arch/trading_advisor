@@ -18,6 +18,7 @@ def score_pairs(metrics: pd.DataFrame) -> pd.DataFrame:
 def score_pairs_alpha(
     metrics: pd.DataFrame,
     weights: dict[str, float] | None = None,
+    primary_metric: str | None = "avg_trade_return_annual_operational_recent",
 ) -> pd.DataFrame:
     df = metrics.copy()
     weights = weights or {}
@@ -31,4 +32,14 @@ def score_pairs_alpha(
         - w_liq * df.get("penalty_liq", 0.0)
         - w_event * df.get("penalty_event", 0.0)
     )
-    return df.sort_values("total_score", ascending=False)
+    metric_name = str(primary_metric or "").strip()
+    if not metric_name or metric_name == "total_score" or metric_name not in df.columns:
+        return df.sort_values("total_score", ascending=False)
+
+    df["_primary_metric_value"] = pd.to_numeric(df[metric_name], errors="coerce")
+    ranked = df.sort_values(
+        by=["_primary_metric_value", "total_score"],
+        ascending=[False, False],
+        na_position="last",
+    )
+    return ranked.drop(columns=["_primary_metric_value"], errors="ignore")

@@ -22,6 +22,9 @@ from moex_carry.selection.universe import build_pair_mappings
 _PRECOMPUTE_CACHE: "OrderedDict[str, BacktestPrecomputed]" = OrderedDict()
 _PRECOMPUTE_LOCK = threading.Lock()
 _PRECOMPUTE_CACHE_MAX = 4
+_FILL_QUALITY_CACHE: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
+_FILL_QUALITY_LOCK = threading.Lock()
+_FILL_QUALITY_CACHE_MAX = 16
 
 
 def _to_float(value: Any) -> float | None:
@@ -243,15 +246,33 @@ def run_backtest_v2_cached(
         start_date=request.test.start_date,
         end_date=request.test.end_date,
     )
+    cache_key = _cache_key(request, universe, data_store.data_dir)
     precomputed = None
     if precompute is not False:
         precomputed = _get_precomputed(request, universe, data_store)
-    return run_backtest_v2(
+
+    mode = str(request.execution.mode or "INTRADAY_MINUTE").upper()
+    fill_quality_summary_override = None
+    if mode == "INTRADAY_MINUTE":
+        with _FILL_QUALITY_LOCK:
+            cached_fill = _FILL_QUALITY_CACHE.get(cache_key)
+            if cached_fill is not None:
+                _FILL_QUALITY_CACHE.move_to_end(cache_key)
+                fill_quality_summary_override = dict(cached_fill)
+    report = run_backtest_v2(
         request=request,
         universe=universe,
         data_store=data_store,
         precomputed=precomputed,
+        fill_quality_summary_override=fill_quality_summary_override,
     )
+    if mode == "INTRADAY_MINUTE" and report.fill_quality_summary:
+        with _FILL_QUALITY_LOCK:
+            _FILL_QUALITY_CACHE[cache_key] = dict(report.fill_quality_summary)
+            _FILL_QUALITY_CACHE.move_to_end(cache_key)
+            if len(_FILL_QUALITY_CACHE) > _FILL_QUALITY_CACHE_MAX:
+                _FILL_QUALITY_CACHE.popitem(last=False)
+    return report
 
 
 def _sanitize_value(value: Any) -> Any:
@@ -310,5 +331,11 @@ def serialize_backtest_report(report: BacktestReport) -> dict[str, Any]:
         "trades": trades,
         "resolved_config": _serialize_config(report.resolved_config),
         "warnings": list(report.warnings),
+        "fill_quality_summary": _serialize_config(report.fill_quality_summary)
+        if report.fill_quality_summary is not None
+        else None,
+        "execution_model": _serialize_config(report.execution_model)
+        if report.execution_model is not None
+        else None,
     }
     return _sanitize_value(payload)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
+import time
 
 import pandas as pd
 
@@ -45,7 +46,7 @@ from moex_carry.strategy.news_filter import apply_news_filter
 from moex_carry.strategy.overall_strategy import aggregate_strategy_signals, strategy_signal_to_dict
 from moex_carry.strategy.orchestrator import build_portfolio_proposal
 from moex_carry.strategy.risk_gate import evaluate_risk_profile
-from moex_carry.strategy.spread_carry_alpha import SpreadCarryState, step_spread_carry_alpha
+from moex_carry.strategy.spread_carry_alpha import spread_pnl_pct
 from moex_carry.strategy.spread_adapter import load_spread_signals
 from moex_carry.backtest.engine import BacktestResult, backtest_pair
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
@@ -75,6 +76,7 @@ def fetch_data(settings: AppSettings, max_shares: int | None = None) -> None:
         retry_backoff_sec=settings.moex.request_retry_backoff_sec,
         retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
         fallback_ips=settings.moex.fallback_ips,
+        force_fallback=settings.moex.force_fallback,
     )
     print("[fetch] Downloading MOEX shares list...", flush=True)
     shares: list[dict[str, object]] = []
@@ -183,6 +185,245 @@ def _fetch_candles(
     df["date"] = pd.to_datetime(df["begin"]).dt.date
     df.rename(columns={"close": secid, "volume": f"{secid}_volume"}, inplace=True)
     return df[["date", secid, f"{secid}_volume"]]
+
+
+def _minute_close_frame(raw: list[dict[str, object]], *, price_scale: float = 1.0) -> pd.DataFrame:
+    df = pd.DataFrame(raw)
+    if df.empty:
+        return pd.DataFrame(columns=["date", "ts", "price", "volume"])
+    df["ts"] = pd.to_datetime(df.get("begin"), errors="coerce").dt.floor("min")
+    df["price"] = pd.to_numeric(df.get("close"), errors="coerce")
+    if price_scale and price_scale != 1.0:
+        df["price"] = df["price"] / price_scale
+    df["volume"] = pd.to_numeric(df.get("volume"), errors="coerce").fillna(0.0)
+    df = df.dropna(subset=["ts", "price"])
+    if df.empty:
+        return pd.DataFrame(columns=["date", "ts", "price", "volume"])
+    df = df.sort_values("ts").drop_duplicates(subset=["ts"], keep="last")
+    df["date"] = df["ts"].dt.date
+    return df[["date", "ts", "price", "volume"]]
+
+
+def _normalize_price_source(alpha_cfg: object) -> str:
+    raw = getattr(alpha_cfg, "price_source", "daily_close")
+    source = str(raw or "daily_close").strip().lower()
+    if source not in {"daily_close", "common_minute_close"}:
+        return "daily_close"
+    return source
+
+
+def _normalize_common_minute_anchor(alpha_cfg: object) -> str:
+    raw = getattr(alpha_cfg, "common_minute_anchor", "last")
+    anchor = str(raw or "last").strip().lower()
+    if anchor not in {"first", "last"}:
+        return "last"
+    return anchor
+
+
+def _fetch_minute_candles_chunked(
+    client: MoexIssClient,
+    *,
+    engine: str,
+    market: str,
+    board: str,
+    secid: str,
+    from_date: date,
+    till_date: date,
+    price_scale: float,
+    chunk_days: int = 10,
+    chunk_retry_attempts: int = 2,
+    chunk_retry_backoff_sec: float = 0.4,
+) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    chunk = max(int(chunk_days), 1)
+    retries = max(int(chunk_retry_attempts), 0)
+    backoff = max(float(chunk_retry_backoff_sec), 0.0)
+    day = from_date
+
+    while day <= till_date:
+        chunk_end = min(day + timedelta(days=chunk - 1), till_date)
+        chunk_loaded = False
+        for attempt in range(retries + 1):
+            try:
+                raw = client.get_candles(
+                    engine,
+                    market,
+                    secid,
+                    board,
+                    day,
+                    chunk_end,
+                    interval=1,
+                )
+                chunk_df = _minute_close_frame(raw, price_scale=price_scale)
+                if not chunk_df.empty:
+                    frames.append(chunk_df)
+                chunk_loaded = True
+                break
+            except Exception:
+                if attempt >= retries:
+                    break
+                if backoff > 0:
+                    wait = min(backoff * (2 ** attempt), 3.0)
+                    time.sleep(wait)
+        if not chunk_loaded:
+            # Fallback to day-by-day calls for the failed chunk.
+            fallback_day = day
+            while fallback_day <= chunk_end:
+                if fallback_day.weekday() >= 5:
+                    fallback_day += timedelta(days=1)
+                    continue
+                try:
+                    raw_day = client.get_candles(
+                        engine,
+                        market,
+                        secid,
+                        board,
+                        fallback_day,
+                        fallback_day,
+                        interval=1,
+                    )
+                except Exception:
+                    fallback_day += timedelta(days=1)
+                    continue
+                day_df = _minute_close_frame(raw_day, price_scale=price_scale)
+                if not day_df.empty:
+                    frames.append(day_df)
+                fallback_day += timedelta(days=1)
+        day = chunk_end + timedelta(days=1)
+
+    if not frames:
+        return pd.DataFrame(columns=["date", "ts", "price", "volume"])
+    result = pd.concat(frames, ignore_index=True)
+    result = result.sort_values("ts").drop_duplicates(subset=["ts"], keep="last")
+    result["date"] = pd.to_datetime(result["ts"]).dt.date
+    return result[["date", "ts", "price", "volume"]]
+
+
+def _fetch_pair_common_minute_daily(
+    client: MoexIssClient,
+    *,
+    settings: AppSettings,
+    stock_secid: str,
+    future_secid: str,
+    from_date: date,
+    till_date: date,
+    future_scale: float,
+    anchor: str,
+) -> pd.DataFrame:
+    stock_df = _fetch_minute_candles_chunked(
+        client,
+        engine=settings.moex.engine_shares,
+        market=settings.moex.market_shares,
+        board=settings.moex.shares_board,
+        secid=stock_secid,
+        from_date=from_date,
+        till_date=till_date,
+        price_scale=1.0,
+    )
+    future_df = _fetch_minute_candles_chunked(
+        client,
+        engine=settings.moex.engine_futures,
+        market=settings.moex.market_futures,
+        board=settings.moex.futures_board,
+        secid=future_secid,
+        from_date=from_date,
+        till_date=till_date,
+        price_scale=future_scale,
+    )
+    if stock_df.empty or future_df.empty:
+        return pd.DataFrame(columns=["date", "spot", "future", "spot_volume", "future_volume", "exec_ts"])
+
+    joined = stock_df.merge(
+        future_df,
+        on="ts",
+        how="inner",
+        suffixes=("_stock", "_future"),
+    )
+    if joined.empty:
+        return pd.DataFrame(columns=["date", "spot", "future", "spot_volume", "future_volume", "exec_ts"])
+    joined = joined.sort_values("ts")
+    joined["date"] = pd.to_datetime(joined["ts"]).dt.date
+
+    per_day_vol = (
+        stock_df.groupby("date", as_index=False)["volume"].sum().rename(columns={"volume": "spot_volume"})
+    ).merge(
+        future_df.groupby("date", as_index=False)["volume"].sum().rename(columns={"volume": "future_volume"}),
+        on="date",
+        how="inner",
+    )
+
+    selected = joined.groupby("date", as_index=False).head(1) if anchor == "first" else joined.groupby("date", as_index=False).tail(1)
+    selected = selected.merge(per_day_vol, on="date", how="left")
+    selected = selected.rename(
+        columns={
+            "price_stock": "spot",
+            "price_future": "future",
+            "ts": "exec_ts",
+        }
+    )
+    selected = selected[["date", "spot", "future", "spot_volume", "future_volume", "exec_ts"]]
+    selected = selected.sort_values("date").drop_duplicates(subset=["date"], keep="last")
+    return selected
+
+
+def _fetch_pair_price_history(
+    client: MoexIssClient,
+    *,
+    settings: AppSettings,
+    stock_secid: str,
+    future_secid: str,
+    from_date: date,
+    till_date: date,
+    future_scale: float,
+    alpha_cfg: object,
+) -> pd.DataFrame:
+    source = _normalize_price_source(alpha_cfg)
+    if source == "common_minute_close":
+        return _fetch_pair_common_minute_daily(
+            client,
+            settings=settings,
+            stock_secid=stock_secid,
+            future_secid=future_secid,
+            from_date=from_date,
+            till_date=till_date,
+            future_scale=future_scale,
+            anchor=_normalize_common_minute_anchor(alpha_cfg),
+        )
+
+    stock_candles = _fetch_candles(
+        client,
+        settings.moex.engine_shares,
+        settings.moex.market_shares,
+        settings.moex.shares_board,
+        stock_secid,
+        from_date,
+        till_date,
+    )
+    future_candles = _fetch_candles(
+        client,
+        settings.moex.engine_futures,
+        settings.moex.market_futures,
+        settings.moex.futures_board,
+        future_secid,
+        from_date,
+        till_date,
+        price_scale=future_scale,
+    )
+    if stock_candles.empty or future_candles.empty:
+        return pd.DataFrame(columns=["date", "spot", "future", "spot_volume", "future_volume"])
+    merged = pd.merge(stock_candles, future_candles, on="date", how="inner")
+    if merged.empty:
+        return pd.DataFrame(columns=["date", "spot", "future", "spot_volume", "future_volume"])
+    merged.rename(
+        columns={
+            stock_secid: "spot",
+            future_secid: "future",
+            f"{stock_secid}_volume": "spot_volume",
+            f"{future_secid}_volume": "future_volume",
+        },
+        inplace=True,
+    )
+    return merged
 
 
 def _future_price_scale(spec: ContractSpec | None) -> float:
@@ -433,6 +674,129 @@ def compute_spread_series(
 RECENT_TRADES_WINDOW = 5
 
 
+def _day_count_basis(day_count: str) -> float:
+    raw = str(day_count or "ACT/365").upper()
+    return 360.0 if "360" in raw else 365.0
+
+
+def _as_date(value: object) -> date:
+    ts = pd.to_datetime(value, errors="coerce")
+    if pd.isna(ts):
+        raise ValueError(f"Cannot parse date from value: {value!r}")
+    if isinstance(ts, pd.Timestamp):
+        return ts.date()
+    if isinstance(ts, datetime):
+        return ts.date()
+    raise ValueError(f"Unsupported date value: {value!r}")
+
+
+def _as_naive_datetime(value: object) -> datetime | None:
+    ts = pd.to_datetime(value, errors="coerce")
+    if pd.isna(ts):
+        return None
+    if isinstance(ts, pd.Timestamp):
+        if ts.tzinfo is not None:
+            ts = ts.tz_convert(None)
+        return ts.to_pydatetime().replace(tzinfo=None)
+    if isinstance(ts, datetime):
+        if ts.tzinfo is not None:
+            return ts.astimezone(timezone.utc).replace(tzinfo=None)
+        return ts
+    return None
+
+
+def _row_exec_timestamp(row_date: date, exec_ts_raw: object) -> datetime:
+    parsed = _as_naive_datetime(exec_ts_raw)
+    if parsed is not None:
+        return parsed
+    # In legacy daily-close mode there is no minute anchor, so we pin to end-of-day.
+    return datetime.combine(row_date, datetime.min.time()) + timedelta(hours=23, minutes=59)
+
+
+def _iso_or_none(value: datetime | None) -> str | None:
+    return value.isoformat(timespec="seconds") if value is not None else None
+
+
+def _execution_band_ok(
+    *,
+    target_spot: float,
+    target_future: float,
+    target_spread: float,
+    spot_now: float,
+    future_now: float,
+    spread_now: float,
+    tolerance: float,
+) -> bool:
+    if target_spot <= 0 or target_future <= 0:
+        return False
+    tol = max(float(tolerance), 0.0)
+    stock_band = target_spot * tol
+    future_band = target_future * tol
+    spread_band = target_spot * tol if target_spot > 0 else max(abs(target_spread), 1.0) * tol
+    return (
+        abs(spot_now - target_spot) <= stock_band
+        and abs(future_now - target_future) <= future_band
+        and abs(spread_now - target_spread) <= spread_band
+    )
+
+
+def _execution_quality_stats(series_df: pd.DataFrame) -> dict[str, float | None]:
+    if series_df.empty:
+        return {
+            "share_target_pass": None,
+            "unfilled_entry_rate": None,
+            "unfilled_exit_rate": None,
+            "forced_exit_rate": None,
+        }
+    action_series = (
+        series_df["signal_action"].astype(str).str.lower()
+        if "signal_action" in series_df.columns
+        else pd.Series([], dtype="string")
+    )
+    entry_signal_mask = action_series == "enter"
+    exit_signal_mask = action_series == "exit"
+    entry_signals = int(entry_signal_mask.sum())
+    exit_signals = int(exit_signal_mask.sum())
+    entry_status = (
+        series_df["entry_fill_status"]
+        if "entry_fill_status" in series_df.columns
+        else pd.Series(index=series_df.index, dtype="object")
+    )
+    exit_status = (
+        series_df["exit_fill_status"]
+        if "exit_fill_status" in series_df.columns
+        else pd.Series(index=series_df.index, dtype="object")
+    )
+    exit_forced = (
+        series_df["exit_forced"]
+        if "exit_forced" in series_df.columns
+        else pd.Series(index=series_df.index, dtype="object")
+    )
+
+    entry_unfilled = int((entry_status[entry_signal_mask] == "entry_unfilled").sum())
+    exit_unfilled = int((exit_status[exit_signal_mask] == "exit_unfilled").sum())
+    forced_exits = int((exit_status[exit_signal_mask] == "forced").sum())
+
+    exit_mask = (
+        series_df["exit_flag"].fillna(False).astype(bool)
+        if "exit_flag" in series_df.columns
+        else pd.Series(False, index=series_df.index)
+    )
+    annual_pass = series_df.get("annual_target_pass")
+    if annual_pass is None:
+        share_target_pass = None
+    else:
+        pass_values = annual_pass[exit_mask & annual_pass.notna()]
+        share_target_pass = float(pass_values.astype(float).mean()) if not pass_values.empty else None
+
+    return {
+        "share_target_pass": share_target_pass,
+        "unfilled_entry_rate": float(entry_unfilled / entry_signals) if entry_signals > 0 else None,
+        "unfilled_exit_rate": float(exit_unfilled / exit_signals) if exit_signals > 0 else None,
+        "forced_exit_rate": float(forced_exits / exit_signals) if exit_signals > 0 else None,
+    }
+
+
 def _apply_spread_carry_signals(
     series_df: pd.DataFrame,
     merged: pd.DataFrame | None,
@@ -445,46 +809,120 @@ def _apply_spread_carry_signals(
     if series_df.empty:
         return series_df
     series_df = series_df.copy()
-    if merged is not None and {"spot_volume", "future_volume"}.issubset(merged.columns):
-        series_df = series_df.merge(
-            merged[["date", "spot_volume", "future_volume"]],
-            on="date",
-            how="left",
-        )
+    if "exec_ts" in series_df.columns:
+        series_df = series_df.sort_values(["date", "exec_ts"]).reset_index(drop=True)
+    else:
+        series_df = series_df.sort_values("date").reset_index(drop=True)
+    if merged is not None and "date" in merged.columns:
+        merge_cols = [col for col in ("spot_volume", "future_volume", "exec_ts") if col in merged.columns]
+        if merge_cols:
+            series_df = series_df.merge(merged[["date", *merge_cols]], on="date", how="left")
 
+    n = len(series_df)
+    if n == 0:
+        return series_df
+
+    try:
+        lag_days = max(int(getattr(alpha_cfg, "signal_exec_lag_days", 1) or 0), 0)
+    except (TypeError, ValueError):
+        lag_days = 1
+    try:
+        lag_minutes = max(int(getattr(alpha_cfg, "execution_lag_minutes", 1) or 0), 0)
+    except (TypeError, ValueError):
+        lag_minutes = 1
+    try:
+        max_wait_minutes = max(int(getattr(alpha_cfg, "execution_max_wait_minutes", 1440) or 0), 0)
+    except (TypeError, ValueError):
+        max_wait_minutes = 1440
+    try:
+        force_exit_penalty_bps = max(float(getattr(alpha_cfg, "force_exit_penalty_bps", 0.0) or 0.0), 0.0)
+    except (TypeError, ValueError):
+        force_exit_penalty_bps = 0.0
+    force_exit_policy = str(getattr(alpha_cfg, "force_exit_policy", "next_anchor") or "next_anchor").lower().strip()
+    if force_exit_policy not in {"next_anchor", "market_worse"}:
+        force_exit_policy = "next_anchor"
+    entry_tolerance = max(float(getattr(alpha_cfg, "entry_price_tolerance_pct", 0.0015) or 0.0015), 0.0)
+    year_basis = _day_count_basis(alpha_cfg.day_count)
+    annual_target_override_raw = getattr(alpha_cfg, "annual_target_threshold", None)
+    try:
+        annual_target_override = (
+            float(annual_target_override_raw)
+            if annual_target_override_raw is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        annual_target_override = None
+
+    series_dates = [_as_date(value) for value in series_df["date"]]
+    series_exec_ts = [
+        _row_exec_timestamp(
+            series_dates[idx],
+            series_df.at[idx, "exec_ts"] if "exec_ts" in series_df.columns else None,
+        )
+        for idx in range(n)
+    ]
     spreads_pct = series_df["spread_pct"].tolist()
-    signal_actions: list[str] = []
-    signal_directions: list[str | None] = []
-    entry_flags: list[bool] = []
-    exit_flags: list[bool] = []
-    entry_spread_pcts: list[float | None] = []
-    exit_spread_pcts: list[float | None] = []
-    trade_cycles: list[int | None] = []
-    trade_returns: list[float | None] = []
-    trade_pnls: list[float | None] = []
-    trade_return_pct_net: list[float | None] = []
-    trade_return_annual: list[float | None] = []
-    trade_hold_days: list[int | None] = []
-    rtc_pcts: list[float] = []
-    tp_nets: list[float] = []
-    sl_nets: list[float] = []
-    floor_rates: list[float] = []
-    floor_passes: list[bool] = []
-    liquidity_passes: list[bool] = []
-    zscores: list[float] = []
-    state = SpreadCarryState()
-    current_entry_spread_pct: float | None = None
-    current_entry_spot_exec: float | None = None
-    current_entry_fut_exec: float | None = None
-    current_entry_date: date | None = None
-    current_entry_stock_fee: float | None = None
-    current_entry_fut_fee: float | None = None
+
+    def _submit_timestamp(signal_idx: int, signal_ts: datetime) -> datetime | None:
+        if lag_days <= 0:
+            return signal_ts + timedelta(minutes=lag_minutes)
+        submit_idx = signal_idx + lag_days
+        if submit_idx >= n:
+            return None
+        submit_day = series_dates[submit_idx]
+        return datetime.combine(submit_day, datetime.min.time()) + timedelta(minutes=lag_minutes)
+
+    signal_actions: list[str] = ["hold"] * n
+    signal_directions: list[str | None] = [None] * n
+    entry_flags: list[bool] = [False] * n
+    exit_flags: list[bool] = [False] * n
+    entry_spread_pcts: list[float | None] = [None] * n
+    exit_spread_pcts: list[float | None] = [None] * n
+    trade_cycles: list[int | None] = [None] * n
+    trade_returns: list[float | None] = [None] * n
+    trade_pnls: list[float | None] = [None] * n
+    trade_return_pct_net: list[float | None] = [None] * n
+    trade_return_annual: list[float | None] = [None] * n
+    trade_return_annual_fill_to_fill: list[float | None] = [None] * n
+    trade_return_annual_operational: list[float | None] = [None] * n
+    annual_target_thresholds: list[float | None] = [None] * n
+    annual_target_passes: list[bool | None] = [None] * n
+    trade_hold_days: list[int | None] = [None] * n
+
+    entry_signal_days: list[str | None] = [None] * n
+    entry_submit_tss: list[str | None] = [None] * n
+    entry_fill_tss: list[str | None] = [None] * n
+    entry_wait_minutes: list[float | None] = [None] * n
+    exit_signal_days: list[str | None] = [None] * n
+    exit_submit_tss: list[str | None] = [None] * n
+    exit_fill_tss: list[str | None] = [None] * n
+    exit_wait_minutes: list[float | None] = [None] * n
+    entry_fill_statuses: list[str | None] = [None] * n
+    exit_fill_statuses: list[str | None] = [None] * n
+    exit_forced_flags: list[bool | None] = [None] * n
+    unfilled_reasons: list[str | None] = [None] * n
+
+    rtc_pcts: list[float] = [0.0] * n
+    tp_nets: list[float] = [0.0] * n
+    sl_nets: list[float] = [0.0] * n
+    floor_rates: list[float] = [0.0] * n
+    floor_passes: list[bool] = [False] * n
+    liquidity_passes: list[bool] = [False] * n
+    zscores: list[float] = [0.0] * n
+
+    pending_entry: dict[str, object] | None = None
+    pending_exit: dict[str, object] | None = None
+    open_position: dict[str, object] | None = None
     current_cycle = 0
 
-    for idx, row in series_df.iterrows():
-        row_date = row["date"]
+    for idx in range(n):
+        row = series_df.iloc[idx]
+        row_date = series_dates[idx]
+        row_ts = series_exec_ts[idx]
         spot_mid = float(row["spot_mid"])
         future_mid = float(row["future_mid"])
+        spread_mid_value = float(row.get("spread_mid", 0.0))
+
         key_rate_row = latest_rate(key_rates, row_date)
         key_rate_value = key_rate_row.rate if key_rate_row else 0.0
         r_cb = alpha_cfg.r_cb_annual if alpha_cfg.r_cb_annual is not None else key_rate_value
@@ -549,7 +987,6 @@ def _apply_spread_carry_signals(
         fut_volume = row.get("future_volume")
         dollar_vol_stock = dollar_volume(spot_mid, spot_volume)
         dollar_vol_fut = dollar_volume(future_mid, fut_volume, future_spec.multiplier)
-        avg_dollar = None
         if dollar_vol_stock is not None and dollar_vol_fut is not None:
             avg_dollar = min(dollar_vol_stock, dollar_vol_fut)
         else:
@@ -588,112 +1025,302 @@ def _apply_spread_carry_signals(
         spread_pct_entry_exec = spread_pct(spread_entry_exec_value, spot_mid)
         spread_pct_exit_exec = spread_pct(spread_exit_exec_value, spot_mid)
 
-        decision = step_spread_carry_alpha(
-            state,
-            as_of=row_date,
-            floor_pass=floor_metrics.floor_pass,
-            liquidity_pass=liquidity_pass,
-            spread_pct_entry_exec=spread_pct_entry_exec,
-            spread_pct_exit_exec=spread_pct_exit_exec,
-            tp_net=tp_net,
-            sl_net=sl_net,
-            dte=dte,
-            min_dte_entry=alpha_cfg.min_DTE_entry,
-            close_buffer_days=alpha_cfg.close_buffer_days,
-            h_max_days=alpha_cfg.H_max_days,
-            entry_filter_ok=entry_filter_ok,
-        )
+        rtc_pcts[idx] = rtc_pct
+        tp_nets[idx] = tp_net
+        sl_nets[idx] = sl_net
+        floor_rates[idx] = floor_metrics.floor_rate_annual
+        floor_passes[idx] = floor_metrics.floor_pass
+        liquidity_passes[idx] = liquidity_pass
+        zscores[idx] = z
 
-        signal_actions.append(decision.action)
-        signal_directions.append(decision.direction)
-        is_entry = decision.action == "enter"
-        is_exit = decision.action == "exit"
-        entry_flags.append(is_entry)
-        exit_flags.append(is_exit)
-        if is_entry:
-            current_cycle += 1
-            current_entry_spread_pct = spread_pct_entry_exec
-            current_entry_spot_exec = exec_prices.stock_buy
-            current_entry_fut_exec = exec_prices.fut_sell
-            current_entry_date = row_date
-            current_entry_stock_fee = stock_fee
-            current_entry_fut_fee = fut_fee
-            entry_spread_pcts.append(spread_pct_entry_exec)
-            exit_spread_pcts.append(None)
-            trade_cycles.append(current_cycle)
-            trade_returns.append(None)
-            trade_pnls.append(None)
-            trade_return_pct_net.append(None)
-            trade_return_annual.append(None)
-            trade_hold_days.append(None)
-        elif is_exit:
-            entry_spread_pcts.append(None)
-            exit_spread_pcts.append(spread_pct_exit_exec)
-            trade_cycles.append(current_cycle if current_cycle > 0 else None)
-            trade_returns.append(
-                (spread_pct_exit_exec - current_entry_spread_pct)
-                if current_entry_spread_pct is not None
-                else None
+        if pending_entry is not None:
+            signal_idx = int(pending_entry["signal_index"])
+            submit_ts = pending_entry["submit_ts"]
+            deadline_ts = pending_entry["deadline_ts"]
+            if isinstance(submit_ts, datetime) and isinstance(deadline_ts, datetime):
+                if row_ts > deadline_ts:
+                    entry_fill_statuses[signal_idx] = "entry_unfilled"
+                    unfilled_reasons[signal_idx] = "entry_timeout"
+                    pending_entry = None
+                elif row_ts >= submit_ts and _execution_band_ok(
+                    target_spot=float(pending_entry["target_spot"]),
+                    target_future=float(pending_entry["target_future"]),
+                    target_spread=float(pending_entry["target_spread"]),
+                    spot_now=spot_mid,
+                    future_now=future_mid,
+                    spread_now=spread_mid_value,
+                    tolerance=entry_tolerance,
+                ):
+                    direction = str(pending_entry.get("direction", "cash_and_carry"))
+                    if direction == "reverse":
+                        entry_spot_exec = float(exec_prices.stock_sell)
+                        entry_fut_exec = float(exec_prices.fut_buy)
+                        entry_spread_value = spread_pct_exit_exec
+                    else:
+                        entry_spot_exec = float(exec_prices.stock_buy)
+                        entry_fut_exec = float(exec_prices.fut_sell)
+                        entry_spread_value = spread_pct_entry_exec
+                    wait_mins = max((row_ts - submit_ts).total_seconds() / 60.0, 0.0)
+                    current_cycle += 1
+                    open_position = {
+                        "cycle_id": current_cycle,
+                        "direction": direction,
+                        "entry_signal_day": pending_entry["signal_day"],
+                        "entry_signal_ts": pending_entry["signal_ts"],
+                        "entry_submit_ts": submit_ts,
+                        "entry_fill_ts": row_ts,
+                        "entry_wait_minutes": wait_mins,
+                        "entry_spot_exec": entry_spot_exec,
+                        "entry_fut_exec": entry_fut_exec,
+                        "entry_spread_pct_exec": entry_spread_value,
+                        "entry_stock_fee": float(stock_fee),
+                        "entry_fut_fee": float(fut_fee),
+                        "r_fund_entry": float(pending_entry["r_fund_entry"]),
+                        "annual_target_threshold": (
+                            annual_target_override
+                            if annual_target_override is not None
+                            else float(pending_entry["r_cb_entry"])
+                        ),
+                    }
+                    entry_flags[idx] = True
+                    trade_cycles[idx] = current_cycle
+                    entry_spread_pcts[idx] = entry_spread_value
+                    for target_idx in {signal_idx, idx}:
+                        entry_signal_days[target_idx] = str(pending_entry["signal_day"])
+                        entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
+                        entry_fill_tss[target_idx] = _iso_or_none(row_ts)
+                        entry_wait_minutes[target_idx] = wait_mins
+                        entry_fill_statuses[target_idx] = "filled"
+                    pending_entry = None
+
+        if pending_exit is not None and open_position is not None:
+            signal_idx = int(pending_exit["signal_index"])
+            submit_ts = pending_exit["submit_ts"]
+            deadline_ts = pending_exit["deadline_ts"]
+            if isinstance(submit_ts, datetime) and isinstance(deadline_ts, datetime) and row_ts >= submit_ts:
+                timed_out = row_ts > deadline_ts
+                band_ok = _execution_band_ok(
+                    target_spot=float(pending_exit["target_spot"]),
+                    target_future=float(pending_exit["target_future"]),
+                    target_spread=float(pending_exit["target_spread"]),
+                    spot_now=spot_mid,
+                    future_now=future_mid,
+                    spread_now=spread_mid_value,
+                    tolerance=entry_tolerance,
+                )
+                if band_ok or timed_out:
+                    forced = timed_out
+                    penalty = (
+                        force_exit_penalty_bps / 10000.0
+                        if forced and force_exit_policy == "market_worse"
+                        else 0.0
+                    )
+                    direction = str(open_position.get("direction", "cash_and_carry"))
+                    if direction == "reverse":
+                        exit_spot_exec = float(exec_prices.stock_buy) * (1.0 + penalty)
+                        exit_fut_exec = float(exec_prices.fut_sell) * (1.0 - penalty)
+                        exit_spread_value = spread_pct_entry_exec
+                    else:
+                        exit_spot_exec = float(exec_prices.stock_sell) * (1.0 - penalty)
+                        exit_fut_exec = float(exec_prices.fut_buy) * (1.0 + penalty)
+                        exit_spread_value = spread_pct_exit_exec
+
+                    entry_fill_ts = open_position["entry_fill_ts"]
+                    entry_signal_day = open_position["entry_signal_day"]
+                    if isinstance(entry_fill_ts, datetime) and isinstance(entry_signal_day, date):
+                        entry_date = entry_fill_ts.date()
+                        hold_tau = year_fraction(entry_date, row_date, alpha_cfg.day_count)
+                        hold_days_value = (row_date - entry_date).days
+                        funding_cost = (
+                            abs(float(open_position["entry_spot_exec"]))
+                            * float(open_position["r_fund_entry"])
+                            * hold_tau
+                        )
+                        dividend_cash = sum(
+                            event.amount
+                            for event in dividends
+                            if entry_date < event.ex_date <= row_date
+                        )
+                        if direction == "reverse":
+                            dividend_cash = -dividend_cash
+                            stock_leg = float(open_position["entry_spot_exec"]) - exit_spot_exec
+                            fut_leg = exit_fut_exec - float(open_position["entry_fut_exec"])
+                        else:
+                            stock_leg = exit_spot_exec - float(open_position["entry_spot_exec"])
+                            fut_leg = float(open_position["entry_fut_exec"]) - exit_fut_exec
+
+                        fees_total = (
+                            float(open_position["entry_stock_fee"])
+                            + float(open_position["entry_fut_fee"])
+                            + float(stock_fee)
+                            + float(fut_fee)
+                        )
+                        trade_pnl = stock_leg + fut_leg + dividend_cash - funding_cost - fees_total
+                        base_spot = abs(float(open_position["entry_spot_exec"]))
+                        trade_return_net = trade_pnl / base_spot if base_spot > 0 else None
+                        trade_return_spread = spread_pnl_pct(
+                            entry_spread_pct_exec=float(open_position["entry_spread_pct_exec"]),
+                            exit_spread_pct_exec=exit_spread_value,
+                            direction=direction,
+                        )
+                        trade_return_ann_fill = (
+                            trade_return_net / hold_tau
+                            if hold_tau > 0 and trade_return_net is not None
+                            else None
+                        )
+                        entry_signal_ts = open_position.get("entry_signal_ts")
+                        if isinstance(entry_signal_ts, datetime):
+                            operational_start = entry_signal_ts
+                        else:
+                            operational_start = datetime.combine(entry_signal_day, datetime.min.time())
+                        operational_seconds = max((row_ts - operational_start).total_seconds(), 0.0)
+                        operational_tau = (
+                            operational_seconds / (year_basis * 24.0 * 60.0 * 60.0)
+                            if operational_seconds > 0
+                            else 0.0
+                        )
+                        trade_return_ann_oper = (
+                            trade_return_net / operational_tau
+                            if operational_tau > 0 and trade_return_net is not None
+                            else None
+                        )
+                        annual_threshold = (
+                            float(open_position["annual_target_threshold"])
+                            if open_position.get("annual_target_threshold") is not None
+                            else None
+                        )
+                        annual_pass = (
+                            trade_return_ann_oper >= annual_threshold
+                            if trade_return_ann_oper is not None and annual_threshold is not None
+                            else None
+                        )
+                        wait_mins = max((row_ts - submit_ts).total_seconds() / 60.0, 0.0)
+
+                        exit_flags[idx] = True
+                        trade_cycles[idx] = int(open_position["cycle_id"])
+                        exit_spread_pcts[idx] = exit_spread_value
+                        trade_returns[idx] = trade_return_spread
+                        trade_pnls[idx] = trade_pnl
+                        trade_return_pct_net[idx] = trade_return_net
+                        trade_return_annual[idx] = trade_return_ann_fill
+                        trade_return_annual_fill_to_fill[idx] = trade_return_ann_fill
+                        trade_return_annual_operational[idx] = trade_return_ann_oper
+                        annual_target_thresholds[idx] = annual_threshold
+                        annual_target_passes[idx] = annual_pass
+                        trade_hold_days[idx] = hold_days_value
+                        entry_signal_days[idx] = str(entry_signal_day)
+                        entry_submit_tss[idx] = _iso_or_none(open_position["entry_submit_ts"])
+                        entry_fill_tss[idx] = _iso_or_none(entry_fill_ts)
+                        entry_wait_minutes[idx] = float(open_position["entry_wait_minutes"])
+                        entry_fill_statuses[idx] = "filled"
+
+                        for target_idx in {signal_idx, idx}:
+                            exit_signal_days[target_idx] = str(pending_exit["signal_day"])
+                            exit_submit_tss[target_idx] = _iso_or_none(submit_ts)
+                            exit_fill_tss[target_idx] = _iso_or_none(row_ts)
+                            exit_wait_minutes[target_idx] = wait_mins
+                            exit_fill_statuses[target_idx] = "forced" if forced else "filled"
+                            exit_forced_flags[target_idx] = forced
+                        if forced:
+                            unfilled_reasons[signal_idx] = "exit_timeout_forced"
+                            unfilled_reasons[idx] = "exit_timeout_forced"
+
+                    pending_exit = None
+                    open_position = None
+
+        if pending_entry is not None:
+            signal_actions[idx] = "hold"
+        elif open_position is None and pending_exit is None:
+            can_enter = (
+                floor_metrics.floor_pass
+                and liquidity_pass
+                and entry_filter_ok
+                and dte >= alpha_cfg.min_DTE_entry
             )
-            trade_pnl = None
-            trade_return_net = None
-            trade_return_ann = None
-            hold_days_value = None
-            if (
-                current_entry_spot_exec is not None
-                and current_entry_fut_exec is not None
-                and current_entry_date is not None
-            ):
-                dividend_cash = sum(
-                    event.amount
-                    for event in dividends
-                    if current_entry_date < event.ex_date <= row_date
-                )
-                hold_tau = year_fraction(current_entry_date, row_date, alpha_cfg.day_count)
-                funding_cost = current_entry_spot_exec * r_fund * hold_tau
-                exit_stock_fee = stock_fee
-                exit_fut_fee = fut_fee
-                entry_stock_fee = current_entry_stock_fee or 0.0
-                entry_fut_fee = current_entry_fut_fee or 0.0
-                fees_total = entry_stock_fee + entry_fut_fee + exit_stock_fee + exit_fut_fee
-                trade_pnl = (
-                    (exec_prices.stock_sell - current_entry_spot_exec)
-                    - (exec_prices.fut_buy - current_entry_fut_exec)
-                    + dividend_cash
-                    - funding_cost
-                    - fees_total
-                )
-                trade_return_net = trade_pnl / current_entry_spot_exec if current_entry_spot_exec else None
-                trade_return_ann = (
-                    trade_return_net / hold_tau if hold_tau > 0 and trade_return_net is not None else None
-                )
-                hold_days_value = (row_date - current_entry_date).days
-            trade_pnls.append(trade_pnl)
-            trade_return_pct_net.append(trade_return_net)
-            trade_return_annual.append(trade_return_ann)
-            trade_hold_days.append(hold_days_value)
-            current_entry_spread_pct = None
-            current_entry_spot_exec = None
-            current_entry_fut_exec = None
-            current_entry_date = None
-            current_entry_stock_fee = None
-            current_entry_fut_fee = None
+            if can_enter:
+                signal_actions[idx] = "enter"
+                signal_directions[idx] = "cash_and_carry"
+                entry_signal_days[idx] = row_date.isoformat()
+                submit_ts = _submit_timestamp(idx, row_ts)
+                if submit_ts is not None:
+                    pending_entry = {
+                        "signal_index": idx,
+                        "signal_day": row_date,
+                        "signal_ts": row_ts,
+                        "submit_ts": submit_ts,
+                        "deadline_ts": submit_ts + timedelta(minutes=max_wait_minutes),
+                        "direction": "cash_and_carry",
+                        "target_spot": spot_mid,
+                        "target_future": future_mid,
+                        "target_spread": spread_mid_value,
+                        "r_fund_entry": r_fund,
+                        "r_cb_entry": r_cb,
+                    }
+                    entry_submit_tss[idx] = _iso_or_none(submit_ts)
+                    entry_fill_statuses[idx] = "pending"
+                else:
+                    entry_fill_statuses[idx] = "entry_unfilled"
+                    unfilled_reasons[idx] = "entry_no_submit_day"
+            else:
+                signal_actions[idx] = "hold"
+        elif open_position is not None and pending_exit is None:
+            direction = str(open_position.get("direction", "cash_and_carry"))
+            hold_days_value = max((row_date - open_position["entry_fill_ts"].date()).days, 0)
+            current_exit_spread = (
+                spread_pct_entry_exec if direction == "reverse" else spread_pct_exit_exec
+            )
+            pnl_spread = spread_pnl_pct(
+                entry_spread_pct_exec=float(open_position["entry_spread_pct_exec"]),
+                exit_spread_pct_exec=current_exit_spread,
+                direction=direction,
+            )
+            exit_reason = None
+            if pnl_spread >= tp_net:
+                exit_reason = "tp"
+            elif pnl_spread <= -sl_net:
+                exit_reason = "sl"
+            elif alpha_cfg.H_max_days > 0 and hold_days_value >= alpha_cfg.H_max_days:
+                exit_reason = "time"
+            elif dte <= alpha_cfg.close_buffer_days:
+                exit_reason = "expiry"
+
+            if exit_reason is not None:
+                signal_actions[idx] = "exit"
+                exit_signal_days[idx] = row_date.isoformat()
+                submit_ts = _submit_timestamp(idx, row_ts)
+                if submit_ts is not None:
+                    pending_exit = {
+                        "signal_index": idx,
+                        "signal_day": row_date,
+                        "signal_ts": row_ts,
+                        "submit_ts": submit_ts,
+                        "deadline_ts": submit_ts + timedelta(minutes=max_wait_minutes),
+                        "target_spot": spot_mid,
+                        "target_future": future_mid,
+                        "target_spread": spread_mid_value,
+                        "reason": exit_reason,
+                    }
+                    exit_submit_tss[idx] = _iso_or_none(submit_ts)
+                    exit_fill_statuses[idx] = "pending"
+                else:
+                    exit_fill_statuses[idx] = "exit_unfilled"
+                    unfilled_reasons[idx] = "exit_no_submit_day"
+            else:
+                signal_actions[idx] = "hold"
         else:
-            entry_spread_pcts.append(None)
-            exit_spread_pcts.append(None)
-            trade_cycles.append(None)
-            trade_returns.append(None)
-            trade_pnls.append(None)
-            trade_return_pct_net.append(None)
-            trade_return_annual.append(None)
-            trade_hold_days.append(None)
-        rtc_pcts.append(rtc_pct)
-        tp_nets.append(tp_net)
-        sl_nets.append(sl_net)
-        floor_rates.append(floor_metrics.floor_rate_annual)
-        floor_passes.append(floor_metrics.floor_pass)
-        liquidity_passes.append(liquidity_pass)
-        zscores.append(z)
+            signal_actions[idx] = "hold"
+
+    if pending_entry is not None:
+        signal_idx = int(pending_entry["signal_index"])
+        if entry_fill_statuses[signal_idx] in {None, "pending"}:
+            entry_fill_statuses[signal_idx] = "entry_unfilled"
+            unfilled_reasons[signal_idx] = unfilled_reasons[signal_idx] or "entry_no_fill_in_window"
+
+    if pending_exit is not None:
+        signal_idx = int(pending_exit["signal_index"])
+        if exit_fill_statuses[signal_idx] in {None, "pending"}:
+            exit_fill_statuses[signal_idx] = "exit_unfilled"
+            unfilled_reasons[signal_idx] = unfilled_reasons[signal_idx] or "exit_no_fill_in_window"
 
     series_df["signal_action"] = signal_actions
     series_df["signal_direction"] = signal_directions
@@ -706,6 +1333,10 @@ def _apply_spread_carry_signals(
     series_df["trade_pnl_cash"] = trade_pnls
     series_df["trade_return_pct_net"] = trade_return_pct_net
     series_df["trade_return_annual"] = trade_return_annual
+    series_df["trade_return_annual_fill_to_fill"] = trade_return_annual_fill_to_fill
+    series_df["trade_return_annual_operational"] = trade_return_annual_operational
+    series_df["annual_target_threshold"] = annual_target_thresholds
+    series_df["annual_target_pass"] = annual_target_passes
     series_df["trade_hold_days"] = trade_hold_days
     series_df["rtc_pct"] = rtc_pcts
     series_df["tp_net"] = tp_nets
@@ -714,15 +1345,48 @@ def _apply_spread_carry_signals(
     series_df["floor_pass"] = floor_passes
     series_df["liquidity_pass"] = liquidity_passes
     series_df["zscore"] = zscores
+    series_df["entry_signal_day"] = entry_signal_days
+    series_df["entry_submit_ts"] = entry_submit_tss
+    series_df["entry_fill_ts"] = entry_fill_tss
+    series_df["entry_wait_minutes"] = entry_wait_minutes
+    series_df["exit_signal_day"] = exit_signal_days
+    series_df["exit_submit_ts"] = exit_submit_tss
+    series_df["exit_fill_ts"] = exit_fill_tss
+    series_df["exit_wait_minutes"] = exit_wait_minutes
+    series_df["entry_fill_status"] = entry_fill_statuses
+    series_df["exit_fill_status"] = exit_fill_statuses
+    series_df["exit_forced"] = exit_forced_flags
+    series_df["unfilled_reason"] = unfilled_reasons
     return series_df
-
 
 def _avg_recent_trade_return_annual(series_df: pd.DataFrame) -> float | None:
     if series_df.empty or "trade_return_annual" not in series_df.columns:
         return None
+    exit_mask = (
+        series_df["exit_flag"].fillna(False).astype(bool)
+        if "exit_flag" in series_df.columns
+        else pd.Series(False, index=series_df.index)
+    )
     exits = series_df.loc[
-        series_df.get("exit_flag", False) & series_df["trade_return_annual"].notna(),
+        exit_mask & series_df["trade_return_annual"].notna(),
         "trade_return_annual",
+    ]
+    if exits.empty:
+        return None
+    return float(exits.tail(RECENT_TRADES_WINDOW).mean())
+
+
+def _avg_recent_trade_return_annual_operational(series_df: pd.DataFrame) -> float | None:
+    if series_df.empty or "trade_return_annual_operational" not in series_df.columns:
+        return None
+    exit_mask = (
+        series_df["exit_flag"].fillna(False).astype(bool)
+        if "exit_flag" in series_df.columns
+        else pd.Series(False, index=series_df.index)
+    )
+    exits = series_df.loc[
+        exit_mask & series_df["trade_return_annual_operational"].notna(),
+        "trade_return_annual_operational",
     ]
     if exits.empty:
         return None
@@ -738,6 +1402,7 @@ def build_spread_series(
 ) -> pd.DataFrame:
     paths = resolve_paths(settings)
     dirs = _data_paths(paths.data_dir)
+    alpha_cfg = settings.spread_carry_alpha
     futures_path = dirs["raw"] / "futures.csv"
     if not futures_path.exists():
         return pd.DataFrame()
@@ -761,47 +1426,25 @@ def build_spread_series(
         retry_backoff_sec=settings.moex.request_retry_backoff_sec,
         retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
         fallback_ips=settings.moex.fallback_ips,
+        force_fallback=settings.moex.force_fallback,
     )
-
-    stock_candles = _fetch_candles(
+    merged = _fetch_pair_price_history(
         client,
-        settings.moex.engine_shares,
-        settings.moex.market_shares,
-        settings.moex.shares_board,
-        stock_secid,
-        lookback,
-        today,
+        settings=settings,
+        stock_secid=stock_secid,
+        future_secid=future_secid,
+        from_date=lookback,
+        till_date=today,
+        future_scale=future_scale,
+        alpha_cfg=alpha_cfg,
     )
-    future_candles = _fetch_candles(
-        client,
-        settings.moex.engine_futures,
-        settings.moex.market_futures,
-        settings.moex.futures_board,
-        future_secid,
-        lookback,
-        today,
-        price_scale=future_scale,
-    )
-    if stock_candles.empty or future_candles.empty:
-        return pd.DataFrame()
-    merged = pd.merge(stock_candles, future_candles, on="date", how="inner")
     if merged.empty:
         return pd.DataFrame()
-    merged.rename(
-        columns={
-            stock_secid: "spot",
-            future_secid: "future_price",
-            f"{stock_secid}_volume": "spot_volume",
-            f"{future_secid}_volume": "future_volume",
-        },
-        inplace=True,
-    )
 
     dividends = _load_dividends(client, stock_secid, paths.data_dir)
     key_rates = _load_key_rates(dirs["raw"] / "key_rates.csv")
-    alpha_cfg = settings.spread_carry_alpha
     series_df = compute_spread_series(
-        merged[["date", "spot", "future_price"]],
+        merged[["date", "spot", "future"]].rename(columns={"future": "future_price"}),
         future_spec.expiry,
         dividends,
         key_rates,
@@ -848,6 +1491,7 @@ def compute_pairs(
         retry_backoff_sec=settings.moex.request_retry_backoff_sec,
         retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
         fallback_ips=settings.moex.fallback_ips,
+        force_fallback=settings.moex.force_fallback,
     )
 
     requested_as_of = as_of
@@ -869,43 +1513,22 @@ def compute_pairs(
             continue
         if allowed_years and expiry.year not in allowed_years:
             continue
-        stock_candles = _fetch_candles(
-            client,
-            settings.moex.engine_shares,
-            settings.moex.market_shares,
-            settings.moex.shares_board,
-            mapping.stock_secid,
-            lookback,
-            as_of_date,
-        )
         future_spec = future_spec_map.get(mapping.future_secid)
         if future_spec is None:
             continue
         future_scale = _future_price_scale(future_spec)
-        future_candles = _fetch_candles(
+        merged = _fetch_pair_price_history(
             client,
-            settings.moex.engine_futures,
-            settings.moex.market_futures,
-            settings.moex.futures_board,
-            mapping.future_secid,
-            lookback,
-            as_of_date,
-            price_scale=future_scale,
+            settings=settings,
+            stock_secid=mapping.stock_secid,
+            future_secid=mapping.future_secid,
+            from_date=lookback,
+            till_date=as_of_date,
+            future_scale=future_scale,
+            alpha_cfg=alpha_cfg,
         )
-        if stock_candles.empty or future_candles.empty:
-            continue
-        merged = pd.merge(stock_candles, future_candles, on="date", how="inner")
         if merged.empty:
             continue
-        merged.rename(
-            columns={
-                mapping.stock_secid: "spot",
-                mapping.future_secid: "future",
-                f"{mapping.stock_secid}_volume": "spot_volume",
-                f"{mapping.future_secid}_volume": "future_volume",
-            },
-            inplace=True,
-        )
         latest = merged.iloc[-1]
         if requested_as_of is not None and latest["date"] != as_of_date:
             continue
@@ -1011,6 +1634,10 @@ def compute_pairs(
             alpha_cfg=alpha_cfg,
         )
         avg_trade_return_annual = _avg_recent_trade_return_annual(series_with_signals)
+        avg_trade_return_annual_operational = _avg_recent_trade_return_annual_operational(
+            series_with_signals
+        )
+        execution_stats = _execution_quality_stats(series_with_signals)
 
         dte = days_to_expiry(as_of_snapshot, expiry, alpha_cfg.use_trading_days)
         tau = year_fraction(as_of_snapshot, expiry, alpha_cfg.day_count)
@@ -1183,6 +1810,12 @@ def compute_pairs(
             "orderbook_stock_depth_available": orderbook_metrics["orderbook_stock_depth_available"],
             "orderbook_fut_depth_available": orderbook_metrics["orderbook_fut_depth_available"],
             "orderbook_data_warnings": orderbook_metrics["orderbook_data_warnings"],
+            "avg_trade_return_annual_recent": avg_trade_return_annual,
+            "avg_trade_return_annual_operational_recent": avg_trade_return_annual_operational,
+            "share_target_pass": execution_stats["share_target_pass"],
+            "unfilled_entry_rate": execution_stats["unfilled_entry_rate"],
+            "unfilled_exit_rate": execution_stats["unfilled_exit_rate"],
+            "forced_exit_rate": execution_stats["forced_exit_rate"],
             **trade_plan_metrics,
         }
         stock_name = (
@@ -1239,6 +1872,11 @@ def compute_pairs(
                 "r_fund_annual": r_fund,
                 "r_disc_annual": r_disc,
                 "avg_trade_return_annual_recent": avg_trade_return_annual,
+                "avg_trade_return_annual_operational_recent": avg_trade_return_annual_operational,
+                "share_target_pass": execution_stats["share_target_pass"],
+                "unfilled_entry_rate": execution_stats["unfilled_entry_rate"],
+                "unfilled_exit_rate": execution_stats["unfilled_exit_rate"],
+                "forced_exit_rate": execution_stats["forced_exit_rate"],
                 "signal_action": signal_action,
                 "signal_direction": signal_direction,
                 "signal_score": total_score,
@@ -1255,7 +1893,14 @@ def compute_pairs(
     if not results:
         return pd.DataFrame() if return_df else None
     metrics_df = pd.DataFrame(results)
-    ranked = score_pairs_alpha(metrics_df)
+    ranked = score_pairs_alpha(
+        metrics_df,
+        primary_metric=getattr(
+            settings.spread_carry_alpha,
+            "ranking_primary_metric",
+            "avg_trade_return_annual_operational_recent",
+        ),
+    )
     if save_csv:
         top_pairs = ranked.drop(columns=["signal_reasons", "signal_metrics"], errors="ignore")
         top_pairs.to_csv(dirs["output"] / "top_pairs.csv", index=False)
@@ -1277,6 +1922,12 @@ def compute_pairs(
                 "forecast_exit_date",
                 "tp_net",
                 "sl_net",
+                "avg_trade_return_annual_recent",
+                "avg_trade_return_annual_operational_recent",
+                "share_target_pass",
+                "unfilled_entry_rate",
+                "unfilled_exit_rate",
+                "forced_exit_rate",
                 "signal_reasons",
                 "signal_metrics",
             ]
@@ -1311,33 +1962,24 @@ def run_backtest(settings: AppSettings) -> BacktestResult | None:
         retry_backoff_sec=settings.moex.request_retry_backoff_sec,
         retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
         fallback_ips=settings.moex.fallback_ips,
+        force_fallback=settings.moex.force_fallback,
     )
     today = date.today()
     lookback_days = max(settings.data.backtest_lookback_days, 1)
     lookback = today - timedelta(days=lookback_days)
-    stock_candles = _fetch_candles(
+    alpha_cfg = settings.spread_carry_alpha
+    merged = _fetch_pair_price_history(
         client,
-        settings.moex.engine_shares,
-        settings.moex.market_shares,
-        settings.moex.shares_board,
-        stock_secid,
-        lookback,
-        today,
+        settings=settings,
+        stock_secid=stock_secid,
+        future_secid=future_secid,
+        from_date=lookback,
+        till_date=today,
+        future_scale=future_scale,
+        alpha_cfg=alpha_cfg,
     )
-    future_candles = _fetch_candles(
-        client,
-        settings.moex.engine_futures,
-        settings.moex.market_futures,
-        settings.moex.futures_board,
-        future_secid,
-        lookback,
-        today,
-        price_scale=future_scale,
-    )
-    if stock_candles.empty or future_candles.empty:
+    if merged.empty:
         return None
-    merged = pd.merge(stock_candles, future_candles, on="date", how="inner")
-    merged.rename(columns={stock_secid: "spot", future_secid: "future"}, inplace=True)
 
     dividends = _load_dividends(client, stock_secid, paths.data_dir)
     key_rates = _load_key_rates(dirs["raw"] / "key_rates.csv")
@@ -1351,7 +1993,6 @@ def run_backtest(settings: AppSettings) -> BacktestResult | None:
         profit_tax_rate=settings.taxes.profit_tax_rate,
         dividend_tax_rate=settings.taxes.dividend_tax_rate,
     )
-    alpha_cfg = settings.spread_carry_alpha
     multiplier = future_spec.multiplier if future_spec else 1.0
     tick_size = future_spec.price_step if future_spec else None
     result = backtest_pair(
