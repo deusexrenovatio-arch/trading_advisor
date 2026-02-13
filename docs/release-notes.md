@@ -26,6 +26,11 @@ Changed
     v2 `active -> /api/v2/signals/{signal_id}/actions` with `ok|duplicate|blocked` outcomes.
   - `scripts/acceptance_check.py` now supports `signal_action` and parameterized source/url templates
     for `spread_series`, `backtest_run`, and `history_date_range`.
+  - Runner now normalizes YAML `date/datetime` payload values to ISO strings before POST.
+  - Runtime-prerequisite scenarios use explicit skip rules:
+    `backtest-run` skips on empty pair source,
+    `forward-start`/`hpo` skip on `400 Missing raw data`,
+    `forward-status`/`hpo-status` skip on `400 no_active_run`.
 - Acceptance documentation updated:
   - `docs/test-cases.md` aligned with v2 URLs and new case `TC-SIG-ACT-API-003`.
 - v2 action response for decisions now includes explicit refs used by UI:

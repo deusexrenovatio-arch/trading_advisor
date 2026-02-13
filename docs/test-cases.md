@@ -599,6 +599,7 @@ Request:
 - POST /api/backtest/run
 Expected:
 - JSON response includes summary_metrics, equity_curve, trades.
+- Acceptance smoke skips this case when pair source is unavailable (`/api/v2/top-pairs` is empty).
 
 ### TC-BACK-V2-API-002 Backtest v2 validation error
 Acceptance: backtest-run
@@ -623,6 +624,7 @@ Request:
 - POST /api/forward/start
 Expected:
 - Response includes run_id and state payload.
+- Acceptance smoke may skip with `400 Missing raw data` when `data/raw/shares.csv` and `data/raw/futures.csv` are absent in the runtime dataset.
 
 ### TC-FWD-API-002 Forward status
 Acceptance: forward-status
@@ -631,6 +633,7 @@ Request:
 - GET /api/forward/status
 Expected:
 - Response includes run_id and last known state.
+- Acceptance smoke may skip with `400 no_active_run` if forward run has not been started in the current runtime dataset.
 
 ### TC-HPO-API-001 HPO run (async start)
 Acceptance: hpo
@@ -640,6 +643,7 @@ Request:
 Expected:
 - Response includes run_id and status=running.
 - When `optimization.metric` and `optimization.mode` are provided, objective direction matches the mode.
+- Acceptance smoke may skip with `400 Missing raw data` when required raw datasets are absent.
 
 ### TC-HPO-API-002 HPO status
 Acceptance: hpo-status
@@ -648,6 +652,7 @@ Request:
 - GET /api/hpo/status
 Expected:
 - 200 OK after an HPO run is started.
+- Acceptance smoke may skip with `400 no_active_run` if no HPO run exists in the runtime dataset.
 
 
 ### TC-FE-PROXY-001 Vite proxy API
