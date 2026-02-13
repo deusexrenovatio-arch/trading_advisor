@@ -20,6 +20,7 @@ import {
   refreshSignals as refreshSignalsApi,
   submitSignalActionV2 as submitSignalActionV2Api,
 } from '../../shared/api/decisionApi'
+import { ApiError } from '../../shared/api/http'
 import { formatDateInputValue, parseDateInput } from '../../shared/utils/date'
 import { getTableColumns } from '../../shared/utils/tables'
 import {
@@ -69,6 +70,32 @@ type Params = {
   tab: AppTab
   compareValues: (left: unknown, right: unknown) => number
   onOperatorAction?: () => void
+}
+
+const formatExecutionActionError = (err: unknown) => {
+  if (err instanceof ApiError) {
+    const payload = err.payload
+    if (payload) {
+      const reasonCode = String(payload.reason_code ?? '').trim()
+      const reasonText = String(payload.message ?? err.message ?? '').trim()
+      const failClosedRaw = payload.fail_closed
+      const failClosed =
+        failClosedRaw && typeof failClosedRaw === 'object' && !Array.isArray(failClosedRaw)
+          ? (failClosedRaw as Record<string, unknown>)
+          : null
+      const failClosedCode = failClosed ? String(failClosed.reason_code ?? '').trim() : ''
+      const detailParts = [reasonCode, failClosedCode].filter(Boolean)
+      if (reasonText) {
+        return detailParts.length ? `${reasonText} (${detailParts.join(', ')})` : reasonText
+      }
+      if (detailParts.length) {
+        return detailParts.join(', ')
+      }
+    }
+    return err.message || `HTTP ${err.status}`
+  }
+  if (err instanceof Error) return err.message
+  return 'Не удалось выполнить действие по сигналу'
 }
 
 export const useMarketTables = ({ tab, compareValues, onOperatorAction }: Params) => {
@@ -344,6 +371,9 @@ export const useMarketTables = ({ tab, compareValues, onOperatorAction }: Params
       const pairKey = stock && future ? `${stock}-${future}` : null
       const actionKey = normalizeExecutionAction(row.signal_action)
       const pendingKey = pairKey ? `${pairKey}:${actionKey}` : null
+      if (pairKey) {
+        setExecutionError((prev) => ({ ...prev, [pairKey]: '' }))
+      }
       const normalizedLeg = normalizeExecutionLeg(executionForm.side)
       const isTwoLegCandidate =
         Boolean(stock) &&
@@ -378,7 +408,17 @@ export const useMarketTables = ({ tab, compareValues, onOperatorAction }: Params
         order_id: orderId,
         note: executionForm.note || null,
       }
-      await submitSignalActionV2Api(signalId, payload)
+      try {
+        await submitSignalActionV2Api(signalId, payload)
+      } catch (err) {
+        if (pairKey) {
+          setExecutionError((prev) => ({
+            ...prev,
+            [pairKey]: formatExecutionActionError(err),
+          }))
+        }
+        return
+      }
       if (pendingKey && normalizedLeg && pendingOrderAfterExecute) {
         const isLinkedTwoLegOrder =
           pendingOrderAfterExecute.legs.has(EXECUTION_LEG_STOCK) &&
