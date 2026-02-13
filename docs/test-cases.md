@@ -21,7 +21,8 @@
 - signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
 - signals-history-reasons -> TC-SIG-HIST-API-004
-- signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002
+- signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-API-002, TC-SIG-EXEC-API-003, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002
+- auto-unwind-policy-v2 -> TC-SIG-POLICY-API-001
 - pretrade-check -> TC-PRETRADE-API-001, TC-PRETRADE-API-002, TC-PRETRADE-UI-001
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
 - backtests -> TC-BACK-API-001, TC-BACK-UI-001
@@ -33,12 +34,21 @@
 - frontend-proxy -> TC-FE-PROXY-001
 - hpo -> TC-HPO-API-001, TC-HPO-UNIT-001
 - hpo-status -> TC-HPO-API-002
+- ui-domain-boundary -> TC-UI-DOMAIN-001
+- workspace-routing -> TC-UI-ROUTE-001
+- workspace-kpi -> TC-UI-KPI-001
+- signals-workspace-flow -> TC-SIG-UI-WORKFLOW-001
+- news-feed-v2 -> TC-NEWS-API-001, TC-NEWS-UI-001
+- portfolio-rebalance-v2 -> TC-PORT-API-001, TC-PORT-UI-001
+- ops-health-v2 -> TC-OPS-API-001
+- ops-slo-v2 -> TC-OPS-API-002
 
 ## User Scenario Coverage (US -> acceptance/test cases)
 - US-01 Configure the strategy -> params-specs (TC-PARAMS-API-001) + unit tests: tests/test_config_resolver.py, tests/test_parameter_specs.py.
 - US-02 Daily scan of pairs -> top-pairs, signals-active, signals-history, frontend, frontend-proxy (TC-TOP-*, TC-SIG-ACT-*, TC-SIG-HIST-*, TC-FE-*).
 - US-03 Drill into a pair -> spread-series + top-pairs details (TC-SPREAD-API-001, TC-SPREAD-UI-001, TC-TOP-UI-002).
-- US-04 Enter a position -> signals-execute + pretrade-check + decision-action (TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002, TC-PRETRADE-API-001, TC-PRETRADE-UI-001, TC-DEC-API-004, TC-DEC-UI-002).
+- US-04 Enter a position -> signals-execute + pretrade-check + decision-action (TC-SIG-EXEC-API-001, TC-SIG-EXEC-API-002, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002, TC-PRETRADE-API-001, TC-PRETRADE-UI-001, TC-DEC-API-004, TC-DEC-UI-002).
+- US-04 Enter a position -> fail-closed guard on degraded/pretrade-unknown entry (tests/test_api_v2.py).
 - US-05 Early exit (alpha) -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
 - US-06 Hold to expiry or roll -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
 - US-07 Backtest review -> backtests (TC-BACK-API-001, TC-BACK-UI-001).
@@ -48,6 +58,62 @@
 - US-11 Review decisions with server filters -> decision-view, decision-view-filters (TC-DEC-API-001, TC-DEC-API-005, TC-DEC-UI-001).
 
 ## UI Test Cases
+
+### TC-UI-DOMAIN-001 Frontend must not compute business signal statuses
+Acceptance: ui-domain-boundary
+Automation: ui-web/scripts/ui-domain-boundary-gate.mjs
+Steps:
+1. Run `npm --prefix ui-web run lint:ui-domain-boundary`.
+Expected:
+- Check fails if UI computes `signal_action_effective` from pretrade/lifecycle logic.
+- Check passes only when `signal_action_effective` is consumed from backend payload.
+
+### TC-UI-ROUTE-001 Workspace routes keep tab context
+Acceptance: workspace-routing
+Automation: manual
+Steps:
+1. Open `/trade-console/signals`, `/decision-audit`, `/research-system/backtest-v2`.
+2. Switch workspace tabs and verify URL changes.
+3. Refresh page on each URL.
+Expected:
+- Workspace and tab state restore from URL.
+- Invalid routes normalize to `/trade-console/signals`.
+
+### TC-UI-KPI-001 Workspace KPI counters are visible and updated
+Acceptance: workspace-kpi
+Automation: manual
+Steps:
+1. Open `/trade-console/signals`.
+2. Switch between `Trade Console`, `Research Lab`, `News Intelligence`.
+3. Trigger one operator action (`approve/reject` decision or `execute` signal).
+Expected:
+- KPI panel shows `tab_switch_count`, `time_to_first_action_sec`, `blocked_action_rate`.
+- `tab_switch_count` increases after route/workspace changes.
+- `time_to_first_action_sec` changes from `n/a` to a numeric value after first action.
+
+### TC-NEWS-UI-001 News workspace route and feed filters
+Acceptance: news-feed-v2
+Automation: ui-web/tests/workspace-news-portfolio.spec.ts
+Steps:
+1. Open `/news-intelligence` from workspace tabs.
+2. Apply `Ticker` and `Severity` filters.
+3. Reload feed.
+Expected:
+- URL is stable (`/news-intelligence`) after refresh.
+- Feed rows respect ticker/severity filters.
+- Event row shows severity, headline, ticker link, and decision reference when present.
+
+### TC-PORT-UI-001 Portfolio workspace preview and commit
+Acceptance: portfolio-rebalance-v2
+Automation: ui-web/tests/workspace-news-portfolio.spec.ts
+Steps:
+1. Open `/portfolio-control` from workspace tabs.
+2. Load rebalance preview and inspect positions table.
+3. Commit rebalance plan.
+Expected:
+- Preview table shows `entity_ref`, target weight, lifecycle, signal action, score.
+- Commit request is sent with `rebalance_plan_id` and positions list.
+- UI shows success status with commit id and number of committed positions.
 
 ### TC-DEC-UI-001 Decisions filters, refresh, detail
 Acceptance: decision-view
@@ -148,6 +214,19 @@ Expected:
   - `entry_future_min_per_share` / `entry_future_max_per_share`,
   - `tp_spread_pct_level` / `sl_spread_pct_level`,
   - `forecast_exit_days`.
+
+### TC-SIG-UI-WORKFLOW-001 Signal workspace flow in single detail context
+Acceptance: signals-workspace-flow
+Automation: manual
+Steps:
+1. Open `/trade-console/signals`.
+2. Expand a signal row with details.
+3. Verify blocks `Итоговый сигнал`, `Pre-trade проверка (ISS)`, `Исполнить сигнал`, `История исполнений`.
+4. Refresh pre-trade and then submit execution action when enabled.
+Expected:
+- Operator sees decision, blockers, and action controls in one detail flow.
+- `PretradePanel` and `ExecutionPanel` render without switching to other screens.
+- Execution history updates in the same expanded row context.
 
 ### TC-SIG-PLAN-UI-001 Signals trading plan layout
 Acceptance: signals-active
@@ -286,8 +365,11 @@ Acceptance: decision-view
 Automation: scripts/acceptance_check.py (decision-view)
 Request:
 - GET /api/decision-view?limit=5
+- GET /api/v2/decisions/view?limit=5
 Expected:
 - JSON list with decision_id, created_at, action, risk_state.
+- For v2 response, rows include backend-owned `decision_ref` and `execution_ref`.
+- Rows include `projection_source` (`jsonl`, `db`, or `jsonl_fallback`) for source traceability.
 
 ### TC-DEC-API-002 Decision view aggregation field
 Acceptance: decision-view-aggregation
@@ -320,6 +402,44 @@ Request:
 - GET /api/params/specs
 Expected:
 - JSON list with key, value_type, default fields.
+
+### TC-NEWS-API-001 News feed v2 contract
+Acceptance: news-feed-v2
+Automation: scripts/acceptance_check.py (api_list)
+Request:
+- GET /api/v2/news/feed?limit=5
+Expected:
+- JSON list response (can be empty).
+- If rows exist, each row contains `news_event_id`, `published_at`, `severity`, `headline`.
+
+### TC-PORT-API-001 Portfolio rebalance preview v2 contract
+Acceptance: portfolio-rebalance-v2
+Automation: scripts/acceptance_check.py (api_object)
+Request:
+- GET /api/v2/portfolio/rebalance/preview?limit=5
+Expected:
+- JSON object with `rebalance_plan_id` and `positions`.
+- `positions` is an array of position proposals with entity references.
+
+### TC-OPS-API-001 Ops health v2 contract
+Acceptance: ops-health-v2
+Automation: tests/test_api_v2.py
+Request:
+- GET /api/v2/ops/health
+Expected:
+- Response includes `status`, `timestamp`, `checks`.
+- `checks.database.status` exists (`ok|error`).
+- HTTP status is `200` for ready and `503` for degraded readiness.
+
+### TC-OPS-API-002 Ops SLO snapshot v2 contract
+Acceptance: ops-slo-v2
+Automation: tests/test_api_v2.py
+Request:
+- GET /api/v2/ops/slo
+Expected:
+- Response includes `generated_at`, `slo_targets`, `api`, `events_15m`, `alerts`.
+- `api` section includes metrics for `v2_signals_actions`, `v2_pretrade_check`, `v2_auto_unwind_run`.
+- Alert flags are deterministic from thresholds.
 
 ### TC-TOP-API-001 Top pairs fields and forbidden keys
 Acceptance: top-pairs
@@ -403,6 +523,34 @@ Request:
 Expected:
 - 200 OK with JSON response containing `status`.
 - For legged execution (`side=stock|future`) response also includes generated or passed `order_id`.
+
+### TC-SIG-EXEC-API-002 Execute signal v1 adapter idempotency
+Acceptance: signals-execute
+Automation: tests/test_signal_api.py
+Request:
+- POST /api/signals/execute (same payload, same `idempotency_key`)
+Expected:
+- First request returns `status=ok`.
+- Repeated request returns `status=duplicate`.
+- Only one execution row is persisted for the same key.
+
+### TC-SIG-EXEC-API-003 Fail-closed entry block in degraded/unconfirmed pretrade
+Acceptance: signals-execute
+Automation: tests/test_api_v2.py
+Request:
+- POST /api/v2/signals/{signal_id}/actions (`action=enter`) with `ui.ff_fail_closed_execution=true`.
+Expected:
+- API returns `409` and `status=blocked` when pretrade is not confirmed or ISS is degraded.
+- No new execution row is persisted on blocked response.
+
+### TC-SIG-POLICY-API-001 Auto-unwind policy run
+Acceptance: auto-unwind-policy-v2
+Automation: tests/test_api_v2.py
+Request:
+- POST /api/v2/policies/auto-unwind/run (`dry_run=true|false`, optional `timeout_sec`).
+Expected:
+- Dry run returns candidates and counters without persistence.
+- Execute mode creates idempotent `exit` actions for stale leg imbalance candidates.
 
 ### TC-PRETRADE-API-001 Pre-trade check endpoint
 Acceptance: pretrade-check

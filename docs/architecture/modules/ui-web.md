@@ -5,8 +5,13 @@ This document covers the React UI in `ui-web/` and the API endpoints it uses.
 
 ## UI components (`ui-web/src`)
 - `App.tsx`
-  - Orchestrates tabs and wires shared hooks/helpers.
+  - Orchestrates workspace navigation and wires shared hooks/helpers.
   - Keeps render logic thin; business logic lives in feature hooks and shared utils.
+  - Workspace IA:
+    - `Trade Console`
+    - `Research Lab`
+    - `News Intelligence`
+    - `Portfolio Control`
 - `features/decisions/*`
   - `DecisionsTab`, `DecisionTable`, `DecisionDetail`, `decisionColumns`, `useDecisionView`.
   - Server-side filters: strategy/instrument/risk/news/created range.
@@ -48,6 +53,10 @@ The UI expects these endpoints (served by the Python backend in
   - Includes spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
 - `GET /api/signals/active`
   - Active signals derived from the latest run.
+- `GET /api/v2/signals/active`
+  - Active signal projection with `signal_id`, `entity_ref`, lifecycle and gates.
+- `POST /api/v2/signals/{signal_id}/actions`
+  - Unified action entrypoint for `ack|enter|exit|hold`.
 - `GET /api/signals/refresh-status`
   - Scheduler status and last successful recompute timestamp.
 - `POST /api/signals/refresh`
@@ -73,6 +82,12 @@ The UI expects these endpoints (served by the Python backend in
 - `GET /api/hpo/status?run_id=...`
   - Returns status/progress and attaches leaderboard on completion.
   - UI polls status while `status=running`.
+- `GET /api/v2/news/feed`
+  - Linked news feed for entity-aware filtering.
+- `GET /api/v2/portfolio/rebalance/preview`
+  - Rebalance preview from active lifecycle.
+- `POST /api/v2/portfolio/rebalance/commit`
+  - Commit approved rebalance plan.
 
 ## Parallel dev workflow
 - Backend API (Flask) runs via `python -m moex_carry.cli ui` on `127.0.0.1:8050`.

@@ -96,6 +96,15 @@ Defaults:
   - `run_id`, `status` (running|completed|failed), `progress {completed,total}`,
     `created_at`, `started_at`, `finished_at`, optional `error`, `result`.
 
+### API v2 surface
+- File: `docs/contracts/api-v2.yaml`
+- Adds contract-first surfaces for:
+  - `signals/active` + `signals/{signal_id}/actions`
+  - `decisions/view`
+  - `news/feed`
+  - `research/backtests/run`, `research/hpo/run`, `research/hpo/status`
+  - `portfolio/rebalance/preview`, `portfolio/rebalance/commit`
+
 ## Compatibility rules
 - Contracts are the source of truth for decision outputs and UI projections.
 - Configuration defaults must keep the pipeline deterministic and reproducible.

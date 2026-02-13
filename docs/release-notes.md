@@ -1,5 +1,148 @@
 # Release Notes
 
+## 2026-02-13 - Sprint 4 follow-up: runbook hardening + v2 surface cleanup
+
+Summary
+- Finalized Sprint 4 operational documentation to incident-grade runbooks.
+- Removed remaining frontend dependencies on v1 signal/decision action read paths.
+- Added explicit governance decision for atomic commit slicing and structured patch notes.
+
+Changed
+- Runbooks hardened with concrete triage flows, metric paths, and escalation criteria:
+  - `docs/runbooks/iss-degradation.md`
+  - `docs/runbooks/execution-failures.md`
+  - `docs/runbooks/ops-slo-alerts.md`
+  - `docs/runbooks/signal-action-audit.md`
+- v2 endpoint usage aligned in UI/API layer:
+  - `GET /api/v2/top-pairs`
+  - `GET /api/v2/signals/history`
+  - `GET /api/v2/signals/executions`
+  - `POST /api/v2/signals/{signal_id}/actions`
+- v2 action response for decisions now includes explicit refs used by UI:
+  - `decision_ref`
+  - `execution_ref`
+- Product governance updated:
+  - `docs/planning/product-decisions.md` now records commit/patch-note policy.
+
+Verification
+- Backend:
+  - `python -m pytest tests/test_api_v2.py`
+  - `python -m pytest tests/test_ui_api.py`
+  - `python -m pytest tests/test_signal_api.py`
+- Frontend:
+  - `npm --prefix ui-web run lint`
+  - `npm --prefix ui-web run build`
+
+Risk / Rollback
+- Risk: low-to-medium (API path migration in frontend and operator runbook behavior).
+- Rollback strategy:
+  - keep v1 adapters enabled for two releases,
+  - revert frontend calls to v1 adapters only if critical regression is detected,
+  - no schema rollback required for documentation-only updates.
+
+## 2026-02-13 - Contract-first Sprint 1 baseline (v2 endpoints + v1 adapters)
+
+Changed
+- Added Sprint 1 contract endpoints:
+  - `GET /api/v2/decision-view` (alias of `GET /api/v2/decisions/view`),
+  - `POST /api/v2/decisions/{decision_id}/actions`,
+  - `POST /api/v2/pretrade/check`.
+- Added UI domain-boundary gate:
+  - `npm --prefix ui-web run lint:ui-domain-boundary`,
+  - wired into `npm --prefix ui-web run lint` to fail if business signal statuses are computed in frontend.
+- Added explicit v1 deprecation headers on legacy routes:
+  - `Deprecation: true`
+  - `Sunset: Wed, 01 Jul 2026 00:00:00 GMT`
+  - `Warning: 299 ... migrate to /api/v2/...`
+  - `Link: <...>; rel="successor-version"`
+- Added route-based workspace navigation in UI:
+  - `/trade-console/*`
+  - `/decision-audit`
+  - `/research-system/*`
+  - `/news-intelligence`
+  - `/portfolio-control`
+- Completed Signals UI decomposition in `MarketTablesTab`:
+  - `SignalQueuePanel`
+  - `DecisionHistoryPanel`
+  - `DecisionPanel`
+  - `ExecutionPanel`
+  - `PretradePanel` (pre-trade diagnostics block extracted from container)
+- Moved Signals status/action adapters out of hook:
+  - new `ui-web/src/features/market/signalViewModel.ts`
+  - `useMarketTables.ts` now keeps orchestration/state and uses external view-model helpers.
+- Updated boundary lint gate for new helper location:
+  - `ui-web/scripts/ui-domain-boundary-gate.mjs` now validates backend-sourced `signal_action_effective` in `signalViewModel.ts`.
+- Added workspace KPI strip in `App`:
+  - `tab_switch_count`
+  - `time_to_first_action_sec`
+  - `blocked_action_rate` (entry-intent signals blocked by pre-trade in Signals view)
+- `useMarketTables` now accepts `onOperatorAction` callback to register first manual action events.
+- Extracted workspace data orchestration hooks:
+  - `ui-web/src/features/news/useNewsIntelligence.ts`
+  - `ui-web/src/features/portfolio/usePortfolioControl.ts`
+  - `NewsIntelligenceTab` and `PortfolioControlTab` remain presentation-focused.
+- Added workspace e2e smoke coverage:
+  - `ui-web/tests/workspace-news-portfolio.spec.ts` (route + filters + rebalance commit flow).
+- Added acceptance coverage for workspace modules:
+  - `news-feed-v2` (`TC-NEWS-API-001`, `TC-NEWS-UI-001`)
+  - `portfolio-rebalance-v2` (`TC-PORT-API-001`, `TC-PORT-UI-001`)
+- Added domain services:
+  - `src/moex_carry/domain/decision_engine.py` for lifecycle/gate/action normalization,
+  - `src/moex_carry/domain/pretrade_service.py` for pretrade status and runtime param projection.
+- Updated v1 adapter behavior:
+  - `POST /api/decisions/{decision_id}/action` now routes through v2 action logic.
+  - `POST /api/signals/execute` now uses unified signal-action writer with idempotency support (`idempotency_key`) while keeping legacy response shape (`status`, `order_id`).
+- Strengthened v2 decision projection audit surface:
+  - `GET /api/v2/decisions/view` now includes backend-owned `decision_ref` and `execution_ref`
+    with latest action/request linkage (`action_id`, `request_id`, `idempotency_key`, timestamps).
+- Added rollout-safe projection source switch:
+  - new config flag `ui.ff_db_projection_source` (`FF_DB_PROJECTION_SOURCE`) to prefer DB projection.
+  - if DB projection has no rows yet, endpoint falls back to JSONL and marks rows with
+    `projection_source=jsonl_fallback`.
+- Added projection migration tooling:
+  - `scripts/backfill_decision_projection.py` (`backfill|parity|all` modes),
+  - parity gate with threshold support (`--parity-threshold`, default `0.995`),
+  - source-of-truth workflow documented in `docs/data/source-of-truth.md`.
+- Added decision projection write-through:
+  - `DecisionLogStore.append` now upserts `decision_view_projection` on every new decision view append.
+  - historical backfill script remains for bootstrap of existing JSONL history.
+- Added execution safety policy controls:
+  - new config flags `ui.ff_fail_closed_execution` and `ui.auto_unwind_timeout_sec`,
+  - `POST /api/v2/signals/{signal_id}/actions` can return `status=blocked` on fail-closed rules for entry,
+  - privileged override path (`fail_closed_override`) requires explicit reason and is audited in `signal_executions.note`.
+- Added auto-unwind policy endpoint:
+  - `POST /api/v2/policies/auto-unwind/run` for stale one-leg imbalance mitigation,
+  - supports `dry_run`, deterministic idempotency, and summary counters (`triggered|duplicate|blocked|error`).
+- Added operational runbooks:
+  - `docs/runbooks/iss-degradation.md`,
+  - `docs/runbooks/execution-failures.md`,
+  - `docs/runbooks/ops-slo-alerts.md`.
+- Added runtime observability endpoints:
+  - `GET /api/v2/ops/health` (DB readiness + signal refresh state),
+  - `GET /api/v2/ops/slo` (endpoint latency/error stats, 15m event counters, alert flags).
+- Added in-memory SLO instrumentation for critical flows:
+  - `v2_signals_actions` (execution rejection spikes),
+  - `v2_pretrade_check` (pretrade failures/degraded checks),
+  - `v2_auto_unwind_run` (policy trigger and error counters).
+
+Verification
+- Frontend:
+  - `npm --prefix ui-web run lint`
+  - `npm --prefix ui-web run build`
+  - `npm --prefix ui-web run test:e2e -- workspace-news-portfolio.spec.ts`
+- UI/API regression:
+  - `python -m pytest -q tests/test_ui_api.py tests/test_spread_series.py`
+  - `python -m pytest -q tests/test_api_v2.py tests/test_signal_api.py`
+  - `python -m pytest -q tests/test_api_v2.py -k "ops_health_and_slo_observability"`
+  - `python scripts/validate_test_cases.py`
+
+Deprecation plan
+- v1 endpoints remain supported via adapter for 2 releases:
+  - `POST /api/decisions/{decision_id}/action`
+  - `GET /api/decision-view`
+  - `GET /api/pretrade/check`
+- Removal target: after 2 stable releases once all UI and bots switch to v2.
+
 ## 2026-02-10 - MOEX ISS IP Fallback (VPN-friendly transport resilience)
 
 Changed
