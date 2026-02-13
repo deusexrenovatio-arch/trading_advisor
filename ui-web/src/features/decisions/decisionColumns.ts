@@ -93,7 +93,11 @@ export const createDecisionColumns = ({
     field: 'execution_status',
     width: 140,
     valueGetter: (params: { row?: DecisionView } | undefined) =>
-      params?.row?.execution_status?.status ?? params?.row?.operator_action?.status ?? '',
+      params?.row?.execution_ref?.status ??
+      params?.row?.decision_ref?.latest_status ??
+      params?.row?.execution_status?.status ??
+      params?.row?.operator_action?.status ??
+      '',
     valueFormatter: (params: { value?: unknown }) => formatValue(params?.value, 'status'),
   },
   {

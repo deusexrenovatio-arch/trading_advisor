@@ -3,17 +3,30 @@ import type {
   BacktestReport,
   DecisionLog,
   DecisionView,
+  DecisionRefV2,
   ExecutionRow,
+  ExecutionRefV2,
   ExecutionStatus,
   ForwardStatus,
   HpoResponse,
+  NewsEventV2,
   OperatorAction,
   ParameterSpec,
   PretradeCheckResult,
+  RebalanceCommitV2,
+  RebalancePreviewV2,
   RefreshStatus,
+  SignalActiveV2,
   SignalHistoryRow,
   SpreadSeriesPoint,
 } from '../../entities/decision/types'
+
+export type DecisionActionResponse = {
+  operator_action?: OperatorAction
+  execution_status?: ExecutionStatus
+  decision_ref?: DecisionRefV2
+  execution_ref?: ExecutionRefV2
+}
 
 export type DecisionViewFilters = {
   limit?: number
@@ -35,22 +48,16 @@ export const fetchDecisionView = (filters: DecisionViewFilters) => {
   if (filters.created_from) params.set('created_from', filters.created_from)
   if (filters.created_to) params.set('created_to', filters.created_to)
   const query = params.toString()
-  const url = query ? `/api/decision-view?${query}` : '/api/decision-view'
+  const url = query ? `/api/v2/decision-view?${query}` : '/api/v2/decision-view'
   return requestJson<DecisionView[]>(url, { cache: 'no-store' })
 }
 
 export const fetchDecisionLog = (decisionId: string) =>
   requestJson<DecisionLog>(`/api/decision-log/${decisionId}`)
 
-export const fetchDecisionAction = (decisionId: string) =>
-  requestJson<{ operator_action?: OperatorAction; execution_status?: ExecutionStatus }>(
-    `/api/decisions/${decisionId}/action`,
-    { cache: 'no-store' },
-  )
-
 export const submitDecisionAction = (decisionId: string, payload: unknown) =>
-  requestJson<{ operator_action?: OperatorAction; execution_status?: ExecutionStatus }>(
-    `/api/decisions/${decisionId}/action`,
+  requestJson<DecisionActionResponse>(
+    `/api/v2/decisions/${decisionId}/actions`,
     {
       method: 'POST',
       body: payload,
@@ -61,13 +68,22 @@ export const fetchTopPairs = (limit: number, allPairs: boolean) => {
   const params = new URLSearchParams()
   params.set('limit', String(limit))
   params.set('all', allPairs ? 'true' : 'false')
-  return requestJson<Record<string, unknown>[]>(`/api/top-pairs?${params.toString()}`, {
+  return requestJson<Record<string, unknown>[]>(`/api/v2/top-pairs?${params.toString()}`, {
     cache: 'no-store',
   })
 }
 
 export const fetchSignalsActive = () =>
   requestJson<Record<string, unknown>[]>('/api/signals/active', { cache: 'no-store' })
+
+export const fetchSignalsActiveV2 = () =>
+  requestJson<SignalActiveV2[]>('/api/v2/signals/active', { cache: 'no-store' })
+
+export const submitSignalActionV2 = (signalId: string, payload: Record<string, unknown>) =>
+  requestJson<Record<string, unknown>>(`/api/v2/signals/${signalId}/actions`, {
+    method: 'POST',
+    body: payload,
+  })
 
 export const fetchBacktests = (limit = 500) =>
   requestJson<Record<string, unknown>[]>(`/api/backtests?limit=${limit}`, { cache: 'no-store' })
@@ -93,7 +109,7 @@ export const fetchSignalHistory = (
   if (stock) params.set('stock', stock)
   if (future) params.set('future', future)
   if (action) params.set('signal_action', action)
-  return requestJson<SignalHistoryRow[]>(`/api/signals/history?${params.toString()}`, {
+  return requestJson<SignalHistoryRow[]>(`/api/v2/signals/history?${params.toString()}`, {
     cache: 'no-store',
   })
 }
@@ -103,16 +119,10 @@ export const fetchSignalExecutions = (stock: string, future: string, limit = 20)
   params.set('stock', stock)
   params.set('future', future)
   params.set('limit', String(limit))
-  return requestJson<ExecutionRow[]>(`/api/signals/executions?${params.toString()}`, {
+  return requestJson<ExecutionRow[]>(`/api/v2/signals/executions?${params.toString()}`, {
     cache: 'no-store',
   })
 }
-
-export const executeSignal = (payload: unknown) =>
-  requestJson('/api/signals/execute', {
-    method: 'POST',
-    body: payload,
-  })
 
 export const fetchSpreadSeries = (
   stock: string,
@@ -147,27 +157,21 @@ export const fetchPretradeCheck = (
   future: string,
   options: PretradeCheckOptions = {},
 ) => {
-  const params = new URLSearchParams()
-  params.set('stock', stock)
-  params.set('future', future)
-  if (options.direction) params.set('direction', options.direction)
-  if (options.snapshots !== undefined) params.set('snapshots', String(options.snapshots))
-  if (options.minHits !== undefined) params.set('min_hits', String(options.minHits))
-  if (options.eps !== undefined) params.set('eps', String(options.eps))
-  if (options.syncSec !== undefined) params.set('sync_sec', String(options.syncSec))
-  if (options.pollSec !== undefined) params.set('poll_sec', String(options.pollSec))
-  if (options.qtyFut !== undefined) params.set('qty_fut', String(options.qtyFut))
-  if (options.participationRate !== undefined) {
-    params.set('participation_rate', String(options.participationRate))
-  }
-  if (options.requireTradeflowForLast !== undefined) {
-    params.set(
-      'require_tradeflow_for_last',
-      options.requireTradeflowForLast ? 'true' : 'false',
-    )
-  }
-  return requestJson<PretradeCheckResult>(`/api/pretrade/check?${params.toString()}`, {
-    cache: 'no-store',
+  return requestJson<PretradeCheckResult>('/api/v2/pretrade/check', {
+    method: 'POST',
+    body: {
+      stock,
+      future,
+      direction: options.direction,
+      snapshots: options.snapshots,
+      min_hits: options.minHits,
+      eps: options.eps,
+      sync_sec: options.syncSec,
+      poll_sec: options.pollSec,
+      qty_fut: options.qtyFut,
+      participation_rate: options.participationRate,
+      require_tradeflow_for_last: options.requireTradeflowForLast,
+    },
   })
 }
 
@@ -203,3 +207,39 @@ export const fetchHpoStatus = (runId?: string) => {
   const url = params.toString() ? `/api/hpo/status?${params.toString()}` : '/api/hpo/status'
   return requestJson<HpoResponse>(url, { cache: 'no-store' })
 }
+
+export const fetchNewsFeedV2 = (filters: {
+  severity?: string
+  ticker?: string
+  entity_id?: string
+  from?: string
+  to?: string
+  limit?: number
+}) => {
+  const params = new URLSearchParams()
+  if (filters.severity) params.set('severity', filters.severity)
+  if (filters.ticker) params.set('ticker', filters.ticker)
+  if (filters.entity_id) params.set('entity_id', filters.entity_id)
+  if (filters.from) params.set('from', filters.from)
+  if (filters.to) params.set('to', filters.to)
+  if (filters.limit) params.set('limit', String(filters.limit))
+  const query = params.toString()
+  const url = query ? `/api/v2/news/feed?${query}` : '/api/v2/news/feed'
+  return requestJson<NewsEventV2[]>(url, { cache: 'no-store' })
+}
+
+export const fetchRebalancePreviewV2 = (limit = 12) =>
+  requestJson<RebalancePreviewV2>(`/api/v2/portfolio/rebalance/preview?limit=${limit}`, {
+    cache: 'no-store',
+  })
+
+export const commitRebalanceV2 = (payload: {
+  rebalance_plan_id: string
+  actor_id?: string
+  note?: string
+  positions: Array<Record<string, unknown>>
+}) =>
+  requestJson<RebalanceCommitV2>('/api/v2/portfolio/rebalance/commit', {
+    method: 'POST',
+    body: payload,
+  })
