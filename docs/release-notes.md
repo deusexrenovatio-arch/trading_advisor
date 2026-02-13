@@ -1,5 +1,30 @@
 # Release Notes
 
+## 2026-02-13 - Interactive architecture dependency map (D3)
+
+Summary
+- Added a single interactive map for components, entities, APIs, storages, and dependency flows.
+- Map is aligned with v2 layers/contracts and workspace IA.
+
+Changed
+- Added D3 architecture visualization:
+  - `docs/architecture/architecture-map-d3.html`
+  - `docs/architecture/architecture-map-data.js`
+  - `docs/architecture/architecture-map-v2.md`
+- Updated architecture documentation index:
+  - `docs/architecture/trading-advisor.md` now links the new map.
+- Coverage includes:
+  - layer boundaries (L1..L6),
+  - backend module dependencies,
+  - `/api/v2/*` surface + v1 adapter bridge,
+  - canonical entity lineage,
+  - UI workspace-to-API flows,
+  - persistence surfaces (SQLite/JSONL/runtime files).
+
+Verification
+- Data file parse check:
+  - `node -e \"global.window={}; require('./docs/architecture/architecture-map-data.js'); console.log(window.ARCH_MAP_DATA.nodes.length, window.ARCH_MAP_DATA.links.length)\"`
+
 ## 2026-02-13 - Sprint 4 follow-up: runbook hardening + v2 surface cleanup
 
 Summary
