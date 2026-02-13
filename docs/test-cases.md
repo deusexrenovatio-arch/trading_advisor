@@ -18,10 +18,11 @@
 - params-specs -> TC-PARAMS-API-001
 - frontend-params-specs -> TC-BACK-V2-UI-001, TC-BACK-V2-UI-002
 - top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
-- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
+- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-TG-UI-002, TC-TG-UI-003, TC-TG-WRK-002, TC-TG-WRK-003
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
 - signals-history-reasons -> TC-SIG-HIST-API-004
 - signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002
+- signals-ack-execute -> TC-SIG-ACK-API-001, TC-SIG-ACK-UI-001, TC-TG-UI-001, TC-TG-WRK-001, TC-TG-WRK-004
 - pretrade-check -> TC-PRETRADE-API-001, TC-PRETRADE-API-002, TC-PRETRADE-UI-001
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
 - backtests -> TC-BACK-API-001, TC-BACK-UI-001
@@ -46,6 +47,8 @@
 - US-09 Forward paper daily cycle -> forward-start/forward-status (TC-FWD-API-001, TC-FWD-API-002) + unit tests: tests/test_forward_engine.py.
 - US-10 HPO run + leaderboard -> hpo, hpo-status (TC-HPO-API-001, TC-HPO-API-002, TC-HPO-UNIT-001) + unit tests: tests/hpo/test_folds.py, tests/hpo/test_objective.py, tests/hpo/test_leaderboard.py.
 - US-11 Review decisions with server filters -> decision-view, decision-view-filters (TC-DEC-API-001, TC-DEC-API-005, TC-DEC-UI-001).
+- US-12 Confirm signal usage from Telegram -> signals-ack-execute + signals-active (TC-SIG-ACK-API-001, TC-SIG-ACK-UI-001, TC-SIG-ACT-API-001, TC-TG-UI-001, TC-TG-WRK-001, TC-TG-WRK-004).
+- US-13 Morning bot liveness check -> signals-active (TC-TG-UI-002, TC-TG-UI-003, TC-TG-WRK-002, TC-TG-WRK-003).
 
 ## UI Test Cases
 
@@ -208,6 +211,54 @@ Expected:
 - API payload contains `order_id`.
 - `order_id` is identical for both legs, enabling linked two-leg execution tracking.
 
+### TC-SIG-ACK-UI-001 Telegram ACK lifecycle
+Acceptance: signals-ack-execute, signals-active
+Automation: manual
+Steps:
+1. Start backend and `telegram_bot` worker.
+2. Send `/start` to bot from whitelisted user.
+3. Wait for a signal message and click `Использовал сигнал`.
+4. Open Signals tab in UI and reload data.
+Expected:
+- Signal row shows `signal_used=true`.
+- `signal_details_pending=true` until first `enter/exit` execution is logged for the pair.
+- ACK action does not change open-position balance fields.
+
+### TC-TG-UI-001 Telegram onboarding and access control
+Acceptance: signals-ack-execute
+Automation: manual
+Steps:
+1. Start backend and `telegram_bot` worker with a whitelist containing only user `A`.
+2. From user `B` send `/start`.
+3. From user `A` send `/start` and `/help`.
+Expected:
+- User `B` receives access denied message and is not added to worker state.
+- User `A` receives onboarding and help text.
+- Worker state contains `registered_chats` for whitelisted users only.
+
+### TC-TG-UI-002 Daily heartbeat happy path
+Acceptance: signals-active
+Automation: manual
+Steps:
+1. Configure `daily_healthcheck_enabled=true` and `daily_healthcheck_time_local` a few minutes ahead.
+2. Ensure backend `/api/signals/active` responds.
+3. Wait for scheduled local time.
+Expected:
+- Bot sends one morning heartbeat message.
+- Message includes bot online status, backend status `OK`, and active signals count.
+- Repeated worker cycles on the same day do not produce duplicate heartbeat messages.
+
+### TC-TG-UI-003 Daily heartbeat with backend outage
+Acceptance: signals-active
+Automation: manual
+Steps:
+1. Configure daily heartbeat as in TC-TG-UI-002.
+2. Stop backend before heartbeat time.
+3. Wait for scheduled local time.
+Expected:
+- Bot still sends heartbeat message.
+- Message contains `Backend: ERROR` and states that data check failed.
+
 ### TC-PRETRADE-UI-001 Signals pre-trade panel
 Acceptance: pretrade-check
 Automation: ui-web/tests/top-signals.spec.ts
@@ -339,6 +390,7 @@ Expected:
 - signal_action only `enter`/`exit`/`hold_open` (`hold_open` is used for open, not yet closed positions).
 - If `signal_metrics` contains execution plan values, they are also available at top level
   (e.g., `entry_spread_pct_min`, `entry_spread_pct_max`, `tp_spread_pct_level`, `sl_spread_pct_level`).
+- Response includes Telegram usage flags: `signal_used`, `signal_used_at`, `signal_used_by`, `signal_details_pending`.
 
 ### TC-SIG-ACT-API-002 Signal diagnostics for missing ISS orderbook
 Acceptance: signals-active
@@ -403,6 +455,51 @@ Request:
 Expected:
 - 200 OK with JSON response containing `status`.
 - For legged execution (`side=stock|future`) response also includes generated or passed `order_id`.
+
+### TC-SIG-ACK-API-001 Execute ACK endpoint
+Acceptance: signals-ack-execute
+Automation: scripts/acceptance_check.py (post_json)
+Request:
+- POST /api/signals/execute with `action=ack`
+Expected:
+- 200 OK with JSON response containing `status`.
+- Stored execution row has `action=ack` and default `status=acknowledged` when status is omitted.
+
+### TC-TG-WRK-001 Whitelist registration in worker
+Acceptance: signals-ack-execute
+Automation: tests/test_telegram_worker.py::test_worker_registers_only_whitelisted_users
+Request:
+- Simulate `/start` updates from both non-whitelisted and whitelisted users.
+Expected:
+- Worker keeps only whitelisted users in `registered_chats`.
+- Worker sends access denied response to non-whitelisted users.
+
+### TC-TG-WRK-002 Daily heartbeat once per local day
+Acceptance: signals-active
+Automation: tests/test_telegram_worker.py::test_worker_daily_healthcheck_sent_once_per_day
+Request:
+- Trigger `_send_daily_healthcheck()` twice in one day for registered chat.
+Expected:
+- Exactly one heartbeat message is sent.
+- Worker stores sent date in `daily_healthcheck_last_sent_date_by_chat`.
+
+### TC-TG-WRK-003 Daily heartbeat backend error fallback
+Acceptance: signals-active
+Automation: tests/test_telegram_worker.py::test_worker_daily_healthcheck_reports_backend_error
+Request:
+- Trigger `_send_daily_healthcheck()` with backend session raising connection error.
+Expected:
+- Heartbeat message is still sent.
+- Message contains `Backend: ERROR`.
+
+### TC-TG-WRK-004 Expired ACK token is rejected
+Acceptance: signals-ack-execute
+Automation: tests/test_telegram_worker.py::test_worker_callback_rejects_expired_token
+Request:
+- Process callback with expired `ack:<token>`.
+Expected:
+- No ACK execution call is sent to backend.
+- Callback token is removed from worker state and user receives rejection notice.
 
 ### TC-PRETRADE-API-001 Pre-trade check endpoint
 Acceptance: pretrade-check
