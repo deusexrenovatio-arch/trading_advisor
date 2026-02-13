@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -189,6 +190,21 @@ class UiConfig(BaseModel):
     require_score_gate_top_pairs_by_default: bool = False
 
 
+class TelegramConfig(BaseModel):
+    enabled: bool = False
+    bot_token: str | None = None
+    backend_base_url: str = "http://127.0.0.1:8050"
+    allowed_user_ids: list[int] = []
+    poll_timeout_sec: int = 25
+    signal_fetch_interval_sec: int = 30
+    hold_open_daily_limit: int = 1
+    callback_ttl_hours: int = 72
+    daily_healthcheck_enabled: bool = True
+    daily_healthcheck_time_local: str = "09:00"
+    state_path: str = "./data/telegram/bot_state.json"
+    ui_base_url: str | None = None
+
+
 class DataConfig(BaseModel):
     data_dir: str = "./data"
     compute_lookback_days: int = 120
@@ -240,6 +256,7 @@ class AppSettings(BaseSettings):
     spread_carry_alpha: SpreadCarryAlphaConfig = SpreadCarryAlphaConfig()
     aggregation: AggregationConfig = AggregationConfig()
     ui: UiConfig = UiConfig()
+    telegram: TelegramConfig = TelegramConfig()
     data: DataConfig = DataConfig()
     environment: EnvironmentConfig = EnvironmentConfig()
     risk_profile: RiskProfileConfig = RiskProfileConfig()
@@ -259,6 +276,44 @@ def _default_config_path() -> Path:
     return Path(__file__).resolve().parents[2] / "configs" / "default.yaml"
 
 
+def _drop_yaml_keys_overridden_by_env(config_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove YAML values that are explicitly overridden via environment variables.
+
+    AppSettings receives YAML as init kwargs, which otherwise has higher priority
+    than env in pydantic-settings resolution order.
+    """
+
+    updated = dict(config_data)
+    env_prefix = "MOEX_CARRY_"
+    env_delimiter = "__"
+
+    for section_key in list(updated.keys()):
+        section_value = updated.get(section_key)
+        section_env_key = f"{env_prefix}{str(section_key).upper()}"
+
+        # Full-section override, e.g. MOEX_CARRY_TELEGRAM='{"enabled": true}'.
+        if section_env_key in os.environ:
+            updated.pop(section_key, None)
+            continue
+
+        if not isinstance(section_value, dict):
+            continue
+
+        section_copy = dict(section_value)
+        for field_key in list(section_copy.keys()):
+            field_env_key = f"{section_env_key}{env_delimiter}{str(field_key).upper()}"
+            if field_env_key in os.environ:
+                section_copy.pop(field_key, None)
+
+        if section_copy:
+            updated[section_key] = section_copy
+        else:
+            updated.pop(section_key, None)
+
+    return updated
+
+
 def load_settings(config_path: Optional[str] = None) -> AppSettings:
     config_data: dict[str, Any] = {}
     default_path = _default_config_path()
@@ -276,6 +331,7 @@ def load_settings(config_path: Optional[str] = None) -> AppSettings:
             yaml_data = yaml.safe_load(handle) or {}
         if isinstance(yaml_data, dict):
             config_data = _merge_dicts(config_data, yaml_data)
+    config_data = _drop_yaml_keys_overridden_by_env(config_data)
     return AppSettings(**config_data)
 
 

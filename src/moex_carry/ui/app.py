@@ -42,6 +42,7 @@ from moex_carry.observability.runtime_metrics import ApiObservability
 from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.pretrade.delay_gate import run_delay_gate
+from moex_carry.signals_ack import build_signal_fingerprint, parse_ack_note
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_decision_view_projection,
@@ -516,6 +517,8 @@ def _normalize_execution_action(value: object) -> str:
     raw = str(value or "").strip().lower()
     if raw in {"exit", "close"}:
         return "exit"
+    if raw in {"ack", "acknowledged"}:
+        return "ack"
     if raw in {"enter", "open", "hold_open", "hold"}:
         # hold_open in execution logs is treated as opening/maintaining leg exposure.
         return "enter"
@@ -665,6 +668,16 @@ def _deprecated_v1_successor_path(request_path: str) -> str | None:
         decision_id = decision_id.strip("/")
         if decision_id:
             return f"/api/v2/decisions/{decision_id}/actions"
+    return None
+
+
+def _signal_used_by_from_ack(note_payload: dict[str, object]) -> str | None:
+    username = note_payload.get("telegram_username")
+    if isinstance(username, str) and username.strip():
+        return username.strip()
+    user_id = note_payload.get("telegram_user_id")
+    if isinstance(user_id, int):
+        return str(user_id)
     return None
 
 
@@ -1808,8 +1821,13 @@ def create_app(settings: AppSettings) -> Dash:
                 return jsonify([])
             rows = load_active_signals(session, latest.run_id)
             executions = load_open_executions(session)
+            ack_by_fingerprint: dict[str, dict[str, object]] = {}
+            pair_trade_timestamps: dict[tuple[str, str], list[datetime]] = {}
             position_state: dict[tuple[str, str], dict[str, object]] = {}
             for exec_row in sorted(executions, key=lambda item: item.timestamp):
+                if not isinstance(exec_row.timestamp, datetime):
+                    continue
+                exec_ts = _normalize_datetime(exec_row.timestamp)
                 key = (exec_row.stock_secid, exec_row.future_secid)
                 state = position_state.setdefault(
                     key,
@@ -1826,8 +1844,28 @@ def create_app(settings: AppSettings) -> Dash:
                     },
                 )
                 action = _normalize_execution_action(exec_row.action)
+                if action == "ack":
+                    ack_note = parse_ack_note(exec_row.note)
+                    if isinstance(ack_note, dict):
+                        fingerprint_raw = ack_note.get("fingerprint")
+                        if isinstance(fingerprint_raw, str) and fingerprint_raw.strip():
+                            fingerprint = fingerprint_raw.strip()
+                            existing = ack_by_fingerprint.get(fingerprint)
+                            existing_ts_raw = existing.get("timestamp") if isinstance(existing, dict) else None
+                            existing_ts = (
+                                _normalize_datetime(existing_ts_raw)
+                                if isinstance(existing_ts_raw, datetime)
+                                else None
+                            )
+                            if existing_ts is None or exec_ts >= existing_ts:
+                                ack_by_fingerprint[fingerprint] = {
+                                    "timestamp": exec_ts,
+                                    "used_by": _signal_used_by_from_ack(ack_note),
+                                }
+                    continue
                 if action not in {"enter", "exit"}:
                     continue
+                pair_trade_timestamps.setdefault(key, []).append(exec_ts)
                 leg = _normalize_execution_leg(exec_row.side)
                 order_id = _normalize_order_id(getattr(exec_row, "order_id", None))
                 if order_id is None:
@@ -1883,9 +1921,45 @@ def create_app(settings: AppSettings) -> Dash:
                 state["exit_orders"] = exit_orders
                 state["open_leg_total"] = int(open_legs["stock"] + open_legs["future"] + open_legs["other"])
                 state["open_leg_imbalance"] = int(open_legs["stock"]) != int(open_legs["future"])
-                state["last_execution_at"] = exec_row.timestamp
+                state["last_execution_at"] = exec_ts
                 if exec_row.direction is not None:
                     state["direction"] = exec_row.direction
+
+            def _signal_usage_fields(
+                *,
+                run_id: str,
+                timestamp: str,
+                stock: str,
+                future: str,
+                signal_action: str,
+            ) -> dict[str, object]:
+                fingerprint = build_signal_fingerprint(
+                    run_id=run_id,
+                    timestamp=timestamp,
+                    stock=stock,
+                    future=future,
+                    signal_action=signal_action,
+                )
+                ack_entry = ack_by_fingerprint.get(fingerprint)
+                if not isinstance(ack_entry, dict):
+                    return {
+                        "signal_used": False,
+                        "signal_used_at": None,
+                        "signal_used_by": None,
+                        "signal_details_pending": False,
+                    }
+                ack_ts_raw = ack_entry.get("timestamp")
+                ack_ts = _normalize_datetime(ack_ts_raw) if isinstance(ack_ts_raw, datetime) else None
+                has_trade_after_ack = False
+                if ack_ts is not None:
+                    trades = pair_trade_timestamps.get((stock, future), [])
+                    has_trade_after_ack = any(trade_ts > ack_ts for trade_ts in trades)
+                return {
+                    "signal_used": True,
+                    "signal_used_at": ack_ts.isoformat() if ack_ts is not None else None,
+                    "signal_used_by": ack_entry.get("used_by"),
+                    "signal_details_pending": not has_trade_after_ack,
+                }
 
             for state in position_state.values():
                 enter_orders = state.get("enter_orders")
@@ -1937,6 +2011,13 @@ def create_app(settings: AppSettings) -> Dash:
                     action = "hold_open"
                 else:
                     continue
+                usage_fields = _signal_usage_fields(
+                    run_id=row.run_id,
+                    timestamp=row.timestamp.isoformat(),
+                    stock=row.stock_secid,
+                    future=row.future_secid,
+                    signal_action=action,
+                )
                 payload = {
                     "run_id": row.run_id,
                     "timestamp": row.timestamp.isoformat(),
@@ -1967,6 +2048,7 @@ def create_app(settings: AppSettings) -> Dash:
                         if isinstance(state.get("last_execution_at"), datetime)
                         else None
                     ),
+                    **usage_fields,
                 }
                 actionable.append(_merge_signal_metrics(payload))
 
@@ -1984,6 +2066,13 @@ def create_app(settings: AppSettings) -> Dash:
                     timestamp_value = last_execution_at.isoformat()
                 else:
                     timestamp_value = latest.as_of.isoformat()
+                usage_fields = _signal_usage_fields(
+                    run_id=latest.run_id,
+                    timestamp=timestamp_value,
+                    stock=stock,
+                    future=future,
+                    signal_action="hold_open",
+                )
                 payload = {
                     "run_id": latest.run_id,
                     "timestamp": timestamp_value,
@@ -2012,6 +2101,7 @@ def create_app(settings: AppSettings) -> Dash:
                     "position_last_execution_at": (
                         last_execution_at.isoformat() if isinstance(last_execution_at, datetime) else None
                     ),
+                    **usage_fields,
                 }
                 actionable.append(_merge_signal_metrics(payload))
 

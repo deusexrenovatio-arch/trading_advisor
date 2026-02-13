@@ -61,6 +61,74 @@ python scripts/run_ui.py
 See `docs/DEV_WORKFLOW.md` for required checks (backend tests, UI lint/build)
 and optional acceptance/E2E smoke checks.
 
+## Telegram Worker (MVP)
+
+The project includes a Telegram worker that sends actionable signals from
+`/api/signals/active` and accepts ACK via an inline button.
+
+1) Create a bot via `@BotFather` and copy the token.
+2) Find your Telegram user id (for whitelist).
+3) Copy `.env.example` values into your environment (or set in config):
+
+```
+MOEX_CARRY_TELEGRAM__ENABLED=true
+MOEX_CARRY_TELEGRAM__BOT_TOKEN=<your-bot-token>
+MOEX_CARRY_TELEGRAM__ALLOWED_USER_IDS=[123456789]
+MOEX_CARRY_TELEGRAM__BACKEND_BASE_URL=http://127.0.0.1:8050
+MOEX_CARRY_TELEGRAM__UI_BASE_URL=http://127.0.0.1:5176
+MOEX_CARRY_TELEGRAM__DAILY_HEALTHCHECK_ENABLED=true
+MOEX_CARRY_TELEGRAM__DAILY_HEALTHCHECK_TIME_LOCAL=09:00
+```
+
+4) Start backend:
+
+```
+python -m moex_carry.cli ui --config configs/default.yaml
+```
+
+5) Start Telegram worker:
+
+```
+python -m moex_carry.cli telegram_bot --config configs/default.yaml
+```
+
+Then send `/start` to the bot and wait for signal messages. ACK is recorded as
+`action=ack` in `signal_executions` and reflected in `Signals` table fields
+(`signal_used`, `signal_used_at`, `signal_details_pending`).
+If `daily_healthcheck_enabled=true`, the worker also sends one daily morning
+heartbeat with backend status and active signals count.
+
+### Windows auto-start (backend + Telegram worker)
+
+Use helper scripts in `scripts/` to avoid manual restart after reboot:
+
+1) Create local env file with token/whitelist:
+
+```
+Copy-Item scripts/moex-carry.local.example.ps1 scripts/moex-carry.local.ps1
+```
+
+2) Validate scripts without starting services:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts/start_backend.ps1 -CheckOnly
+powershell -ExecutionPolicy Bypass -File scripts/start_telegram_worker.ps1 -CheckOnly
+```
+
+3) Install startup tasks (as `SYSTEM`, worker delayed by 30s):
+
+```
+powershell -ExecutionPolicy Bypass -File scripts/install_autostart_tasks.ps1
+```
+
+Note: run this command from an elevated PowerShell (Run as Administrator).
+
+4) Remove startup tasks if needed:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts/remove_autostart_tasks.ps1
+```
+
 ## HPO
 
 See `docs/hpo-howto.md` for running HPO locally with Backtest v2 as a black box.

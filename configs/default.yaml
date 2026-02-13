@@ -152,6 +152,20 @@ ui:
   require_score_gate_by_default: true
   require_score_gate_top_pairs_by_default: false
 
+telegram:
+  enabled: false
+  bot_token: null
+  backend_base_url: "http://127.0.0.1:8050"
+  allowed_user_ids: []
+  poll_timeout_sec: 25
+  signal_fetch_interval_sec: 30
+  hold_open_daily_limit: 1
+  callback_ttl_hours: 72
+  daily_healthcheck_enabled: true
+  daily_healthcheck_time_local: "09:00"
+  state_path: "./data/telegram/bot_state.json"
+  ui_base_url: null
+
 data:
   data_dir: "./data"
   compute_lookback_days: 120

@@ -127,14 +127,15 @@ scenarios:
     scope: backend
     url: /api/v2/signals/active
     require_non_empty: false
-    required_keys: [signal_id, run_id, timestamp, stock, future, signal_action, signal_score, lifecycle_state]
+    required_keys:
+      [signal_id, run_id, timestamp, stock, future, signal_action, signal_score, lifecycle_state, signal_used, signal_used_at, signal_used_by, signal_details_pending]
     allowed_field_values:
       signal_action: [enter, exit, hold_open]
-    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001]
+    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001, TC-SIG-ACK-UI-001, TC-TG-UI-002, TC-TG-UI-003, TC-TG-WRK-002, TC-TG-WRK-003]
     title: Active signals
     user_story: User receives only actionable signals.
     expectations:
-      - Action includes only enter/exit.
+      - Action includes only enter/exit/hold_open.
       - Signal includes pair identifiers and score.
   - id: signals-action-v2
     type: signal_action
@@ -156,6 +157,7 @@ scenarios:
     expectations:
       - Scenario resolves signal_id from active feed and sends an action.
       - Response contains status and action/audit references.
+      - Telegram usage flags are present for each row.
   - id: signals-execute
     type: signal_action
     scope: backend
@@ -198,6 +200,23 @@ scenarios:
     expectations:
       - API returns summary with policy name and candidate counters.
       - Dry run does not write execution rows.
+  - id: signals-ack-execute
+    type: post_json
+    scope: backend
+    url: /api/signals/execute
+    payload:
+      stock: AAA
+      future: AAH6
+      direction: cash_and_carry
+      action: ack
+      note: "{}"
+    required_keys: [status]
+    test_cases: [TC-SIG-ACK-API-001, TC-SIG-ACK-UI-001, TC-TG-UI-001, TC-TG-WRK-001, TC-TG-WRK-004]
+    title: Signal ACK via Telegram payload
+    user_story: Operator confirms signal usage in Telegram and backend records ACK.
+    expectations:
+      - API accepts action=ack and returns status ok.
+      - ACK defaults to `status=acknowledged` when status is omitted.
   - id: pretrade-check
     type: api_object
     scope: backend

@@ -46,6 +46,7 @@ export const valueLabels: Record<string, Record<string, string>> = {
     hold: 'Удерживать',
     enter: 'Вход',
     exit: 'Выход',
+    ack: 'Подтверждено в Telegram',
   },
   risk_state: {
     green: 'Зеленый',
@@ -186,5 +187,6 @@ export const valueLabels: Record<string, Record<string, string>> = {
     pending: 'Ожидание',
     running: 'В работе',
     stub: 'Заглушка',
+    acknowledged: 'Подтверждено',
   },
 }

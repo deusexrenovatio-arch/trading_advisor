@@ -298,6 +298,22 @@ export const fieldMeta: Record<string, FieldMeta> = {
     label: 'Итоговый сигнал',
     tooltip: 'Сигнал с учетом pre-trade ограничений перед постановкой заявки.',
   },
+  signal_used: {
+    label: 'Сигнал использован',
+    tooltip: 'Флаг, что оператор подтвердил использование сигнала через Telegram.',
+  },
+  signal_used_at: {
+    label: 'Использован в',
+    tooltip: 'Время подтверждения сигнала в Telegram.',
+  },
+  signal_used_by: {
+    label: 'Кем использован',
+    tooltip: 'Пользователь Telegram, подтвердивший сигнал.',
+  },
+  signal_details_pending: {
+    label: 'Детали ждут',
+    tooltip: 'После ACK еще не внесены детали сделки enter/exit по паре.',
+  },
   signal_direction: {
     label: 'Направление',
     tooltip: 'Тип позиции: cash-and-carry или reverse.',

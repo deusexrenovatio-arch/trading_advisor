@@ -139,3 +139,28 @@ Steps:
 Expected:
 - API uses server-side filters (`strategy_type`, `primary_instrument`, `risk_state`, `news_severity`, `created_from`, `created_to`).
 - Result list updates quickly without client-side heavy filtering.
+
+## US-12 Confirm signal usage from Telegram
+Actor: Operator
+Goal: Mark that a signal was used from Telegram, then complete trade details in UI.
+Steps:
+1. Start `telegram_bot` with whitelist and send `/start`.
+2. Wait for an actionable signal message in Telegram.
+3. Click `Use signal` inline button.
+4. Open Signals table in UI and reload.
+Expected:
+- Backend writes `action=ack` and `status=acknowledged` to `signal_executions`.
+- Active row shows `signal_used=true` and `signal_used_at/signal_used_by`.
+- `signal_details_pending=true` remains until first `enter` or `exit` execution is logged.
+
+## US-13 Morning bot liveness check
+Actor: Operator
+Goal: Receive one daily morning message confirming bot and data availability.
+Steps:
+1. Configure `daily_healthcheck_enabled=true` and `daily_healthcheck_time_local`.
+2. Keep worker running past scheduled local time.
+3. Review heartbeat message in Telegram.
+Expected:
+- Exactly one heartbeat message per registered chat per local calendar day.
+- Message includes bot status, backend status, and active signals count.
+- If backend is unavailable, heartbeat still arrives with `Backend: ERROR`.
