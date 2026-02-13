@@ -30,9 +30,9 @@ def _cycle_return_pct(
 ) -> float | None:
     if entry_spread is not None and entry_spot:
         if entry_direction == "cash_and_carry":
-            return (entry_spread - spread) / entry_spot * 100.0
-        if entry_direction == "reverse":
             return (spread - entry_spread) / entry_spot * 100.0
+        if entry_direction == "reverse":
+            return (entry_spread - spread) / entry_spot * 100.0
     return None
 
 

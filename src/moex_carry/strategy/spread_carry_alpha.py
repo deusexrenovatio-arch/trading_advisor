@@ -15,6 +15,18 @@ class SpreadCarryState:
     hold_days: int = 0
 
 
+def spread_pnl_pct(
+    *,
+    entry_spread_pct_exec: float,
+    exit_spread_pct_exec: float,
+    direction: str | None,
+) -> float:
+    direction_norm = str(direction or "cash_and_carry").lower()
+    if direction_norm == "reverse":
+        return entry_spread_pct_exec - exit_spread_pct_exec
+    return exit_spread_pct_exec - entry_spread_pct_exec
+
+
 def step_spread_carry_alpha(
     state: SpreadCarryState,
     *,
@@ -72,7 +84,11 @@ def step_spread_carry_alpha(
         )
 
     state.hold_days += 1
-    pnl_spread = spread_pct_exit_exec - (state.entry_spread_pct_exec or 0.0)
+    pnl_spread = spread_pnl_pct(
+        entry_spread_pct_exec=state.entry_spread_pct_exec or 0.0,
+        exit_spread_pct_exec=spread_pct_exit_exec,
+        direction=state.position,
+    )
     metrics["pnl_spread_pct"] = pnl_spread
     metrics["hold_days"] = state.hold_days
 

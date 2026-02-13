@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import numpy as np
+
+import pandas as pd
 
 from moex_carry.analytics.alpha import alpha_metrics
 from moex_carry.analytics.spread import spread_entry_exec, spread_pct
@@ -31,10 +34,19 @@ from moex_carry.portfolio.rebalance_controller import (
     PortfolioRebalanceController,
     pair_key,
 )
+from moex_carry.signal_replay import (
+    build_replay_settings_from_resolved,
+    load_pair_minute_series,
+    run_minute_replay,
+)
 from moex_carry.snapshot import build_snapshot_universe
 
 FILL_TIME_EOD = "EOD"
 FILL_TIME_NEXT_OPEN = "NEXT_OPEN"
+EXECUTION_MODE_INTRADAY_MINUTE = "INTRADAY_MINUTE"
+EXECUTION_MODE_DAILY_COMMON_MINUTE = "DAILY_COMMON_MINUTE"
+EXECUTION_MODE_DAILY_EOD = "DAILY_EOD"
+EXECUTION_MODE_DAILY_NEXT_OPEN = "DAILY_NEXT_OPEN"
 SPREAD_HISTORY_DAYS_DEFAULT = 90
 _RATE_CACHE_MISS = object()
 
@@ -75,6 +87,8 @@ class BacktestReport:
     trades: list[BacktestTrade]
     resolved_config: dict[str, Any]
     warnings: list[str] = field(default_factory=list)
+    fill_quality_summary: dict[str, Any] | None = None
+    execution_model: dict[str, Any] | None = None
 
 
 @dataclass
@@ -269,12 +283,19 @@ def run_backtest_v2(
     fill_time: str | None = None,
     precomputed: BacktestPrecomputed | None = None,
     initial_equity: float | None = None,
+    fill_quality_summary_override: dict[str, Any] | None = None,
 ) -> BacktestReport:
     resolved, warnings = _resolve_config(request)
     start_date, end_date = _resolve_date_range(resolved, data_store)
     trading_days = _resolve_trading_days(data_store, start_date, end_date)
     if not trading_days:
         raise ValueError("No trading days in requested range")
+    exec_cfg = resolved.get("execution", {}) if isinstance(resolved, Mapping) else {}
+    execution_mode = _normalize_execution_mode(str(exec_cfg.get("mode") or EXECUTION_MODE_INTRADAY_MINUTE))
+    if execution_mode == EXECUTION_MODE_DAILY_COMMON_MINUTE:
+        warnings.append("execution.mode=DAILY_COMMON_MINUTE currently uses daily portfolio execution path")
+    if execution_mode == EXECUTION_MODE_INTRADAY_MINUTE:
+        warnings.append("INTRADAY_MINUTE applies canonical minute replay for fill quality summary")
 
     if initial_equity is None:
         portfolio_cfg = resolved.get("portfolio", {}) if isinstance(resolved, Mapping) else {}
@@ -283,8 +304,8 @@ def run_backtest_v2(
             initial_equity = 1_000_000.0
 
     if fill_time is None:
-        exec_cfg = resolved.get("execution", {}) if isinstance(resolved, Mapping) else {}
-        fill_time = str(exec_cfg.get("fill_time") or FILL_TIME_EOD)
+        default_fill_time = FILL_TIME_NEXT_OPEN if execution_mode == EXECUTION_MODE_DAILY_NEXT_OPEN else FILL_TIME_EOD
+        fill_time = str(exec_cfg.get("fill_time") or default_fill_time)
     fill_time = _normalize_fill_time(fill_time)
 
     if rebalance_config is None:
@@ -293,6 +314,20 @@ def run_backtest_v2(
     dividends = precomputed.dividends if precomputed is not None else data_store.get_dividends()
     key_rates = precomputed.key_rates if precomputed is not None else data_store.get_key_rates()
     rate_cache = _build_rate_cache(trading_days, key_rates)
+    fill_quality_summary = None
+    if execution_mode == EXECUTION_MODE_INTRADAY_MINUTE:
+        if fill_quality_summary_override is not None:
+            fill_quality_summary = dict(fill_quality_summary_override)
+        else:
+            fill_quality_summary = _compute_intraday_fill_quality_summary(
+                universe=universe,
+                data_store=data_store,
+                resolved_config=resolved,
+                start_date=start_date,
+                end_date=end_date,
+                key_rates=key_rates,
+                warnings=warnings,
+            )
     events = (
         precomputed.events
         if precomputed is not None
@@ -519,6 +554,8 @@ def run_backtest_v2(
         trades=trades,
         resolved_config=resolved,
         warnings=warnings,
+        fill_quality_summary=fill_quality_summary,
+        execution_model=_build_execution_model(resolved, execution_mode, fill_time),
     )
 
 
@@ -1107,6 +1144,9 @@ def _weekday_calendar(start_date: date, end_date: date) -> list[date]:
 
 _PRECOMPUTE_CONFIG_FIELDS: dict[str, tuple[str, ...]] = {
     "execution": (
+        "mode",
+        "price_source",
+        "common_minute_anchor",
         "price_mode",
         "half_spread_bps",
         "slip_stock_bps",
@@ -1139,6 +1179,16 @@ _PRECOMPUTE_CONFIG_FIELDS: dict[str, tuple[str, ...]] = {
         "margin_stock_pct",
         "margin_fut_pct",
         "var_margin_buffer_pct",
+        "signal_exec_lag_days",
+        "execution_lag_minutes",
+        "execution_max_wait_minutes",
+        "entry_price_tolerance_pct",
+        "entry_stock_tolerance_pct",
+        "entry_future_tolerance_pct",
+        "entry_spread_tolerance_pct",
+        "signal_cutoff_before_day_end_minutes",
+        "force_exit_policy",
+        "force_exit_penalty_bps",
     ),
     "portfolio": (
         "account_equity",
@@ -1210,6 +1260,163 @@ def _resolve_key_rate(
         if cached is not _RATE_CACHE_MISS:
             return cached
     return latest_rate(key_rates, day)
+
+
+def _normalize_execution_mode(value: str) -> str:
+    mode = str(value or "").strip().upper()
+    if mode in {
+        EXECUTION_MODE_INTRADAY_MINUTE,
+        EXECUTION_MODE_DAILY_COMMON_MINUTE,
+        EXECUTION_MODE_DAILY_EOD,
+        EXECUTION_MODE_DAILY_NEXT_OPEN,
+    }:
+        return mode
+    return EXECUTION_MODE_INTRADAY_MINUTE
+
+
+def _build_execution_model(
+    resolved_config: Mapping[str, Any],
+    execution_mode: str,
+    fill_time: str,
+) -> dict[str, Any]:
+    execution = resolved_config.get("execution", {}) if isinstance(resolved_config, Mapping) else {}
+    strategy = resolved_config.get("strategy", {}) if isinstance(resolved_config, Mapping) else {}
+    return {
+        "mode": execution_mode,
+        "fill_time": fill_time,
+        "price_source": str(execution.get("price_source") or "common_minute_close"),
+        "common_minute_anchor": str(execution.get("common_minute_anchor") or "last"),
+        "signal_exec_lag_days": int(strategy.get("signal_exec_lag_days") or 0),
+        "execution_lag_minutes": int(strategy.get("execution_lag_minutes") or 0),
+        "execution_max_wait_minutes": int(strategy.get("execution_max_wait_minutes") or 0),
+        "signal_cutoff_before_day_end_minutes": int(strategy.get("signal_cutoff_before_day_end_minutes") or 0),
+    }
+
+
+def _safe_mean(values: list[float | None]) -> float | None:
+    cleaned: list[float] = []
+    for value in values:
+        if value is None:
+            continue
+        numeric = float(value)
+        if pd.isna(numeric):
+            continue
+        cleaned.append(numeric)
+    if not cleaned:
+        return None
+    return float(sum(cleaned) / len(cleaned))
+
+
+def _compute_intraday_fill_quality_summary(
+    *,
+    universe: list[PairSpec],
+    data_store: BacktestDataStore,
+    resolved_config: Mapping[str, Any],
+    start_date: date,
+    end_date: date,
+    key_rates: list[KeyRate],
+    warnings: list[str],
+) -> dict[str, Any] | None:
+    data_dir_value = getattr(data_store, "data_dir", None)
+    if data_dir_value is None:
+        warnings.append("intraday_minute_data_unavailable: data_store_has_no_data_dir")
+        return None
+    data_dir = Path(str(data_dir_value))
+    settings = build_replay_settings_from_resolved(resolved_config)
+    pair_rows: list[dict[str, Any]] = []
+    for pair in universe:
+        loaded = load_pair_minute_series(
+            data_dir=data_dir,
+            stock=pair.stock_secid,
+            future=pair.future_secid,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if loaded is None:
+            pair_rows.append(
+                {
+                    "stock": pair.stock_secid,
+                    "future": pair.future_secid,
+                    "error": "minute_series_not_found",
+                }
+            )
+            continue
+        try:
+            replay_result = run_minute_replay(
+                series_base=loaded.series_base,
+                pair=pair,
+                settings=settings,
+                dividends=loaded.dividends,
+                key_rates=key_rates,
+            )
+            row = replay_result.metrics.to_dict()
+            row.update(
+                {
+                    "stock": pair.stock_secid,
+                    "future": pair.future_secid,
+                    "source": loaded.source,
+                    "cutoff_minutes": replay_result.cutoff_minutes,
+                }
+            )
+            pair_rows.append(row)
+        except Exception as exc:
+            pair_rows.append(
+                {
+                    "stock": pair.stock_secid,
+                    "future": pair.future_secid,
+                    "error": f"minute_replay_failed:{exc.__class__.__name__}",
+                }
+            )
+
+    if not pair_rows:
+        warnings.append("intraday_minute_data_unavailable: no_pairs")
+        return None
+
+    frame = pd.DataFrame(pair_rows)
+    if frame.empty:
+        warnings.append("intraday_minute_data_unavailable: empty_result")
+        return None
+    valid = frame[frame.get("error").isna()] if "error" in frame.columns else frame
+    pairs_ok = int(len(valid))
+    pairs_total = int(len(frame))
+    pairs_failed = int(pairs_total - pairs_ok)
+
+    if pairs_ok == 0:
+        warnings.append("intraday_minute_data_unavailable: no_valid_pairs")
+        return {
+            "pairs_total": pairs_total,
+            "pairs_ok": 0,
+            "pairs_failed": pairs_failed,
+            "rows": pair_rows,
+        }
+
+    def _col_values(name: str) -> list[float | None]:
+        if name not in valid.columns:
+            return []
+        return pd.to_numeric(valid[name], errors="coerce").tolist()
+
+    trades_closed_series = (
+        pd.to_numeric(valid["trades_closed"], errors="coerce")
+        if "trades_closed" in valid.columns
+        else pd.Series(dtype=float)
+    )
+
+    summary = {
+        "pairs_total": pairs_total,
+        "pairs_ok": pairs_ok,
+        "pairs_failed": pairs_failed,
+        "avg_oper_mean": _safe_mean(_col_values("avg_trade_return_annual_operational_last5")),
+        "avg_fill_to_fill_mean": _safe_mean(_col_values("avg_trade_return_annual_fill_to_fill_last5")),
+        "share_target_pass_mean": _safe_mean(_col_values("share_target_pass")),
+        "unfilled_entry_rate_mean": _safe_mean(_col_values("unfilled_entry_rate")),
+        "unfilled_exit_rate_mean": _safe_mean(_col_values("unfilled_exit_rate")),
+        "forced_exit_rate_mean": _safe_mean(_col_values("forced_exit_rate")),
+        "avg_entry_wait_min_closed_mean": _safe_mean(_col_values("avg_entry_wait_min_closed")),
+        "avg_exit_wait_min_closed_mean": _safe_mean(_col_values("avg_exit_wait_min_closed")),
+        "trades_closed_total": int(trades_closed_series.fillna(0.0).sum()),
+        "rows": pair_rows,
+    }
+    return summary
 
 
 def _normalize_fill_time(value: str) -> str:

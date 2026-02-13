@@ -2,6 +2,7 @@ moex:
   base_url: "https://iss.moex.com"
   fallback_ips:
     - "85.118.181.8"
+  force_fallback: true
   engine_shares: "stock"
   market_shares: "shares"
   shares_board: "TQBR"
@@ -47,6 +48,14 @@ strategy:
 spread_carry_alpha:
   day_count: "ACT/365"
   use_trading_days: false
+  price_source: "common_minute_close"
+  common_minute_anchor: "last"
+  signal_exec_lag_days: 0
+  execution_lag_minutes: 30
+  execution_max_wait_minutes: 360
+  force_exit_policy: "next_anchor"
+  force_exit_penalty_bps: 0.0
+  annual_target_threshold: null
   r_cb_annual: null
   r_fund_annual: 0.0
   r_disc_annual: null
@@ -85,7 +94,11 @@ spread_carry_alpha:
   SL_pct: 0.01
   z_window: 60
   z_entry_threshold: null
-  entry_price_tolerance_pct: 0.0015
+  entry_price_tolerance_pct: 0.02
+  entry_stock_tolerance_pct: 0.02
+  entry_future_tolerance_pct: 0.025
+  entry_spread_tolerance_pct: 0.03
+  signal_cutoff_before_day_end_minutes: 0
   max_gross_notional: null
   max_contracts_per_pair: 1
   capital_allocated_per_trade: null
@@ -100,6 +113,7 @@ spread_carry_alpha:
   min_floor_score: null
   min_alpha_score: null
   min_total_score: null
+  ranking_primary_metric: "avg_trade_return_annual_operational_recent"
   allowed_expiry_months: [3, 6, 9, 12]
   allowed_expiry_years: [2026]
 
@@ -126,6 +140,12 @@ ui:
   signal_refresh_max_pairs: null
   signal_refresh_save_csv: true
   pretrade_fail_open_on_transport_error: true
+  use_unified_signal_engine: true
+  unified_allow_legacy_fallback: true
+  unified_snapshot_ttl_sec: 120
+  unified_pair_workers: 4
+  unified_front_only: true
+  unified_front_roll_days: 7
 
 data:
   data_dir: "./data"
