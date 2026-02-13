@@ -78,6 +78,10 @@ def test_api_endpoints_return_rows(tmp_path):
     assert isinstance(top_pairs_data, list)
     assert len(top_pairs_data) == 1
     assert top_pairs_data[0]["stock"] == "AAA"
+    assert "signal_metrics" in top_pairs_data[0]
+    assert "score_model" in top_pairs_data[0]
+    assert "score_exec_probability" in top_pairs_data[0]
+    assert "score_exec_probability" in top_pairs_data[0]["signal_metrics"]
 
     signals = client.get("/api/signals?limit=5")
     assert signals.status_code == 200
@@ -207,6 +211,9 @@ def test_pretrade_check_endpoint_returns_price_bands_and_volume_gate(tmp_path, m
     assert payload["status"] == "PLACE"
     assert payload["ready_to_place"] is True
     assert "require_live_quotes_for_legs" not in payload["params"]
+    assert payload["params"]["stock_eps"] == 0.0015
+    assert payload["params"]["future_eps"] == 0.0015
+    assert payload["params"]["spread_eps"] == 0.0015
     assert payload["gates"]["quote_pass"] is True
     assert payload["gates"]["fut_quote_pass"] is True
     assert payload["gates"]["stock_volume_pass"] is True
@@ -260,5 +267,8 @@ def test_pretrade_check_endpoint_fail_opens_on_iss_transport_error(tmp_path, mon
     assert payload["degraded"] is True
     assert payload["gate_policy"]["mode"] == "iss_manual_drive_transport_fail_open"
     assert "iss_transport_error" in payload["advisory_reasons"]
+    assert payload["params"]["stock_eps"] == 0.0015
+    assert payload["params"]["future_eps"] == 0.0015
+    assert payload["params"]["spread_eps"] == 0.0015
     assert "order_price_bands" in payload
     assert "future_sell_min_contract" in payload["order_price_bands"]
