@@ -128,7 +128,7 @@ scenarios:
     required_keys: [run_id, timestamp, stock, future, signal_action, signal_score]
     allowed_field_values:
       signal_action: [enter, exit, hold_open]
-    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001]
+    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001]
     title: Active signals
     user_story: User receives only actionable signals.
     expectations:
@@ -148,12 +148,26 @@ scenarios:
       side: stock
       note: acceptance
     required_keys: [status, order_id]
-    test_cases: [TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002]
+    test_cases: [TC-SIG-EXEC-API-001, TC-SIG-EXEC-API-002, TC-SIG-EXEC-API-003, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002]
     title: Execute signal
     user_story: User can manually execute a signal and record the fact.
     expectations:
       - API accepts payload and returns status ok.
       - order_id is returned for side=stock|future to link legs of one order.
+  - id: auto-unwind-policy-v2
+    type: post_json
+    scope: backend
+    url: /api/v2/policies/auto-unwind/run
+    payload:
+      dry_run: true
+      timeout_sec: 60
+    required_keys: [status, policy, candidate_count, candidates]
+    test_cases: [TC-SIG-POLICY-API-001]
+    title: Auto-unwind policy run
+    user_story: System evaluates stale leg imbalance candidates before forced close.
+    expectations:
+      - API returns summary with policy name and candidate counters.
+      - Dry run does not write execution rows.
   - id: pretrade-check
     type: api_object
     scope: backend
@@ -162,7 +176,7 @@ scenarios:
     allow_empty: true
     required_keys:
       [status, ready_to_place, reasons, order_price_bands, volume_requirements, gates, hits]
-    test_cases: [TC-PRETRADE-API-001, TC-PRETRADE-UI-001]
+    test_cases: [TC-PRETRADE-API-001, TC-PRETRADE-API-002, TC-PRETRADE-UI-001]
     title: Delayed pre-trade readiness check
     user_story: Operator validates entry readiness for both legs before placing orders.
     expectations:
@@ -178,7 +192,7 @@ scenarios:
     allowed_field_values:
       signal_action: [enter, exit, hold]
     cache_as: signals_history
-    test_cases: [TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002]
+    test_cases: [TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002]
     title: История сигналов
     user_story: Пользователь видит историю сигналов за период.
     expectations:
@@ -257,7 +271,7 @@ scenarios:
         universe:
           max_pairs: 1
     required_keys: [status, run_id]
-    test_cases: [TC-HPO-UNIT-001]
+    test_cases: [TC-HPO-API-001, TC-HPO-UNIT-001]
     title: HPO run
     user_story: Researcher starts an HPO run.
     expectations:
@@ -284,11 +298,53 @@ scenarios:
     test_cases: [TC-SPREAD-API-001, TC-SPREAD-UI-001]
     title: График спреда
     user_story: Пользователь видит данные для графика спреда.
+  - id: news-feed-v2
+    type: api_list
+    scope: backend
+    url: /api/v2/news/feed?limit=5
+    allow_empty: true
+    required_keys: [news_event_id, published_at, severity, headline]
+    test_cases: [TC-NEWS-API-001, TC-NEWS-UI-001]
+    title: News feed v2
+    user_story: Operator reviews event feed with linked entities and severity.
+    expectations:
+      - Response is JSON array; rows include event id/time/severity/headline.
+  - id: portfolio-rebalance-v2
+    type: api_object
+    scope: backend
+    url: /api/v2/portfolio/rebalance/preview?limit=5
+    allow_empty: true
+    required_keys: [rebalance_plan_id, positions]
+    test_cases: [TC-PORT-API-001, TC-PORT-UI-001]
+    title: Portfolio rebalance preview v2
+    user_story: Operator inspects rebalance proposals before commit.
+    expectations:
+      - Response is JSON object with plan id and positions list.
+  - id: ops-health-v2
+    type: api_object
+    scope: backend
+    url: /api/v2/ops/health
+    required_keys: [status, timestamp, checks]
+    test_cases: [TC-OPS-API-001]
+    title: Ops health v2
+    user_story: Operator checks service liveness/readiness before market actions.
+    expectations:
+      - Response includes global status and dependency checks.
+  - id: ops-slo-v2
+    type: api_object
+    scope: backend
+    url: /api/v2/ops/slo
+    required_keys: [generated_at, slo_targets, api, events_15m, alerts]
+    test_cases: [TC-OPS-API-002]
+    title: Ops SLO snapshot v2
+    user_story: Operator reviews latency/error SLO and alert flags.
+    expectations:
+      - Response includes endpoint metrics and 15-minute event counters.
   - id: frontend
     type: http_status
     scope: frontend
     url: /
-    test_cases: [TC-FE-HTTP-001]
+    test_cases: [TC-FE-HTTP-001, TC-UI-DOMAIN-001, TC-UI-ROUTE-001, TC-UI-KPI-001]
     title: Доступность UI
     user_story: Пользователь может открыть UI.
   - id: frontend-proxy

@@ -126,6 +126,9 @@ ui:
   signal_refresh_max_pairs: null
   signal_refresh_save_csv: true
   pretrade_fail_open_on_transport_error: true
+  ff_db_projection_source: false
+  ff_fail_closed_execution: false
+  auto_unwind_timeout_sec: 600
 
 data:
   data_dir: "./data"
