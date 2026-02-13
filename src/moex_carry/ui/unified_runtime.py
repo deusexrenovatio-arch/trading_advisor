@@ -456,6 +456,13 @@ def _build_pair_rows(
         "unfilled_entry_rate": unfilled_entry_rate,
         "unfilled_exit_rate": unfilled_exit_rate,
         "forced_exit_rate": forced_exit_rate,
+        "rows": int(metrics.rows),
+        "days": int(metrics.days),
+        "entry_signals": int(metrics.entry_signals),
+        "exit_signals": int(metrics.exit_signals),
+        "trades_closed": int(metrics.trades_closed),
+        "avg_entry_wait_min_closed": _safe_float(metrics.avg_entry_wait_min_closed),
+        "avg_exit_wait_min_closed": _safe_float(metrics.avg_exit_wait_min_closed),
         "entry_spread_pct_min": entry_spread,
         "entry_spread_pct_max": entry_spread,
         "tp_spread_pct_level": tp_spread_level,
@@ -467,6 +474,10 @@ def _build_pair_rows(
     }
     decision = "ENTER_OK" if signal_action == "enter" else ("EXIT" if signal_action == "exit" else "HOLD")
     reasons = [f"replay_{signal_action}"]
+    if int(metrics.trades_closed) <= 0:
+        reasons.append("no_closed_trades_in_window")
+    if metrics.unfilled_entry_rate is not None and float(metrics.unfilled_entry_rate) >= 1.0:
+        reasons.append("entries_unfilled")
     if metrics.error:
         reasons.append(metrics.error)
 
@@ -558,6 +569,13 @@ def _build_pair_rows(
         "unfilled_entry_rate": unfilled_entry_rate,
         "unfilled_exit_rate": unfilled_exit_rate,
         "forced_exit_rate": forced_exit_rate,
+        "rows": int(metrics.rows),
+        "days": int(metrics.days),
+        "entry_signals": int(metrics.entry_signals),
+        "exit_signals": int(metrics.exit_signals),
+        "trades_closed": int(metrics.trades_closed),
+        "avg_entry_wait_min_closed": _safe_float(metrics.avg_entry_wait_min_closed),
+        "avg_exit_wait_min_closed": _safe_float(metrics.avg_exit_wait_min_closed),
         "signal_reasons": reasons,
         "signal_metrics": signal_metrics,
     }

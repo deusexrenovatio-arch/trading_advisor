@@ -179,6 +179,45 @@ def _parse_bool(value: object) -> bool | None:
     return None
 
 
+def _coerce_bool(value: object, *, default: bool) -> bool:
+    parsed = _parse_bool(value)
+    if parsed is None:
+        return bool(default)
+    return parsed
+
+
+def _default_require_score_gate_for_signals(settings: AppSettings) -> bool:
+    return bool(getattr(settings.ui, "require_score_gate_by_default", True))
+
+
+def _default_require_score_gate_for_top_pairs(settings: AppSettings) -> bool:
+    # Top-pairs should reflect historical ranking by default.
+    return bool(settings.ui.require_score_gate_top_pairs_by_default)
+
+
+def _resolve_require_score_gate(value: object, *, default: bool) -> bool:
+    return _coerce_bool(value, default=default)
+
+
+def _apply_score_gate_filter(df: pd.DataFrame, *, require_score_gate: bool) -> pd.DataFrame:
+    if not require_score_gate or df.empty or "score_gate_pass" not in df.columns:
+        return df
+    gate_mask = df["score_gate_pass"].map(lambda value: _coerce_bool(value, default=False))
+    return df.loc[gate_mask].copy()
+
+
+def _record_score_gate_pass(record: dict[str, object]) -> bool:
+    direct = _parse_bool(record.get("score_gate_pass"))
+    if direct is not None:
+        return bool(direct)
+    metrics = record.get("signal_metrics")
+    if isinstance(metrics, dict):
+        nested = _parse_bool(metrics.get("score_gate_pass"))
+        if nested is not None:
+            return bool(nested)
+    return False
+
+
 def _parse_int(value: object, default: int) -> int:
     if value is None:
         return default
@@ -706,22 +745,41 @@ def create_app(settings: AppSettings) -> Dash:
 
     def _persist_unified_signal_run(max_pairs: int | None) -> int:
         snapshot = _unified_snapshot(max_pairs=max_pairs, force=True)
+        require_score_gate_signals = _default_require_score_gate_for_signals(settings)
+        signals_all = snapshot.signals.copy()
+        top_pairs = snapshot.top_pairs.copy()
+        signals_actionable = _apply_score_gate_filter(
+            signals_all.copy(),
+            require_score_gate=require_score_gate_signals,
+        )
+        filtered_snapshot = UnifiedMarketSnapshot(
+            created_at=snapshot.created_at,
+            top_pairs=top_pairs,
+            signals=signals_all,
+            backtests=snapshot.backtests.copy(),
+            warnings=list(snapshot.warnings),
+            errors=list(snapshot.errors),
+        )
         if settings.ui.signal_refresh_save_csv:
-            persist_snapshot_to_csv(snapshot, paths.data_dir)
+            persist_snapshot_to_csv(filtered_snapshot, paths.data_dir)
         run_id = f"signal-run-{uuid.uuid4().hex[:8]}"
         as_of = datetime.now(timezone.utc)
         params = {
             "max_pairs": max_pairs,
             "engine": "unified_minute_replay",
+            "require_score_gate_signals": require_score_gate_signals,
+            "require_score_gate_top_pairs": False,
+            "signals_total": int(len(signals_all)),
+            "signals_actionable": int(len(signals_actionable)),
             "warnings": list(snapshot.warnings),
             "errors": list(snapshot.errors),
         }
-        records = snapshot.signals.to_dict("records") if not snapshot.signals.empty else []
+        records = signals_all.to_dict("records") if not signals_all.empty else []
         with session_factory() as session:
             store_signal_run(session, run_id, as_of, params)
             if records:
                 store_signal_history(session, run_id, as_of, records)
-        return len(records)
+        return int(len(signals_actionable))
 
     def _run_signal_refresh(trigger: str, force: bool = False) -> bool:
         if not refresh_enabled and not force:
@@ -1031,6 +1089,10 @@ def create_app(settings: AppSettings) -> Dash:
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
         all_pairs = request.args.get("all", "").lower() in {"1", "true", "yes"}
+        require_score_gate = _resolve_require_score_gate(
+            request.args.get("require_score_gate"),
+            default=_default_require_score_gate_for_top_pairs(settings),
+        )
         limit = int(request.args.get("limit", "500"))
         df = pd.DataFrame()
         if settings.ui.use_unified_signal_engine:
@@ -1044,6 +1106,7 @@ def create_app(settings: AppSettings) -> Dash:
                     return jsonify({"error": "server_error", "message": "unified_top_pairs_failed"}), 500
         if df.empty and settings.ui.unified_allow_legacy_fallback:
             df = load_top_pairs(paths.data_dir)
+        df = _apply_score_gate_filter(df, require_score_gate=require_score_gate)
         if not df.empty and "signal_score_norm" not in df.columns:
             if {"zscore", "implied_rate_net", "required_rate"}.issubset(df.columns):
                 z_entry = settings.strategy.z_entry
@@ -1060,6 +1123,10 @@ def create_app(settings: AppSettings) -> Dash:
     @server.route("/api/signals", methods=["GET"])
     def signals_api():
         df = pd.DataFrame()
+        require_score_gate = _resolve_require_score_gate(
+            request.args.get("require_score_gate"),
+            default=_default_require_score_gate_for_signals(settings),
+        )
         if settings.ui.use_unified_signal_engine:
             limit = int(request.args.get("limit", "500"))
             try:
@@ -1071,6 +1138,7 @@ def create_app(settings: AppSettings) -> Dash:
                     return jsonify({"error": "server_error", "message": "unified_signals_failed"}), 500
         if df.empty and settings.ui.unified_allow_legacy_fallback:
             df = load_signals(paths.data_dir)
+        df = _apply_score_gate_filter(df, require_score_gate=require_score_gate)
         limit = int(request.args.get("limit", "500"))
         df = df.head(max(limit, 0)) if limit else df
         records = [_merge_signal_metrics(record) for record in _df_to_records(df)]
@@ -1078,6 +1146,10 @@ def create_app(settings: AppSettings) -> Dash:
 
     @server.route("/api/signals/active", methods=["GET"])
     def signals_active_api():
+        require_score_gate = _resolve_require_score_gate(
+            request.args.get("require_score_gate"),
+            default=_default_require_score_gate_for_signals(settings),
+        )
         with session_factory() as session:
             latest = load_latest_signal_run(session)
             if not latest:
@@ -1290,6 +1362,13 @@ def create_app(settings: AppSettings) -> Dash:
                     ),
                 }
                 actionable.append(_merge_signal_metrics(payload))
+
+            if require_score_gate:
+                actionable = [
+                    row
+                    for row in actionable
+                    if bool(row.get("position_open")) or _record_score_gate_pass(row)
+                ]
 
             actionable.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
             actionable.sort(key=lambda item: 0 if bool(item.get("position_open")) else 1)
@@ -1739,8 +1818,14 @@ def create_app(settings: AppSettings) -> Dash:
                     max_pairs=_resolved_unified_max_pairs(settings.ui.signal_refresh_max_pairs),
                     force=False,
                 )
-                top_pairs = snapshot.top_pairs.copy()
-                signals = snapshot.signals.copy()
+                top_pairs = _apply_score_gate_filter(
+                    snapshot.top_pairs.copy(),
+                    require_score_gate=_default_require_score_gate_for_top_pairs(settings),
+                )
+                signals = _apply_score_gate_filter(
+                    snapshot.signals.copy(),
+                    require_score_gate=_default_require_score_gate_for_signals(settings),
+                )
                 backtest = snapshot.backtests.copy()
             except Exception:
                 logger.exception("Unified Dash refresh failed")

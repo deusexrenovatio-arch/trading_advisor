@@ -182,6 +182,8 @@ class UiConfig(BaseModel):
     unified_pair_workers: int = 4
     unified_front_only: bool = True
     unified_front_roll_days: int = 7
+    require_score_gate_by_default: bool = True
+    require_score_gate_top_pairs_by_default: bool = False
 
 
 class DataConfig(BaseModel):
@@ -256,14 +258,17 @@ def _default_config_path() -> Path:
 
 def load_settings(config_path: Optional[str] = None) -> AppSettings:
     config_data: dict[str, Any] = {}
-    path: Optional[Path] = None
+    default_path = _default_config_path()
+    config_paths: list[Path] = []
+
+    if default_path.exists():
+        config_paths.append(default_path)
     if config_path:
-        path = Path(config_path)
-    else:
-        default_path = _default_config_path()
-        if default_path.exists():
-            path = default_path
-    if path and path.exists():
+        override_path = Path(config_path)
+        if override_path.exists():
+            config_paths.append(override_path)
+
+    for path in config_paths:
         with path.open("r", encoding="utf-8") as handle:
             yaml_data = yaml.safe_load(handle) or {}
         if isinstance(yaml_data, dict):
