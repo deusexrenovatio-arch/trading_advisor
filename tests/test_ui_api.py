@@ -3,7 +3,7 @@ from datetime import date
 import pandas as pd
 import requests
 
-from moex_carry.config import AppSettings, DataConfig
+from moex_carry.config import AppSettings, DataConfig, UiConfig
 from moex_carry.ui.app import SIGNAL_METRIC_CONTRACT_KEYS, create_app
 import moex_carry.ui.app as ui_app
 
@@ -101,6 +101,137 @@ def test_api_endpoints_return_rows(tmp_path):
     assert isinstance(backtests_data, list)
     assert len(backtests_data) == 1
     assert backtests_data[0]["sharpe"] == 1.1
+
+
+def test_score_gate_required_by_default_and_can_be_disabled(tmp_path):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_csv(
+        output_dir / "top_pairs.csv",
+        [
+            {
+                "stock": "AAA",
+                "stock_name": "Alpha",
+                "future": "AAH6",
+                "signal_action": "hold",
+                "signal_score": 0.11,
+                "score_gate_pass": False,
+            },
+            {
+                "stock": "BBB",
+                "stock_name": "Beta",
+                "future": "BBH6",
+                "signal_action": "enter",
+                "signal_score": 0.22,
+                "score_gate_pass": True,
+            },
+        ],
+    )
+    _write_csv(
+        output_dir / "signals.csv",
+        [
+            {
+                "stock": "AAA",
+                "stock_name": "Alpha",
+                "future": "AAH6",
+                "signal_action": "hold",
+                "signal_score": 0.11,
+                "score_gate_pass": False,
+                "signal_metrics": {"score_gate_pass": False},
+            },
+            {
+                "stock": "BBB",
+                "stock_name": "Beta",
+                "future": "BBH6",
+                "signal_action": "enter",
+                "signal_score": 0.22,
+                "score_gate_pass": True,
+                "signal_metrics": {"score_gate_pass": True},
+            },
+        ],
+    )
+    _write_csv(output_dir / "backtest_summary.csv", [{"cagr": 0.1}])
+
+    settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    top_pairs_default = client.get("/api/top-pairs?limit=10")
+    assert top_pairs_default.status_code == 200
+    top_pairs_default_data = top_pairs_default.get_json()
+    assert len(top_pairs_default_data) == 2
+    assert {row["stock"] for row in top_pairs_default_data} == {"AAA", "BBB"}
+
+    top_pairs_all = client.get("/api/top-pairs?limit=10&require_score_gate=false")
+    assert top_pairs_all.status_code == 200
+    assert len(top_pairs_all.get_json()) == 2
+
+    top_pairs_gated = client.get("/api/top-pairs?limit=10&require_score_gate=true")
+    assert top_pairs_gated.status_code == 200
+    top_pairs_gated_data = top_pairs_gated.get_json()
+    assert len(top_pairs_gated_data) == 1
+    assert top_pairs_gated_data[0]["stock"] == "BBB"
+    assert top_pairs_gated_data[0]["score_gate_pass"] is True
+
+    signals_default = client.get("/api/signals?limit=10")
+    assert signals_default.status_code == 200
+    signals_default_data = signals_default.get_json()
+    assert len(signals_default_data) == 1
+    assert signals_default_data[0]["stock"] == "BBB"
+    assert signals_default_data[0]["score_gate_pass"] is True
+    assert signals_default_data[0]["signal_metrics"]["score_gate_pass"] is True
+
+    signals_all = client.get("/api/signals?limit=10&require_score_gate=0")
+    assert signals_all.status_code == 200
+    assert len(signals_all.get_json()) == 2
+
+
+def test_top_pairs_default_gate_can_be_enabled_from_config(tmp_path):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_csv(
+        output_dir / "top_pairs.csv",
+        [
+            {
+                "stock": "AAA",
+                "stock_name": "Alpha",
+                "future": "AAH6",
+                "signal_action": "hold",
+                "signal_score": 0.11,
+                "score_gate_pass": False,
+            },
+            {
+                "stock": "BBB",
+                "stock_name": "Beta",
+                "future": "BBH6",
+                "signal_action": "enter",
+                "signal_score": 0.22,
+                "score_gate_pass": True,
+            },
+        ],
+    )
+    _write_csv(output_dir / "signals.csv", [])
+    _write_csv(output_dir / "backtest_summary.csv", [{"cagr": 0.1}])
+
+    settings = AppSettings(
+        data=DataConfig(data_dir=str(tmp_path)),
+        ui=UiConfig(
+            require_score_gate_by_default=False,
+            require_score_gate_top_pairs_by_default=True,
+        ),
+    )
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    top_pairs_default = client.get("/api/top-pairs?limit=10")
+    assert top_pairs_default.status_code == 200
+    top_pairs_default_data = top_pairs_default.get_json()
+    assert len(top_pairs_default_data) == 1
+    assert top_pairs_default_data[0]["stock"] == "BBB"
+
+    top_pairs_all = client.get("/api/top-pairs?limit=10&require_score_gate=false")
+    assert top_pairs_all.status_code == 200
+    assert len(top_pairs_all.get_json()) == 2
 
 
 def test_spread_series_endpoint_uses_builder(tmp_path, monkeypatch):

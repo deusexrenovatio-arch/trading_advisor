@@ -120,6 +120,7 @@ def _settings(tmp_path: Path, *, allow_legacy_fallback: bool) -> AppSettings:
         unified_pair_workers=1,
         unified_front_only=True,
         unified_front_roll_days=7,
+        require_score_gate_by_default=False,
     )
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path), compute_lookback_days=120),
@@ -207,3 +208,13 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     status_payload = refresh.get_json()
     assert status_payload["status"] == "ok"
     assert status_payload["engine"] == "unified_minute_replay"
+    assert int(status_payload["rows"]) >= 0
+
+    history = client.get("/api/signals/history?limit=5")
+    assert history.status_code == 200
+    history_data = history.get_json()
+    assert isinstance(history_data, list)
+    assert history_data
+    assert "signal_reasons" in history_data[0]
+    assert "signal_metrics" in history_data[0]
+    assert "trades_closed" in history_data[0]

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from moex_carry.config import AppSettings, DataConfig, DatabaseConfig
+from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_open_executions,
@@ -20,6 +20,7 @@ def _build_settings(tmp_path):
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path)),
         database=DatabaseConfig(url=f"sqlite:///{tmp_path}/signals.db"),
+        ui=UiConfig(require_score_gate_by_default=False),
     )
 
 
@@ -681,3 +682,59 @@ def test_signals_active_includes_execution_only_open_pairs(tmp_path):
     assert missing_row["position_open"] is True
     assert missing_row["signal_reasons"] == ["position_open_no_active_signal"]
     _assert_signal_metric_contract(missing_row)
+
+
+def test_signals_active_requires_score_gate_by_default_and_supports_override(tmp_path):
+    settings = AppSettings(
+        data=DataConfig(data_dir=str(tmp_path)),
+        database=DatabaseConfig(url=f"sqlite:///{tmp_path}/signals.db"),
+        ui=UiConfig(require_score_gate_by_default=True),
+    )
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-1",
+            datetime(2025, 1, 4, 12, 0, 0),
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.1,
+                    "score_gate_pass": False,
+                    "signal_reasons": [],
+                    "signal_metrics": {"score_gate_pass": False},
+                },
+                {
+                    "stock": "BBB",
+                    "future": "BBH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.2,
+                    "score_gate_pass": True,
+                    "signal_reasons": [],
+                    "signal_metrics": {"score_gate_pass": True},
+                },
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response_default = client.get("/api/signals/active")
+    assert response_default.status_code == 200
+    data_default = response_default.get_json()
+    assert isinstance(data_default, list)
+    assert len(data_default) == 1
+    assert data_default[0]["stock"] == "BBB"
+    assert data_default[0]["score_gate_pass"] is True
+
+    response_all = client.get("/api/signals/active?require_score_gate=false")
+    assert response_all.status_code == 200
+    data_all = response_all.get_json()
+    assert isinstance(data_all, list)
+    assert len(data_all) == 2
