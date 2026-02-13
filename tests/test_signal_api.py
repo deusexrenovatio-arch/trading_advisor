@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig
+from moex_carry.signals_ack import build_ack_note, build_signal_fingerprint
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_open_executions,
@@ -271,6 +272,35 @@ def test_signals_execute_normalizes_hold_open_action_to_enter(tmp_path):
         rows = load_open_executions(session)
         assert len(rows) == 1
         assert rows[0].action == "enter"
+
+
+def test_signals_execute_ack_sets_default_acknowledged_status(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.post(
+        "/api/signals/execute",
+        json={
+            "stock": "AAA",
+            "future": "AAH6",
+            "direction": "cash_and_carry",
+            "action": "ack",
+            "note": "{}",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        rows = load_open_executions(session)
+        assert len(rows) == 1
+        assert rows[0].action == "ack"
+        assert rows[0].status == "acknowledged"
 
 
 def test_signals_executions_endpoint_returns_rows(tmp_path):
@@ -681,3 +711,260 @@ def test_signals_active_includes_execution_only_open_pairs(tmp_path):
     assert missing_row["position_open"] is True
     assert missing_row["signal_reasons"] == ["position_open_no_active_signal"]
     _assert_signal_metric_contract(missing_row)
+
+
+def test_signals_active_exposes_signal_used_fields_from_ack(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    signal_ts = datetime(2025, 1, 4, 12, 0, 0)
+    ack_ts = signal_ts + timedelta(minutes=1)
+    fingerprint = build_signal_fingerprint(
+        run_id="run-1",
+        timestamp=signal_ts.isoformat(),
+        stock="AAA",
+        future="AAH6",
+        signal_action="enter",
+    )
+    note = build_ack_note(
+        fingerprint=fingerprint,
+        signal_run_id="run-1",
+        signal_timestamp=signal_ts.isoformat(),
+        signal_action="enter",
+        telegram_user_id=123456,
+        telegram_username="trader_bot_user",
+        telegram_chat_id=987654,
+        acked_at=ack_ts.isoformat(),
+    )
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-1",
+            signal_ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.2,
+                    "signal_reasons": ["enter_ok"],
+                    "signal_metrics": {},
+                }
+            ],
+        )
+        store_signal_execution(
+            session,
+            ack_ts,
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "ack",
+                "status": "acknowledged",
+                "note": note,
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    response = client.get("/api/signals/active")
+    assert response.status_code == 200
+    data = response.get_json()
+    row = next(item for item in data if item["stock"] == "AAA")
+    assert row["signal_used"] is True
+    assert row["signal_used_by"] == "trader_bot_user"
+    assert row["signal_used_at"] is not None
+    assert row["signal_details_pending"] is True
+
+
+def test_signals_active_ack_does_not_affect_position_balance(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    signal_ts = datetime(2025, 1, 5, 12, 0, 0)
+    enter_ts = signal_ts + timedelta(minutes=1)
+    ack_ts = signal_ts + timedelta(minutes=2)
+    fingerprint = build_signal_fingerprint(
+        run_id="run-1",
+        timestamp=signal_ts.isoformat(),
+        stock="AAA",
+        future="AAH6",
+        signal_action="exit",
+    )
+    note = build_ack_note(
+        fingerprint=fingerprint,
+        signal_run_id="run-1",
+        signal_timestamp=signal_ts.isoformat(),
+        signal_action="exit",
+        telegram_user_id=123456,
+        telegram_username=None,
+        telegram_chat_id=111,
+        acked_at=ack_ts.isoformat(),
+    )
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-1",
+            signal_ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "exit",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.1,
+                    "signal_reasons": ["zscore_revert"],
+                    "signal_metrics": {},
+                }
+            ],
+        )
+        store_signal_execution(
+            session,
+            enter_ts,
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "enter",
+                "price": 100.0,
+                "quantity": 1,
+                "side": "stock",
+            },
+        )
+        store_signal_execution(
+            session,
+            ack_ts,
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "ack",
+                "status": "acknowledged",
+                "note": note,
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    response = client.get("/api/signals/active")
+    assert response.status_code == 200
+    data = response.get_json()
+    row = next(item for item in data if item["stock"] == "AAA")
+    assert row["signal_action"] == "exit"
+    assert row["position_open"] is True
+    assert row["position_net_executions"] == 1
+    assert row["signal_used"] is True
+    assert row["signal_details_pending"] is True
+
+
+def test_signals_active_clears_pending_when_trade_after_ack(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    signal_ts = datetime(2025, 1, 6, 12, 0, 0)
+    enter_ts_1 = signal_ts + timedelta(minutes=1)
+    enter_ts_2 = signal_ts + timedelta(minutes=2)
+    ack_ts = signal_ts + timedelta(minutes=3)
+    exit_ts = signal_ts + timedelta(minutes=4)
+    fingerprint = build_signal_fingerprint(
+        run_id="run-1",
+        timestamp=signal_ts.isoformat(),
+        stock="AAA",
+        future="AAH6",
+        signal_action="exit",
+    )
+    note = build_ack_note(
+        fingerprint=fingerprint,
+        signal_run_id="run-1",
+        signal_timestamp=signal_ts.isoformat(),
+        signal_action="exit",
+        telegram_user_id=999,
+        telegram_username="operator_1",
+        telegram_chat_id=111,
+        acked_at=ack_ts.isoformat(),
+    )
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-1",
+            signal_ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "exit",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.1,
+                    "signal_reasons": ["zscore_revert"],
+                    "signal_metrics": {},
+                }
+            ],
+        )
+        store_signal_execution(
+            session,
+            enter_ts_1,
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "enter",
+                "price": 100.0,
+                "quantity": 1,
+                "side": "stock",
+                "order_id": "ord-enter-1",
+            },
+        )
+        store_signal_execution(
+            session,
+            enter_ts_2,
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "enter",
+                "price": 101.0,
+                "quantity": 1,
+                "side": "future",
+                "order_id": "ord-enter-1",
+            },
+        )
+        store_signal_execution(
+            session,
+            ack_ts,
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "ack",
+                "status": "acknowledged",
+                "note": note,
+            },
+        )
+        store_signal_execution(
+            session,
+            exit_ts,
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "exit",
+                "price": 102.0,
+                "quantity": 1,
+                "side": "stock",
+                "order_id": "ord-exit-1",
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    response = client.get("/api/signals/active")
+    assert response.status_code == 200
+    data = response.get_json()
+    row = next(item for item in data if item["stock"] == "AAA")
+    assert row["signal_action"] == "exit"
+    assert row["signal_used"] is True
+    assert row["signal_details_pending"] is False

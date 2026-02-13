@@ -72,6 +72,9 @@ def main() -> None:
     ui_parser = subparsers.add_parser("ui", help="Run Dash UI")
     _add_common_args(ui_parser)
 
+    telegram_parser = subparsers.add_parser("telegram_bot", help="Run Telegram signal worker")
+    _add_common_args(telegram_parser)
+
     backtest_v2_parser = subparsers.add_parser("backtest_v2", help="Run Backtest v2")
     _add_common_args(backtest_v2_parser)
     backtest_v2_parser.add_argument("--request", type=str, default=None, help="Path to BacktestRequest YAML/JSON")
@@ -148,6 +151,10 @@ def main() -> None:
         from moex_carry.ui.app import run_ui
 
         run_ui(settings)
+    elif args.command == "telegram_bot":
+        from moex_carry.integrations.telegram_worker import run_telegram_worker
+
+        run_telegram_worker(settings)
     elif args.command == "backtest_v2":
         from moex_carry.backtest_v2.runtime import run_backtest_v2_cached, serialize_backtest_report
         from moex_carry.contracts.strategy_test import BacktestRequest
