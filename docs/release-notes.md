@@ -18,6 +18,14 @@ Changed
   - `GET /api/v2/signals/history`
   - `GET /api/v2/signals/executions`
   - `POST /api/v2/signals/{signal_id}/actions`
+- Acceptance smoke migrated to v2-first routes:
+  - `configs/acceptance_scenarios.yaml` now uses `/api/v2/decisions/view`, `/api/v2/top-pairs`,
+    `/api/v2/signals/active`, `/api/v2/signals/history`.
+  - Added dynamic scenario `signals-action-v2` (`active -> /api/v2/signals/{signal_id}/actions`).
+  - `scripts/acceptance_check.py` now supports `signal_action` and parameterized source/url templates
+    for `spread_series`, `backtest_run`, and `history_date_range`.
+- Acceptance documentation updated:
+  - `docs/test-cases.md` aligned with v2 URLs and new case `TC-SIG-ACT-API-003`.
 - v2 action response for decisions now includes explicit refs used by UI:
   - `decision_ref`
   - `execution_ref`
@@ -26,6 +34,8 @@ Changed
 
 Verification
 - Backend:
+  - `python scripts/validate_test_cases.py`
+  - `python scripts/acceptance_check.py --skip-frontend --allow-empty`
   - `python -m pytest tests/test_api_v2.py`
   - `python -m pytest tests/test_ui_api.py`
   - `python -m pytest tests/test_signal_api.py`

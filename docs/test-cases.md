@@ -18,7 +18,8 @@
 - params-specs -> TC-PARAMS-API-001
 - frontend-params-specs -> TC-BACK-V2-UI-001, TC-BACK-V2-UI-002
 - top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
-- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
+- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001
+- signals-action-v2 -> TC-SIG-ACT-API-003
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
 - signals-history-reasons -> TC-SIG-HIST-API-004
 - signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-API-002, TC-SIG-EXEC-API-003, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002
@@ -47,7 +48,7 @@
 - US-01 Configure the strategy -> params-specs (TC-PARAMS-API-001) + unit tests: tests/test_config_resolver.py, tests/test_parameter_specs.py.
 - US-02 Daily scan of pairs -> top-pairs, signals-active, signals-history, frontend, frontend-proxy (TC-TOP-*, TC-SIG-ACT-*, TC-SIG-HIST-*, TC-FE-*).
 - US-03 Drill into a pair -> spread-series + top-pairs details (TC-SPREAD-API-001, TC-SPREAD-UI-001, TC-TOP-UI-002).
-- US-04 Enter a position -> signals-execute + pretrade-check + decision-action (TC-SIG-EXEC-API-001, TC-SIG-EXEC-API-002, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002, TC-PRETRADE-API-001, TC-PRETRADE-UI-001, TC-DEC-API-004, TC-DEC-UI-002).
+- US-04 Enter a position -> signals-action-v2 + signals-execute + pretrade-check + decision-action (TC-SIG-ACT-API-003, TC-SIG-EXEC-API-001, TC-SIG-EXEC-API-002, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002, TC-PRETRADE-API-001, TC-PRETRADE-UI-001, TC-DEC-API-004, TC-DEC-UI-002).
 - US-04 Enter a position -> fail-closed guard on degraded/pretrade-unknown entry (tests/test_api_v2.py).
 - US-05 Early exit (alpha) -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
 - US-06 Hold to expiry or roll -> signals-history-reasons + spread-series (TC-SIG-HIST-API-004, TC-SPREAD-API-001) + unit tests: tests/test_spread_carry_alpha.py.
@@ -364,8 +365,8 @@ Expected:
 Acceptance: decision-view
 Automation: scripts/acceptance_check.py (decision-view)
 Request:
-- GET /api/decision-view?limit=5
 - GET /api/v2/decisions/view?limit=5
+- GET /api/decision-view?limit=5 (adapter compatibility smoke)
 Expected:
 - JSON list with decision_id, created_at, action, risk_state.
 - For v2 response, rows include backend-owned `decision_ref` and `execution_ref`.
@@ -375,7 +376,7 @@ Expected:
 Acceptance: decision-view-aggregation
 Automation: scripts/acceptance_check.py (decision-view-aggregation)
 Request:
-- GET /api/decision-view?limit=1
+- GET /api/v2/decisions/view?limit=1
 Expected:
 - aggregation_summary field exists.
 
@@ -391,7 +392,7 @@ Expected:
 Acceptance: decision-action
 Automation: scripts/acceptance_check.py (decision-action)
 Request:
-- POST /api/decisions/{decision_id}/action
+- POST /api/v2/decisions/{decision_id}/actions
 Expected:
 - status ok and operator_action/execution_status present.
 
@@ -445,7 +446,7 @@ Expected:
 Acceptance: top-pairs
 Automation: scripts/acceptance_check.py (top-pairs)
 Request:
-- GET /api/top-pairs?limit=5
+- GET /api/v2/top-pairs?limit=5
 Expected:
 - Required keys include spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
 - signal_reasons/signal_metrics are absent.
@@ -454,7 +455,7 @@ Expected:
 Acceptance: signals-active
 Automation: scripts/acceptance_check.py (signals-active)
 Request:
-- GET /api/signals/active
+- GET /api/v2/signals/active
 Expected:
 - signal_action only `enter`/`exit`/`hold_open` (`hold_open` is used for open, not yet closed positions).
 - If `signal_metrics` contains execution plan values, they are also available at top level
@@ -464,19 +465,30 @@ Expected:
 Acceptance: signals-active
 Automation: tests/test_intraday_marketdata_scaling.py
 Request:
-- GET /api/signals/active
+- GET /api/v2/signals/active
 Expected:
 - Rows expose `orderbook_stock_quote_available`, `orderbook_fut_quote_available`,
   `orderbook_stock_depth_available`, `orderbook_fut_depth_available`.
 - If futures quote/depth is missing in ISS, `orderbook_data_warnings` contains
   `orderbook_fut_quote_missing` and/or `orderbook_fut_depth_missing`.
 
+### TC-SIG-ACT-API-003 Signal action v2 from active feed
+Acceptance: signals-action-v2
+Automation: scripts/acceptance_check.py (signal_action)
+Request:
+- GET /api/v2/signals/active?limit=5 (resolve `signal_id`)
+- POST /api/v2/signals/{signal_id}/actions (`action=ack`)
+Expected:
+- If active rows exist, action request returns HTTP 200 with status `ok` or `duplicate`.
+- Response includes `signal_id`, `entity_ref`, `action`, and `fail_closed`.
+- Scenario is skipped (not failed) when no active rows are available.
+
 ### TC-SIG-CONTRACT-API-001 Signals API contract completeness
 Acceptance: signals-active, signals-history
 Automation: tests/test_signal_api.py, tests/test_ui_api.py
 Request:
-- GET /api/signals/active
-- GET /api/signals/history?limit=5
+- GET /api/v2/signals/active
+- GET /api/v2/signals/history?limit=5
 - GET /api/signals?limit=5
 Expected:
 - Each row contains `signal_metrics` as an object.
@@ -487,7 +499,7 @@ Expected:
 Acceptance: signals-history
 Automation: scripts/acceptance_check.py (signals-history)
 Request:
-- GET /api/signals/history?limit=5
+- GET /api/v2/signals/history?limit=5
 Expected:
 - Required keys exist, action in enter/exit/hold.
 
@@ -495,7 +507,7 @@ Expected:
 Acceptance: signals-history-range
 Automation: scripts/acceptance_check.py (signals-history-range)
 Request:
-- GET /api/signals/history?from=YYYY-MM-DD&to=YYYY-MM-DD
+- GET /api/v2/signals/history?from=YYYY-MM-DD&to=YYYY-MM-DD
 Expected:
 - Inclusive range for the day.
 
@@ -503,7 +515,7 @@ Expected:
 Acceptance: signals-history
 Automation: tests/test_signal_api.py
 Request:
-- GET /api/signals/history?stock=SBER&future=SRH6&signal_action=enter&limit=500
+- GET /api/v2/signals/history?stock=SBER&future=SRH6&signal_action=enter&limit=500
 Expected:
 - All rows match stock/future/action.
 
@@ -511,7 +523,7 @@ Expected:
 Acceptance: signals-history-reasons
 Automation: scripts/acceptance_check.py (api_list)
 Request:
-- GET /api/signals/history?limit=5
+- GET /api/v2/signals/history?limit=5
 Expected:
 - Each row includes signal_reasons and signal_metrics.
 
@@ -639,7 +651,7 @@ Expected:
 Acceptance: frontend-proxy
 Automation: scripts/acceptance_check.py (frontend-proxy)
 Request:
-- GET http://127.0.0.1:5176/api/top-pairs?limit=5
+- GET http://127.0.0.1:5176/api/v2/top-pairs?limit=5
 Expected:
 - JSON list returned via proxy.
 
@@ -656,7 +668,7 @@ Expected:
 - Leaderboard orders by objective and best_config matches the top trial.
 
 ## Regression Checklist (minimum)
-- /api/signals/history returns JSON (no HTML).
+- /api/v2/signals/history returns JSON (no HTML).
 - Signals tab loads and renders history table.
 - Filters change visible rows (not just the first row).
 
