@@ -135,6 +135,9 @@ type PretradeCheckOptions = {
   snapshots?: number
   minHits?: number
   eps?: number
+  stockEps?: number
+  futureEps?: number
+  spreadEps?: number
   syncSec?: number
   pollSec?: number
   qtyFut?: number
@@ -154,6 +157,9 @@ export const fetchPretradeCheck = (
   if (options.snapshots !== undefined) params.set('snapshots', String(options.snapshots))
   if (options.minHits !== undefined) params.set('min_hits', String(options.minHits))
   if (options.eps !== undefined) params.set('eps', String(options.eps))
+  if (options.stockEps !== undefined) params.set('stock_eps', String(options.stockEps))
+  if (options.futureEps !== undefined) params.set('future_eps', String(options.futureEps))
+  if (options.spreadEps !== undefined) params.set('spread_eps', String(options.spreadEps))
   if (options.syncSec !== undefined) params.set('sync_sec', String(options.syncSec))
   if (options.pollSec !== undefined) params.set('poll_sec', String(options.pollSec))
   if (options.qtyFut !== undefined) params.set('qty_fut', String(options.qtyFut))

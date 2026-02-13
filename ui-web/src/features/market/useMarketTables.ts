@@ -27,6 +27,14 @@ const PRETRADE_SNAPSHOTS = 4
 const PRETRADE_MIN_HITS = 2
 const PRETRADE_POLL_SEC = 0
 const PRETRADE_PREFETCH_LIMIT = 12
+const SIGNALS_EXECUTION_PROFILE = {
+  executionLagMinutes: 30,
+  executionMaxWaitMinutes: 360,
+  entryStockTolerancePct: 0.02,
+  entryFutureTolerancePct: 0.025,
+  entrySpreadTolerancePct: 0.03,
+  signalCutoffBeforeDayEndMinutes: 0,
+} as const
 const SIGNAL_ACTION_ENTER = 'enter'
 const SIGNAL_ACTION_HOLD_PRETRADE = 'hold_pretrade'
 const SIGNAL_ACTION_CHECK_PRETRADE = 'check_pretrade'
@@ -338,6 +346,9 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
           direction,
           snapshots: PRETRADE_SNAPSHOTS,
           minHits: PRETRADE_MIN_HITS,
+          stockEps: SIGNALS_EXECUTION_PROFILE.entryStockTolerancePct,
+          futureEps: SIGNALS_EXECUTION_PROFILE.entryFutureTolerancePct,
+          spreadEps: SIGNALS_EXECUTION_PROFILE.entrySpreadTolerancePct,
           pollSec: PRETRADE_POLL_SEC,
         })
         setPretradeChecks((prev) => ({ ...prev, [pairKey]: data }))
@@ -533,7 +544,15 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         'floor_rate_annual',
         'score_floor',
         'total_score',
+        'score_exec_probability',
+        'score_earn_probability',
+        'score_gate_pass',
+        'avg_trade_return_annual_operational_recent',
         'avg_trade_return_annual_recent',
+        'share_target_pass',
+        'unfilled_entry_rate',
+        'unfilled_exit_rate',
+        'forced_exit_rate',
         'decision',
         'signal_action',
         'signal_direction',
@@ -547,6 +566,9 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         'signal_action_effective',
         'signal_direction',
         'signal_score',
+        'score_exec_probability',
+        'score_earn_probability',
+        'score_gate_pass',
         'entry_stock_min',
         'entry_stock_max',
         'entry_future_min_per_share',
@@ -715,6 +737,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       'spread_mid',
       'spread_pct',
       'rtc_pct',
+      'score_model',
       'total_score',
     ],
     [],
@@ -726,7 +749,9 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       'liquidity_pass',
       'dte',
       'floor_rate_annual',
+      'score_target_annual',
       'score_floor',
+      'score_floor_excess_annual',
       'r_cb_annual',
       'r_fund_annual',
       'r_disc_annual',
@@ -737,7 +762,16 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
 
   const alphaFields = useMemo(
     () => [
+      'avg_trade_return_annual_operational_recent',
       'avg_trade_return_annual_recent',
+      'share_target_pass',
+      'unfilled_entry_rate',
+      'unfilled_exit_rate',
+      'forced_exit_rate',
+      'score_exec_probability',
+      'score_earn_probability',
+      'score_edge_raw_annual',
+      'score_gate_pass',
       'score_alpha',
       'p_hit_tp',
       'p_hit_sl',
@@ -760,7 +794,15 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
   )
 
   const signalContextFields = useMemo(
-    () => ['signal_action', 'signal_direction', 'signal_score', 'decision', 'signal_reasons'],
+    () => [
+      'signal_action',
+      'signal_direction',
+      'signal_score',
+      'score_model',
+      'score_gate_pass',
+      'decision',
+      'signal_reasons',
+    ],
     [],
   )
 
@@ -821,10 +863,18 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       'orderbook_stock_imbalance',
       'orderbook_fut_imbalance',
       'floor_rate_annual',
+      'score_target_annual',
       'rtc_pct',
       'spread_pct',
       'score_floor',
+      'score_floor_excess_annual',
       'score_alpha',
+      'score_edge_raw_annual',
+      'score_exec_probability',
+      'score_earn_probability',
+      'score_gate_exec_threshold',
+      'score_gate_earn_threshold',
+      'score_gate_pass',
       'total_score',
     ],
     [],

@@ -212,6 +212,32 @@ const BacktestV2Tab = ({
                 ))}
               </Stack>
             ) : null}
+            {backtestRunReport.execution_model ? (
+              <>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="subtitle2" fontWeight={600}>
+                  Модель исполнения
+                </Typography>
+                <KeyValueGrid
+                  payload={backtestRunReport.execution_model}
+                  renderLabel={renderFieldLabel}
+                  renderValue={(value, key) => formatCellValue(value, key)}
+                />
+              </>
+            ) : null}
+            {backtestRunReport.fill_quality_summary ? (
+              <>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="subtitle2" fontWeight={600}>
+                  Качество исполнения (minute replay)
+                </Typography>
+                <KeyValueGrid
+                  payload={backtestRunReport.fill_quality_summary}
+                  renderLabel={renderFieldLabel}
+                  renderValue={(value, key) => formatCellValue(value, key)}
+                />
+              </>
+            ) : null}
           </Stack>
         </Paper>
         <Paper sx={{ p: 2 }}>

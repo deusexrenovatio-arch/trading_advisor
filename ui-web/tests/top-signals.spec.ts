@@ -12,9 +12,16 @@ const topPairsFirst = [
     spread_pct: 0.012,
     rtc_pct: 0.001,
     floor_rate_annual: 0.18,
+    score_model: 'probabilistic_edge_v1',
+    score_target_annual: 0.16,
     score_floor: 0.02,
+    score_floor_excess_annual: 0.02,
     avg_trade_return_annual_recent: 0.14,
     score_alpha: 0.005,
+    score_edge_raw_annual: 0.01025,
+    score_exec_probability: 0.78,
+    score_earn_probability: 0.42,
+    score_gate_pass: true,
     total_score: 0.025,
     decision: 'ENTER_OK',
     signal_action: 'enter',
@@ -32,9 +39,16 @@ const topPairsFirst = [
     spread_pct: -0.004,
     rtc_pct: 0.001,
     floor_rate_annual: 0.09,
+    score_model: 'probabilistic_edge_v1',
+    score_target_annual: 0.16,
     score_floor: -0.01,
+    score_floor_excess_annual: -0.01,
     avg_trade_return_annual_recent: 0.05,
     score_alpha: 0.002,
+    score_edge_raw_annual: -0.0022,
+    score_exec_probability: 0.55,
+    score_earn_probability: 0.09,
+    score_gate_pass: false,
     total_score: -0.008,
     decision: 'SKIP_FLOOR',
     signal_action: 'hold',
@@ -55,9 +69,16 @@ const topPairsSecond = [
     spread_pct: 0.008,
     rtc_pct: 0.001,
     floor_rate_annual: 0.11,
+    score_model: 'probabilistic_edge_v1',
+    score_target_annual: 0.16,
     score_floor: 0.01,
+    score_floor_excess_annual: 0.01,
     avg_trade_return_annual_recent: 0.09,
     score_alpha: 0.004,
+    score_edge_raw_annual: 0.0061,
+    score_exec_probability: 0.73,
+    score_earn_probability: 0.29,
+    score_gate_pass: true,
     total_score: 0.014,
     decision: 'ENTER_OK',
     signal_action: 'enter',
@@ -75,6 +96,17 @@ const activeSignals = [
     signal_action: 'enter',
     signal_direction: 'cash_and_carry',
     signal_score: 0.42,
+    score_model: 'probabilistic_edge_v1',
+    score_target_annual: 0.16,
+    score_floor: 0.02,
+    score_floor_excess_annual: 0.02,
+    score_alpha: 0.12,
+    score_edge_raw_annual: 0.085,
+    score_exec_probability: 0.78,
+    score_earn_probability: 0.45,
+    score_gate_exec_threshold: 0.2,
+    score_gate_earn_threshold: 0.1,
+    score_gate_pass: true,
     spread_pct: 0.011,
     entry_stock_min: 298.2,
     entry_stock_max: 301.8,
@@ -96,6 +128,17 @@ const activeSignals = [
       tp_spread_pct_level: 0.021,
       sl_spread_pct_level: 0.001,
       forecast_exit_days: 5,
+      score_model: 'probabilistic_edge_v1',
+      score_target_annual: 0.16,
+      score_floor: 0.02,
+      score_floor_excess_annual: 0.02,
+      score_alpha: 0.12,
+      score_edge_raw_annual: 0.085,
+      score_exec_probability: 0.78,
+      score_earn_probability: 0.45,
+      score_gate_exec_threshold: 0.2,
+      score_gate_earn_threshold: 0.1,
+      score_gate_pass: true,
     },
   },
   {
@@ -176,6 +219,15 @@ const spreadSeries = [
     entry_flag: true,
     exit_flag: false,
   },
+]
+
+const spreadSeriesIntraday = [
+  { date: '2026-01-10', exec_ts: '2026-01-10 10:01:00', spread_mid: 1.0, spread_pct: 0.01 },
+  { date: '2026-01-10', exec_ts: '2026-01-10 10:04:00', spread_mid: 1.2, spread_pct: 0.012 },
+  { date: '2026-01-10', exec_ts: '2026-01-10 10:06:00', spread_mid: 0.9, spread_pct: 0.009 },
+  { date: '2026-01-10', exec_ts: '2026-01-10 10:58:00', spread_mid: 1.4, spread_pct: 0.014 },
+  { date: '2026-01-10', exec_ts: '2026-01-10 11:03:00', spread_mid: 1.1, spread_pct: 0.011 },
+  { date: '2026-01-10', exec_ts: '2026-01-10 11:08:00', spread_mid: 1.5, spread_pct: 0.015 },
 ]
 const refreshStatus = {
   enabled: true,
@@ -329,6 +381,23 @@ test.describe('Top pairs + Signals UI', () => {
 
     await expect(page.getByText('График спреда (жизнь контракта)')).toBeVisible()
     await expect.poll(() => spreadCalls).toBeGreaterThan(0)
+  })
+
+  test('Top pairs details switch spread candle timeframe', async ({ page }) => {
+    await registerCommonRoutes(page)
+    await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: topPairsFirst }))
+    await page.route('**/api/spread-series**', (route) => route.fulfill({ json: spreadSeriesIntraday }))
+
+    await page.goto('/')
+    await page.locator('[role="tab"]').nth(1).click()
+    await expect(page.getByText('SRH6')).toBeVisible()
+    await page.locator('table tbody tr').first().locator('button').first().click()
+
+    await expect(page.getByText(/\(1 час\)/)).toBeVisible()
+    await page.getByRole('button', { name: '5 минут' }).click()
+    await expect(page.getByText(/\(5 минут\)/)).toBeVisible()
+    await page.getByRole('button', { name: '1 день' }).click()
+    await expect(page.getByText(/\(1 день\)/)).toBeVisible()
   })
 
   test('Backtests table renders', async ({ page }) => {
@@ -545,6 +614,8 @@ test.describe('Top pairs + Signals UI', () => {
     await expect(page.getByRole('heading', { name: 'Итоговый сигнал' })).toBeVisible()
     await expect(page.getByText('Котировки: OK')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Pre-trade проверка (ISS)' })).toBeVisible()
+    await expect(page.getByText('P(exec)', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('P(earn)', { exact: true }).first()).toBeVisible()
     await expect(page.getByRole('button', { name: 'Обновить pre-trade' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Коридор цен заявки' })).toBeVisible()
     await expect(page.getByText('Расширенная диагностика')).toBeVisible()

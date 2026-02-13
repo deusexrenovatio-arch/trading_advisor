@@ -180,8 +180,8 @@ export const fieldMeta: Record<string, FieldMeta> = {
   score_floor: {
     label: 'Floor-скор',
     tooltip:
-      'Формула: floor_rate_annual - r_cb_annual. ' +
-      'Интерпретация: превышение над бенчмарком.',
+      'Формула: score_floor = floor_rate_annual - score_target_annual. ' +
+      'Интерпретация: запас floor-доходности над целевым годовым порогом.',
     format: 'percent',
     digits: 2,
   },
@@ -204,16 +204,16 @@ export const fieldMeta: Record<string, FieldMeta> = {
   score_alpha: {
     label: 'Alpha-скор',
     tooltip:
-      'Формула: p_hit_tp * tp_net - p_hit_sl * sl_pct - rtc_pct. ' +
-      'Интерпретация: ожидаемая alpha-доходность с учетом TP/SL и издержек.',
+      'Формула: avg_trade_return_annual_operational_recent (fallback: fill-to-fill). ' +
+      'Интерпретация: операционная alpha-доходность по последним закрытым сделкам.',
     format: 'percent',
     digits: 2,
   },
   total_score: {
     label: 'Итоговый скор',
     tooltip:
-      'Формула: w1*score_floor + w2*score_alpha - w3*penalty_liq - w4*penalty_event. ' +
-      'Интерпретация: итоговый скор пары (выше лучше).',
+      'Формула: total_score = score_exec_probability * score_edge_raw_annual. ' +
+      'Интерпретация: ожидаемая годовая edge-доходность с учетом исполнимости.',
     digits: 4,
   },
   signal_score: {
@@ -222,6 +222,66 @@ export const fieldMeta: Record<string, FieldMeta> = {
       'Формула: total_score. ' +
       'Интерпретация: скор сигнала для ранжирования.',
     digits: 4,
+  },
+  score_model: {
+    label: 'Модель score',
+    tooltip: 'Идентификатор активной формулы score в unified minute runtime.',
+  },
+  score_target_annual: {
+    label: 'Target, % год.',
+    tooltip:
+      'Формула: annual_target_threshold || r_cb_annual || последняя ключевая ставка CBR. ' +
+      'Интерпретация: базовый годовой порог для floor-компоненты.',
+    format: 'percent',
+    digits: 2,
+  },
+  score_floor_excess_annual: {
+    label: 'Floor excess, % год.',
+    tooltip:
+      'Формула: floor_rate_annual - score_target_annual. ' +
+      'Интерпретация: превышение floor-доходности над целевым порогом.',
+    format: 'percent',
+    digits: 2,
+  },
+  score_edge_raw_annual: {
+    label: 'Raw edge, % год.',
+    tooltip:
+      'Формула: 0.35*score_floor + 0.65*score_alpha. ' +
+      'Интерпретация: доходностная часть score до учета исполнимости.',
+    format: 'percent',
+    digits: 2,
+  },
+  score_exec_probability: {
+    label: 'P(exec)',
+    tooltip:
+      'Формула: (1-unfilled_entry_rate)*(1-unfilled_exit_rate)*(1-forced_exit_rate). ' +
+      'Интерпретация: вероятность корректного исполнения входа и выхода.',
+    format: 'percent',
+    digits: 2,
+  },
+  score_earn_probability: {
+    label: 'P(earn)',
+    tooltip:
+      'Формула: score_exec_probability * share_target_pass. ' +
+      'Интерпретация: вероятность получить целевую доходность с учетом исполнимости.',
+    format: 'percent',
+    digits: 2,
+  },
+  score_gate_exec_threshold: {
+    label: 'Порог P(exec)',
+    tooltip: 'Порог фильтра score-gate по исполнимости.',
+    format: 'percent',
+    digits: 2,
+  },
+  score_gate_earn_threshold: {
+    label: 'Порог P(earn)',
+    tooltip: 'Порог фильтра score-gate по вероятности заработка.',
+    format: 'percent',
+    digits: 2,
+  },
+  score_gate_pass: {
+    label: 'Score gate pass',
+    tooltip: 'Истина, если пара проходит пороги score-gate.',
   },
   signal_score_norm: {
     label: 'Норм. скор сигнала',
@@ -312,6 +372,46 @@ export const fieldMeta: Record<string, FieldMeta> = {
     tooltip:
       'Формула: mean(trade_return_annual последних 5 сделок). ' +
       'Интерпретация: средняя годовая доходность по последним выходам.',
+    format: 'percent',
+    digits: 2,
+  },
+  avg_trade_return_annual_operational_recent: {
+    label: 'Средн. годовая доходность (операц., посл. 5)',
+    tooltip:
+      'Формула: mean(trade_return_annual_operational последних 5 сделок). ' +
+      'Интерпретация: годовая доходность с учетом ожидания исполнения.',
+    format: 'percent',
+    digits: 2,
+  },
+  share_target_pass: {
+    label: 'Доля прохода target',
+    tooltip:
+      'Формула: mean(annual_target_pass) по закрытым сделкам. ' +
+      'Интерпретация: доля сделок с операционной доходностью выше порога.',
+    format: 'percent',
+    digits: 2,
+  },
+  unfilled_entry_rate: {
+    label: 'Доля неисп. входов',
+    tooltip:
+      'Формула: entry_unfilled / entry_signals. ' +
+      'Интерпретация: сколько входных сигналов не исполнилось в окне ожидания.',
+    format: 'percent',
+    digits: 2,
+  },
+  unfilled_exit_rate: {
+    label: 'Доля неисп. выходов',
+    tooltip:
+      'Формула: exit_unfilled / exit_signals. ' +
+      'Интерпретация: сколько выходных сигналов не исполнилось в окне ожидания.',
+    format: 'percent',
+    digits: 2,
+  },
+  forced_exit_rate: {
+    label: 'Доля forced exit',
+    tooltip:
+      'Формула: forced_exit / exit_signals. ' +
+      'Интерпретация: доля выходов, закрытых аварийной политикой.',
     format: 'percent',
     digits: 2,
   },
@@ -533,7 +633,7 @@ export const fieldMeta: Record<string, FieldMeta> = {
   pnl_spread_pct: {
     label: 'PnL по спреду, %',
     tooltip:
-      'Формула: spread_pct_exit_exec - spread_pct_entry_exec. ' +
+      'Формула: cash_and_carry => spread_pct_exit_exec - spread_pct_entry_exec; reverse => spread_pct_entry_exec - spread_pct_exit_exec. ' +
       'Интерпретация: прибыль/убыток по спреду.',
     format: 'percent',
     digits: 2,
@@ -557,8 +657,8 @@ export const fieldMeta: Record<string, FieldMeta> = {
   cycle_return_pct: {
     label: 'Доходность цикла, %',
     tooltip:
-      'Формула: cash_and_carry => (entry_spread - spread) / entry_spot * 100; ' +
-      'reverse => (spread - entry_spread) / entry_spot * 100. ' +
+      'Формула: cash_and_carry => (spread - entry_spread) / entry_spot * 100; ' +
+      'reverse => (entry_spread - spread) / entry_spot * 100. ' +
       'Интерпретация: результат завершённого цикла.',
     format: 'percent',
     digits: 2,
@@ -566,7 +666,7 @@ export const fieldMeta: Record<string, FieldMeta> = {
   trade_return_pct: {
     label: 'Доходность спреда, %',
     tooltip:
-      'Формула: spread_pct_exit_exec - spread_pct_entry_exec. ' +
+      'Формула: cash_and_carry => spread_pct_exit_exec - spread_pct_entry_exec; reverse => spread_pct_entry_exec - spread_pct_exit_exec. ' +
       'Интерпретация: изменение спреда между входом и выходом.',
     format: 'percent',
     digits: 2,
@@ -595,6 +695,36 @@ export const fieldMeta: Record<string, FieldMeta> = {
     format: 'percent',
     digits: 2,
   },
+  trade_return_annual_fill_to_fill: {
+    label: 'Годовая доходность (fill-to-fill), %',
+    tooltip:
+      'Формула: trade_return_net / tau_fill_to_fill. ' +
+      'Интерпретация: годовая доходность между фактическим входом и выходом.',
+    format: 'percent',
+    digits: 2,
+  },
+  trade_return_annual_operational: {
+    label: 'Годовая доходность (операц.), %',
+    tooltip:
+      'Формула: trade_return_net / tau_operational. ' +
+      'Интерпретация: годовая доходность с учетом ожидания исполнения (signal→fill).',
+    format: 'percent',
+    digits: 2,
+  },
+  annual_target_threshold: {
+    label: 'Годовой порог target, %',
+    tooltip:
+      'Формула: annual_target_threshold = override или r_cb_annual. ' +
+      'Интерпретация: порог сравнения для операционной годовой доходности.',
+    format: 'percent',
+    digits: 2,
+  },
+  annual_target_pass: {
+    label: 'Target пройден',
+    tooltip:
+      'Истина, если trade_return_annual_operational >= annual_target_threshold.',
+    digits: 0,
+  },
   trade_hold_days: {
     label: 'Дней в сделке',
     tooltip:
@@ -602,6 +732,57 @@ export const fieldMeta: Record<string, FieldMeta> = {
       'Интерпретация: длительность удержания сделки.',
     format: 'days',
     digits: 0,
+  },
+  entry_signal_day: {
+    label: 'День сигнала входа',
+    tooltip: 'Дата генерации сигнала входа.',
+  },
+  entry_submit_ts: {
+    label: 'TS отправки входа',
+    tooltip: 'Плановый timestamp отправки входа (D+lag).',
+  },
+  entry_fill_ts: {
+    label: 'TS исполнения входа',
+    tooltip: 'Фактический timestamp исполнения входа.',
+  },
+  entry_wait_minutes: {
+    label: 'Ожидание входа, мин',
+    tooltip: 'Время от submit до fill для входа.',
+    digits: 1,
+  },
+  exit_signal_day: {
+    label: 'День сигнала выхода',
+    tooltip: 'Дата генерации сигнала выхода.',
+  },
+  exit_submit_ts: {
+    label: 'TS отправки выхода',
+    tooltip: 'Плановый timestamp отправки выхода (D+lag).',
+  },
+  exit_fill_ts: {
+    label: 'TS исполнения выхода',
+    tooltip: 'Фактический timestamp исполнения выхода.',
+  },
+  exit_wait_minutes: {
+    label: 'Ожидание выхода, мин',
+    tooltip: 'Время от submit до fill для выхода.',
+    digits: 1,
+  },
+  entry_fill_status: {
+    label: 'Статус входа',
+    tooltip: 'filled | pending | entry_unfilled.',
+  },
+  exit_fill_status: {
+    label: 'Статус выхода',
+    tooltip: 'filled | pending | forced | exit_unfilled.',
+  },
+  exit_forced: {
+    label: 'Forced exit',
+    tooltip: 'Истина для аварийного закрытия после timeout.',
+    digits: 0,
+  },
+  unfilled_reason: {
+    label: 'Причина неисполнения',
+    tooltip: 'Диагностика, почему сигнал не исполнился в окне.',
   },
   pnl: {
     label: 'P&L',
