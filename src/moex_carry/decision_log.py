@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import date, datetime, time, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Optional
 
 
 def _repo_root() -> Path:
@@ -192,11 +192,17 @@ def build_decision_view(decision_log: dict[str, Any]) -> dict[str, Any]:
 
 
 class DecisionLogStore:
-    def __init__(self, data_dir: Path) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        *,
+        session_factory: Callable[[], Any] | None = None,
+    ) -> None:
         self.base_dir = data_dir / "decisions"
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.base_dir / "decision_log.jsonl"
         self.view_path = self.base_dir / "decision_view.jsonl"
+        self._session_factory = session_factory
 
     def append(self, decision_log: dict[str, Any], decision_view: dict[str, Any]) -> None:
         log_errors = validate_decision_log(decision_log)
@@ -209,6 +215,12 @@ class DecisionLogStore:
             handle.write(json.dumps(decision_log, ensure_ascii=False) + "\n")
         with self.view_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(decision_view, ensure_ascii=False) + "\n")
+        if self._session_factory is None:
+            return
+        from moex_carry.storage.repositories import upsert_decision_view_projection
+
+        with self._session_factory() as session:
+            upsert_decision_view_projection(session, [decision_view])
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
