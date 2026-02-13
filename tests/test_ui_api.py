@@ -262,3 +262,53 @@ def test_pretrade_check_endpoint_fail_opens_on_iss_transport_error(tmp_path, mon
     assert "iss_transport_error" in payload["advisory_reasons"]
     assert "order_price_bands" in payload
     assert "future_sell_min_contract" in payload["order_price_bands"]
+
+
+def test_v1_endpoints_return_deprecation_headers(tmp_path, monkeypatch):
+    output_dir = tmp_path / "output"
+    raw_dir = tmp_path / "raw"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    _write_csv(
+        output_dir / "top_pairs.csv",
+        [
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "spot": 100.0,
+                "future_price": 101.0,
+                "spread_mid": -1.0,
+                "signal_direction": "cash_and_carry",
+            }
+        ],
+    )
+    _write_csv(
+        raw_dir / "futures.csv",
+        [
+            {
+                "SECID": "AAH6",
+                "LOTVOLUME": 10,
+                "MULTIPLIER": 1,
+            }
+        ],
+    )
+    monkeypatch.setattr(ui_app, "MoexIssClient", _FakeMoexClientPretrade)
+
+    settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    decision_view_response = client.get("/api/decision-view")
+    assert decision_view_response.status_code == 200
+    assert decision_view_response.headers.get("Deprecation") == "true"
+    assert decision_view_response.headers.get("Sunset") == "Wed, 01 Jul 2026 00:00:00 GMT"
+    assert decision_view_response.headers.get("X-API-Deprecated") == "v1"
+    assert decision_view_response.headers.get("X-API-Sunset-Date") == "2026-07-01"
+    assert "/api/v2/decision-view" in str(decision_view_response.headers.get("Link", ""))
+
+    pretrade_response = client.get(
+        "/api/pretrade/check?stock=AAA&future=AAH6&snapshots=1&min_hits=1&poll_sec=0"
+    )
+    assert pretrade_response.status_code == 200
+    assert pretrade_response.headers.get("Deprecation") == "true"
+    assert "/api/v2/pretrade/check" in str(pretrade_response.headers.get("Link", ""))

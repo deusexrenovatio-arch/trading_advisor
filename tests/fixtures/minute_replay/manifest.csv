@@ -1,0 +1,6 @@
+stock,future,fixture,rows,expiry
+FLOT,FLH6,tests/fixtures/minute_replay/FLOT_FLH6.csv,800,2026-03-19
+AFLT,AFH6,tests/fixtures/minute_replay/AFLT_AFH6.csv,800,2026-03-19
+ALRS,ALH6,tests/fixtures/minute_replay/ALRS_ALH6.csv,800,2026-03-19
+CHMF,CHH6,tests/fixtures/minute_replay/CHMF_CHH6.csv,800,2026-03-19
+CBOM,CMH6,tests/fixtures/minute_replay/CBOM_CMH6.csv,800,2026-03-19

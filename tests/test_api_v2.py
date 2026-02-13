@@ -1,0 +1,770 @@
+from __future__ import annotations
+
+import json
+from datetime import datetime
+
+from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
+from moex_carry.contracts.strategy_test import BacktestRequest, HpoRequest
+from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+from moex_carry.storage.repositories import (
+    load_signal_executions,
+    store_signal_execution,
+    store_signal_history,
+    store_signal_run,
+    upsert_decision_view_projection,
+)
+from moex_carry.ui.app import create_app
+import moex_carry.ui.app as ui_app
+
+
+def _build_settings(
+    tmp_path,
+    *,
+    ff_db_projection_source: bool = False,
+    ff_fail_closed_execution: bool = False,
+    auto_unwind_timeout_sec: int = 600,
+):
+    return AppSettings(
+        data=DataConfig(data_dir=str(tmp_path)),
+        database=DatabaseConfig(url=f"sqlite:///{tmp_path}/api-v2.db"),
+        ui=UiConfig(
+            ff_db_projection_source=ff_db_projection_source,
+            ff_fail_closed_execution=ff_fail_closed_execution,
+            auto_unwind_timeout_sec=auto_unwind_timeout_sec,
+        ),
+    )
+
+
+def _write_jsonl(path, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _seed_signal_history(session, run_id: str):
+    ts = datetime(2025, 1, 1, 12, 0, 0)
+    store_signal_run(session, run_id, ts, params={"source": "test"})
+    store_signal_history(
+        session,
+        run_id,
+        ts,
+        [
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "signal_action": "enter",
+                "signal_direction": "cash_and_carry",
+                "signal_score": 0.2,
+                "signal_reasons": ["test"],
+                "signal_metrics": {"score_gate_pass": True},
+            }
+        ],
+    )
+
+
+def test_v2_signals_active_and_actions_idempotency(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-1")
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    active_response = client.get("/api/v2/signals/active")
+    assert active_response.status_code == 200
+    rows = active_response.get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+    assert "signal_id" in row
+    assert row["stock"] == "AAA"
+    assert row["future"] == "AAH6"
+    assert row["lifecycle_state"] == "ready"
+    assert row["signal_action_effective"] == "enter"
+    assert row["entity_ref"]["entity_type"] == "pair"
+    assert isinstance(row["gate_results"], list)
+    assert "legacy" not in row
+    signal_id = row["signal_id"]
+
+    payload = {
+        "action": "ack",
+        "source": "ui",
+        "actor_id": "tester",
+        "idempotency_key": "idem-123",
+    }
+    action_first = client.post(f"/api/v2/signals/{signal_id}/actions", json=payload)
+    assert action_first.status_code == 200
+    first_data = action_first.get_json()
+    assert first_data["status"] == "ok"
+
+    action_second = client.post(f"/api/v2/signals/{signal_id}/actions", json=payload)
+    assert action_second.status_code == 200
+    second_data = action_second.get_json()
+    assert second_data["status"] == "duplicate"
+
+    history_response = client.get("/api/v2/signals/history?limit=10")
+    assert history_response.status_code == 200
+    history_rows = history_response.get_json()
+    assert isinstance(history_rows, list)
+    assert history_rows[0]["stock"] == "AAA"
+    assert history_rows[0]["future"] == "AAH6"
+
+    executions_response = client.get("/api/v2/signals/executions?stock=AAA&future=AAH6&limit=10")
+    assert executions_response.status_code == 200
+    execution_rows = executions_response.get_json()
+    assert isinstance(execution_rows, list)
+    assert len(execution_rows) == 1
+    assert execution_rows[0]["stock"] == "AAA"
+    assert execution_rows[0]["future"] == "AAH6"
+
+    top_pairs_response = client.get("/api/v2/top-pairs?limit=5")
+    assert top_pairs_response.status_code == 200
+    assert isinstance(top_pairs_response.get_json(), list)
+
+
+def test_v2_signal_action_fail_closed_blocks_unconfirmed_entry(tmp_path):
+    settings = _build_settings(tmp_path, ff_fail_closed_execution=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 1, 12, 0, 0)
+        store_signal_run(session, "run-v2-fc-block", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-fc-block",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.2,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {"score_gate_pass": True, "pretrade_status": "check"},
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    active_rows = client.get("/api/v2/signals/active").get_json()
+    assert isinstance(active_rows, list)
+    assert len(active_rows) == 1
+    signal_id = active_rows[0]["signal_id"]
+
+    blocked = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "enter",
+            "source": "ui",
+            "actor_id": "tester",
+            "idempotency_key": "idem-fc-block-1",
+        },
+    )
+    assert blocked.status_code == 409
+    data = blocked.get_json()
+    assert data["status"] == "blocked"
+    assert data["error"] == "fail_closed_execution"
+    assert data["reason_code"] == "PRETRADE_NOT_CONFIRMED"
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        assert executions == []
+
+
+def test_v2_signal_action_fail_closed_allows_privileged_override(tmp_path):
+    settings = _build_settings(tmp_path, ff_fail_closed_execution=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 1, 12, 0, 0)
+        store_signal_run(session, "run-v2-fc-override", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-fc-override",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.2,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {"score_gate_pass": True, "pretrade_status": "check"},
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    signal_id = client.get("/api/v2/signals/active").get_json()[0]["signal_id"]
+    response = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "enter",
+            "source": "system",
+            "actor_id": "risk-service",
+            "idempotency_key": "idem-fc-override-1",
+            "fail_closed_override": True,
+            "reason_code": "ISS_OVERRIDE",
+            "comment": "approved by risk owner",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["fail_closed"]["status"] == "override"
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        assert len(executions) == 1
+        assert executions[0].action == "enter"
+        assert '"fail_closed_override":true' in str(executions[0].note or "")
+
+
+def test_v2_auto_unwind_policy_run_dry_run_and_live(tmp_path):
+    settings = _build_settings(tmp_path, auto_unwind_timeout_sec=60)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 2, 12, 0, 0)
+        store_signal_run(session, "run-v2-au-1", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-au-1",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "hold",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.1,
+                    "signal_reasons": ["hold"],
+                    "signal_metrics": {"score_gate_pass": True},
+                }
+            ],
+        )
+        store_signal_execution(
+            session,
+            datetime(2025, 1, 2, 12, 1, 0),
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "enter",
+                "price": 101.0,
+                "quantity": 1.0,
+                "side": "stock",
+                "order_id": "ord-au-1",
+                "status": "filled",
+                "note": "seed-open-leg",
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    dry_run = client.post(
+        "/api/v2/policies/auto-unwind/run",
+        json={"dry_run": True, "timeout_sec": 60, "actor_id": "auto-unwind"},
+    )
+    assert dry_run.status_code == 200
+    dry_payload = dry_run.get_json()
+    assert dry_payload["status"] == "dry_run"
+    assert dry_payload["candidate_count"] == 1
+
+    live = client.post(
+        "/api/v2/policies/auto-unwind/run",
+        json={"timeout_sec": 60, "actor_id": "auto-unwind"},
+    )
+    assert live.status_code == 200
+    live_payload = live.get_json()
+    assert live_payload["status"] == "ok"
+    assert live_payload["triggered_count"] == 1
+    assert live_payload["duplicate_count"] == 0
+
+    second_live = client.post(
+        "/api/v2/policies/auto-unwind/run",
+        json={"timeout_sec": 60, "actor_id": "auto-unwind"},
+    )
+    assert second_live.status_code == 200
+    second_payload = second_live.get_json()
+    assert second_payload["candidate_count"] == 0
+    assert second_payload["duplicate_count"] == 0
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        assert len(executions) == 2
+        assert executions[0].action == "exit"
+        assert "LEG_IMBALANCE_TIMEOUT" in str(executions[0].note or "")
+
+
+def test_v2_ops_health_and_slo_observability(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path, ff_fail_closed_execution=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 3, 10, 0, 0)
+        store_signal_run(session, "run-v2-ops-1", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-ops-1",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.2,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {"score_gate_pass": True, "pretrade_status": "check"},
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    active_rows = client.get("/api/v2/signals/active").get_json()
+    assert isinstance(active_rows, list)
+    assert len(active_rows) == 1
+    signal_id = active_rows[0]["signal_id"]
+
+    for idx in range(5):
+        blocked = client.post(
+            f"/api/v2/signals/{signal_id}/actions",
+            json={
+                "action": "enter",
+                "source": "ui",
+                "actor_id": "tester",
+                "idempotency_key": f"idem-ops-block-{idx}",
+            },
+        )
+        assert blocked.status_code == 409
+
+    monkeypatch.setattr(
+        ui_app,
+        "run_delay_gate",
+        lambda *_args, **_kwargs: {
+            "status": "CHECK",
+            "ready_to_place": False,
+            "manual_confirm_required": True,
+            "reasons": ["snapshot_unsynced"],
+            "degraded": True,
+            "pair": {"stock": "AAA", "future": "AAH6", "direction": "cash_and_carry"},
+            "gates": {"stock_quote_pass": False},
+            "hits": {"required": 2, "snapshots": 2},
+        },
+    )
+
+    for _ in range(10):
+        pretrade = client.post(
+            "/api/v2/pretrade/check",
+            json={
+                "stock": "AAA",
+                "future": "AAH6",
+                "spot_target": 100.0,
+                "future_target": 101.0,
+                "snapshots": 1,
+                "min_hits": 1,
+                "poll_sec": 0.0,
+            },
+        )
+        assert pretrade.status_code == 200
+
+    health = client.get("/api/v2/ops/health")
+    assert health.status_code == 200
+    health_payload = health.get_json()
+    assert health_payload["status"] in {"ok", "degraded"}
+    assert "checks" in health_payload
+    assert "database" in health_payload["checks"]
+
+    slo = client.get("/api/v2/ops/slo")
+    assert slo.status_code == 200
+    payload = slo.get_json()
+    assert "api" in payload
+    assert "v2_signals_actions" in payload["api"]
+    assert "v2_pretrade_check" in payload["api"]
+    assert payload["events_15m"]["execution_rejections_fail_closed"] >= 5
+    assert payload["events_15m"]["pretrade_failures"] >= 10
+    assert payload["events_15m"]["pretrade_degraded"] >= 10
+    alert_codes = {str(item.get("code")) for item in payload["alerts"] if isinstance(item, dict)}
+    assert "EXECUTION_REJECTION_SPIKE" in alert_codes
+    assert "PRETRADE_FAILURE_SPIKE" in alert_codes
+
+
+def test_v2_decision_view_and_news_feed(tmp_path):
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    decisions_dir = tmp_path / "decisions"
+    _write_jsonl(
+        decisions_dir / "decision_view.jsonl",
+        [
+            {
+                "decision_id": "dec-1",
+                "decision_view_id": "view-dec-1",
+                "created_at": "2025-01-01T10:00:00Z",
+                "strategy_type": "arbitrage",
+                "primary_instrument": "SBER",
+                "action": "hold",
+                "risk_state": "green",
+                "news_severity": "high",
+                "cost_summary": {"round_trip_cost": 1.0, "break_even_ticks": 1},
+                "key_features": [{"name": "x", "value": 1}],
+                "links": {"decision_log": "dec-1"},
+            }
+        ],
+    )
+    _write_jsonl(
+        decisions_dir / "decision_log.jsonl",
+        [
+            {
+                "decision_id": "dec-1",
+                "created_at": "2025-01-01T10:00:00Z",
+                "news_context": {
+                    "severity": "high",
+                    "headline_count": 2,
+                    "summary": "news_blocked",
+                },
+            }
+        ],
+    )
+    _write_jsonl(
+        decisions_dir / "decision_actions.jsonl",
+        [
+            {
+                "action_id": "dact-1",
+                "decision_id": "dec-1",
+                "action": "execute",
+                "status": "execute_requested",
+                "actor": "tester",
+                "source": "ui",
+                "idempotency_key": "idem-dec-1",
+                "created_at": "2025-01-01T10:01:00Z",
+            }
+        ],
+    )
+    _write_jsonl(
+        decisions_dir / "execution_requests.jsonl",
+        [
+            {
+                "decision_id": "dec-1",
+                "request_id": "dreq-1",
+                "action": "execute",
+                "status": "queued",
+                "requested_at": "2025-01-01T10:01:00Z",
+                "idempotency_key": "idem-dec-1",
+            }
+        ],
+    )
+
+    view_response = client.get("/api/v2/decisions/view")
+    assert view_response.status_code == 200
+    view_rows = view_response.get_json()
+    assert isinstance(view_rows, list)
+    assert view_rows[0]["projection_version"] == "v2.0"
+    assert view_rows[0]["entity_ref"]["entity_type"] == "instrument"
+    assert view_rows[0]["decision_ref"]["decision_id"] == "dec-1"
+    assert view_rows[0]["decision_ref"]["action_id"] == "dact-1"
+    assert view_rows[0]["execution_ref"]["request_id"] == "dreq-1"
+    assert view_rows[0]["execution_ref"]["status"] == "queued"
+
+    alias_response = client.get("/api/v2/decision-view")
+    assert alias_response.status_code == 200
+    alias_rows = alias_response.get_json()
+    assert isinstance(alias_rows, list)
+    assert alias_rows[0]["decision_id"] == "dec-1"
+    assert alias_rows[0]["decision_ref"]["latest_action"] == "execute"
+
+    news_response = client.get("/api/v2/news/feed?severity=high&ticker=SBER")
+    assert news_response.status_code == 200
+    news_rows = news_response.get_json()
+    assert isinstance(news_rows, list)
+    assert len(news_rows) == 1
+    assert news_rows[0]["severity"] == "high"
+    assert news_rows[0]["entity_links"][0]["ticker"] == "SBER"
+
+
+def test_v2_decision_view_uses_db_projection_source(tmp_path):
+    settings = _build_settings(tmp_path, ff_db_projection_source=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        upsert_decision_view_projection(
+            session,
+            [
+                {
+                    "decision_id": "dec-db-1",
+                    "decision_view_id": "view-dec-db-1",
+                    "created_at": "2025-01-02T09:00:00Z",
+                    "strategy_type": "arbitrage",
+                    "primary_instrument": "GAZP",
+                    "action": "hold",
+                    "risk_state": "green",
+                    "news_severity": "low",
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    response = client.get("/api/v2/decisions/view?limit=5")
+    assert response.status_code == 200
+    rows = response.get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    assert rows[0]["decision_id"] == "dec-db-1"
+    assert rows[0]["projection_source"] == "db"
+    assert rows[0]["entity_ref"]["ticker"] == "GAZP"
+
+
+def test_v2_decision_view_db_projection_falls_back_to_jsonl(tmp_path):
+    settings = _build_settings(tmp_path, ff_db_projection_source=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+
+    decisions_dir = tmp_path / "decisions"
+    _write_jsonl(
+        decisions_dir / "decision_view.jsonl",
+        [
+            {
+                "decision_id": "dec-jsonl-1",
+                "decision_view_id": "view-dec-jsonl-1",
+                "created_at": "2025-01-03T10:00:00Z",
+                "strategy_type": "arbitrage",
+                "primary_instrument": "SBER",
+                "action": "hold",
+                "risk_state": "yellow",
+                "news_severity": "medium",
+            }
+        ],
+    )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    response = client.get("/api/v2/decisions/view?limit=5")
+    assert response.status_code == 200
+    rows = response.get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    assert rows[0]["decision_id"] == "dec-jsonl-1"
+    assert rows[0]["projection_source"] == "jsonl_fallback"
+
+
+def test_v2_research_wrappers(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    monkeypatch.setattr(ui_app, "run_backtest_v2_cached", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        ui_app,
+        "serialize_backtest_report",
+        lambda _report: {"summary_metrics": {"cagr": 0.1}},
+    )
+    monkeypatch.setattr(
+        ui_app,
+        "start_hpo_run",
+        lambda *_args, **_kwargs: {"run_id": "hpo-1", "status": "running", "progress": {"completed": 0, "total": 1}},
+    )
+    monkeypatch.setattr(
+        ui_app,
+        "load_hpo_status",
+        lambda *_args, **_kwargs: {
+            "run_id": "hpo-1",
+            "status": "completed",
+            "result": {"leaderboard": [{"objective": 1.0}]},
+        },
+    )
+
+    backtest_request = BacktestRequest().model_dump(mode="json")
+    backtest_request["test"]["start_date"] = "2025-01-01"
+    backtest_request["test"]["end_date"] = "2025-01-10"
+    backtest_request["universe"]["include_stocks"] = ["AAA"]
+    backtest_request["universe"]["include_futures"] = ["AAH6"]
+
+    backtest_response = client.post(
+        "/api/v2/research/backtests/run",
+        json={
+            "experiment_id": "exp-a",
+            "request": backtest_request,
+        },
+    )
+    assert backtest_response.status_code == 200
+    backtest_data = backtest_response.get_json()
+    assert backtest_data["experiment_id"] == "exp-a"
+    assert backtest_data["status"] == "completed"
+    assert backtest_data["report"]["summary_metrics"]["cagr"] == 0.1
+
+    hpo_request = HpoRequest().model_dump(mode="json")
+    hpo_request["base"]["test"]["start_date"] = "2025-01-01"
+    hpo_request["base"]["test"]["end_date"] = "2025-01-10"
+    hpo_request["base"]["universe"]["include_stocks"] = ["AAA"]
+    hpo_request["base"]["universe"]["include_futures"] = ["AAH6"]
+
+    hpo_run_response = client.post(
+        "/api/v2/research/hpo/run",
+        json={
+            "experiment_id": "exp-b",
+            "request": hpo_request,
+        },
+    )
+    assert hpo_run_response.status_code == 200
+    hpo_run_data = hpo_run_response.get_json()
+    assert hpo_run_data["experiment_id"] == "exp-b"
+    assert hpo_run_data["run_id"] == "hpo-1"
+
+    hpo_status_response = client.get("/api/v2/research/hpo/status?run_id=hpo-1")
+    assert hpo_status_response.status_code == 200
+    hpo_status_data = hpo_status_response.get_json()
+    assert hpo_status_data["promotion_gate"]["status"] == "pass"
+
+
+def test_v2_portfolio_rebalance_preview_and_commit(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-rebal")
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    preview_response = client.get("/api/v2/portfolio/rebalance/preview?limit=5")
+    assert preview_response.status_code == 200
+    preview = preview_response.get_json()
+    assert "rebalance_plan_id" in preview
+    assert isinstance(preview["positions"], list)
+
+    commit_response = client.post(
+        "/api/v2/portfolio/rebalance/commit",
+        json={
+            "rebalance_plan_id": preview["rebalance_plan_id"],
+            "actor_id": "tester",
+            "positions": preview["positions"],
+        },
+    )
+    assert commit_response.status_code == 200
+    commit_data = commit_response.get_json()
+    assert commit_data["status"] == "ok"
+    assert commit_data["positions_committed"] == len(preview["positions"])
+
+
+def test_v2_decision_actions_and_v1_adapter(tmp_path):
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    decisions_dir = tmp_path / "decisions"
+    _write_jsonl(
+        decisions_dir / "decision_view.jsonl",
+        [
+            {
+                "decision_id": "dec-9",
+                "created_at": "2025-01-01T10:00:00Z",
+                "strategy_type": "arbitrage",
+                "primary_instrument": "SBER",
+                "action": "hold",
+                "risk_state": "green",
+                "news_severity": "low",
+            }
+        ],
+    )
+
+    payload = {
+        "action": "EXECUTE",
+        "actor_id": "tester",
+        "reason_code": "manual_ok",
+        "comment": "run it",
+        "idempotency_key": "dec-9-idem-1",
+    }
+    first = client.post("/api/v2/decisions/dec-9/actions", json=payload)
+    assert first.status_code == 200
+    first_data = first.get_json()
+    assert first_data["status"] == "ok"
+    assert first_data["operator_action"]["action"] == "execute"
+    assert first_data["decision_ref"]["decision_id"] == "dec-9"
+    assert first_data["decision_ref"]["latest_action"] == "execute"
+    assert first_data["execution_ref"]["status"] in {"queued", "execute_requested"}
+    assert first_data["execution_ref"]["request_id"] is not None
+
+    duplicate = client.post("/api/v2/decisions/dec-9/actions", json=payload)
+    assert duplicate.status_code == 200
+    duplicate_data = duplicate.get_json()
+    assert duplicate_data["status"] == "duplicate"
+    assert duplicate_data["decision_ref"]["decision_id"] == "dec-9"
+    assert duplicate_data["decision_ref"]["latest_action"] == "execute"
+
+    v1 = client.post(
+        "/api/decisions/dec-9/action",
+        json={"action": "approve", "actor": "legacy-user", "note": "legacy-path"},
+    )
+    assert v1.status_code == 200
+    assert v1.headers.get("Deprecation") == "true"
+    assert "/api/v2/decisions/dec-9/actions" in str(v1.headers.get("Link", ""))
+    v1_data = v1.get_json()
+    assert v1_data["status"] == "ok"
+    assert v1_data["operator_action"]["source"] == "v1_adapter"
+    assert v1_data["operator_action"]["action"] == "approve"
+
+    view_response = client.get("/api/v2/decisions/view?limit=10")
+    assert view_response.status_code == 200
+    view_rows = view_response.get_json()
+    assert isinstance(view_rows, list)
+    dec_row = next(row for row in view_rows if row.get("decision_id") == "dec-9")
+    assert dec_row["decision_ref"]["decision_id"] == "dec-9"
+    assert dec_row["decision_ref"]["latest_action"] in {"approve", "execute"}
+    assert dec_row["execution_ref"]["status"] is not None
+
+
+def test_v2_pretrade_check_post(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    monkeypatch.setattr(
+        ui_app,
+        "run_delay_gate",
+        lambda *_args, **_kwargs: {
+            "status": "PLACE",
+            "ready_to_place": True,
+            "manual_confirm_required": True,
+            "reasons": [],
+            "pair": {"stock": "AAA", "future": "AAH6", "direction": "cash_and_carry"},
+            "gates": {"stock_quote_pass": True},
+            "hits": {"required": 2, "snapshots": 2},
+        },
+    )
+
+    response = client.post(
+        "/api/v2/pretrade/check",
+        json={
+            "stock": "AAA",
+            "future": "AAH6",
+            "spot_target": 100.0,
+            "future_target": 101.0,
+            "snapshots": 3,
+            "min_hits": 2,
+        },
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["ready_to_place"] is True
+    assert data["pretrade_status"] == "pass"
+    assert data["params"]["snapshots"] == 3
