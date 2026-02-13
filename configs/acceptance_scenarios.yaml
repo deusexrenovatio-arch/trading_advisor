@@ -3,9 +3,9 @@ scenarios:
   - id: decision-view
     type: api_list
     scope: backend
-    url: /api/decision-view?limit=5
+    url: /api/v2/decisions/view?limit=5
     require_non_empty: false
-    required_keys: [decision_id, created_at, action, risk_state]
+    required_keys: [decision_id, created_at, action, risk_state, decision_ref, execution_ref, projection_source]
     test_cases: [TC-DEC-API-001, TC-DEC-UI-001]
     title: Просмотр решений
     user_story: Пользователь видит таблицу решений и может выбрать строку.
@@ -15,7 +15,7 @@ scenarios:
   - id: decision-view-filters
     type: api_list
     scope: backend
-    url: /api/decision-view?limit=5&strategy_type=arbitrage&primary_instrument=stock&risk_state=green&news_severity=low&created_from=2026-01-01&created_to=2026-12-31
+    url: /api/v2/decisions/view?limit=5&strategy_type=arbitrage&primary_instrument=stock&risk_state=green&news_severity=low&created_from=2026-01-01&created_to=2026-12-31
     allow_empty: true
     required_keys: [decision_id]
     test_cases: [TC-DEC-API-005]
@@ -27,7 +27,7 @@ scenarios:
   - id: decision-view-aggregation
     type: api_list
     scope: backend
-    url: /api/decision-view?limit=1
+    url: /api/v2/decisions/view?limit=1
     require_non_empty: false
     required_keys: [aggregation_summary]
     test_cases: [TC-DEC-API-002]
@@ -38,7 +38,7 @@ scenarios:
   - id: decision-log-aggregation
     type: decision_log_detail
     scope: backend
-    source_url: /api/decision-view?limit=1
+    source_url: /api/v2/decisions/view?limit=1
     url_template: /api/decision-log/{decision_id}
     required_keys: [strategy_signals, aggregation]
     test_cases: [TC-DEC-API-003]
@@ -49,11 +49,14 @@ scenarios:
   - id: decision-action
     type: decision_action
     scope: backend
-    source_url: /api/decision-view?limit=1
-    url_template: /api/decisions/{decision_id}/action
+    source_url: /api/v2/decisions/view?limit=1
+    url_template: /api/v2/decisions/{decision_id}/actions
     payload:
-      action: approve
-      note: acceptance
+      action: EXECUTE
+      actor_id: acceptance
+      reason_code: acceptance
+      comment: acceptance
+      idempotency_key: acceptance-decision-action-v2
     required_keys: [status, operator_action, execution_status]
     test_cases: [TC-DEC-API-004, TC-DEC-UI-002]
     title: Операторское решение
@@ -96,7 +99,7 @@ scenarios:
   - id: top-pairs
     type: api_list
     scope: backend
-    url: /api/top-pairs?limit=5
+    url: /api/v2/top-pairs?limit=5
     require_non_empty: false
     required_keys:
       [
@@ -123,9 +126,9 @@ scenarios:
   - id: signals-active
     type: api_list
     scope: backend
-    url: /api/signals/active
+    url: /api/v2/signals/active
     require_non_empty: false
-    required_keys: [run_id, timestamp, stock, future, signal_action, signal_score]
+    required_keys: [signal_id, run_id, timestamp, stock, future, signal_action, signal_score, lifecycle_state]
     allowed_field_values:
       signal_action: [enter, exit, hold_open]
     test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001]
@@ -134,6 +137,26 @@ scenarios:
     expectations:
       - Action includes only enter/exit.
       - Signal includes pair identifiers and score.
+  - id: signals-action-v2
+    type: signal_action
+    scope: backend
+    active_url: /api/v2/signals/active?limit=5
+    url_template: /api/v2/signals/{signal_id}/actions
+    allow_empty: true
+    expected_http_statuses: [200]
+    payload:
+      action: ack
+      source: ui
+      actor_id: acceptance
+      idempotency_key: acceptance-signals-action-v2
+    required_keys: [status, signal_id, action, entity_ref, fail_closed]
+    allowed_response_status: [ok, duplicate]
+    test_cases: [TC-SIG-ACT-API-003]
+    title: Signal actions v2 from active feed
+    user_story: Operator acknowledges an active signal through the v2 action API.
+    expectations:
+      - Scenario resolves signal_id from active feed and sends an action.
+      - Response contains status and action/audit references.
   - id: signals-execute
     type: post_json
     scope: backend
@@ -185,7 +208,7 @@ scenarios:
   - id: signals-history
     type: api_list
     scope: backend
-    url: /api/signals/history?limit=5
+    url: /api/v2/signals/history?limit=5
     require_non_empty: true
     required_keys:
       [run_id, timestamp, stock, future, signal_action, signal_direction, signal_score]
@@ -201,7 +224,7 @@ scenarios:
   - id: signals-history-reasons
     type: api_list
     scope: backend
-    url: /api/signals/history?limit=5
+    url: /api/v2/signals/history?limit=5
     require_non_empty: false
     required_keys: [signal_action, signal_reasons, signal_metrics]
     test_cases: [TC-SIG-HIST-API-004]
@@ -211,6 +234,8 @@ scenarios:
     type: history_date_range
     scope: backend
     history_source: signals_history
+    source_url: /api/v2/signals/history?limit=1
+    url_template: /api/v2/signals/history?from={date_from}&to={date_to}
     required_keys: [timestamp, stock, future, signal_action]
     test_cases: [TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001]
     title: Фильтр истории по датам
@@ -230,6 +255,7 @@ scenarios:
     type: backtest_run
     scope: backend
     url: /api/backtest/run
+    source_url: /api/v2/top-pairs?limit=1
     window_days: 60
     precompute: true
     required_keys: [summary_metrics, equity_curve, trades]
@@ -289,6 +315,7 @@ scenarios:
     type: spread_series
     scope: backend
     pair_source: top_pairs
+    source_url: /api/v2/top-pairs?limit=1
     window_days: 60
     required_keys:
       - spread_mid
@@ -350,7 +377,7 @@ scenarios:
   - id: frontend-proxy
     type: api_list
     scope: frontend
-    url: /api/top-pairs?limit=5
+    url: /api/v2/top-pairs?limit=5
     require_non_empty: false
     test_cases: [TC-FE-PROXY-001]
     title: Прокси API
