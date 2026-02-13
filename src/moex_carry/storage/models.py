@@ -141,3 +141,17 @@ class BacktestRunModel(Base):
     started_at: Mapped[DateTime] = mapped_column(DateTime)
     params: Mapped[dict] = mapped_column(JSON)
     metrics: Mapped[dict] = mapped_column(JSON)
+
+
+class DecisionViewProjectionModel(Base):
+    __tablename__ = "decision_view_projection"
+
+    decision_id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[DateTime | None] = mapped_column(DateTime, index=True, nullable=True)
+    strategy_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    primary_instrument: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    action: Mapped[str | None] = mapped_column(String, nullable=True)
+    risk_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    news_severity: Mapped[str | None] = mapped_column(String, nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)

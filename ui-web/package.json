@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "eslint . && npm run lint:ui-domain-boundary",
+    "lint:ui-domain-boundary": "node ./scripts/ui-domain-boundary-gate.mjs",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },

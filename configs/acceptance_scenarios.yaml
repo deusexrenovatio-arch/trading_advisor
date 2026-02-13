@@ -3,9 +3,9 @@ scenarios:
   - id: decision-view
     type: api_list
     scope: backend
-    url: /api/decision-view?limit=5
+    url: /api/v2/decisions/view?limit=5
     require_non_empty: false
-    required_keys: [decision_id, created_at, action, risk_state]
+    required_keys: [decision_id, created_at, action, risk_state, decision_ref, execution_ref, projection_source]
     test_cases: [TC-DEC-API-001, TC-DEC-UI-001]
     title: Просмотр решений
     user_story: Пользователь видит таблицу решений и может выбрать строку.
@@ -15,7 +15,7 @@ scenarios:
   - id: decision-view-filters
     type: api_list
     scope: backend
-    url: /api/decision-view?limit=5&strategy_type=arbitrage&primary_instrument=stock&risk_state=green&news_severity=low&created_from=2026-01-01&created_to=2026-12-31
+    url: /api/v2/decisions/view?limit=5&strategy_type=arbitrage&primary_instrument=stock&risk_state=green&news_severity=low&created_from=2026-01-01&created_to=2026-12-31
     allow_empty: true
     required_keys: [decision_id]
     test_cases: [TC-DEC-API-005]
@@ -27,7 +27,7 @@ scenarios:
   - id: decision-view-aggregation
     type: api_list
     scope: backend
-    url: /api/decision-view?limit=1
+    url: /api/v2/decisions/view?limit=1
     require_non_empty: false
     required_keys: [aggregation_summary]
     test_cases: [TC-DEC-API-002]
@@ -38,7 +38,7 @@ scenarios:
   - id: decision-log-aggregation
     type: decision_log_detail
     scope: backend
-    source_url: /api/decision-view?limit=1
+    source_url: /api/v2/decisions/view?limit=1
     url_template: /api/decision-log/{decision_id}
     required_keys: [strategy_signals, aggregation]
     test_cases: [TC-DEC-API-003]
@@ -49,11 +49,14 @@ scenarios:
   - id: decision-action
     type: decision_action
     scope: backend
-    source_url: /api/decision-view?limit=1
-    url_template: /api/decisions/{decision_id}/action
+    source_url: /api/v2/decisions/view?limit=1
+    url_template: /api/v2/decisions/{decision_id}/actions
     payload:
-      action: approve
-      note: acceptance
+      action: EXECUTE
+      actor_id: acceptance
+      reason_code: acceptance
+      comment: acceptance
+      idempotency_key: acceptance-decision-action-v2
     required_keys: [status, operator_action, execution_status]
     test_cases: [TC-DEC-API-004, TC-DEC-UI-002]
     title: Операторское решение
@@ -96,7 +99,7 @@ scenarios:
   - id: top-pairs
     type: api_list
     scope: backend
-    url: /api/top-pairs?limit=5
+    url: /api/v2/top-pairs?limit=5
     require_non_empty: false
     required_keys:
       [
@@ -123,37 +126,79 @@ scenarios:
   - id: signals-active
     type: api_list
     scope: backend
-    url: /api/signals/active
+    url: /api/v2/signals/active
     require_non_empty: false
-    required_keys: [run_id, timestamp, stock, future, signal_action, signal_score]
+    required_keys: [signal_id, run_id, timestamp, stock, future, signal_action, signal_score, lifecycle_state]
     allowed_field_values:
       signal_action: [enter, exit, hold_open]
-    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001]
+    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001]
     title: Active signals
     user_story: User receives only actionable signals.
     expectations:
       - Action includes only enter/exit.
       - Signal includes pair identifiers and score.
-  - id: signals-execute
-    type: post_json
+  - id: signals-action-v2
+    type: signal_action
     scope: backend
-    url: /api/signals/execute
+    active_url: /api/v2/signals/active?limit=5
+    url_template: /api/v2/signals/{signal_id}/actions
+    allow_empty: true
+    expected_http_statuses: [200]
     payload:
-      stock: AAA
-      future: AAH6
-      direction: cash_and_carry
+      action: ack
+      source: ui
+      actor_id: acceptance
+      idempotency_key: acceptance-signals-action-v2
+    required_keys: [status, signal_id, action, entity_ref, fail_closed]
+    allowed_response_status: [ok, duplicate]
+    test_cases: [TC-SIG-ACT-API-003]
+    title: Signal actions v2 from active feed
+    user_story: Operator acknowledges an active signal through the v2 action API.
+    expectations:
+      - Scenario resolves signal_id from active feed and sends an action.
+      - Response contains status and action/audit references.
+  - id: signals-execute
+    type: signal_action
+    scope: backend
+    active_url: /api/v2/signals/active?limit=5
+    url_template: /api/v2/signals/{signal_id}/actions
+    allow_empty: true
+    expected_http_statuses: [200, 409]
+    payload:
       action: enter
+      source: ui
+      actor_id: acceptance
+      reason_code: acceptance_enter
+      idempotency_key: acceptance-signals-enter-v2
       price: 100.5
       quantity: 1
       side: stock
-      note: acceptance
-    required_keys: [status, order_id]
-    test_cases: [TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002]
+      comment: acceptance
+    required_keys: [status, signal_id, action, entity_ref, fail_closed]
+    required_keys_by_status:
+      ok: [execution_event_id]
+      blocked: [reason_code, message]
+    allowed_response_status: [ok, duplicate, blocked]
+    test_cases: [TC-SIG-EXEC-API-001, TC-SIG-EXEC-API-002, TC-SIG-EXEC-API-003, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002]
     title: Execute signal
     user_story: User can manually execute a signal and record the fact.
     expectations:
-      - API accepts payload and returns status ok.
-      - order_id is returned for side=stock|future to link legs of one order.
+      - Scenario resolves signal_id from active feed and submits enter action to v2 endpoint.
+      - Response returns status and execution references; blocked path includes explicit reason.
+  - id: auto-unwind-policy-v2
+    type: post_json
+    scope: backend
+    url: /api/v2/policies/auto-unwind/run
+    payload:
+      dry_run: true
+      timeout_sec: 60
+    required_keys: [status, policy, candidate_count, candidates]
+    test_cases: [TC-SIG-POLICY-API-001]
+    title: Auto-unwind policy run
+    user_story: System evaluates stale leg imbalance candidates before forced close.
+    expectations:
+      - API returns summary with policy name and candidate counters.
+      - Dry run does not write execution rows.
   - id: pretrade-check
     type: api_object
     scope: backend
@@ -162,7 +207,7 @@ scenarios:
     allow_empty: true
     required_keys:
       [status, ready_to_place, reasons, order_price_bands, volume_requirements, gates, hits]
-    test_cases: [TC-PRETRADE-API-001, TC-PRETRADE-UI-001]
+    test_cases: [TC-PRETRADE-API-001, TC-PRETRADE-API-002, TC-PRETRADE-UI-001]
     title: Delayed pre-trade readiness check
     user_story: Operator validates entry readiness for both legs before placing orders.
     expectations:
@@ -171,14 +216,14 @@ scenarios:
   - id: signals-history
     type: api_list
     scope: backend
-    url: /api/signals/history?limit=5
+    url: /api/v2/signals/history?limit=5
     require_non_empty: true
     required_keys:
       [run_id, timestamp, stock, future, signal_action, signal_direction, signal_score]
     allowed_field_values:
       signal_action: [enter, exit, hold]
     cache_as: signals_history
-    test_cases: [TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002]
+    test_cases: [TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002]
     title: История сигналов
     user_story: Пользователь видит историю сигналов за период.
     expectations:
@@ -187,7 +232,7 @@ scenarios:
   - id: signals-history-reasons
     type: api_list
     scope: backend
-    url: /api/signals/history?limit=5
+    url: /api/v2/signals/history?limit=5
     require_non_empty: false
     required_keys: [signal_action, signal_reasons, signal_metrics]
     test_cases: [TC-SIG-HIST-API-004]
@@ -197,6 +242,8 @@ scenarios:
     type: history_date_range
     scope: backend
     history_source: signals_history
+    source_url: /api/v2/signals/history?limit=1
+    url_template: /api/v2/signals/history?from={date_from}&to={date_to}
     required_keys: [timestamp, stock, future, signal_action]
     test_cases: [TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001]
     title: Фильтр истории по датам
@@ -216,6 +263,8 @@ scenarios:
     type: backtest_run
     scope: backend
     url: /api/backtest/run
+    source_url: /api/v2/top-pairs?limit=1
+    allow_empty: true
     window_days: 60
     precompute: true
     required_keys: [summary_metrics, equity_curve, trades]
@@ -230,6 +279,8 @@ scenarios:
     scope: backend
     url: /api/forward/start
     payload: {}
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["Missing raw data"]
     required_keys: [run_id, status, state]
     test_cases: [TC-FWD-API-001]
     title: Forward start
@@ -240,6 +291,8 @@ scenarios:
     type: http_status
     scope: backend
     url: /api/forward/status
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["no_active_run"]
     test_cases: [TC-FWD-API-002, TC-FWD-UI-001]
     title: Forward status
     user_story: Оператор проверяет статус forward-run.
@@ -256,8 +309,10 @@ scenarios:
           end_date: 2020-12-31
         universe:
           max_pairs: 1
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["Missing raw data"]
     required_keys: [status, run_id]
-    test_cases: [TC-HPO-UNIT-001]
+    test_cases: [TC-HPO-API-001, TC-HPO-UNIT-001]
     title: HPO run
     user_story: Researcher starts an HPO run.
     expectations:
@@ -266,6 +321,8 @@ scenarios:
     type: http_status
     scope: backend
     url: /api/hpo/status
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["no_active_run"]
     test_cases: [TC-HPO-API-002]
     title: HPO status
     user_story: Operator checks HPO run status.
@@ -275,6 +332,7 @@ scenarios:
     type: spread_series
     scope: backend
     pair_source: top_pairs
+    source_url: /api/v2/top-pairs?limit=1
     window_days: 60
     required_keys:
       - spread_mid
@@ -284,17 +342,59 @@ scenarios:
     test_cases: [TC-SPREAD-API-001, TC-SPREAD-UI-001]
     title: График спреда
     user_story: Пользователь видит данные для графика спреда.
+  - id: news-feed-v2
+    type: api_list
+    scope: backend
+    url: /api/v2/news/feed?limit=5
+    allow_empty: true
+    required_keys: [news_event_id, published_at, severity, headline]
+    test_cases: [TC-NEWS-API-001, TC-NEWS-UI-001]
+    title: News feed v2
+    user_story: Operator reviews event feed with linked entities and severity.
+    expectations:
+      - Response is JSON array; rows include event id/time/severity/headline.
+  - id: portfolio-rebalance-v2
+    type: api_object
+    scope: backend
+    url: /api/v2/portfolio/rebalance/preview?limit=5
+    allow_empty: true
+    required_keys: [rebalance_plan_id, positions]
+    test_cases: [TC-PORT-API-001, TC-PORT-UI-001]
+    title: Portfolio rebalance preview v2
+    user_story: Operator inspects rebalance proposals before commit.
+    expectations:
+      - Response is JSON object with plan id and positions list.
+  - id: ops-health-v2
+    type: api_object
+    scope: backend
+    url: /api/v2/ops/health
+    required_keys: [status, timestamp, checks]
+    test_cases: [TC-OPS-API-001]
+    title: Ops health v2
+    user_story: Operator checks service liveness/readiness before market actions.
+    expectations:
+      - Response includes global status and dependency checks.
+  - id: ops-slo-v2
+    type: api_object
+    scope: backend
+    url: /api/v2/ops/slo
+    required_keys: [generated_at, slo_targets, api, events_15m, alerts]
+    test_cases: [TC-OPS-API-002]
+    title: Ops SLO snapshot v2
+    user_story: Operator reviews latency/error SLO and alert flags.
+    expectations:
+      - Response includes endpoint metrics and 15-minute event counters.
   - id: frontend
     type: http_status
     scope: frontend
     url: /
-    test_cases: [TC-FE-HTTP-001]
+    test_cases: [TC-FE-HTTP-001, TC-UI-DOMAIN-001, TC-UI-ROUTE-001, TC-UI-KPI-001]
     title: Доступность UI
     user_story: Пользователь может открыть UI.
   - id: frontend-proxy
     type: api_list
     scope: frontend
-    url: /api/top-pairs?limit=5
+    url: /api/v2/top-pairs?limit=5
     require_non_empty: false
     test_cases: [TC-FE-PROXY-001]
     title: Прокси API

@@ -108,6 +108,14 @@ flowchart LR
 - `docs/architecture/modules/strategy-signal-interface.md`
 - `docs/architecture/modules/stock-futures-spread-carry-alpha.md`
 - `docs/architecture/modules/ui-web.md`
+- `docs/architecture/layers-v2.md`
+- `docs/architecture/entities-v2.md`
+- `docs/architecture/architecture-map-v2.md`
+- `docs/architecture/architecture-map-d3.html`
+- `docs/contracts/api-v2.yaml`
+- `docs/ux/workspaces-map.md`
+- `docs/research/evaluation-policy.md`
+- `docs/runbooks/signal-action-audit.md`
 - `docs/user-scenarios.md`
 
 ## QC checkpoints and self-correction
@@ -158,6 +166,8 @@ Traces:
 - Canonical contracts:
   - `contracts/decision-log.schema.json`
   - `contracts/decision-view.schema.json`
+- v2 API surface:
+  - `docs/contracts/api-v2.yaml`
 - DecisionView is strictly derived from DecisionLog.
 - All modules must include snapshot_id references for MOEX ISS/QUIK inputs.
 

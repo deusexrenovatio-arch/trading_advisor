@@ -1,0 +1,890 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trading Advisor Architecture Map v2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-a: #f4fbff;
+      --bg-b: #fff9f2;
+      --surface: rgba(255, 255, 255, 0.9);
+      --surface-strong: #ffffff;
+      --border: #d8e3ef;
+      --text-main: #102133;
+      --text-muted: #4c6278;
+      --accent: #0f766e;
+      --accent-soft: #ccfbf1;
+      --danger: #c2410c;
+      --shadow: 0 14px 36px rgba(22, 44, 68, 0.14);
+      --radius: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text-main);
+      background: radial-gradient(1100px 460px at 10% -10%, #ddf5ff, transparent 65%),
+                  radial-gradient(900px 420px at 95% -5%, #ffedd5, transparent 65%),
+                  linear-gradient(145deg, var(--bg-a), var(--bg-b));
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      letter-spacing: 0.01em;
+    }
+
+    .page {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .hero {
+      background: linear-gradient(145deg, #ffffff, #f3fbff);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+      font-size: clamp(1.25rem, 1.8vw, 1.7rem);
+      letter-spacing: 0.015em;
+    }
+
+    .hero p {
+      margin: 8px 0 0;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+      max-width: 1000px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 14px;
+      min-height: calc(100vh - 170px);
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(4px);
+    }
+
+    .graph-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      border-bottom: 1px solid var(--border);
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      background: linear-gradient(180deg, #ffffff, #f8fcff);
+    }
+
+    .toolbar input,
+    .toolbar select,
+    .toolbar button {
+      border: 1px solid #bfd0e3;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+      color: var(--text-main);
+      background: #ffffff;
+    }
+
+    .toolbar button {
+      cursor: pointer;
+      background: linear-gradient(180deg, #f7fffc, #e3fff9);
+      border-color: #96d7cd;
+      color: #0d5f58;
+      font-weight: 600;
+    }
+
+    .toolbar button:hover {
+      background: linear-gradient(180deg, #ecfffa, #d4fff6);
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(246, 252, 255, 0.85);
+    }
+
+    .filter-group {
+      border: 1px solid #d3e0ed;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 8px;
+    }
+
+    .filter-group h3 {
+      margin: 0 0 6px;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #587188;
+    }
+
+    .chip-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 98px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      border: 1px solid #c7d9eb;
+      background: #f8fbff;
+      color: #24425e;
+      font-size: 0.77rem;
+      line-height: 1;
+      padding: 6px 9px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .chip.active {
+      border-color: #6bbcae;
+      background: #d9fff3;
+      color: #0d6358;
+      font-weight: 600;
+    }
+
+    .stats {
+      padding: 8px 12px;
+      display: flex;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      color: #395874;
+      font-size: 0.82rem;
+      background: #ffffff;
+    }
+
+    .graph-wrap {
+      flex: 1;
+      min-height: 640px;
+      background: linear-gradient(180deg, rgba(241, 250, 255, 0.65), rgba(255, 251, 245, 0.65));
+    }
+
+    #graph {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .side {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .side .head {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #ffffff, #f5fbff);
+    }
+
+    .side .head h2 {
+      margin: 0;
+      font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+      font-size: 1rem;
+    }
+
+    .side .head p {
+      margin: 6px 0 0;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+    }
+
+    .detail {
+      padding: 12px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 0.88rem;
+    }
+
+    .detail .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border: 1px solid #bfd3e8;
+      border-radius: 999px;
+      background: #f3f9ff;
+      color: #274a69;
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      width: fit-content;
+    }
+
+    .detail h3 {
+      margin: 0;
+      font-size: 1.02rem;
+    }
+
+    .detail p {
+      margin: 0;
+      color: #375772;
+      line-height: 1.45;
+    }
+
+    .detail ul {
+      margin: 0;
+      padding-left: 18px;
+      color: #30506b;
+      line-height: 1.35;
+    }
+
+    .detail li {
+      margin: 4px 0;
+    }
+
+    .legend {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    .legend-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 6px;
+      color: #48627b;
+      font-size: 0.8rem;
+    }
+
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+    }
+
+    .tooltip {
+      position: fixed;
+      pointer-events: none;
+      border-radius: 10px;
+      border: 1px solid #9db8d1;
+      background: rgba(255, 255, 255, 0.96);
+      color: #1e3950;
+      padding: 8px 10px;
+      max-width: 320px;
+      font-size: 0.8rem;
+      box-shadow: 0 10px 28px rgba(25, 46, 68, 0.2);
+      transform: translate(10px, 10px);
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    .tooltip strong {
+      font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+      font-size: 0.86rem;
+    }
+
+    .footer {
+      color: #567089;
+      font-size: 0.78rem;
+      padding-top: 4px;
+    }
+
+    @media (max-width: 1240px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .graph-wrap {
+        min-height: 540px;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .filters {
+        grid-template-columns: 1fr;
+      }
+
+      .graph-wrap {
+        min-height: 460px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero panel">
+      <h1 id="title">Architecture Map</h1>
+      <p id="subtitle"></p>
+    </section>
+
+    <section class="layout">
+      <section class="graph-panel panel">
+        <div class="toolbar">
+          <input id="search" type="search" placeholder="Search node id or label..." />
+          <select id="preset">
+            <option value="all">Preset: All dependencies</option>
+            <option value="trade">Preset: Trade path</option>
+            <option value="research">Preset: Research path</option>
+            <option value="news_portfolio">Preset: News + Portfolio</option>
+            <option value="entities">Preset: Entity lineage</option>
+          </select>
+          <button id="reset">Reset filters</button>
+        </div>
+
+        <div class="filters">
+          <div class="filter-group">
+            <h3>Node Kinds</h3>
+            <div class="chip-wrap" id="kind-filters"></div>
+          </div>
+          <div class="filter-group">
+            <h3>Relation Types</h3>
+            <div class="chip-wrap" id="link-filters"></div>
+          </div>
+        </div>
+
+        <div class="stats" id="stats"></div>
+
+        <div class="graph-wrap">
+          <svg id="graph"></svg>
+        </div>
+      </section>
+
+      <aside class="side panel">
+        <div class="head">
+          <h2>Node Inspector</h2>
+          <p>Click any node to inspect dependencies and connected flows.</p>
+        </div>
+        <div class="detail" id="detail"></div>
+      </aside>
+    </section>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="./architecture-map-data.js"></script>
+  <script>
+    (() => {
+      const data = window.ARCH_MAP_DATA;
+      if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.links)) {
+        throw new Error("ARCH_MAP_DATA is missing or invalid");
+      }
+
+      const colors = {
+        layer: "#2563eb",
+        module: "#0f766e",
+        api: "#c2410c",
+        entity: "#0b7285",
+        store: "#475569",
+        workspace: "#be123c",
+        external: "#7c3aed",
+      };
+
+      const laneOrder = {
+        external: 1,
+        layer: 2,
+        module: 3,
+        api: 4,
+        entity: 5,
+        store: 6,
+        workspace: 7,
+      };
+
+      const edgeStyle = {
+        contains: { color: "#6b7280", dash: "" },
+        depends_on: { color: "#c2410c", dash: "3 3" },
+        feeds: { color: "#0284c7", dash: "" },
+        governs: { color: "#9333ea", dash: "6 3" },
+        reads: { color: "#64748b", dash: "2 4" },
+        writes: { color: "#0f766e", dash: "" },
+        serves: { color: "#0ea5e9", dash: "" },
+        calls: { color: "#f59e0b", dash: "" },
+        returns: { color: "#059669", dash: "4 3" },
+        emits: { color: "#0891b2", dash: "" },
+        maps_to: { color: "#ef4444", dash: "5 2" },
+        links: { color: "#7c3aed", dash: "1 3" },
+        triggers: { color: "#1d4ed8", dash: "7 3" },
+        operates: { color: "#e11d48", dash: "" },
+      };
+
+      const titleEl = document.getElementById("title");
+      const subtitleEl = document.getElementById("subtitle");
+      const searchEl = document.getElementById("search");
+      const presetEl = document.getElementById("preset");
+      const kindFiltersEl = document.getElementById("kind-filters");
+      const linkFiltersEl = document.getElementById("link-filters");
+      const statsEl = document.getElementById("stats");
+      const detailEl = document.getElementById("detail");
+      const tooltipEl = document.getElementById("tooltip");
+      const resetEl = document.getElementById("reset");
+      const svgEl = document.getElementById("graph");
+
+      titleEl.textContent = data.title || "Architecture Map";
+      subtitleEl.textContent = data.subtitle || "";
+
+      const layerRank = new Map(
+        data.nodes
+          .filter((n) => n.kind === "layer")
+          .map((n) => [n.id, n.layer_rank || 1]),
+      );
+
+      const kinds = [...new Set(data.nodes.map((n) => n.kind))].sort(
+        (a, b) => (laneOrder[a] || 99) - (laneOrder[b] || 99),
+      );
+      const linkTypes = [...new Set(data.links.map((l) => l.type))].sort();
+
+      const selectedKinds = new Set(kinds);
+      const selectedLinkTypes = new Set(linkTypes);
+      let selectedNodeId = null;
+      let searchTerm = "";
+
+      function createChip(label, activeSet, value, container) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip active";
+        chip.textContent = label;
+        chip.dataset.value = value;
+        chip.onclick = () => {
+          if (activeSet.has(value)) {
+            activeSet.delete(value);
+            chip.classList.remove("active");
+          } else {
+            activeSet.add(value);
+            chip.classList.add("active");
+          }
+          updateVisibility();
+        };
+        container.appendChild(chip);
+      }
+
+      kinds.forEach((kind) => createChip(kind, selectedKinds, kind, kindFiltersEl));
+      linkTypes.forEach((type) => createChip(type, selectedLinkTypes, type, linkFiltersEl));
+
+      const bounds = svgEl.getBoundingClientRect();
+      const width = Math.max(880, Math.floor(bounds.width));
+      const height = Math.max(580, Math.floor(bounds.height));
+
+      const svg = d3
+        .select(svgEl)
+        .attr("viewBox", [0, 0, width, height])
+        .attr("preserveAspectRatio", "xMidYMid meet");
+
+      const defs = svg.append("defs");
+      defs
+        .append("marker")
+        .attr("id", "arrow")
+        .attr("viewBox", "0 -5 10 10")
+        .attr("refX", 12)
+        .attr("refY", 0)
+        .attr("markerWidth", 6)
+        .attr("markerHeight", 6)
+        .attr("orient", "auto")
+        .append("path")
+        .attr("d", "M0,-5L10,0L0,5")
+        .attr("fill", "#8ca3b8");
+
+      const zoomLayer = svg.append("g");
+      const linkLayer = zoomLayer.append("g").attr("stroke-linecap", "round");
+      const nodeLayer = zoomLayer.append("g");
+
+      svg.call(
+        d3
+          .zoom()
+          .scaleExtent([0.35, 2.8])
+          .on("zoom", (event) => zoomLayer.attr("transform", event.transform)),
+      );
+
+      const nodes = data.nodes.map((node) => ({ ...node }));
+      const nodeById = new Map(nodes.map((node) => [node.id, node]));
+      const links = data.links
+        .map((link) => {
+          const source = nodeById.get(link.source);
+          const target = nodeById.get(link.target);
+          if (!source || !target) return null;
+          return { ...link, source, target };
+        })
+        .filter(Boolean);
+
+      function nodeRadius(node) {
+        if (node.kind === "layer") return 14;
+        if (node.kind === "workspace") return 10;
+        if (node.kind === "api") return 8;
+        return 7;
+      }
+
+      function laneX(node) {
+        const lane = laneOrder[node.kind] || 4;
+        const lanes = Object.keys(laneOrder).length + 1;
+        return (width / lanes) * lane;
+      }
+
+      function rankY(node) {
+        const rank =
+          node.kind === "layer"
+            ? node.layer_rank || 1
+            : layerRank.get(node.layer) || 3;
+        const minY = 70;
+        const maxY = height - 50;
+        const maxRank = 6;
+        return minY + ((rank - 1) / (maxRank - 1)) * (maxY - minY);
+      }
+
+      const linkSelection = linkLayer
+        .selectAll("line")
+        .data(links)
+        .join("line")
+        .attr("stroke", (d) => (edgeStyle[d.type] || edgeStyle.depends_on).color)
+        .attr("stroke-dasharray", (d) => (edgeStyle[d.type] || edgeStyle.depends_on).dash)
+        .attr("stroke-width", (d) => (d.type === "contains" ? 1.1 : 1.4))
+        .attr("stroke-opacity", 0.58)
+        .attr("marker-end", "url(#arrow)");
+
+      const nodeSelection = nodeLayer
+        .selectAll("g")
+        .data(nodes)
+        .join("g")
+        .attr("cursor", "pointer");
+
+      nodeSelection
+        .append("circle")
+        .attr("r", (d) => nodeRadius(d))
+        .attr("fill", (d) => colors[d.kind] || "#64748b")
+        .attr("stroke", "#ffffff")
+        .attr("stroke-width", 1.2)
+        .attr("opacity", 0.95);
+
+      nodeSelection
+        .append("text")
+        .text((d) => d.label)
+        .attr("x", (d) => nodeRadius(d) + 6)
+        .attr("y", 4)
+        .attr("font-size", (d) => (d.kind === "layer" ? 12.5 : 11))
+        .attr("font-family", "IBM Plex Sans, sans-serif")
+        .attr("fill", "#20364b")
+        .attr("paint-order", "stroke")
+        .attr("stroke", "rgba(255,255,255,0.82)")
+        .attr("stroke-width", 3.2)
+        .attr("stroke-linejoin", "round");
+
+      const simulation = d3
+        .forceSimulation(nodes)
+        .force(
+          "link",
+          d3
+            .forceLink(links)
+            .id((d) => d.id)
+            .distance((d) => {
+              if (d.type === "contains") return 70;
+              if (d.type === "calls") return 110;
+              if (d.type === "depends_on") return 95;
+              if (d.type === "returns") return 92;
+              return 84;
+            })
+            .strength((d) => (d.type === "contains" ? 0.22 : 0.36)),
+        )
+        .force("charge", d3.forceManyBody().strength(-155))
+        .force("collision", d3.forceCollide().radius((d) => nodeRadius(d) + 6))
+        .force("x", d3.forceX((d) => laneX(d)).strength(0.21))
+        .force("y", d3.forceY((d) => rankY(d)).strength(0.24))
+        .alpha(1)
+        .alphaDecay(0.033)
+        .on("tick", ticked);
+
+      function ticked() {
+        linkSelection
+          .attr("x1", (d) => d.source.x)
+          .attr("y1", (d) => d.source.y)
+          .attr("x2", (d) => d.target.x)
+          .attr("y2", (d) => d.target.y);
+
+        nodeSelection.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
+      }
+
+      nodeSelection
+        .call(
+          d3
+            .drag()
+            .on("start", (event, d) => {
+              if (!event.active) simulation.alphaTarget(0.2).restart();
+              d.fx = d.x;
+              d.fy = d.y;
+            })
+            .on("drag", (event, d) => {
+              d.fx = event.x;
+              d.fy = event.y;
+            })
+            .on("end", (event, d) => {
+              if (!event.active) simulation.alphaTarget(0);
+              d.fx = null;
+              d.fy = null;
+            }),
+        )
+        .on("mouseenter", (_, d) => {
+          tooltipEl.style.opacity = "1";
+          tooltipEl.innerHTML = `<strong>${d.label}</strong><br>${d.summary || "No description"}`;
+        })
+        .on("mousemove", (event) => {
+          tooltipEl.style.left = `${event.clientX + 8}px`;
+          tooltipEl.style.top = `${event.clientY + 8}px`;
+        })
+        .on("mouseleave", () => {
+          tooltipEl.style.opacity = "0";
+        })
+        .on("click", (_, d) => {
+          selectedNodeId = d.id;
+          renderDetail(d.id);
+          updateVisibility();
+        });
+
+      const adjacencyOut = new Map();
+      const adjacencyIn = new Map();
+      nodes.forEach((node) => {
+        adjacencyOut.set(node.id, []);
+        adjacencyIn.set(node.id, []);
+      });
+      links.forEach((link) => {
+        adjacencyOut.get(link.source.id).push(link);
+        adjacencyIn.get(link.target.id).push(link);
+      });
+
+      const presets = {
+        all: null,
+        trade: new Set([
+          "ws.trade_console",
+          "ws.decision_audit",
+          "api.v2.top_pairs",
+          "api.v2.signals.active",
+          "api.v2.signals.actions",
+          "api.v2.pretrade.check",
+          "api.v2.signals.history",
+          "api.v2.signals.executions",
+          "api.v2.decisions.view",
+          "api.v2.decisions.actions",
+          "api.v2.policies.auto_unwind",
+          "api.v2.ops.health",
+          "api.v2.ops.slo",
+          "mod.api_ui",
+          "mod.decision_engine",
+          "mod.execution_policy",
+          "mod.pretrade_service",
+          "mod.storage_repositories",
+          "mod.decision_projection",
+          "mod.observability",
+          "entity.strategy_signal",
+          "entity.gate_result",
+          "entity.decision_record",
+          "entity.decision_action",
+          "entity.execution_event",
+          "entity.entity_ref",
+          "store.sqlite.signal_history",
+          "store.sqlite.signal_executions",
+          "store.sqlite.decision_projection",
+        ]),
+        research: new Set([
+          "ws.research_lab",
+          "api.v2.research.backtest",
+          "api.v2.research.hpo.run",
+          "api.v2.research.hpo.status",
+          "mod.api_ui",
+          "mod.backtest_v2",
+          "mod.hpo_runtime",
+          "mod.forward_runtime",
+          "mod.snapshot_builder",
+          "mod.portfolio_rebalance",
+          "entity.research_experiment",
+          "entity.backtest_run",
+          "entity.hpo_run",
+          "entity.portfolio_state",
+          "store.history.candles",
+          "store.hpo.runs",
+          "store.forward.runs",
+        ]),
+        news_portfolio: new Set([
+          "ws.news_intelligence",
+          "ws.portfolio_control",
+          "api.v2.news.feed",
+          "api.v2.portfolio.preview",
+          "api.v2.portfolio.commit",
+          "mod.api_ui",
+          "mod.news_projection",
+          "mod.news_filter",
+          "mod.portfolio_rebalance",
+          "entity.news_event",
+          "entity.news_entity_link",
+          "entity.rebalance_plan",
+          "entity.portfolio_state",
+          "entity.decision_record",
+          "ext.news_sources",
+        ]),
+        entities: new Set(data.nodes.filter((n) => n.kind === "entity").map((n) => n.id)),
+      };
+
+      function getVisibleNodeIds() {
+        const preset = presets[presetEl.value] || null;
+        const ids = new Set();
+        nodes.forEach((node) => {
+          if (!selectedKinds.has(node.kind)) return;
+          if (preset && !preset.has(node.id)) return;
+          ids.add(node.id);
+        });
+        return ids;
+      }
+
+      function updateVisibility() {
+        const visibleNodeIds = getVisibleNodeIds();
+
+        const term = searchTerm.trim().toLowerCase();
+        const nodeVisible = (node) => visibleNodeIds.has(node.id);
+        const nodeMatched = (node) => {
+          if (!term) return true;
+          return `${node.id} ${node.label}`.toLowerCase().includes(term);
+        };
+
+        nodeSelection.attr("display", (d) => (nodeVisible(d) ? null : "none"));
+
+        linkSelection.attr("display", (d) => {
+          if (!selectedLinkTypes.has(d.type)) return "none";
+          if (!visibleNodeIds.has(d.source.id) || !visibleNodeIds.has(d.target.id)) return "none";
+          return null;
+        });
+
+        nodeSelection
+          .select("circle")
+          .attr("opacity", (d) => {
+            if (!nodeVisible(d)) return 0;
+            const match = nodeMatched(d);
+            if (selectedNodeId && d.id === selectedNodeId) return 1;
+            return match ? 0.95 : 0.2;
+          })
+          .attr("stroke-width", (d) => (selectedNodeId && d.id === selectedNodeId ? 2.7 : 1.2))
+          .attr("stroke", (d) => (selectedNodeId && d.id === selectedNodeId ? "#f59e0b" : "#ffffff"));
+
+        nodeSelection
+          .select("text")
+          .attr("opacity", (d) => {
+            if (!nodeVisible(d)) return 0;
+            if (!term) return 0.95;
+            return nodeMatched(d) ? 0.98 : 0.16;
+          });
+
+        const visibleLinksCount = links.filter((d) => {
+          if (!selectedLinkTypes.has(d.type)) return false;
+          return visibleNodeIds.has(d.source.id) && visibleNodeIds.has(d.target.id);
+        }).length;
+
+        statsEl.innerHTML = `
+          <span><strong>Nodes:</strong> ${visibleNodeIds.size}/${nodes.length}</span>
+          <span><strong>Edges:</strong> ${visibleLinksCount}/${links.length}</span>
+          <span><strong>Preset:</strong> ${presetEl.value}</span>
+        `;
+      }
+
+      function renderDetail(nodeId) {
+        const node = nodeById.get(nodeId);
+        if (!node) {
+          detailEl.innerHTML = "<p>Select a node to inspect.</p>";
+          return;
+        }
+
+        const outgoing = (adjacencyOut.get(node.id) || [])
+          .map((edge) => `<li><strong>${edge.type}</strong> -> ${edge.target.label}</li>`)
+          .join("");
+
+        const incoming = (adjacencyIn.get(node.id) || [])
+          .map((edge) => `<li><strong>${edge.type}</strong> <- ${edge.source.label}</li>`)
+          .join("");
+
+        detailEl.innerHTML = `
+          <span class="pill">${node.kind}</span>
+          <h3>${node.label}</h3>
+          <p>${node.summary || "No summary."}</p>
+          <p><strong>ID:</strong> <code>${node.id}</code></p>
+          ${node.layer ? `<p><strong>Layer:</strong> <code>${node.layer}</code></p>` : ""}
+          ${node.owner ? `<p><strong>Owner:</strong> ${node.owner}</p>` : ""}
+          ${node.worktree ? `<p><strong>Worktree source:</strong> ${node.worktree}</p>` : ""}
+
+          <div>
+            <h3>Incoming</h3>
+            <ul>${incoming || "<li>None</li>"}</ul>
+          </div>
+          <div>
+            <h3>Outgoing</h3>
+            <ul>${outgoing || "<li>None</li>"}</ul>
+          </div>
+
+          <div class="legend">
+            <h3>Legend</h3>
+            ${Object.keys(colors)
+              .map(
+                (kind) =>
+                  `<div class="legend-row"><span class="swatch" style="background:${colors[kind]}"></span>${kind}</div>`,
+              )
+              .join("")}
+            <p class="footer">Tip: combine kind + relation filters to isolate dependency slices.</p>
+          </div>
+        `;
+      }
+
+      searchEl.addEventListener("input", (event) => {
+        searchTerm = event.target.value || "";
+        updateVisibility();
+      });
+
+      presetEl.addEventListener("change", () => {
+        selectedNodeId = null;
+        renderDetail(null);
+        updateVisibility();
+      });
+
+      resetEl.addEventListener("click", () => {
+        selectedKinds.clear();
+        kinds.forEach((kind) => selectedKinds.add(kind));
+        selectedLinkTypes.clear();
+        linkTypes.forEach((type) => selectedLinkTypes.add(type));
+        [...document.querySelectorAll(".chip")].forEach((chip) => chip.classList.add("active"));
+        presetEl.value = "all";
+        searchEl.value = "";
+        searchTerm = "";
+        selectedNodeId = null;
+        renderDetail(null);
+        updateVisibility();
+      });
+
+      renderDetail(null);
+      updateVisibility();
+    })();
+  </script>
+</body>
+</html>

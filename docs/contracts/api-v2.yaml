@@ -1,0 +1,529 @@
+openapi: 3.0.3
+info:
+  title: Trading Advisor API v2
+  version: 2.0.0
+  description: Contract-first surface for signal/decision/research/news/portfolio workflows.
+servers:
+  - url: /api/v2
+paths:
+  /signals/active:
+    get:
+      summary: List active signals in v2 contract.
+      responses:
+        '200':
+          description: Active signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SignalActiveV2'
+  /signals/{signal_id}/actions:
+    post:
+      summary: Append signal action event (ack/enter/exit/hold).
+      parameters:
+        - in: path
+          name: signal_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalActionRequestV2'
+      responses:
+        '200':
+          description: Action accepted or idempotent duplicate.
+        '409':
+          description: Action blocked by fail-closed execution policy.
+  /policies/auto-unwind/run:
+    post:
+      summary: Evaluate and execute auto-unwind for stale leg imbalance.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoUnwindRunRequestV2'
+      responses:
+        '200':
+          description: Auto-unwind evaluation summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoUnwindRunResponseV2'
+  /ops/health:
+    get:
+      summary: Liveness/readiness checks for operational monitoring.
+      responses:
+        '200':
+          description: Service is ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsHealthV2'
+        '503':
+          description: Service is degraded (readiness failed).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsHealthV2'
+  /ops/slo:
+    get:
+      summary: Runtime SLO snapshot and alert state.
+      responses:
+        '200':
+          description: Current SLO metrics and alerts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsSloSnapshotV2'
+  /decisions/{decision_id}/actions:
+    post:
+      summary: Unified decision action endpoint.
+      parameters:
+        - in: path
+          name: decision_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionActionRequestV2'
+      responses:
+        '200':
+          description: Decision action accepted or idempotent duplicate.
+  /decisions/view:
+    get:
+      summary: Read backend decision projection.
+      responses:
+        '200':
+          description: Projection rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DecisionViewV2'
+  /decision-view:
+    get:
+      summary: Alias of /decisions/view for compatibility during migration.
+      responses:
+        '200':
+          description: Projection rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DecisionViewV2'
+  /pretrade/check:
+    post:
+      summary: Execute deterministic pretrade validation for a pair.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PretradeCheckRequestV2'
+      responses:
+        '200':
+          description: Pretrade readiness payload.
+  /news/feed:
+    get:
+      summary: Aggregated news feed linked to domain entities.
+      parameters:
+        - in: query
+          name: severity
+          schema:
+            type: string
+        - in: query
+          name: ticker
+          schema:
+            type: string
+        - in: query
+          name: entity_id
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: News events.
+  /research/backtests/run:
+    post:
+      summary: Run backtest v2 in experiment envelope.
+      responses:
+        '200':
+          description: Backtest completed.
+  /research/hpo/run:
+    post:
+      summary: Start HPO run in experiment envelope.
+      responses:
+        '200':
+          description: HPO run started.
+  /research/hpo/status:
+    get:
+      summary: Fetch HPO status with promotion gate projection.
+      responses:
+        '200':
+          description: HPO status.
+  /portfolio/rebalance/preview:
+    get:
+      summary: Build rebalance proposal from active lifecycle.
+      responses:
+        '200':
+          description: Rebalance preview.
+  /portfolio/rebalance/commit:
+    post:
+      summary: Commit approved rebalance plan.
+      responses:
+        '200':
+          description: Commit accepted.
+components:
+  schemas:
+    EntityRef:
+      type: object
+      required: [entity_type, entity_id]
+      properties:
+        entity_type:
+          type: string
+          enum: [instrument, pair, portfolio]
+        entity_id:
+          type: string
+        asset_id:
+          type: string
+          nullable: true
+        ticker:
+          type: string
+          nullable: true
+    GateResult:
+      type: object
+      required: [gate_result_id, gate_type, status]
+      properties:
+        gate_result_id:
+          type: string
+        gate_type:
+          type: string
+        status:
+          type: string
+          enum: [pass, warn, block]
+        reasons:
+          type: array
+          items:
+            type: string
+    SignalActiveV2:
+      type: object
+      required:
+        - signal_id
+        - entity_ref
+        - lifecycle_state
+        - gate_results
+      properties:
+        signal_id:
+          type: string
+        entity_ref:
+          $ref: '#/components/schemas/EntityRef'
+        lifecycle_state:
+          type: string
+          enum:
+            - candidate
+            - blocked
+            - ready
+            - acknowledged
+            - entered
+            - hold_open
+            - exit_ready
+            - closed
+            - rejected
+        signal_action_effective:
+          type: string
+        gate_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GateResult'
+    DecisionRefV2:
+      type: object
+      required: [decision_id]
+      properties:
+        decision_id:
+          type: string
+          nullable: true
+        action_id:
+          type: string
+          nullable: true
+        latest_action:
+          type: string
+          nullable: true
+        latest_status:
+          type: string
+          nullable: true
+        actor_id:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        idempotency_key:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+    ExecutionRefV2:
+      type: object
+      properties:
+        request_id:
+          type: string
+          nullable: true
+        action:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        requested_at:
+          type: string
+          format: date-time
+          nullable: true
+        executed_at:
+          type: string
+          format: date-time
+          nullable: true
+        actor_id:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        reason_code:
+          type: string
+          nullable: true
+        idempotency_key:
+          type: string
+          nullable: true
+    DecisionViewV2:
+      type: object
+      required: [decision_id, projection_version, entity_ref, decision_ref, execution_ref]
+      additionalProperties: true
+      properties:
+        decision_id:
+          type: string
+        projection_version:
+          type: string
+        projection_source:
+          type: string
+          enum: [jsonl, db, jsonl_fallback]
+        entity_ref:
+          $ref: '#/components/schemas/EntityRef'
+        decision_ref:
+          $ref: '#/components/schemas/DecisionRefV2'
+        execution_ref:
+          $ref: '#/components/schemas/ExecutionRefV2'
+    SignalActionRequestV2:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [ack, enter, exit, hold]
+        source:
+          type: string
+          enum: [ui, telegram, system]
+        actor_id:
+          type: string
+        reason_code:
+          type: string
+        fail_closed_override:
+          type: boolean
+        override_reason:
+          type: string
+        pretrade_status:
+          type: string
+          enum: [pass, block, check]
+        pretrade_degraded:
+          type: boolean
+        pretrade:
+          type: object
+          additionalProperties: true
+        idempotency_key:
+          type: string
+    AutoUnwindCandidateV2:
+      type: object
+      properties:
+        signal_id:
+          type: string
+          nullable: true
+        stock:
+          type: string
+        future:
+          type: string
+        direction:
+          type: string
+          nullable: true
+        last_execution_at:
+          type: string
+          format: date-time
+        age_sec:
+          type: integer
+        open_leg_total:
+          type: integer
+        open_stock_legs:
+          type: integer
+        open_future_legs:
+          type: integer
+        reason_code:
+          type: string
+    AutoUnwindRunRequestV2:
+      type: object
+      properties:
+        timeout_sec:
+          type: integer
+        dry_run:
+          type: boolean
+        actor_id:
+          type: string
+        now_utc:
+          type: string
+          format: date-time
+    AutoUnwindRunResponseV2:
+      type: object
+      properties:
+        status:
+          type: string
+        policy:
+          type: string
+        evaluated_at:
+          type: string
+          format: date-time
+        timeout_sec:
+          type: integer
+        candidate_count:
+          type: integer
+        triggered_count:
+          type: integer
+        duplicate_count:
+          type: integer
+        blocked_count:
+          type: integer
+        error_count:
+          type: integer
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutoUnwindCandidateV2'
+        triggered:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        duplicates:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        blocked:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    OpsHealthV2:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          additionalProperties: true
+    OpsSloSnapshotV2:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        slo_targets:
+          type: object
+          additionalProperties: true
+        api:
+          type: object
+          additionalProperties: true
+        events_15m:
+          type: object
+          additionalProperties: true
+        alerts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    DecisionActionRequestV2:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [APPROVE, HOLD, REJECT, EXECUTE, CLOSE]
+        actor_id:
+          type: string
+        reason_code:
+          type: string
+        comment:
+          type: string
+        source:
+          type: string
+          enum: [ui, telegram, system]
+        idempotency_key:
+          type: string
+    PretradeCheckRequestV2:
+      type: object
+      required: [stock, future]
+      properties:
+        stock:
+          type: string
+        future:
+          type: string
+        direction:
+          type: string
+          enum: [cash_and_carry, reverse]
+        spot_target:
+          type: number
+        future_target:
+          type: number
+        spread_target:
+          type: number
+        snapshots:
+          type: integer
+        min_hits:
+          type: integer
+        eps:
+          type: number
+        sync_sec:
+          type: number
+        poll_sec:
+          type: number
+        qty_fut:
+          type: number
+        participation_rate:
+          type: number

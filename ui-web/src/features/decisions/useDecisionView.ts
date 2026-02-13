@@ -1,13 +1,14 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   BasketAllocation,
+  DecisionRefV2,
   DecisionLog,
   DecisionView,
+  ExecutionRefV2,
   ExecutionStatus,
   OperatorAction,
 } from '../../entities/decision/types'
 import {
-  fetchDecisionAction as fetchDecisionActionApi,
   fetchDecisionLog as fetchDecisionLogApi,
   fetchDecisionView as fetchDecisionViewApi,
   submitDecisionAction as submitDecisionActionApi,
@@ -17,10 +18,57 @@ import { getArray, getObject } from '../../shared/utils/guards'
 export type DecisionActionState = {
   operator_action?: OperatorAction
   execution_status?: ExecutionStatus
+  decision_ref?: DecisionRefV2
+  execution_ref?: ExecutionRefV2
 }
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0
+
+const toOperatorAction = (
+  operatorAction: OperatorAction | undefined,
+  decisionRef: DecisionRefV2 | undefined,
+): OperatorAction | undefined => {
+  if (operatorAction) return operatorAction
+  if (!decisionRef) return undefined
+  const hasData =
+    Boolean(decisionRef.latest_action) ||
+    Boolean(decisionRef.latest_status) ||
+    Boolean(decisionRef.actor_id) ||
+    Boolean(decisionRef.updated_at)
+  if (!hasData) return undefined
+  return {
+    action: decisionRef.latest_action ?? undefined,
+    status: decisionRef.latest_status ?? undefined,
+    actor: decisionRef.actor_id ?? undefined,
+    created_at: decisionRef.updated_at ?? undefined,
+  }
+}
+
+const toExecutionStatus = (
+  executionStatus: ExecutionStatus | undefined,
+  executionRef: ExecutionRefV2 | undefined,
+): ExecutionStatus | undefined => {
+  if (executionStatus) return executionStatus
+  if (!executionRef) return undefined
+  const hasData =
+    Boolean(executionRef.status) ||
+    Boolean(executionRef.requested_at) ||
+    Boolean(executionRef.executed_at) ||
+    Boolean(executionRef.request_id)
+  if (!hasData) return undefined
+  return {
+    request_id: executionRef.request_id ?? undefined,
+    action: executionRef.action ?? undefined,
+    status: executionRef.status ?? undefined,
+    requested_at: executionRef.requested_at ?? undefined,
+    executed_at: executionRef.executed_at ?? undefined,
+    actor: executionRef.actor_id ?? undefined,
+    source: executionRef.source ?? undefined,
+    reason_code: executionRef.reason_code ?? undefined,
+    idempotency_key: executionRef.idempotency_key ?? undefined,
+  }
+}
 
 export const useDecisionView = () => {
   const [rows, setRows] = useState<DecisionView[]>([])
@@ -31,7 +79,6 @@ export const useDecisionView = () => {
   const [detailError, setDetailError] = useState<string | null>(null)
   const [decisionAction, setDecisionAction] = useState<DecisionActionState | null>(null)
   const [decisionActionError, setDecisionActionError] = useState<string | null>(null)
-  const [decisionActionLoading, setDecisionActionLoading] = useState(false)
   const [decisionActionSubmitting, setDecisionActionSubmitting] = useState(false)
   const [decisionActionNote, setDecisionActionNote] = useState('')
   const [quickFilter, setQuickFilter] = useState('')
@@ -74,29 +121,13 @@ export const useDecisionView = () => {
     }
   }, [])
 
-  const fetchDecisionAction = useCallback(async (decisionId: string) => {
-    setDecisionAction(null)
-    setDecisionActionError(null)
-    setDecisionActionLoading(true)
-    try {
-      const data = await fetchDecisionActionApi(decisionId)
-      setDecisionAction(data)
-    } catch (err) {
-      setDecisionActionError(
-        err instanceof Error ? err.message : 'Не удалось загрузить действие решения',
-      )
-    } finally {
-      setDecisionActionLoading(false)
-    }
-  }, [])
-
   const selectDecision = useCallback(
     (decisionId: string) => {
       setSelectedId(decisionId)
+      setDecisionAction(null)
       void fetchDecisionLog(decisionId)
-      void fetchDecisionAction(decisionId)
     },
-    [fetchDecisionAction, fetchDecisionLog],
+    [fetchDecisionLog],
   )
 
   const submitDecisionAction = useCallback(
@@ -110,12 +141,14 @@ export const useDecisionView = () => {
           note: decisionActionNote || undefined,
         })
         setDecisionAction(data)
-        if (data.operator_action || data.execution_status) {
+        if (data.operator_action || data.execution_status || data.decision_ref || data.execution_ref) {
           setRows((prev) =>
             prev.map((row) =>
               row.decision_id === selectedId
                 ? {
                     ...row,
+                    decision_ref: data.decision_ref ?? row.decision_ref,
+                    execution_ref: data.execution_ref ?? row.execution_ref,
                     operator_action: data.operator_action ?? row.operator_action,
                     execution_status: data.execution_status ?? row.execution_status,
                   }
@@ -175,10 +208,16 @@ export const useDecisionView = () => {
     ? getObject<Record<string, unknown>>(detailRecord['basket_allocations'])
     : null
   const detailFacts = detailRecord ? getArray<Record<string, unknown>>(detailRecord['facts']) : []
-  const operatorAction =
-    decisionAction?.operator_action ?? selectedDecision?.operator_action ?? undefined
-  const executionStatus =
-    decisionAction?.execution_status ?? selectedDecision?.execution_status ?? undefined
+
+  const operatorAction = toOperatorAction(
+    decisionAction?.operator_action ?? selectedDecision?.operator_action ?? undefined,
+    decisionAction?.decision_ref ?? selectedDecision?.decision_ref ?? undefined,
+  )
+  const executionStatus = toExecutionStatus(
+    decisionAction?.execution_status ?? selectedDecision?.execution_status ?? undefined,
+    decisionAction?.execution_ref ?? selectedDecision?.execution_ref ?? undefined,
+  )
+  const decisionActionLoading = false
 
   const basketRows = useMemo(() => {
     const current = getArray<BasketAllocation>(detailBasket?.current)

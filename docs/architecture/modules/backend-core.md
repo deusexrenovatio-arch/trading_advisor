@@ -139,6 +139,12 @@ but the API endpoints remain the primary backend interface for the React app.
   - Refresh endpoints: `POST /api/signals/refresh`, `GET /api/signals/refresh-status`.
   - Backtest/forward endpoints: `POST /api/backtest/run`, `POST /api/forward/start`, `GET /api/forward/status`.
   - HPO endpoints: `POST /api/hpo/run` (async start), `GET /api/hpo/status` (status + result).
+  - V2 endpoints:
+    - `GET /api/v2/signals/active`, `POST /api/v2/signals/<signal_id>/actions`
+    - `GET /api/v2/decisions/view`
+    - `GET /api/v2/news/feed`
+    - `POST /api/v2/research/backtests/run`, `POST /api/v2/research/hpo/run`, `GET /api/v2/research/hpo/status`
+    - `GET /api/v2/portfolio/rebalance/preview`, `POST /api/v2/portfolio/rebalance/commit`
 
 ## Parallel dev workflow
 - Run backend API: `python -m moex_carry.cli ui` (serves `/api/*` on `127.0.0.1:8050`).

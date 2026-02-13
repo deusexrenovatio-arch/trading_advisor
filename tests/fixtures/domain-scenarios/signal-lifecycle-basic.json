@@ -1,0 +1,30 @@
+{
+  "scenario_id": "signal-lifecycle-basic",
+  "description": "Single pair lifecycle from ready to enter to hold_open to exit_ready.",
+  "pair": {
+    "stock": "AAA",
+    "future": "AAH6"
+  },
+  "events": [
+    {
+      "signal_action": "enter",
+      "lifecycle_state": "ready",
+      "gate_results": [
+        { "gate_type": "pretrade", "status": "pass" },
+        { "gate_type": "score_gate", "status": "pass" }
+      ]
+    },
+    {
+      "execution_action": "enter",
+      "expected_lifecycle_state": "entered"
+    },
+    {
+      "signal_action": "hold_open",
+      "lifecycle_state": "hold_open"
+    },
+    {
+      "signal_action": "exit",
+      "lifecycle_state": "exit_ready"
+    }
+  ]
+}

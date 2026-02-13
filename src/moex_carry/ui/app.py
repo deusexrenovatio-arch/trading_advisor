@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import math
 import threading
@@ -20,13 +21,30 @@ from moex_carry.contracts.strategy_test import BacktestRequest, ForwardTestReque
 from moex_carry.backtest_v2.runtime import run_backtest_v2_cached, serialize_backtest_report
 from moex_carry.data.moex_iss import MoexIssClient
 from moex_carry.decision_log import load_jsonl
+from moex_carry.domain.decision_engine import (
+    build_decision_action_entries,
+    build_signal_gate_results,
+    derive_signal_lifecycle_state,
+    parse_decision_action_request,
+)
+from moex_carry.domain.execution_policy import (
+    evaluate_fail_closed_entry,
+    select_auto_unwind_candidates,
+)
+from moex_carry.domain.pretrade_service import (
+    PretradeRuntimeParams,
+    enrich_pretrade_result,
+    normalize_pretrade_direction,
+)
 from moex_carry.forward.runtime import load_forward_status, start_forward_run
 from moex_carry.hpo.runtime import load_hpo_status, start_hpo_run
+from moex_carry.observability.runtime_metrics import ApiObservability
 from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.pretrade.delay_gate import run_delay_gate
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
+    load_decision_view_projection,
     load_active_signals,
     load_latest_signal_run,
     load_open_executions,
@@ -63,6 +81,8 @@ BASE_TABLE_STYLE = {
 
 
 _CACHE_VERSION = "v4"
+_V1_DEPRECATION_SUNSET_HTTP = "Wed, 01 Jul 2026 00:00:00 GMT"
+_V1_DEPRECATION_SUNSET_DATE = "2026-07-01"
 
 
 def _append_jsonl(path, payload: dict[str, object]) -> None:
@@ -416,11 +436,150 @@ def _normalize_execution_action(value: object) -> str:
     return raw or "enter"
 
 
+def _coerce_signal_action_request(
+    value: object, *, legacy_mode: bool = False
+) -> tuple[str, str] | None:
+    raw = str(value or "").strip().lower()
+    if raw in {"ack", "acknowledged"}:
+        return "ack", "ack"
+    if raw in {"enter", "open"}:
+        return "enter", "enter"
+    if raw in {"exit", "close"}:
+        return "exit", "exit"
+    if raw in {"hold", "hold_open"}:
+        if legacy_mode:
+            # Keep v1 storage semantics: hold-like actions are persisted as enter.
+            return "enter", "enter"
+        return "hold", "hold_open"
+    return None
+
+
+def _normalize_signal_action_source(value: object, *, default: str) -> str:
+    source = str(value or default).strip().lower()
+    allowed = {"ui", "telegram", "system"}
+    if default == "v1_adapter":
+        allowed.add("v1_adapter")
+    if source in allowed:
+        return source
+    return default
+
+
 def _normalize_order_id(value: object) -> str | None:
     if value is None:
         return None
     raw = str(value).strip()
     return raw or None
+
+
+def _stable_id(prefix: str, *parts: object, length: int = 16) -> str:
+    raw = "|".join(str(part or "").strip() for part in parts)
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[: max(length, 8)]
+    return f"{prefix}-{digest}"
+
+
+def _build_pair_entity_ref(stock: object, future: object) -> dict[str, object]:
+    stock_value = str(stock or "").strip()
+    future_value = str(future or "").strip()
+    entity_id = f"{stock_value}:{future_value}" if stock_value or future_value else ""
+    return {
+        "entity_type": "pair",
+        "entity_id": entity_id,
+        "ticker": stock_value or None,
+    }
+
+
+def _build_signal_id_from_row(row: dict[str, object]) -> str:
+    return _stable_id(
+        "sig",
+        row.get("run_id"),
+        row.get("timestamp"),
+        row.get("stock"),
+        row.get("future"),
+        row.get("signal_action"),
+    )
+
+
+def _derive_lifecycle_state(row: dict[str, object]) -> str:
+    return derive_signal_lifecycle_state(
+        row.get("signal_action"),
+        position_open=bool(row.get("position_open")),
+    )
+
+
+def _derive_effective_signal_action(row: dict[str, object]) -> str:
+    action = str(row.get("signal_action") or "").strip().lower()
+    if action != "enter":
+        return action or "hold"
+    pretrade_status = str(row.get("pretrade_status") or "").strip().lower()
+    if pretrade_status in {"hold", "block"}:
+        return "hold_pretrade"
+    if pretrade_status in {"check", "pending"}:
+        return "check_pretrade"
+    return "enter"
+
+
+def _build_gate_results_from_row(row: dict[str, object], signal_id: str) -> list[dict[str, object]]:
+    metrics = row.get("signal_metrics")
+    if isinstance(metrics, dict) and row.get("score_gate_pass") is not None:
+        metrics = {**metrics, "score_gate_pass": row.get("score_gate_pass")}
+    return build_signal_gate_results(
+        signal_id=signal_id,
+        action=row.get("signal_action"),
+        signal_metrics=metrics,
+        pretrade_status=row.get("pretrade_status"),
+        pretrade_reasons=row.get("pretrade_reasons"),
+        stable_id=_stable_id,
+    )
+
+
+def _extract_response_payload(result) -> tuple[object | None, int]:
+    if isinstance(result, tuple):
+        payload, status_code = result[0], int(result[1])
+    else:
+        payload, status_code = result, 200
+    if hasattr(payload, "get_json"):
+        data = payload.get_json(silent=True)
+        return data, status_code
+    return payload, status_code
+
+
+def _extract_idempotency_key(note: object) -> str | None:
+    if not isinstance(note, str) or not note.strip():
+        return None
+    try:
+        payload = json.loads(note)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    raw = payload.get("idempotency_key")
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    return value or None
+
+
+def _deprecated_v1_successor_path(request_path: str) -> str | None:
+    if request_path == "/api/top-pairs":
+        return "/api/v2/top-pairs"
+    if request_path == "/api/decision-view":
+        return "/api/v2/decision-view"
+    if request_path == "/api/pretrade/check":
+        return "/api/v2/pretrade/check"
+    if request_path == "/api/signals/active":
+        return "/api/v2/signals/active"
+    if request_path == "/api/signals/history":
+        return "/api/v2/signals/history"
+    if request_path == "/api/signals/executions":
+        return "/api/v2/signals/executions"
+    if request_path == "/api/signals/execute":
+        return "/api/v2/signals/{signal_id}/actions"
+    if request_path.startswith("/api/decisions/") and request_path.endswith("/action"):
+        decision_id = request_path.removeprefix("/api/decisions/").removesuffix("/action")
+        decision_id = decision_id.strip("/")
+        if decision_id:
+            return f"/api/v2/decisions/{decision_id}/actions"
+    return None
 
 
 def _decrement_leg_bucket(open_legs: dict[str, int], preferred: str) -> None:
@@ -613,6 +772,51 @@ def create_app(settings: AppSettings) -> Dash:
     actions_path = decisions_dir / "decision_actions.jsonl"
     executions_path = decisions_dir / "execution_requests.jsonl"
     logger = logging.getLogger(__name__)
+    observability = ApiObservability(latency_window_size=1000)
+
+    def _observe_request(endpoint_key: str, started_at: datetime, result):
+        _, status_code = _extract_response_payload(result)
+        duration_ms = max((datetime.now(timezone.utc) - started_at).total_seconds() * 1000.0, 0.0)
+        observability.record_request(endpoint_key, status_code=status_code, duration_ms=duration_ms)
+        return result
+
+    def _mark_signal_action_events(result) -> None:
+        payload, status_code = _extract_response_payload(result)
+        if status_code == 409 and isinstance(payload, dict):
+            if str(payload.get("error") or "").strip().lower() == "fail_closed_execution":
+                observability.mark_event("execution_rejected_fail_closed")
+
+    def _mark_pretrade_events(result) -> None:
+        payload, status_code = _extract_response_payload(result)
+        if status_code >= 500:
+            observability.mark_event("pretrade_error")
+            return
+        if status_code >= 400 or not isinstance(payload, dict):
+            return
+        pretrade_status = str(payload.get("pretrade_status") or payload.get("status") or "").strip().lower()
+        ready_to_place = _parse_bool(payload.get("ready_to_place"))
+        if pretrade_status in {"block", "check", "pending"} or ready_to_place is False:
+            observability.mark_event("pretrade_failure")
+        degraded = _parse_bool(payload.get("degraded"))
+        if degraded is True:
+            observability.mark_event("pretrade_degraded")
+
+    def _mark_auto_unwind_events(result) -> None:
+        payload, status_code = _extract_response_payload(result)
+        if status_code >= 500:
+            observability.mark_event("auto_unwind_error")
+            return
+        if status_code >= 400 or not isinstance(payload, dict):
+            return
+        triggered_count = _parse_int(payload.get("triggered_count"), 0)
+        blocked_count = _parse_int(payload.get("blocked_count"), 0)
+        error_count = _parse_int(payload.get("error_count"), 0)
+        if triggered_count > 0:
+            observability.mark_event("auto_unwind_triggered", count=triggered_count)
+        if blocked_count > 0:
+            observability.mark_event("auto_unwind_blocked", count=blocked_count)
+        if error_count > 0:
+            observability.mark_event("auto_unwind_error", count=error_count)
 
     refresh_enabled = bool(settings.ui.signal_refresh_enabled)
     refresh_interval = int(settings.ui.signal_refresh_interval_sec or 0)
@@ -698,7 +902,173 @@ def create_app(settings: AppSettings) -> Dash:
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+
+        successor = _deprecated_v1_successor_path(request.path)
+        if successor is not None:
+            response.headers["Deprecation"] = "true"
+            response.headers["Sunset"] = _V1_DEPRECATION_SUNSET_HTTP
+            response.headers["X-API-Deprecated"] = "v1"
+            response.headers["X-API-Sunset-Date"] = _V1_DEPRECATION_SUNSET_DATE
+            warning_text = (
+                f'299 - "Deprecated API v1 endpoint; migrate to {successor} '
+                f'before {_V1_DEPRECATION_SUNSET_DATE}"'
+            )
+            response.headers["Warning"] = warning_text
+            link_value = f'<{successor}>; rel="successor-version"'
+            existing_link = response.headers.get("Link")
+            response.headers["Link"] = (
+                f"{existing_link}, {link_value}" if existing_link else link_value
+            )
+
         return response
+
+    def _decision_exists(decision_id: str) -> bool:
+        log_path = decisions_dir / "decision_log.jsonl"
+        view_path = decisions_dir / "decision_view.jsonl"
+        records = load_jsonl(log_path) if log_path.exists() else []
+        if any(str(record.get("decision_id") or "") == decision_id for record in records):
+            return True
+        view_records = load_jsonl(view_path) if view_path.exists() else []
+        return any(str(record.get("decision_id") or "") == decision_id for record in view_records)
+
+    def _record_decision_action(
+        decision_id: str,
+        payload: dict[str, object],
+        *,
+        source_default: str,
+        allowed_actions: set[str] | None = None,
+    ):
+        if not _decision_exists(decision_id):
+            return jsonify({"error": "not_found"}), 404
+        command, error = parse_decision_action_request(payload)
+        if error is not None or command is None:
+            return _bad_request(error or "invalid_action")
+        if allowed_actions is not None and command.action not in allowed_actions:
+            allowed = ", ".join(sorted(allowed_actions))
+            return _bad_request(f"action must be one of: {allowed}")
+
+        if not command.source:
+            command.source = source_default
+        idempotency_key = command.idempotency_key or f"idem-{uuid.uuid4().hex[:12]}"
+
+        action_records = load_jsonl(actions_path) if actions_path.exists() else []
+        execution_records = load_jsonl(executions_path) if executions_path.exists() else []
+        for item in action_records:
+            if str(item.get("decision_id") or "") != decision_id:
+                continue
+            existing_key = str(item.get("idempotency_key") or "").strip()
+            if existing_key and existing_key == idempotency_key:
+                execution_match = None
+                for execution_item in execution_records:
+                    if not isinstance(execution_item, dict):
+                        continue
+                    if str(execution_item.get("decision_id") or "") != decision_id:
+                        continue
+                    execution_key = str(execution_item.get("idempotency_key") or "").strip()
+                    if execution_key and execution_key == idempotency_key:
+                        execution_match = execution_item
+                        break
+                decision_ref = {
+                    "decision_id": decision_id,
+                    "action_id": item.get("action_id"),
+                    "latest_action": item.get("action"),
+                    "latest_status": item.get("status"),
+                    "actor_id": item.get("actor"),
+                    "source": item.get("source"),
+                    "idempotency_key": item.get("idempotency_key"),
+                    "updated_at": item.get("created_at"),
+                }
+                execution_ref = {
+                    "request_id": execution_match.get("request_id")
+                    if isinstance(execution_match, dict)
+                    else None,
+                    "action": execution_match.get("action")
+                    if isinstance(execution_match, dict)
+                    else None,
+                    "status": execution_match.get("status")
+                    if isinstance(execution_match, dict)
+                    else None,
+                    "requested_at": execution_match.get("requested_at")
+                    if isinstance(execution_match, dict)
+                    else None,
+                    "executed_at": execution_match.get("executed_at")
+                    if isinstance(execution_match, dict)
+                    else None,
+                    "actor_id": execution_match.get("actor")
+                    if isinstance(execution_match, dict)
+                    else None,
+                    "source": execution_match.get("source")
+                    if isinstance(execution_match, dict)
+                    else None,
+                    "reason_code": execution_match.get("reason_code")
+                    if isinstance(execution_match, dict)
+                    else None,
+                    "idempotency_key": execution_match.get("idempotency_key")
+                    if isinstance(execution_match, dict)
+                    else None,
+                }
+                return jsonify(
+                    {
+                        "status": "duplicate",
+                        "decision_id": decision_id,
+                        "action_id": item.get("action_id"),
+                        "idempotency_key": idempotency_key,
+                        "operator_action": item,
+                        "execution_status": execution_match or {},
+                        "decision_ref": decision_ref,
+                        "execution_ref": execution_ref,
+                    }
+                )
+
+        created_at = _iso_now()
+        action_id = _stable_id(
+            "dact", decision_id, command.action, idempotency_key, created_at, length=20
+        )
+        request_id = _stable_id(
+            "dreq", decision_id, command.action, idempotency_key, created_at, length=20
+        )
+        action_entry, execution_entry = build_decision_action_entries(
+            decision_id=decision_id,
+            action_id=action_id,
+            request_id=request_id,
+            created_at=created_at,
+            command=command,
+            idempotency_key=idempotency_key,
+        )
+        _append_jsonl(actions_path, action_entry)
+        _append_jsonl(executions_path, execution_entry)
+
+        return jsonify(
+            {
+                "status": "ok",
+                "decision_id": decision_id,
+                "action_id": action_id,
+                "idempotency_key": idempotency_key,
+                "operator_action": action_entry,
+                "execution_status": execution_entry,
+                "decision_ref": {
+                    "decision_id": decision_id,
+                    "action_id": action_entry.get("action_id"),
+                    "latest_action": action_entry.get("action"),
+                    "latest_status": action_entry.get("status"),
+                    "actor_id": action_entry.get("actor"),
+                    "source": action_entry.get("source"),
+                    "idempotency_key": action_entry.get("idempotency_key"),
+                    "updated_at": action_entry.get("created_at"),
+                },
+                "execution_ref": {
+                    "request_id": execution_entry.get("request_id"),
+                    "action": execution_entry.get("action"),
+                    "status": execution_entry.get("status"),
+                    "requested_at": execution_entry.get("requested_at"),
+                    "executed_at": execution_entry.get("executed_at"),
+                    "actor_id": execution_entry.get("actor"),
+                    "source": execution_entry.get("source"),
+                    "reason_code": execution_entry.get("reason_code"),
+                    "idempotency_key": execution_entry.get("idempotency_key"),
+                },
+            }
+        )
 
     @server.route("/api/signals/refresh-status", methods=["GET"])
     def signals_refresh_status_api():
@@ -714,14 +1084,39 @@ def create_app(settings: AppSettings) -> Dash:
 
     @server.route("/api/decision-view", methods=["GET"])
     def decision_view_api():
-        view_path = paths.data_dir / "decisions" / "decision_view.jsonl"
-        records = load_jsonl(view_path)
-        df = pd.DataFrame(records)
-        df = _apply_query_filters(df, request.args)
-        df = df.sort_values("created_at", ascending=False) if not df.empty else df
-        limit = int(request.args.get("limit", "500"))
-        df = df.head(max(limit, 0)) if limit else df
-        response_rows = _df_to_records(df)
+        limit = max(_parse_int(request.args.get("limit"), 500), 0)
+
+        def _load_decision_view_jsonl_rows() -> list[dict[str, object]]:
+            view_path = paths.data_dir / "decisions" / "decision_view.jsonl"
+            records = load_jsonl(view_path)
+            df = pd.DataFrame(records)
+            df = _apply_query_filters(df, request.args)
+            df = df.sort_values("created_at", ascending=False) if not df.empty else df
+            if limit > 0:
+                df = df.head(limit)
+            return _df_to_records(df)
+
+        projection_source = "jsonl"
+        if settings.ui.ff_db_projection_source:
+            with session_factory() as session:
+                response_rows = load_decision_view_projection(
+                    session,
+                    limit=limit,
+                    strategy_type=request.args.get("strategy_type"),
+                    primary_instrument=request.args.get("primary_instrument"),
+                    risk_state=request.args.get("risk_state"),
+                    news_severity=request.args.get("news_severity"),
+                    created_from=request.args.get("created_from"),
+                    created_to=request.args.get("created_to"),
+                )
+            if response_rows:
+                projection_source = "db"
+            else:
+                response_rows = _load_decision_view_jsonl_rows()
+                projection_source = "jsonl_fallback"
+        else:
+            response_rows = _load_decision_view_jsonl_rows()
+
         action_records = load_jsonl(actions_path) if actions_path.exists() else []
         execution_records = load_jsonl(executions_path) if executions_path.exists() else []
         latest_actions = _latest_by_decision_id(action_records)
@@ -733,20 +1128,87 @@ def create_app(settings: AppSettings) -> Dash:
             action = latest_actions.get(decision_id)
             if isinstance(action, dict):
                 row["operator_action"] = {
+                    "action_id": action.get("action_id"),
                     "action": action.get("action"),
                     "status": action.get("status"),
                     "actor": action.get("actor"),
+                    "source": action.get("source"),
+                    "reason_code": action.get("reason_code"),
                     "note": action.get("note"),
+                    "comment": action.get("comment"),
+                    "idempotency_key": action.get("idempotency_key"),
                     "created_at": action.get("created_at"),
                 }
             execution = latest_executions.get(decision_id)
             if isinstance(execution, dict):
                 row["execution_status"] = {
+                    "request_id": execution.get("request_id"),
+                    "action": execution.get("action"),
                     "status": execution.get("status"),
                     "requested_at": execution.get("requested_at"),
                     "executed_at": execution.get("executed_at"),
+                    "actor": execution.get("actor"),
+                    "source": execution.get("source"),
+                    "reason_code": execution.get("reason_code"),
+                    "note": execution.get("note"),
+                    "idempotency_key": execution.get("idempotency_key"),
                 }
+            row["projection_source"] = projection_source
         return jsonify(response_rows)
+
+    @server.route("/api/v2/decisions/view", methods=["GET"])
+    @server.route("/api/v2/decision-view", methods=["GET"])
+    def decision_view_v2_api():
+        legacy = decision_view_api()
+        rows, status_code = _extract_response_payload(legacy)
+        if status_code >= 400:
+            return legacy
+        if not isinstance(rows, list):
+            return jsonify([])
+        projection_version = "v2.0"
+        payload: list[dict[str, object]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            decision_id = str(row.get("decision_id") or "").strip() or None
+            primary = str(row.get("primary_instrument") or "").strip()
+            operator_action = row.get("operator_action")
+            execution_status = row.get("execution_status")
+            operator_action = operator_action if isinstance(operator_action, dict) else {}
+            execution_status = execution_status if isinstance(execution_status, dict) else {}
+            entity_ref = {
+                "entity_type": "instrument",
+                "entity_id": primary,
+                "ticker": primary or None,
+            }
+            decision_ref = {
+                "decision_id": decision_id,
+                "action_id": operator_action.get("action_id"),
+                "latest_action": operator_action.get("action"),
+                "latest_status": operator_action.get("status"),
+                "actor_id": operator_action.get("actor"),
+                "source": operator_action.get("source"),
+                "idempotency_key": operator_action.get("idempotency_key"),
+                "updated_at": operator_action.get("created_at"),
+            }
+            execution_ref = {
+                "request_id": execution_status.get("request_id"),
+                "action": execution_status.get("action"),
+                "status": execution_status.get("status"),
+                "requested_at": execution_status.get("requested_at"),
+                "executed_at": execution_status.get("executed_at"),
+                "actor_id": execution_status.get("actor"),
+                "source": execution_status.get("source"),
+                "reason_code": execution_status.get("reason_code"),
+                "idempotency_key": execution_status.get("idempotency_key"),
+            }
+            enriched = dict(row)
+            enriched["projection_version"] = projection_version
+            enriched["decision_ref"] = decision_ref
+            enriched["entity_ref"] = entity_ref
+            enriched["execution_ref"] = execution_ref
+            payload.append(enriched)
+        return jsonify(payload)
 
     @server.route("/api/decision-log/<decision_id>", methods=["GET"])
     def decision_log_api(decision_id: str):
@@ -757,16 +1219,91 @@ def create_app(settings: AppSettings) -> Dash:
                 return jsonify(record)
         return jsonify({"error": "not_found"}), 404
 
+    @server.route("/api/v2/news/feed", methods=["GET"])
+    def news_feed_v2_api():
+        severity_filter = str(request.args.get("severity") or "").strip().lower()
+        ticker_filter = str(request.args.get("ticker") or "").strip().upper()
+        entity_filter = str(request.args.get("entity_id") or "").strip()
+        from_raw = request.args.get("from")
+        to_raw = request.args.get("to")
+        from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
+        to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
+        if from_raw and from_ts is None:
+            return jsonify({"error": "invalid_from"}), 400
+        if to_raw and to_ts is None:
+            return jsonify({"error": "invalid_to"}), 400
+
+        log_path = paths.data_dir / "decisions" / "decision_log.jsonl"
+        view_path = paths.data_dir / "decisions" / "decision_view.jsonl"
+        log_records = load_jsonl(log_path)
+        view_records = load_jsonl(view_path)
+        view_by_decision = {
+            str(item.get("decision_id") or ""): item for item in view_records if isinstance(item, dict)
+        }
+
+        events: list[dict[str, object]] = []
+        for record in log_records:
+            if not isinstance(record, dict):
+                continue
+            decision_id = str(record.get("decision_id") or "").strip()
+            created_at_raw = str(record.get("created_at") or "").strip()
+            if not decision_id or not created_at_raw:
+                continue
+            try:
+                created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            created_at_cmp = _normalize_datetime(created_at)
+            if from_ts and created_at_cmp < from_ts:
+                continue
+            if to_ts and created_at_cmp > to_ts:
+                continue
+
+            news_context = record.get("news_context")
+            if not isinstance(news_context, dict):
+                continue
+            severity = str(news_context.get("severity") or "low").strip().lower()
+            if severity_filter and severity != severity_filter:
+                continue
+
+            view_row = view_by_decision.get(decision_id, {})
+            primary = str(view_row.get("primary_instrument") or "").strip()
+            entity_ref = {
+                "entity_type": "instrument",
+                "entity_id": primary,
+                "ticker": primary or None,
+            }
+            if ticker_filter and ticker_filter not in {primary.upper(), str(entity_ref.get("ticker") or "").upper()}:
+                continue
+            if entity_filter and entity_filter != str(entity_ref.get("entity_id") or ""):
+                continue
+
+            summary = str(news_context.get("summary") or "news_signal").strip() or "news_signal"
+            headline = str(news_context.get("headline") or summary).strip() or summary
+            event_id = _stable_id("news", decision_id, created_at_raw, severity, headline, summary, length=20)
+            events.append(
+                {
+                    "news_event_id": event_id,
+                    "published_at": created_at_raw,
+                    "severity": severity,
+                    "headline": headline,
+                    "summary": summary,
+                    "headline_count": int(news_context.get("headline_count") or 0),
+                    "decision_ref": {"decision_id": decision_id},
+                    "entity_links": [entity_ref],
+                }
+            )
+
+        events.sort(key=lambda item: str(item.get("published_at") or ""), reverse=True)
+        limit = _parse_int(request.args.get("limit"), 200)
+        if limit > 0:
+            events = events[:limit]
+        return jsonify(events)
+
     @server.route("/api/decisions/<decision_id>/action", methods=["GET", "POST"])
     def decision_action_api(decision_id: str):
-        decisions_dir = paths.data_dir / "decisions"
-        log_path = decisions_dir / "decision_log.jsonl"
-        view_path = decisions_dir / "decision_view.jsonl"
-        records = load_jsonl(log_path)
-        if not any(record.get("decision_id") == decision_id for record in records):
-            view_records = load_jsonl(view_path)
-            if not any(record.get("decision_id") == decision_id for record in view_records):
-                return jsonify({"error": "not_found"}), 404
+        if not _decision_exists(decision_id):
+            return jsonify({"error": "not_found"}), 404
         if request.method == "GET":
             action_records = load_jsonl(actions_path) if actions_path.exists() else []
             latest_actions = _latest_by_decision_id(action_records)
@@ -781,36 +1318,34 @@ def create_app(settings: AppSettings) -> Dash:
                     "execution_status": execution or {},
                 }
             )
-        payload = request.get_json(silent=True) or {}
-        action = str(payload.get("action", "")).lower().strip()
-        if action not in {"approve", "reject"}:
-            return jsonify({"error": "invalid_action"}), 400
-        created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        action_entry = {
-            "decision_id": decision_id,
-            "action": action,
-            "status": "recorded",
-            "actor": payload.get("actor") or "operator",
-            "note": payload.get("note"),
-            "created_at": created_at,
-        }
-        _append_jsonl(actions_path, action_entry)
-        request_id = payload.get("request_id") or f"exec-{uuid.uuid4().hex}"
-        execution_entry = {
-            "decision_id": decision_id,
-            "request_id": request_id,
-            "action": action,
-            "status": "queued",
-            "requested_at": created_at,
-        }
-        _append_jsonl(executions_path, execution_entry)
-        return jsonify(
-            {
-                "status": "ok",
-                "decision_id": decision_id,
-                "operator_action": action_entry,
-                "execution_status": execution_entry,
-            }
+        payload = request.get_json(silent=True)
+        if payload is None:
+            return _bad_request("invalid_json")
+        if not isinstance(payload, dict):
+            return _bad_request("payload must be object")
+        adapter_payload: dict[str, object] = dict(payload)
+        adapter_payload["source"] = "v1_adapter"
+        adapter_payload["actor_id"] = payload.get("actor") or payload.get("actor_id")
+        adapter_payload["comment"] = payload.get("note") or payload.get("comment")
+        return _record_decision_action(
+            decision_id,
+            adapter_payload,
+            source_default="v1_adapter",
+            allowed_actions={"APPROVE", "REJECT"},
+        )
+
+    @server.route("/api/v2/decisions/<decision_id>/actions", methods=["POST"])
+    def decision_actions_v2_api(decision_id: str):
+        payload = request.get_json(silent=True)
+        if payload is None:
+            return _bad_request("invalid_json")
+        if not isinstance(payload, dict):
+            return _bad_request("payload must be object")
+        return _record_decision_action(
+            decision_id,
+            dict(payload),
+            source_default="ui",
+            allowed_actions={"APPROVE", "HOLD", "REJECT", "EXECUTE", "CLOSE"},
         )
 
     @server.route("/api/params/specs", methods=["GET"])
@@ -931,6 +1466,123 @@ def create_app(settings: AppSettings) -> Dash:
             return jsonify({"error": "server_error", "message": str(exc)}), 500
         return jsonify(status)
 
+    @server.route("/api/v2/research/backtests/run", methods=["POST"])
+    def backtest_run_v2_api():
+        payload = request.get_json(silent=True)
+        if payload is None or not isinstance(payload, dict):
+            return _bad_request("invalid_json")
+        experiment_id = str(payload.get("experiment_id") or f"exp-{uuid.uuid4().hex[:12]}")
+        precompute = _parse_bool(payload.get("precompute"))
+        if precompute is None:
+            precompute = True
+        request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else payload
+        if not isinstance(request_payload, dict):
+            return _bad_request("missing_request")
+        request_payload = {key: value for key, value in request_payload.items() if key != "precompute"}
+        try:
+            backtest_request = BacktestRequest.model_validate(request_payload)
+        except ValidationError as exc:
+            return _bad_request("validation_error", details=exc.errors())
+        try:
+            report = run_backtest_v2_cached(backtest_request, paths.data_dir, precompute=precompute)
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("Backtest v2 failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+
+        request_hash = hashlib.sha1(
+            json.dumps(request_payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        return jsonify(
+            {
+                "experiment_id": experiment_id,
+                "run_id": f"bt-{uuid.uuid4().hex[:12]}",
+                "request_hash": request_hash,
+                "status": "completed",
+                "report": serialize_backtest_report(report),
+            }
+        )
+
+    @server.route("/api/v2/research/hpo/run", methods=["POST"])
+    def hpo_run_v2_api():
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return _bad_request("invalid_json")
+        experiment_id = str(payload.get("experiment_id") or f"exp-{uuid.uuid4().hex[:12]}")
+        precompute = _parse_bool(payload.get("precompute"))
+        if precompute is None:
+            precompute = True
+        request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else payload
+        if not isinstance(request_payload, dict):
+            return _bad_request("missing_request")
+        request_payload = {key: value for key, value in request_payload.items() if key != "precompute"}
+        optimization = request_payload.get("optimization") if isinstance(request_payload, dict) else None
+        max_trials_override = None
+        if not (isinstance(optimization, dict) and "max_trials" in optimization):
+            max_trials_override = 10
+        try:
+            hpo_request = HpoRequest.model_validate(request_payload)
+        except ValidationError as exc:
+            return _bad_request("validation_error", details=exc.errors())
+        try:
+            run_info = start_hpo_run(
+                hpo_request,
+                paths.data_dir,
+                precompute=precompute,
+                max_trials_override=max_trials_override,
+            )
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("HPO run failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+
+        request_hash = hashlib.sha1(
+            json.dumps(request_payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        return jsonify(
+            {
+                **run_info,
+                "experiment_id": experiment_id,
+                "request_hash": request_hash,
+            }
+        )
+
+    @server.route("/api/v2/research/hpo/status", methods=["GET"])
+    def hpo_status_v2_api():
+        run_id = request.args.get("run_id")
+        try:
+            status = load_hpo_status(paths.data_dir, run_id=run_id)
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("HPO status failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+
+        payload = dict(status) if isinstance(status, dict) else {"status": "unknown"}
+        run_state = str(payload.get("status") or "").lower()
+        result = payload.get("result")
+        leaderboard = []
+        if isinstance(result, dict):
+            raw = result.get("leaderboard")
+            if isinstance(raw, list):
+                leaderboard = raw
+        if not leaderboard and isinstance(payload.get("leaderboard"), list):
+            leaderboard = payload.get("leaderboard")
+
+        if run_state == "completed" and leaderboard:
+            promotion_gate = {"status": "pass", "checks": ["leaderboard_present", "completed"]}
+        elif run_state == "completed":
+            promotion_gate = {"status": "fail", "checks": ["leaderboard_missing"]}
+        elif run_state == "failed":
+            promotion_gate = {"status": "fail", "checks": ["run_failed"]}
+        else:
+            promotion_gate = {"status": "pending", "checks": ["run_in_progress"]}
+        payload["promotion_gate"] = promotion_gate
+        return jsonify(payload)
+
+    @server.route("/api/v2/top-pairs", methods=["GET"])
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
         df = load_top_pairs(paths.data_dir)
@@ -1176,6 +1828,560 @@ def create_app(settings: AppSettings) -> Dash:
             actionable.sort(key=lambda item: 0 if bool(item.get("position_open")) else 1)
             return jsonify(actionable)
 
+    @server.route("/api/v2/signals/active", methods=["GET"])
+    def signals_active_v2_api():
+        legacy = signals_active_api()
+        rows, status_code = _extract_response_payload(legacy)
+        if status_code >= 400:
+            return legacy
+        if not isinstance(rows, list):
+            return jsonify([])
+
+        payload: list[dict[str, object]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            signal_id = _build_signal_id_from_row(row)
+            lifecycle_state = _derive_lifecycle_state(row)
+            entity_ref = _build_pair_entity_ref(row.get("stock"), row.get("future"))
+            gate_results = _build_gate_results_from_row(row, signal_id)
+            execution_ref = {
+                "position_open": bool(row.get("position_open")),
+                "position_state": row.get("position_state"),
+                "last_execution_at": row.get("position_last_execution_at"),
+                "open_leg_total": int(row.get("position_open_leg_total") or 0),
+                "net_orders": int(row.get("position_net_orders") or 0),
+            }
+            enriched_row = dict(row)
+            enriched_row.update(
+                {
+                    "signal_id": signal_id,
+                    "entity_ref": entity_ref,
+                    "lifecycle_state": lifecycle_state,
+                    "signal_action_effective": _derive_effective_signal_action(row),
+                    "gate_results": gate_results,
+                    "decision_ref": {"decision_id": None},
+                    "execution_ref": execution_ref,
+                }
+            )
+            payload.append(enriched_row)
+        return jsonify(payload)
+
+    def _record_signal_action(
+        signal_id: str | None,
+        payload: dict[str, object],
+        *,
+        source_default: str,
+        legacy_mode: bool = False,
+    ):
+        action_pair = _coerce_signal_action_request(payload.get("action"), legacy_mode=legacy_mode)
+        if action_pair is None:
+            if legacy_mode:
+                return _bad_request("action must be one of: enter, exit, hold_open")
+            return _bad_request("action must be one of: ack, enter, exit, hold")
+        requested_action, execution_action = action_pair
+
+        source = _normalize_signal_action_source(payload.get("source"), default=source_default)
+        actor_id = str(payload.get("actor_id") or payload.get("actor") or "operator").strip() or "operator"
+        reason_code_raw = payload.get("reason_code")
+        reason_code = str(reason_code_raw).strip() if reason_code_raw is not None else None
+        if reason_code == "":
+            reason_code = None
+        fail_closed_override = bool(_parse_bool(payload.get("fail_closed_override")))
+        override_reason_raw = payload.get("override_reason")
+        override_reason = (
+            str(override_reason_raw).strip() if override_reason_raw is not None else (reason_code or None)
+        )
+        if override_reason == "":
+            override_reason = None
+        idempotency_key = str(payload.get("idempotency_key") or "").strip()
+        if not idempotency_key:
+            idempotency_key = f"idem-{uuid.uuid4().hex[:12]}"
+
+        signal_row = None
+        if signal_id:
+            legacy = signals_active_api()
+            rows, status_code = _extract_response_payload(legacy)
+            if status_code >= 400:
+                return legacy
+            if isinstance(rows, list):
+                for row in rows:
+                    if isinstance(row, dict) and _build_signal_id_from_row(row) == signal_id:
+                        signal_row = row
+                        break
+
+        stock = str(payload.get("stock") or (signal_row or {}).get("stock") or "").strip()
+        future = str(payload.get("future") or (signal_row or {}).get("future") or "").strip()
+        if not stock or not future:
+            message = "signal_id is unknown in active set" if signal_id else "stock and future are required"
+            return jsonify({"error": "not_found", "message": message}), 404
+        direction = payload.get("direction") or (signal_row or {}).get("signal_direction")
+        signal_id_resolved = signal_id or _stable_id("sig", stock, future, requested_action)
+
+        pretrade_payload = payload.get("pretrade")
+        pretrade_status_hint = payload.get("pretrade_status")
+        pretrade_degraded_hint = _parse_bool(payload.get("pretrade_degraded"))
+        if isinstance(pretrade_payload, dict):
+            if pretrade_status_hint is None:
+                pretrade_status_hint = pretrade_payload.get("pretrade_status") or pretrade_payload.get("status")
+            if pretrade_degraded_hint is None:
+                pretrade_degraded_hint = _parse_bool(pretrade_payload.get("degraded"))
+
+        fail_closed = evaluate_fail_closed_entry(
+            enabled=bool(settings.ui.ff_fail_closed_execution),
+            requested_action=requested_action,
+            signal_row=signal_row if isinstance(signal_row, dict) else None,
+            source=source,
+            override=fail_closed_override,
+            override_reason=override_reason,
+            pretrade_status=pretrade_status_hint,
+            pretrade_degraded=pretrade_degraded_hint,
+        )
+        if fail_closed.status == "block":
+            return (
+                jsonify(
+                    {
+                        "status": "blocked",
+                        "error": "fail_closed_execution",
+                        "signal_id": signal_id_resolved,
+                        "entity_ref": _build_pair_entity_ref(stock, future),
+                        "action": requested_action,
+                        "reason_code": fail_closed.reason_code,
+                        "message": fail_closed.message,
+                        "fail_closed": {
+                            "enabled": bool(settings.ui.ff_fail_closed_execution),
+                            "status": fail_closed.status,
+                            "reason_code": fail_closed.reason_code,
+                        },
+                    }
+                ),
+                409,
+            )
+
+        side = payload.get("side")
+        order_id = _normalize_order_id(payload.get("order_id"))
+        if order_id is None and execution_action in {"enter", "exit", "hold_open"}:
+            leg = _normalize_execution_leg(side)
+            if leg in {"stock", "future"}:
+                order_id = f"{stock}-{future}-{execution_action}-{uuid.uuid4().hex[:10]}"
+
+        note_payload: dict[str, object] = {
+            "kind": "signal_action_v1_adapter" if legacy_mode else "signal_action_v2",
+            "signal_id": signal_id_resolved,
+            "source": source,
+            "actor_id": actor_id,
+            "idempotency_key": idempotency_key,
+            "requested_action": requested_action,
+        }
+        if reason_code is not None:
+            note_payload["reason_code"] = reason_code
+        if fail_closed.status == "override":
+            note_payload["fail_closed_override"] = True
+            note_payload["fail_closed_reason"] = fail_closed.reason_code
+        operator_note = payload.get("note") or payload.get("comment")
+        if operator_note is not None and str(operator_note).strip():
+            note_payload["note"] = str(operator_note).strip()
+        note = json.dumps(note_payload, ensure_ascii=False, separators=(",", ":"))
+
+        now = datetime.now(timezone.utc)
+        action_id = f"act-{uuid.uuid4().hex[:12]}"
+
+        with session_factory() as session:
+            recent = load_signal_executions(session, stock=stock, future=future, limit=500)
+            for row in recent:
+                existing_key = _extract_idempotency_key(row.note)
+                if existing_key and existing_key == idempotency_key:
+                    return jsonify(
+                        {
+                            "status": "duplicate",
+                            "action_id": f"act-{row.id}",
+                            "signal_id": signal_id_resolved,
+                            "entity_ref": _build_pair_entity_ref(stock, future),
+                            "execution_event_id": f"exec-{row.id}",
+                            "action": requested_action,
+                            "idempotency_key": idempotency_key,
+                            "order_id": row.order_id,
+                            "fail_closed": {
+                                "enabled": bool(settings.ui.ff_fail_closed_execution),
+                                "status": fail_closed.status,
+                                "reason_code": fail_closed.reason_code,
+                            },
+                        }
+                    )
+
+            status = payload.get("status")
+            if status is None:
+                status = "acknowledged" if requested_action == "ack" else "recorded"
+            store_signal_execution(
+                session,
+                now,
+                {
+                    "stock": stock,
+                    "future": future,
+                    "direction": direction,
+                    "action": execution_action,
+                    "price": payload.get("price"),
+                    "quantity": payload.get("quantity"),
+                    "side": side,
+                    "order_id": order_id,
+                    "status": status,
+                    "note": note,
+                },
+            )
+
+        return jsonify(
+            {
+                "status": "ok",
+                "action_id": action_id,
+                "signal_id": signal_id_resolved,
+                "entity_ref": _build_pair_entity_ref(stock, future),
+                "execution_event_id": _stable_id(
+                    "exec",
+                    signal_id_resolved,
+                    idempotency_key,
+                    requested_action,
+                    now.isoformat(),
+                    length=20,
+                ),
+                "action": requested_action,
+                "source": source,
+                "actor_id": actor_id,
+                "idempotency_key": idempotency_key,
+                "stored_action": execution_action,
+                "order_id": order_id,
+                "created_at": now.isoformat().replace("+00:00", "Z"),
+                "fail_closed": {
+                    "enabled": bool(settings.ui.ff_fail_closed_execution),
+                    "status": fail_closed.status,
+                    "reason_code": fail_closed.reason_code,
+                },
+            }
+        )
+
+    @server.route("/api/v2/signals/<signal_id>/actions", methods=["POST"])
+    def signals_actions_v2_api(signal_id: str):
+        started_at = datetime.now(timezone.utc)
+        payload = request.get_json(silent=True)
+        if payload is None or not isinstance(payload, dict):
+            return _observe_request("v2_signals_actions", started_at, _bad_request("invalid_json"))
+        result = _record_signal_action(
+            signal_id,
+            dict(payload),
+            source_default="ui",
+            legacy_mode=False,
+        )
+        _mark_signal_action_events(result)
+        return _observe_request("v2_signals_actions", started_at, result)
+
+    @server.route("/api/v2/policies/auto-unwind/run", methods=["POST"])
+    def auto_unwind_run_v2_api():
+        started_at = datetime.now(timezone.utc)
+
+        def _finish(result):
+            _mark_auto_unwind_events(result)
+            return _observe_request("v2_auto_unwind_run", started_at, result)
+
+        payload = request.get_json(silent=True)
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            return _finish(_bad_request("payload must be object"))
+
+        timeout_default = max(int(getattr(settings.ui, "auto_unwind_timeout_sec", 600) or 600), 0)
+        timeout_sec = max(_parse_int(payload.get("timeout_sec"), timeout_default), 0)
+        dry_run_raw = _parse_bool(payload.get("dry_run"))
+        dry_run = bool(dry_run_raw) if dry_run_raw is not None else False
+        actor_id = str(payload.get("actor_id") or "system:auto-unwind").strip() or "system:auto-unwind"
+
+        now_utc = datetime.now(timezone.utc)
+        now_override = payload.get("now_utc")
+        if now_override is not None and str(now_override).strip():
+            try:
+                parsed_now = datetime.fromisoformat(str(now_override).strip().replace("Z", "+00:00"))
+            except ValueError:
+                return _finish(_bad_request("now_utc must be ISO-8601 datetime"))
+            now_utc = (
+                parsed_now.replace(tzinfo=timezone.utc)
+                if parsed_now.tzinfo is None
+                else parsed_now.astimezone(timezone.utc)
+            )
+
+        active = signals_active_api()
+        rows, status_code = _extract_response_payload(active)
+        if status_code >= 400:
+            return _finish(active)
+        rows_list: list[dict[str, object]] = []
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict):
+                    rows_list.append(row)
+
+        candidates = select_auto_unwind_candidates(rows_list, timeout_sec=timeout_sec, now_utc=now_utc)
+        rows_by_pair: dict[tuple[str, str], dict[str, object]] = {
+            (str(row.get("stock") or "").strip(), str(row.get("future") or "").strip()): row
+            for row in rows_list
+        }
+        candidate_payload: list[dict[str, object]] = []
+        for candidate in candidates:
+            pair_key = (candidate.stock, candidate.future)
+            row = rows_by_pair.get(pair_key)
+            signal_id_value: str | None = None
+            if isinstance(row, dict):
+                signal_id_value = _build_signal_id_from_row(row)
+            candidate_payload.append(
+                {
+                    "signal_id": signal_id_value,
+                    "stock": candidate.stock,
+                    "future": candidate.future,
+                    "direction": candidate.direction,
+                    "last_execution_at": candidate.last_execution_at,
+                    "age_sec": candidate.age_sec,
+                    "open_leg_total": candidate.open_leg_total,
+                    "open_stock_legs": candidate.open_stock_legs,
+                    "open_future_legs": candidate.open_future_legs,
+                    "reason_code": "LEG_IMBALANCE_TIMEOUT",
+                }
+            )
+
+        if dry_run:
+            return _finish(
+                jsonify(
+                    {
+                        "status": "dry_run",
+                        "policy": "auto_unwind_leg_imbalance_timeout",
+                        "evaluated_at": now_utc.isoformat().replace("+00:00", "Z"),
+                        "timeout_sec": timeout_sec,
+                        "candidate_count": len(candidate_payload),
+                        "candidates": candidate_payload,
+                    }
+                )
+            )
+
+        triggered: list[dict[str, object]] = []
+        duplicates: list[dict[str, object]] = []
+        blocked: list[dict[str, object]] = []
+        errors: list[dict[str, object]] = []
+
+        for candidate in candidates:
+            action_payload: dict[str, object] = {
+                "action": "exit",
+                "stock": candidate.stock,
+                "future": candidate.future,
+                "direction": candidate.direction,
+                "source": "system",
+                "actor_id": actor_id,
+                "reason_code": "LEG_IMBALANCE_TIMEOUT",
+                "comment": f"auto_unwind_after_{candidate.age_sec}s",
+                "status": "policy_submitted",
+                "idempotency_key": (
+                    f"auto-unwind:{candidate.stock}:{candidate.future}:{candidate.last_execution_at}"
+                ),
+            }
+            result = _record_signal_action(
+                signal_id=None,
+                payload=action_payload,
+                source_default="system",
+                legacy_mode=False,
+            )
+            result_payload, result_status = _extract_response_payload(result)
+            item = {
+                "stock": candidate.stock,
+                "future": candidate.future,
+                "age_sec": candidate.age_sec,
+                "last_execution_at": candidate.last_execution_at,
+            }
+
+            if isinstance(result_payload, dict):
+                item["action_status"] = result_payload.get("status")
+                item["action_id"] = result_payload.get("action_id")
+                item["execution_event_id"] = result_payload.get("execution_event_id")
+                item["reason_code"] = result_payload.get("reason_code")
+                item["message"] = result_payload.get("message")
+            else:
+                item["action_status"] = "unknown"
+                item["message"] = "non_json_response"
+
+            if result_status >= 500:
+                errors.append(item)
+                continue
+            action_status = str(item.get("action_status") or "").strip().lower()
+            if action_status == "ok":
+                triggered.append(item)
+            elif action_status == "duplicate":
+                duplicates.append(item)
+            elif action_status == "blocked":
+                blocked.append(item)
+            else:
+                errors.append(item)
+
+        status = "ok" if not errors else "partial_error"
+        return _finish(
+            jsonify(
+                {
+                    "status": status,
+                    "policy": "auto_unwind_leg_imbalance_timeout",
+                    "evaluated_at": now_utc.isoformat().replace("+00:00", "Z"),
+                    "timeout_sec": timeout_sec,
+                    "candidate_count": len(candidate_payload),
+                    "triggered_count": len(triggered),
+                    "duplicate_count": len(duplicates),
+                    "blocked_count": len(blocked),
+                    "error_count": len(errors),
+                    "candidates": candidate_payload,
+                    "triggered": triggered,
+                    "duplicates": duplicates,
+                    "blocked": blocked,
+                    "errors": errors,
+                }
+            )
+        )
+
+    @server.route("/api/v2/ops/health", methods=["GET"])
+    def ops_health_v2_api():
+        started_at = datetime.now(timezone.utc)
+        checks: dict[str, dict[str, object]] = {}
+        db_status = "ok"
+        db_message: str | None = None
+        try:
+            with session_factory() as session:
+                load_latest_signal_run(session)
+        except Exception as exc:
+            db_status = "error"
+            db_message = str(exc)
+            logger.exception("Ops health DB check failed")
+        checks["database"] = {
+            "status": db_status,
+            "message": db_message,
+        }
+        checks["signal_refresh"] = {
+            "status": str(refresh_state.get("status") or "unknown"),
+            "enabled": bool(refresh_state.get("enabled")),
+            "last_success_at": refresh_state.get("last_success_at"),
+            "last_error": refresh_state.get("last_error"),
+        }
+        overall_status = "ok" if db_status == "ok" else "degraded"
+        status_code = 200 if db_status == "ok" else 503
+        result = (
+            jsonify(
+                {
+                    "status": overall_status,
+                    "timestamp": _iso_now(),
+                    "checks": checks,
+                }
+            ),
+            status_code,
+        )
+        return _observe_request("v2_ops_health", started_at, result)
+
+    @server.route("/api/v2/ops/slo", methods=["GET"])
+    def ops_slo_v2_api():
+        started_at = datetime.now(timezone.utc)
+        snapshot = observability.snapshot()
+        endpoints = snapshot.get("endpoints")
+        endpoint_stats = endpoints if isinstance(endpoints, dict) else {}
+        actions_stats = (
+            endpoint_stats.get("v2_signals_actions")
+            if isinstance(endpoint_stats.get("v2_signals_actions"), dict)
+            else {}
+        )
+        pretrade_stats = (
+            endpoint_stats.get("v2_pretrade_check")
+            if isinstance(endpoint_stats.get("v2_pretrade_check"), dict)
+            else {}
+        )
+        auto_unwind_stats = (
+            endpoint_stats.get("v2_auto_unwind_run")
+            if isinstance(endpoint_stats.get("v2_auto_unwind_run"), dict)
+            else {}
+        )
+
+        pretrade_failures_15m = observability.count_recent("pretrade_failure", window_sec=900)
+        pretrade_degraded_15m = observability.count_recent("pretrade_degraded", window_sec=900)
+        pretrade_errors_15m = observability.count_recent("pretrade_error", window_sec=900)
+        execution_rejections_15m = observability.count_recent(
+            "execution_rejected_fail_closed", window_sec=900
+        )
+        auto_unwind_triggered_15m = observability.count_recent("auto_unwind_triggered", window_sec=900)
+        auto_unwind_errors_15m = observability.count_recent("auto_unwind_error", window_sec=900)
+
+        alerts: list[dict[str, object]] = []
+        pretrade_p95 = float(((pretrade_stats.get("latency_ms") or {}).get("p95") or 0.0))
+        action_p95 = float(((actions_stats.get("latency_ms") or {}).get("p95") or 0.0))
+        if pretrade_p95 > 1_500.0:
+            alerts.append(
+                {
+                    "code": "PRETRADE_LATENCY_HIGH",
+                    "severity": "warning",
+                    "message": "Pretrade p95 latency exceeds 1500 ms.",
+                    "value": pretrade_p95,
+                }
+            )
+        if action_p95 > 800.0:
+            alerts.append(
+                {
+                    "code": "ACTION_LATENCY_HIGH",
+                    "severity": "warning",
+                    "message": "Signal action p95 latency exceeds 800 ms.",
+                    "value": action_p95,
+                }
+            )
+        if execution_rejections_15m >= 5:
+            alerts.append(
+                {
+                    "code": "EXECUTION_REJECTION_SPIKE",
+                    "severity": "critical",
+                    "message": "Fail-closed execution rejections in the last 15m reached threshold.",
+                    "value": execution_rejections_15m,
+                }
+            )
+        if pretrade_failures_15m >= 10:
+            alerts.append(
+                {
+                    "code": "PRETRADE_FAILURE_SPIKE",
+                    "severity": "warning",
+                    "message": "Pretrade failures in the last 15m reached threshold.",
+                    "value": pretrade_failures_15m,
+                }
+            )
+        if auto_unwind_errors_15m >= 1:
+            alerts.append(
+                {
+                    "code": "AUTO_UNWIND_ERRORS",
+                    "severity": "critical",
+                    "message": "Auto-unwind errors detected in the last 15m.",
+                    "value": auto_unwind_errors_15m,
+                }
+            )
+
+        result = jsonify(
+            {
+                "generated_at": snapshot.get("generated_at"),
+                "slo_targets": {
+                    "pretrade_p95_ms": 1500.0,
+                    "signals_actions_p95_ms": 800.0,
+                    "execution_rejections_15m": 5,
+                    "pretrade_failures_15m": 10,
+                    "auto_unwind_errors_15m": 1,
+                },
+                "api": {
+                    "v2_signals_actions": actions_stats,
+                    "v2_pretrade_check": pretrade_stats,
+                    "v2_auto_unwind_run": auto_unwind_stats,
+                },
+                "events_15m": {
+                    "pretrade_failures": pretrade_failures_15m,
+                    "pretrade_degraded": pretrade_degraded_15m,
+                    "pretrade_errors": pretrade_errors_15m,
+                    "execution_rejections_fail_closed": execution_rejections_15m,
+                    "auto_unwind_triggered": auto_unwind_triggered_15m,
+                    "auto_unwind_errors": auto_unwind_errors_15m,
+                },
+                "alerts": alerts,
+            }
+        )
+        return _observe_request("v2_ops_slo", started_at, result)
+
+    @server.route("/api/v2/signals/history", methods=["GET"])
     @server.route("/api/signals/history", methods=["GET"])
     def signals_history_api():
         limit = int(request.args.get("limit", "500"))
@@ -1223,22 +2429,28 @@ def create_app(settings: AppSettings) -> Dash:
 
     @server.route("/api/signals/execute", methods=["POST"])
     def signals_execute_api():
-        payload = request.get_json(silent=True) or {}
-        normalized_action = _normalize_execution_action(payload.get("action"))
-        payload["action"] = normalized_action
-        order_id = _normalize_order_id(payload.get("order_id"))
-        if order_id is None:
-            side = _normalize_execution_leg(payload.get("side"))
-            stock = str(payload.get("stock") or "").strip()
-            future = str(payload.get("future") or "").strip()
-            if side in {"stock", "future"} and stock and future:
-                order_id = f"{stock}-{future}-{normalized_action}-{uuid.uuid4().hex[:10]}"
-        payload["order_id"] = order_id
-        payload["timestamp"] = datetime.now(timezone.utc)
-        with session_factory() as session:
-            store_signal_execution(session, payload["timestamp"], payload)
-        return jsonify({"status": "ok", "order_id": order_id})
+        payload = request.get_json(silent=True)
+        if payload is None or not isinstance(payload, dict):
+            return _bad_request("invalid_json")
+        result = _record_signal_action(
+            signal_id=None,
+            payload=dict(payload),
+            source_default="v1_adapter",
+            legacy_mode=True,
+        )
+        response_payload, status_code = _extract_response_payload(result)
+        if status_code >= 400:
+            return result
+        if not isinstance(response_payload, dict):
+            return result
+        return jsonify(
+            {
+                "status": response_payload.get("status", "ok"),
+                "order_id": response_payload.get("order_id"),
+            }
+        )
 
+    @server.route("/api/v2/signals/executions", methods=["GET"])
     @server.route("/api/signals/executions", methods=["GET"])
     def signals_executions_api():
         limit = int(request.args.get("limit", "200"))
@@ -1271,6 +2483,109 @@ def create_app(settings: AppSettings) -> Dash:
         limit = int(request.args.get("limit", "500"))
         df = df.head(max(limit, 0)) if limit else df
         return jsonify(_df_to_records(df))
+
+    @server.route("/api/v2/portfolio/rebalance/preview", methods=["GET"])
+    def rebalance_preview_v2_api():
+        limit = max(_parse_int(request.args.get("limit"), 12), 1)
+        legacy = signals_active_api()
+        rows, status_code = _extract_response_payload(legacy)
+        if status_code >= 400:
+            return legacy
+        if not isinstance(rows, list):
+            rows = []
+
+        candidates: list[dict[str, object]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            action = str(row.get("signal_action") or "").strip().lower()
+            if action not in {"enter", "hold_open", "exit"}:
+                continue
+            score_raw = row.get("signal_score")
+            try:
+                score = float(score_raw) if score_raw is not None else 0.0
+            except (TypeError, ValueError):
+                score = 0.0
+            candidates.append({**row, "_score": score})
+
+        candidates.sort(key=lambda item: float(item.get("_score") or 0.0), reverse=True)
+        selected = candidates[:limit]
+        active_for_weight = [row for row in selected if str(row.get("signal_action")).lower() in {"enter", "hold_open"}]
+        equal_weight = 1.0 / len(active_for_weight) if active_for_weight else 0.0
+
+        positions: list[dict[str, object]] = []
+        for row in selected:
+            signal_action = str(row.get("signal_action") or "").strip().lower()
+            lifecycle_state = _derive_lifecycle_state(row)
+            target_weight = equal_weight if signal_action in {"enter", "hold_open"} else 0.0
+            positions.append(
+                {
+                    "entity_ref": _build_pair_entity_ref(row.get("stock"), row.get("future")),
+                    "target_weight": target_weight,
+                    "signal_id": _build_signal_id_from_row(row),
+                    "lifecycle_state": lifecycle_state,
+                    "signal_action": signal_action,
+                    "signal_score": row.get("signal_score"),
+                    "reasons": row.get("signal_reasons") or [],
+                }
+            )
+
+        plan_id = f"rebal-{uuid.uuid4().hex[:12]}"
+        max_positions = int(settings.risk_profile.max_positions or 0)
+        risk_checks = [
+            {
+                "check": "max_positions",
+                "passed": len(active_for_weight) <= max_positions if max_positions > 0 else True,
+                "limit": max_positions if max_positions > 0 else None,
+                "value": len(active_for_weight),
+            }
+        ]
+        return jsonify(
+            {
+                "rebalance_plan_id": plan_id,
+                "generated_at": _iso_now(),
+                "positions": positions,
+                "summary": {
+                    "selected": len(selected),
+                    "target_active_positions": len(active_for_weight),
+                    "equal_weight": equal_weight,
+                },
+                "risk_checks": risk_checks,
+            }
+        )
+
+    @server.route("/api/v2/portfolio/rebalance/commit", methods=["POST"])
+    def rebalance_commit_v2_api():
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return _bad_request("invalid_json")
+        plan_id = str(payload.get("rebalance_plan_id") or "").strip()
+        if not plan_id:
+            return _bad_request("rebalance_plan_id is required")
+        positions = payload.get("positions")
+        if not isinstance(positions, list):
+            return _bad_request("positions must be a list")
+        actor_id = str(payload.get("actor_id") or "operator").strip() or "operator"
+        commit_id = f"rebal-commit-{uuid.uuid4().hex[:12]}"
+        entry = {
+            "commit_id": commit_id,
+            "rebalance_plan_id": plan_id,
+            "actor_id": actor_id,
+            "positions": positions,
+            "committed_at": _iso_now(),
+            "note": payload.get("note"),
+        }
+        commits_path = paths.data_dir / "portfolio" / "rebalance_commits.jsonl"
+        _append_jsonl(commits_path, entry)
+        return jsonify(
+            {
+                "status": "ok",
+                "commit_id": commit_id,
+                "rebalance_plan_id": plan_id,
+                "positions_committed": len(positions),
+                "committed_at": entry["committed_at"],
+            }
+        )
 
     @server.route("/api/spread-series", methods=["GET"])
     def spread_series_api():
@@ -1305,10 +2620,9 @@ def create_app(settings: AppSettings) -> Dash:
         _write_cache(cache_path, records)
         return jsonify(records)
 
-    @server.route("/api/pretrade/check", methods=["GET"])
-    def pretrade_check_api():
-        stock = request.args.get("stock")
-        future = request.args.get("future")
+    def _run_pretrade_check(payload: dict[str, object]):
+        stock = str(payload.get("stock") or "").strip()
+        future = str(payload.get("future") or "").strip()
         if not stock or not future:
             return jsonify({"error": "missing_params", "message": "stock and future are required"}), 400
 
@@ -1316,16 +2630,23 @@ def create_app(settings: AppSettings) -> Dash:
         pair_row = pd.DataFrame()
         if not top_pairs.empty and {"stock", "future"}.issubset(top_pairs.columns):
             pair_row = top_pairs[
-                (top_pairs["stock"].astype(str) == str(stock))
-                & (top_pairs["future"].astype(str) == str(future))
+                (top_pairs["stock"].astype(str) == stock)
+                & (top_pairs["future"].astype(str) == future)
             ]
 
         row = pair_row.iloc[0] if not pair_row.empty else None
         default_direction = "cash_and_carry"
         if row is not None and "signal_direction" in row and pd.notna(row.get("signal_direction")):
             default_direction = str(row.get("signal_direction"))
-        direction = str(request.args.get("direction") or default_direction).strip().lower()
-        if direction not in {"cash_and_carry", "reverse"}:
+        normalized_default_direction = normalize_pretrade_direction(
+            default_direction, default="cash_and_carry"
+        )
+        if normalized_default_direction is None:
+            normalized_default_direction = "cash_and_carry"
+        direction = normalize_pretrade_direction(
+            payload.get("direction"), default=normalized_default_direction
+        )
+        if direction is None:
             return _bad_request("direction must be cash_and_carry or reverse")
 
         spot_default = None
@@ -1336,9 +2657,12 @@ def create_app(settings: AppSettings) -> Dash:
             fut_default = row.get("future_price")
             spread_default = row.get("spread_mid")
 
-        spot_target = _parse_float(request.args.get("spot_target"), float(spot_default) if pd.notna(spot_default) else float("nan"))
+        spot_target = _parse_float(
+            payload.get("spot_target"),
+            float(spot_default) if pd.notna(spot_default) else float("nan"),
+        )
         future_target = _parse_float(
-            request.args.get("future_target"),
+            payload.get("future_target"),
             float(fut_default) if pd.notna(fut_default) else float("nan"),
         )
         if math.isnan(spot_target) or math.isnan(future_target):
@@ -1346,28 +2670,28 @@ def create_app(settings: AppSettings) -> Dash:
 
         spread_fallback = spot_target - future_target
         spread_target = _parse_float(
-            request.args.get("spread_target"),
+            payload.get("spread_target"),
             float(spread_default) if pd.notna(spread_default) else spread_fallback,
         )
 
-        snapshots = max(_parse_int(request.args.get("snapshots"), 4), 1)
+        snapshots = max(_parse_int(payload.get("snapshots"), 4), 1)
         snapshots = min(snapshots, 12)
-        min_hits = max(_parse_int(request.args.get("min_hits"), 2), 1)
+        min_hits = max(_parse_int(payload.get("min_hits"), 2), 1)
         min_hits = min(min_hits, snapshots)
         eps_default = float(
             getattr(settings.spread_carry_alpha, "entry_price_tolerance_pct", 0.0015) or 0.0015
         )
-        eps = max(_parse_float(request.args.get("eps"), eps_default), 0.0001)
+        eps = max(_parse_float(payload.get("eps"), eps_default), 0.0001)
         eps = min(eps, 0.05)
-        sync_sec = max(_parse_float(request.args.get("sync_sec"), 120.0), 1.0)
-        poll_sec = max(_parse_float(request.args.get("poll_sec"), 5.0), 0.0)
+        sync_sec = max(_parse_float(payload.get("sync_sec"), 120.0), 1.0)
+        poll_sec = max(_parse_float(payload.get("poll_sec"), 5.0), 0.0)
         poll_sec = min(poll_sec, 15.0)
 
         qty_fut_default = float(settings.spread_carry_alpha.max_contracts_per_pair or 1)
-        qty_fut = max(_parse_float(request.args.get("qty_fut"), qty_fut_default), 0.0)
+        qty_fut = max(_parse_float(payload.get("qty_fut"), qty_fut_default), 0.0)
         participation_default = float(settings.spread_carry_alpha.participation_rate or 0.1)
         participation_rate = max(
-            _parse_float(request.args.get("participation_rate"), participation_default),
+            _parse_float(payload.get("participation_rate"), participation_default),
             0.000001,
         )
         participation_rate = min(participation_rate, 1.0)
@@ -1430,17 +2754,36 @@ def create_app(settings: AppSettings) -> Dash:
                 logger.exception("Pretrade delay gate failed")
                 return jsonify({"error": "server_error", "message": str(exc)}), 500
 
-        result["params"] = {
-            "snapshots": snapshots,
-            "min_hits": min_hits,
-            "eps": eps,
-            "sync_sec": sync_sec,
-            "poll_sec": poll_sec,
-            "qty_fut": qty_fut,
-            "participation_rate": participation_rate,
-            "future_scale": future_scale,
-        }
-        return jsonify(_sanitize_value(result))
+        runtime_params = PretradeRuntimeParams(
+            snapshots=snapshots,
+            min_hits=min_hits,
+            eps=eps,
+            sync_sec=sync_sec,
+            poll_sec=poll_sec,
+            qty_fut=qty_fut,
+            participation_rate=participation_rate,
+            future_scale=future_scale,
+        )
+        enriched = enrich_pretrade_result(result, params=runtime_params)
+        return jsonify(_sanitize_value(enriched))
+
+    @server.route("/api/pretrade/check", methods=["GET"])
+    def pretrade_check_api():
+        return _run_pretrade_check(dict(request.args.to_dict(flat=True)))
+
+    @server.route("/api/v2/pretrade/check", methods=["POST"])
+    def pretrade_check_v2_api():
+        started_at = datetime.now(timezone.utc)
+        payload = request.get_json(silent=True)
+        if payload is None:
+            return _observe_request("v2_pretrade_check", started_at, _bad_request("invalid_json"))
+        if not isinstance(payload, dict):
+            return _observe_request(
+                "v2_pretrade_check", started_at, _bad_request("payload must be object")
+            )
+        result = _run_pretrade_check(dict(payload))
+        _mark_pretrade_events(result)
+        return _observe_request("v2_pretrade_check", started_at, result)
 
     app = Dash(__name__, server=server, url_base_pathname="/dash/")
     app.layout = html.Div(

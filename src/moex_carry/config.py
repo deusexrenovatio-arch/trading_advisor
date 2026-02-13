@@ -158,6 +158,9 @@ class UiConfig(BaseModel):
     signal_refresh_max_pairs: Optional[int] = None
     signal_refresh_save_csv: bool = True
     pretrade_fail_open_on_transport_error: bool = True
+    ff_db_projection_source: bool = False
+    ff_fail_closed_execution: bool = False
+    auto_unwind_timeout_sec: int = 600
 
 
 class DataConfig(BaseModel):
