@@ -1,5 +1,34 @@
 # Release Notes
 
+## 2026-02-13 - Signals Score-Gate Defaults, Unified Refresh Persistence, and Worktree Config Merge
+
+Changed
+- Score-gate behavior is now explicit and endpoint-specific:
+  - `GET /api/signals` and `GET /api/signals/active` are score-gated by default (`ui.require_score_gate_by_default=true`),
+  - `GET /api/top-pairs` is not score-gated by default (historical ranking view),
+  - all three endpoints support explicit `require_score_gate=true|false` override.
+- Unified refresh path persists full replay signal history and tracks both counts:
+  - `signals_total` (all replay rows),
+  - `signals_actionable` (rows passing current score-gate).
+- Unified replay rows expose diagnostic counters in API payload:
+  - `rows`, `days`, `entry_signals`, `exit_signals`, `trades_closed`,
+  - `avg_entry_wait_min_closed`, `avg_exit_wait_min_closed`,
+  - reasons include `no_closed_trades_in_window` / `entries_unfilled` when applicable.
+- Config loading fixed for worktree/local overrides:
+  - `load_settings(<override>)` now merges `configs/default.yaml` first, then override file,
+  - prevents accidental fallback to model defaults when running with partial config files.
+
+Added
+- New UI setting:
+  - `ui.require_score_gate_top_pairs_by_default` (default `false`).
+
+Tests
+- Added/extended regression coverage:
+  - `tests/test_config_loading.py` (default+override merge behavior),
+  - `tests/test_ui_api.py` (score-gate defaults/overrides for top-pairs/signals),
+  - `tests/test_signal_api.py` (active-signals default gate + override),
+  - `tests/test_ui_unified_runtime.py` (refresh persistence + history diagnostics).
+
 ## 2026-02-12 - Unified Minute-First Runtime for Market UI Endpoints
 
 Changed

@@ -112,14 +112,13 @@ scenarios:
         total_score,
         decision
       ]
-    forbid_keys: [signal_reasons, signal_metrics]
     cache_as: top_pairs
-    test_cases: [TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004]
+    test_cases: [TC-TOP-API-001, TC-TOP-API-002, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004]
     title: Top pairs table (floor + alpha)
     user_story: Operator reviews ranked pairs with floor + alpha metrics.
     expectations:
       - Ranking uses total_score for ordering.
-      - Response excludes signal_reasons and signal_metrics.
+      - Response supports optional `require_score_gate=true|false` filtering.
   - id: signals-active
     type: api_list
     scope: backend
@@ -128,7 +127,7 @@ scenarios:
     required_keys: [run_id, timestamp, stock, future, signal_action, signal_score]
     allowed_field_values:
       signal_action: [enter, exit, hold_open]
-    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001]
+    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-ACT-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001]
     title: Active signals
     user_story: User receives only actionable signals.
     expectations:
@@ -162,7 +161,7 @@ scenarios:
     allow_empty: true
     required_keys:
       [status, ready_to_place, reasons, order_price_bands, volume_requirements, gates, hits]
-    test_cases: [TC-PRETRADE-API-001, TC-PRETRADE-UI-001]
+    test_cases: [TC-PRETRADE-API-001, TC-PRETRADE-API-002, TC-PRETRADE-UI-001]
     title: Delayed pre-trade readiness check
     user_story: Operator validates entry readiness for both legs before placing orders.
     expectations:
@@ -257,7 +256,7 @@ scenarios:
         universe:
           max_pairs: 1
     required_keys: [status, run_id]
-    test_cases: [TC-HPO-UNIT-001]
+    test_cases: [TC-HPO-API-001, TC-HPO-UNIT-001]
     title: HPO run
     user_story: Researcher starts an HPO run.
     expectations:
@@ -305,7 +304,7 @@ scenarios:
     url: /api/top-pairs?limit=5
     require_non_empty: false
     required_keys: [stock, future, signal_action, signal_score]
-    test_cases: [TC-UNI-API-001, TC-UNI-API-002, TC-PERF-GATE-MAN-001, TC-PERF-ARCH-UNIT-001]
+    test_cases: [TC-UNI-API-001, TC-UNI-API-002, TC-UNI-API-003, TC-PERF-GATE-MAN-001, TC-PERF-ARCH-UNIT-001]
     title: Unified minute-first market runtime
     user_story: Backend market tables are served by unified minute replay runtime with compatibility fields.
     expectations:

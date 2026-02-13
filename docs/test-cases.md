@@ -17,8 +17,8 @@
 - decision-action -> TC-DEC-API-004, TC-DEC-UI-002
 - params-specs -> TC-PARAMS-API-001
 - frontend-params-specs -> TC-BACK-V2-UI-001, TC-BACK-V2-UI-002
-- top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
-- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
+- top-pairs -> TC-TOP-API-001, TC-TOP-API-002, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
+- signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-ACT-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
 - signals-history-reasons -> TC-SIG-HIST-API-004
 - signals-execute -> TC-SIG-EXEC-API-001, TC-SIG-EXEC-UI-001, TC-SIG-EXEC-UI-002
@@ -33,7 +33,7 @@
 - frontend-proxy -> TC-FE-PROXY-001
 - hpo -> TC-HPO-API-001, TC-HPO-UNIT-001
 - hpo-status -> TC-HPO-API-002
-- unified-minute-runtime -> TC-UNI-API-001, TC-UNI-API-002, TC-PERF-GATE-MAN-001
+- unified-minute-runtime -> TC-UNI-API-001, TC-UNI-API-002, TC-UNI-API-003, TC-PERF-GATE-MAN-001
 
 ## User Scenario Coverage (US -> acceptance/test cases)
 - US-01 Configure the strategy -> params-specs (TC-PARAMS-API-001) + unit tests: tests/test_config_resolver.py, tests/test_parameter_specs.py.
@@ -334,14 +334,23 @@ Request:
 Expected:
 - JSON list with key, value_type, default fields.
 
-### TC-TOP-API-001 Top pairs fields and forbidden keys
+### TC-TOP-API-001 Top pairs fields
 Acceptance: top-pairs
 Automation: scripts/acceptance_check.py (top-pairs)
 Request:
 - GET /api/top-pairs?limit=5
 Expected:
 - Required keys include spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
-- signal_reasons/signal_metrics are absent.
+
+### TC-TOP-API-002 Top pairs score-gate defaults and override
+Acceptance: top-pairs
+Automation: tests/test_ui_api.py
+Request:
+- GET /api/top-pairs?limit=10
+- GET /api/top-pairs?limit=10&require_score_gate=true
+Expected:
+- By default top-pairs are not score-gated (historical ranking view).
+- Explicit `require_score_gate=true` returns only `score_gate_pass=true` rows.
 
 ### TC-SIG-ACT-API-001 Active signals actionable
 Acceptance: signals-active
@@ -363,6 +372,17 @@ Expected:
   `orderbook_stock_depth_available`, `orderbook_fut_depth_available`.
 - If futures quote/depth is missing in ISS, `orderbook_data_warnings` contains
   `orderbook_fut_quote_missing` and/or `orderbook_fut_depth_missing`.
+
+### TC-SIG-ACT-API-003 Active signals score-gate defaults and override
+Acceptance: signals-active
+Automation: tests/test_signal_api.py
+Request:
+- GET /api/signals/active
+- GET /api/signals/active?require_score_gate=false
+Expected:
+- By default (`require_score_gate_by_default=true`) active signals are score-gated.
+- Explicit `require_score_gate=false` returns both gated and non-gated rows.
+- `hold_open` rows are preserved even when score-gate is enabled.
 
 ### TC-SIG-CONTRACT-API-001 Signals API contract completeness
 Acceptance: signals-active, signals-history
@@ -486,6 +506,17 @@ Expected:
 - Response status is `ok`.
 - `engine` equals `unified_minute_replay`.
 - Signal run is persisted without calling legacy pipeline.
+
+### TC-UNI-API-003 Unified refresh persists history with replay diagnostics
+Acceptance: unified-minute-runtime
+Automation: tests/test_ui_unified_runtime.py
+Request:
+- POST /api/signals/refresh
+- GET /api/signals/history?limit=5
+Expected:
+- Signal history rows are persisted from unified replay.
+- History rows contain `signal_reasons`, `signal_metrics`, and replay counters
+  (`trades_closed`, `entry_signals`, `exit_signals`).
 
 ### TC-PERF-GATE-MAN-001 Minute runtime performance gate (cold/warm)
 Acceptance: unified-minute-runtime
