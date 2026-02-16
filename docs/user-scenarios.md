@@ -1,4 +1,4 @@
-# User Scenarios
+﻿# User Scenarios
 
 Reference:
 - End-to-end operator flow for `Signals` is documented in `docs/signals-business-process.md`.
@@ -20,9 +20,10 @@ Goal: See the current state of spread signals and top pairs.
 Steps:
 1. Run the signal cycle or wait for the scheduled refresh.
 2. Open Top pairs and Signals views.
-3. Click Reload to trigger recompute and refresh rankings and signals.
-4. Open pair Details to confirm snapshot_as_of and signal timestamps.
-5. In Signals details, open tab `Сигнал` and check grouped trading plan blocks.
+3. Click Reload to fetch the latest backend snapshot (last-good output).
+4. Use `POST /api/signals/refresh` only when forced recompute is explicitly needed.
+5. Open pair Details to confirm snapshot_as_of and signal timestamps.
+6. In Signals details, open tab `РЎРёРіРЅР°Р»` and check grouped trading plan blocks.
 Expected:
 - Pairs are ranked by total_score.
 - Each row includes spread_pct, rtc_pct, floor_rate_annual, score_floor, score_alpha.
@@ -31,13 +32,15 @@ Expected:
   - spread TP/SL levels (`tp_spread_pct_level`, `sl_spread_pct_level`),
   - forecast exit horizon (`forecast_exit_days`).
 - Signal details show grouped plan sections:
-  - `Контекст сигнала`,
-  - `План входа`,
-  - `Риск и стоп-уровни`,
-  - `Прогноз выхода`.
+  - `РљРѕРЅС‚РµРєСЃС‚ СЃРёРіРЅР°Р»Р°`,
+  - `РџР»Р°РЅ РІС…РѕРґР°`,
+  - `Р РёСЃРє Рё СЃС‚РѕРї-СѓСЂРѕРІРЅРё`,
+  - `РџСЂРѕРіРЅРѕР· РІС‹С…РѕРґР°`.
 - If API does not provide plan fields (`entry_*`, `tp/sl`, `forecast_*`) for a row, the UI shows a coverage hint and keeps the screen readable without empty/broken tabs.
 - If a pair is entered and not yet closed, `Signals` keeps this pair visible with explicit `hold_open` status.
 - UI shows last successful recompute time.
+- `GET /api/signals/refresh-status` exposes incremental telemetry:
+  `pairs_recomputed`, `pairs_reused`, `pairs_skipped`, `skip_reason`.
 - snapshot_as_of and signal timestamps reflect the latest run time using ISO 8601 with timezone (e.g., 2026-01-26T18:45:00Z).
 
 ## US-03 Drill into a pair
@@ -164,3 +167,4 @@ Expected:
 - Exactly one heartbeat message per registered chat per local calendar day.
 - Message includes bot status, backend status, and active signals count.
 - If backend is unavailable, heartbeat still arrives with `Backend: ERROR`.
+
