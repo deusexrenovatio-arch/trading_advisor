@@ -1,0 +1,6 @@
+- `POST /api/signals/refresh` now runs incremental replay by default for manual refresh requests.
+- Full replay is still available for manual refresh via `force_full=true`.
+- Manual refresh is no longer blocked when scheduled refresh is disabled.
+- Removed Trade Console auto-refresh toggle from market tables UI.
+- Market tables keep periodic polling enabled at `60s` without a user toggle.
+- Added API test coverage for manual incremental refresh and `force_full` behavior.

@@ -4,7 +4,6 @@ import type { MarketTablesState } from '../market/useMarketTables'
 
 type Props = {
   market: MarketTablesState
-  autoRefreshLabel: string
   formatCellValue: (value: unknown, column?: string) => string
   renderFieldLabel: (column: string) => ReactNode
   formatDate: (value?: string) => string
@@ -13,7 +12,6 @@ type Props = {
 
 const SignalsTab = ({
   market,
-  autoRefreshLabel,
   formatCellValue,
   renderFieldLabel,
   formatDate,
@@ -22,7 +20,6 @@ const SignalsTab = ({
   <MarketTablesTab
     tab="signals"
     market={market}
-    autoRefreshLabel={autoRefreshLabel}
     formatCellValue={formatCellValue}
     renderFieldLabel={renderFieldLabel}
     formatDate={formatDate}

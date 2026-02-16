@@ -107,7 +107,6 @@ export const useMarketTables = ({ tab, compareValues, onOperatorAction }: Params
   const [auxLoading, setAuxLoading] = useState(false)
   const [auxError, setAuxError] = useState<string | null>(null)
   const [auxLastUpdated, setAuxLastUpdated] = useState<string | null>(null)
-  const [autoRefresh, setAutoRefresh] = useState(true)
   const [refreshStatus, setRefreshStatus] = useState<RefreshStatus | null>(null)
   const [recomputeLoading, setRecomputeLoading] = useState(false)
   const [recomputeError, setRecomputeError] = useState<string | null>(null)
@@ -940,19 +939,16 @@ export const useMarketTables = ({ tab, compareValues, onOperatorAction }: Params
   }, [fetchAuxData])
 
   useEffect(() => {
-    if (!autoRefresh) return
     const interval = window.setInterval(() => {
       void fetchAuxData()
     }, AUTO_REFRESH_MS)
     return () => window.clearInterval(interval)
-  }, [autoRefresh, fetchAuxData])
+  }, [fetchAuxData])
 
   return {
     auxLoading,
     auxError,
     auxLastUpdated,
-    autoRefresh,
-    setAutoRefresh,
     refreshStatus,
     recomputeLoading,
     recomputeError,

@@ -1082,7 +1082,7 @@ def create_app(settings: AppSettings) -> Dash:
         return top_pairs, signals, backtests
 
     def _run_signal_refresh(trigger: str, force: bool = False) -> bool:
-        if not refresh_enabled and not force:
+        if not refresh_enabled and trigger != "manual":
             refresh_state["status"] = "disabled"
             refresh_state["last_error"] = f"skip:{trigger}"
             return False
@@ -1407,7 +1407,13 @@ def create_app(settings: AppSettings) -> Dash:
     def signals_refresh_api():
         if refresh_lock.locked():
             return jsonify({**refresh_state, "status": "busy"}), 409
-        ok = _run_signal_refresh("manual", force=True)
+        payload = request.get_json(silent=True)
+        force_full = False
+        if isinstance(payload, dict):
+            force_full = bool(_parse_bool(payload.get("force_full")))
+        elif request.args:
+            force_full = bool(_parse_bool(request.args.get("force_full")))
+        ok = _run_signal_refresh("manual", force=force_full)
         status_code = 200 if ok else 500
         return jsonify(refresh_state), status_code
 
