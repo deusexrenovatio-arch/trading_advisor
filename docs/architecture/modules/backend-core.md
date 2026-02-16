@@ -125,6 +125,20 @@ but the API endpoints remain the primary backend interface for the React app.
 - Responsibilities: incremental historical candles download with state tracking.
 - Outputs: historical CSV files under `data/history/`.
 
+### `minute_ingest/`
+- Responsibilities: incremental minute-candle ingestion with overlap window, upsert/dedup, watermark tracking.
+- Key files: `cursor_state.py`, `store.py`, `runner.py`.
+- Outputs:
+  - updated pair minute series under `data/output/intraday_minute_series/`,
+  - cursor/watermark state under `data/state/incremental_replay/<pair_id>/cursor.json`.
+
+### `signal_replay/`
+- Responsibilities: minute replay execution core and true incremental replay/checkpoint engine.
+- Key files: `core.py`, `minute_loader.py`, `incremental.py`.
+- Outputs:
+  - per-pair replay output under `data/output/incremental_replay/<pair_id>.parquet`,
+  - latest and periodic checkpoints under `data/state/incremental_replay/<pair_id>/`.
+
 ### `broker/`
 - Responsibilities: adapter boundary for execution and broker integration.
 - Key files: `adapter.py` (abstraction for order flow).
@@ -137,7 +151,9 @@ but the API endpoints remain the primary backend interface for the React app.
 - Key files:
   - `app.py`: API routes (Dash layout still present but not used in production).
   - `data.py`: loaders for CSV/JSONL artifacts.
-  - Optional signal refresh scheduler (configurable in `ui.signal_refresh_*`).
+  - Signal refresh scheduler (configurable in `ui.signal_refresh_*` and incremental settings).
+  - Scheduled refresh uses non-force incremental path.
+  - Manual refresh endpoint uses forced full path.
   - Refresh endpoints: `POST /api/signals/refresh`, `GET /api/signals/refresh-status`.
   - Backtest/forward endpoints: `POST /api/backtest/run`, `POST /api/forward/start`, `GET /api/forward/status`.
   - HPO endpoints: `POST /api/hpo/run` (async start), `GET /api/hpo/status` (status + result).

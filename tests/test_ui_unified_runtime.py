@@ -209,6 +209,32 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert status_payload["status"] == "ok"
     assert status_payload["engine"] == "unified_minute_replay"
     assert int(status_payload["rows"]) >= 0
+    for key in (
+        "incremental_enabled",
+        "data_watermark_before",
+        "data_watermark_after",
+        "pairs_total",
+        "pairs_recomputed",
+        "pairs_reused",
+        "pairs_skipped",
+        "skip_reason",
+    ):
+        assert key in status_payload
+
+    refresh_status = client.get("/api/signals/refresh-status")
+    assert refresh_status.status_code == 200
+    refresh_status_payload = refresh_status.get_json()
+    for key in (
+        "incremental_enabled",
+        "data_watermark_before",
+        "data_watermark_after",
+        "pairs_total",
+        "pairs_recomputed",
+        "pairs_reused",
+        "pairs_skipped",
+        "skip_reason",
+    ):
+        assert key in refresh_status_payload
 
     history = client.get("/api/signals/history?limit=5")
     assert history.status_code == 200

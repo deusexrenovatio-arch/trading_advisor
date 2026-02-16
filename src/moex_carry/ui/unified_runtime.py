@@ -15,7 +15,9 @@ import pandas as pd
 from moex_carry.config import AppSettings
 from moex_carry.domain.models import KeyRate
 from moex_carry.domain.portfolio import PairSpec
+from moex_carry.minute_ingest.runner import IngestPair, PairIngestResult
 from moex_carry.selection.universe import ASSET_CODE_ALIASES
+from moex_carry.signal_replay.incremental import ReplayMutation, run_true_incremental_replay
 from moex_carry.signal_replay import ReplayResult, load_pair_minute_series, run_minute_replay
 
 
@@ -39,6 +41,18 @@ class _PairReplayCacheItem:
     created_at: datetime
     replay_result: ReplayResult
     source: str
+    data_watermark: str | None
+
+
+@dataclass(frozen=True)
+class _PairReplayFetch:
+    replay_result: ReplayResult | None
+    source: str | None
+    error: str | None
+    cache_hit: bool
+    skip_reason: str | None
+    fallback_reason: str | None
+    replay_mode: str
 
 
 @dataclass
@@ -58,12 +72,44 @@ class _SnapshotCacheItem:
     snapshot: UnifiedMarketSnapshot
 
 
+@dataclass(frozen=True)
+class PairReplayTelemetry:
+    pair_id: str
+    cache_source: str
+    skip_reason: str | None
+    fallback_reason: str | None
+
+
+@dataclass(frozen=True)
+class RefreshTelemetry:
+    incremental_enabled: bool
+    data_watermark_before: str | None
+    data_watermark_after: str | None
+    pairs_total: int
+    pairs_recomputed: int
+    pairs_reused: int
+    pairs_skipped: int
+    skip_reason: str | None
+
+
 _SNAPSHOT_CACHE_LOCK = threading.Lock()
 _SNAPSHOT_CACHE: _SnapshotCacheItem | None = None
 
 _PAIR_REPLAY_CACHE_LOCK = threading.Lock()
 _PAIR_REPLAY_CACHE: dict[str, _PairReplayCacheItem] = {}
 _PAIR_REPLAY_CACHE_MAX = 512
+
+_LAST_REFRESH_TELEMETRY_LOCK = threading.Lock()
+_LAST_REFRESH_TELEMETRY = RefreshTelemetry(
+    incremental_enabled=False,
+    data_watermark_before=None,
+    data_watermark_after=None,
+    pairs_total=0,
+    pairs_recomputed=0,
+    pairs_reused=0,
+    pairs_skipped=0,
+    skip_reason=None,
+)
 
 _SCORE_MODEL = "probabilistic_edge_v1"
 _SCORE_W_FLOOR = 0.35
@@ -86,6 +132,21 @@ def _safe_float(value: Any) -> float | None:
 
 def _clip01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def get_last_refresh_telemetry() -> dict[str, Any]:
+    with _LAST_REFRESH_TELEMETRY_LOCK:
+        telemetry = _LAST_REFRESH_TELEMETRY
+    return {
+        "incremental_enabled": bool(telemetry.incremental_enabled),
+        "data_watermark_before": telemetry.data_watermark_before,
+        "data_watermark_after": telemetry.data_watermark_after,
+        "pairs_total": int(telemetry.pairs_total),
+        "pairs_recomputed": int(telemetry.pairs_recomputed),
+        "pairs_reused": int(telemetry.pairs_reused),
+        "pairs_skipped": int(telemetry.pairs_skipped),
+        "skip_reason": telemetry.skip_reason,
+    }
 
 
 def _row_get(row: dict[str, Any], *keys: str) -> Any:
@@ -238,6 +299,7 @@ def _pair_replay_key(
     pair: _UniversePair,
     start_date: date,
     end_date: date,
+    data_watermark: str | None = None,
 ) -> str:
     payload = {
         "sig": _alpha_signature(settings),
@@ -245,6 +307,7 @@ def _pair_replay_key(
         "future": pair.future,
         "start": start_date.isoformat(),
         "end": end_date.isoformat(),
+        "data_watermark": data_watermark,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -269,6 +332,50 @@ def _pair_spec_from_universe(pair: _UniversePair) -> PairSpec:
     )
 
 
+def _resolve_incremental_checkpoint_dir(settings: AppSettings, data_dir: Path) -> Path:
+    configured = Path(str(getattr(settings.ui, "incremental_checkpoint_dir", "./data/state/incremental_replay")))
+    if configured.is_absolute():
+        return configured
+    text = str(configured).replace("\\", "/")
+    if text.startswith("./data/"):
+        return data_dir.parent / text[2:]
+    if text.startswith("data/"):
+        return data_dir.parent / text
+    return data_dir / configured
+
+
+def _resolve_incremental_output_dir(data_dir: Path) -> Path:
+    return data_dir / "output" / "incremental_replay"
+
+
+def _pair_data_watermark(pair_id: str, ingest_result_map: dict[str, PairIngestResult] | None) -> str | None:
+    if not ingest_result_map:
+        return None
+    item = ingest_result_map.get(pair_id)
+    if item is None:
+        return None
+    return item.after.signature
+
+
+def _pair_mutation(pair_id: str, ingest_result_map: dict[str, PairIngestResult] | None) -> ReplayMutation:
+    if not ingest_result_map or pair_id not in ingest_result_map:
+        return ReplayMutation(
+            changed=False,
+            append_only=True,
+            earliest_changed_exec_ts=None,
+            watermark_before=None,
+            watermark_after=None,
+        )
+    item = ingest_result_map[pair_id]
+    return ReplayMutation(
+        changed=bool(item.changed),
+        append_only=bool(item.append_only),
+        earliest_changed_exec_ts=item.earliest_changed_exec_ts,
+        watermark_before=item.before.signature,
+        watermark_after=item.after.signature,
+    )
+
+
 def _compute_pair_replay(
     *,
     settings: AppSettings,
@@ -277,7 +384,9 @@ def _compute_pair_replay(
     start_date: date,
     end_date: date,
     key_rates: list[KeyRate],
-) -> tuple[ReplayResult | None, str | None, str | None]:
+    force: bool,
+    mutation: ReplayMutation,
+) -> _PairReplayFetch:
     loaded = load_pair_minute_series(
         data_dir=data_dir,
         stock=pair.stock,
@@ -286,17 +395,70 @@ def _compute_pair_replay(
         end_date=end_date,
     )
     if loaded is None:
-        return None, None, "minute_series_not_found"
-    replay_result = run_minute_replay(
-        series_base=loaded.series_base,
-        pair=_pair_spec_from_universe(pair),
-        settings=settings,
-        dividends=loaded.dividends,
-        key_rates=key_rates,
-    )
+        return _PairReplayFetch(
+            replay_result=None,
+            source=None,
+            error="minute_series_not_found",
+            cache_hit=False,
+            skip_reason=None,
+            fallback_reason=None,
+            replay_mode="none",
+        )
+    incremental_enabled = bool(getattr(settings.ui, "incremental_replay_enabled", True))
+    replay_result: ReplayResult
+    fallback_reason: str | None = None
+    skip_reason: str | None = None
+    replay_mode = "full"
+    if incremental_enabled and not force:
+        outcome = run_true_incremental_replay(
+            pair_id=pair.pair_id,
+            pair=_pair_spec_from_universe(pair),
+            series_base=loaded.series_base,
+            settings=settings,
+            dividends=loaded.dividends,
+            key_rates=key_rates,
+            mutation=mutation,
+            checkpoint_root=_resolve_incremental_checkpoint_dir(settings, data_dir),
+            output_root=_resolve_incremental_output_dir(data_dir),
+            overlap_minutes=max(int(getattr(settings.ui, "incremental_overlap_minutes", 180) or 0), 1),
+            checkpoint_interval_minutes=max(
+                int(getattr(settings.ui, "incremental_checkpoint_interval_minutes", 60) or 0),
+                1,
+            ),
+            force_full=False,
+        )
+        replay_result = outcome.replay_result
+        fallback_reason = outcome.fallback_reason
+        skip_reason = outcome.skip_reason
+        replay_mode = outcome.mode
+    else:
+        replay_result = run_minute_replay(
+            series_base=loaded.series_base,
+            pair=_pair_spec_from_universe(pair),
+            settings=settings,
+            dividends=loaded.dividends,
+            key_rates=key_rates,
+        )
+        replay_mode = "force_full" if force else "full"
     if replay_result.replay.empty:
-        return replay_result, loaded.source, "minute_replay_empty"
-    return replay_result, loaded.source, None
+        return _PairReplayFetch(
+            replay_result=replay_result,
+            source=loaded.source,
+            error="minute_replay_empty",
+            cache_hit=False,
+            skip_reason=skip_reason,
+            fallback_reason=fallback_reason,
+            replay_mode=replay_mode,
+        )
+    return _PairReplayFetch(
+        replay_result=replay_result,
+        source=loaded.source,
+        error=None,
+        cache_hit=False,
+        skip_reason=skip_reason,
+        fallback_reason=fallback_reason,
+        replay_mode=replay_mode,
+    )
 
 
 def get_pair_replay(
@@ -309,12 +471,22 @@ def get_pair_replay(
     key_rates: list[KeyRate],
     force: bool = False,
     ttl_sec: int = 120,
-) -> tuple[ReplayResult | None, str | None, str | None]:
+    data_watermark: str | None = None,
+    mutation: ReplayMutation | None = None,
+) -> _PairReplayFetch:
     cache_key = _pair_replay_key(
         settings=settings,
         pair=pair,
         start_date=start_date,
         end_date=end_date,
+        data_watermark=data_watermark,
+    )
+    mutation_payload = mutation or ReplayMutation(
+        changed=False,
+        append_only=True,
+        earliest_changed_exec_ts=None,
+        watermark_before=None,
+        watermark_after=data_watermark,
     )
     now = datetime.now(timezone.utc)
     if not force:
@@ -322,25 +494,37 @@ def get_pair_replay(
             cached = _PAIR_REPLAY_CACHE.get(cache_key)
             if cached is not None:
                 age = (now - cached.created_at).total_seconds()
-                if age <= max(int(ttl_sec), 1):
-                    return cached.replay_result, cached.source, None
-    replay_result, source, error = _compute_pair_replay(
+                if data_watermark is not None or age <= max(int(ttl_sec), 1):
+                    skip_reason = "no_data_change" if not mutation_payload.changed else None
+                    return _PairReplayFetch(
+                        replay_result=cached.replay_result,
+                        source=cached.source,
+                        error=None,
+                        cache_hit=True,
+                        skip_reason=skip_reason,
+                        fallback_reason=None,
+                        replay_mode="cache",
+                    )
+    computed = _compute_pair_replay(
         settings=settings,
         data_dir=data_dir,
         pair=pair,
         start_date=start_date,
         end_date=end_date,
         key_rates=key_rates,
+        force=force,
+        mutation=mutation_payload,
     )
-    if replay_result is not None and error is None:
+    if computed.replay_result is not None and computed.error is None:
         with _PAIR_REPLAY_CACHE_LOCK:
             _PAIR_REPLAY_CACHE[cache_key] = _PairReplayCacheItem(
                 created_at=now,
-                replay_result=replay_result,
-                source=str(source or ""),
+                replay_result=computed.replay_result,
+                source=str(computed.source or ""),
+                data_watermark=data_watermark,
             )
             _evict_pair_cache_if_needed()
-    return replay_result, source, error
+    return computed
 
 
 def _value_from_row(frame: pd.DataFrame, column: str) -> Any:
@@ -598,6 +782,32 @@ def _build_pair_rows(
     return top_row, signal_row, backtest_row
 
 
+def list_unified_ingest_pairs(
+    settings: AppSettings,
+    data_dir: Path,
+    *,
+    as_of: date | None = None,
+    max_pairs: int | None = None,
+) -> list[IngestPair]:
+    as_of_date = as_of or datetime.now(timezone.utc).date()
+    universe, _ = _load_universe(settings, data_dir, as_of=as_of_date)
+    if max_pairs is not None and max_pairs > 0:
+        universe = universe[: max_pairs]
+    pairs: list[IngestPair] = []
+    for item in universe:
+        scale = float(item.lot_size) * float(item.multiplier)
+        if scale <= 0:
+            scale = 1.0
+        pairs.append(
+            IngestPair(
+                stock=item.stock,
+                future=item.future,
+                future_scale=scale,
+            )
+        )
+    return pairs
+
+
 def _build_snapshot_signature(
     *,
     settings: AppSettings,
@@ -605,6 +815,7 @@ def _build_snapshot_signature(
     as_of: date,
     lookback_days: int,
     max_pairs: int | None,
+    global_data_watermark: str | None = None,
 ) -> str:
     payload = {
         "settings_sig": _alpha_signature(settings),
@@ -612,6 +823,7 @@ def _build_snapshot_signature(
         "as_of": as_of.isoformat(),
         "lookback_days": int(lookback_days),
         "max_pairs": int(max_pairs) if max_pairs is not None else None,
+        "global_data_watermark": global_data_watermark,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -624,8 +836,12 @@ def build_unified_market_snapshot(
     ttl_sec: int = 120,
     as_of: date | None = None,
     max_pairs: int | None = None,
+    ingest_result_map: dict[str, PairIngestResult] | None = None,
+    global_data_watermark_before: str | None = None,
+    global_data_watermark_after: str | None = None,
 ) -> UnifiedMarketSnapshot:
     global _SNAPSHOT_CACHE
+    global _LAST_REFRESH_TELEMETRY
     now = datetime.now(timezone.utc)
     as_of_date = as_of or now.date()
     lookback_days = max(int(settings.data.compute_lookback_days or 120), 1)
@@ -635,6 +851,7 @@ def build_unified_market_snapshot(
         as_of=as_of_date,
         lookback_days=lookback_days,
         max_pairs=max_pairs,
+        global_data_watermark=global_data_watermark_after,
     )
     if not force:
         with _SNAPSHOT_CACHE_LOCK:
@@ -654,9 +871,17 @@ def build_unified_market_snapshot(
     signal_rows: list[dict[str, Any]] = []
     backtest_rows: list[dict[str, Any]] = []
     errors: list[str] = []
+    replay_telemetry: list[PairReplayTelemetry] = []
 
-    def _compute(pair: _UniversePair) -> tuple[_UniversePair, ReplayResult | None, str | None, str | None]:
-        replay_result, source, error = get_pair_replay(
+    pairs_total = len(universe)
+    pairs_recomputed = 0
+    pairs_reused = 0
+    pairs_skipped = 0
+
+    def _compute(pair: _UniversePair) -> tuple[_UniversePair, _PairReplayFetch]:
+        pair_watermark = _pair_data_watermark(pair.pair_id, ingest_result_map)
+        mutation = _pair_mutation(pair.pair_id, ingest_result_map)
+        fetch = get_pair_replay(
             settings=settings,
             data_dir=data_dir,
             pair=pair,
@@ -665,8 +890,10 @@ def build_unified_market_snapshot(
             key_rates=key_rates,
             force=force,
             ttl_sec=ttl_sec,
+            data_watermark=pair_watermark,
+            mutation=mutation,
         )
-        return pair, replay_result, source, error
+        return pair, fetch
 
     workers = max(int(getattr(settings.ui, "unified_pair_workers", 4) or 0), 1)
     if workers <= 1:
@@ -675,17 +902,38 @@ def build_unified_market_snapshot(
         with ThreadPoolExecutor(max_workers=workers) as pool:
             results = list(pool.map(_compute, universe))
 
-    for pair, replay_result, source, error in results:
-        if error:
-            errors.append(f"{pair.pair_id}:{error}")
+    for pair, fetched in results:
+        if fetched.cache_hit or fetched.replay_mode in {"reuse", "cache"}:
+            pairs_reused += 1
+        elif fetched.error is None:
+            pairs_recomputed += 1
+        if fetched.skip_reason:
+            pairs_skipped += 1
+        replay_telemetry.append(
+            PairReplayTelemetry(
+                pair_id=pair.pair_id,
+                cache_source=(
+                    "cache"
+                    if fetched.cache_hit or fetched.replay_mode in {"reuse", "cache"}
+                    else "recomputed"
+                ),
+                skip_reason=fetched.skip_reason,
+                fallback_reason=fetched.fallback_reason,
+            )
+        )
+        if fetched.fallback_reason:
+            warnings.append(f"{pair.pair_id}:fallback:{fetched.fallback_reason}")
+        if fetched.error:
+            errors.append(f"{pair.pair_id}:{fetched.error}")
             continue
+        replay_result = fetched.replay_result
         if replay_result is None:
             errors.append(f"{pair.pair_id}:replay_none")
             continue
         top_row, signal_row, backtest_row = _build_pair_rows(
             pair=pair,
             replay=replay_result,
-            source=source,
+            source=fetched.source,
             settings=settings,
             key_rates=key_rates,
         )
@@ -725,6 +973,21 @@ def build_unified_market_snapshot(
             created_at=now,
             signature=signature,
             snapshot=snapshot,
+        )
+    telemetry_skip_reason: str | None = None
+    if pairs_total > 0 and pairs_skipped == pairs_total and pairs_recomputed == 0:
+        reasons = sorted({item.skip_reason for item in replay_telemetry if item.skip_reason})
+        telemetry_skip_reason = reasons[0] if len(reasons) == 1 else "no_data_change"
+    with _LAST_REFRESH_TELEMETRY_LOCK:
+        _LAST_REFRESH_TELEMETRY = RefreshTelemetry(
+            incremental_enabled=bool(getattr(settings.ui, "incremental_replay_enabled", True)),
+            data_watermark_before=global_data_watermark_before,
+            data_watermark_after=global_data_watermark_after,
+            pairs_total=pairs_total,
+            pairs_recomputed=pairs_recomputed,
+            pairs_reused=pairs_reused,
+            pairs_skipped=pairs_skipped,
+            skip_reason=telemetry_skip_reason,
         )
     return snapshot
 
@@ -782,7 +1045,7 @@ def build_unified_spread_series(
         if fallback is None:
             return pd.DataFrame()
         pair = fallback
-    replay_result, _, error = get_pair_replay(
+    fetched = get_pair_replay(
         settings=settings,
         data_dir=data_dir,
         pair=pair,
@@ -792,9 +1055,9 @@ def build_unified_spread_series(
         force=False,
         ttl_sec=ttl_sec,
     )
-    if error or replay_result is None:
+    if fetched.error or fetched.replay_result is None:
         return pd.DataFrame()
-    frame = replay_result.replay.copy()
+    frame = fetched.replay_result.replay.copy()
     if frame.empty:
         return frame
     if not full_life:

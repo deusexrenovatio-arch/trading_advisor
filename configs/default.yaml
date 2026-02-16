@@ -134,11 +134,15 @@ ui:
   host: "127.0.0.1"
   port: 8050
   signal_refresh_enabled: true
-  signal_refresh_interval_sec: 0
-  signal_refresh_daily_time: "01:00"
+  signal_refresh_interval_sec: 60
+  signal_refresh_daily_time: null
   signal_refresh_timezone: null
   signal_refresh_max_pairs: null
   signal_refresh_save_csv: true
+  incremental_replay_enabled: true
+  incremental_overlap_minutes: 180
+  incremental_checkpoint_dir: "./data/state/incremental_replay"
+  incremental_checkpoint_interval_minutes: 60
   pretrade_fail_open_on_transport_error: true
   ff_db_projection_source: false
   ff_fail_closed_execution: false

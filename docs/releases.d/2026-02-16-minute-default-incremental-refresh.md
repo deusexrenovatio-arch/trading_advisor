@@ -1,0 +1,6 @@
+- Switched default backend refresh to `60s` and disabled default daily run (`signal_refresh_daily_time=null`).
+- Added true incremental replay with per-pair disk checkpoints and overlap-safe tail replay.
+- Scheduled refresh now uses incremental non-force path; manual `POST /api/signals/refresh` keeps forced full fallback.
+- Added minute ingest runtime (`minute_ingest`) with overlap polling, upsert/dedup, and watermark tracking.
+- Enriched `GET /api/signals/refresh-status` with incremental telemetry counters and watermark fields.
+- UI/API now return latest backend-produced last-good outputs by default (`/api/top-pairs`, `/api/signals`, `/api/backtests`), with optional `fresh=1` on-demand path.
