@@ -22,6 +22,14 @@ function Is-ProcessRunning {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$configAbsolute = if ([System.IO.Path]::IsPathRooted($ConfigPath)) {
+    $ConfigPath
+}
+else {
+    Join-Path $repoRoot $ConfigPath
+}
+$backendScript = Join-Path $repoRoot "scripts\start_backend.ps1"
+$workerScript = Join-Path $repoRoot "scripts\start_telegram_worker.ps1"
 $logDir = Join-Path $repoRoot "data\runtime-logs"
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
@@ -35,17 +43,7 @@ $frontendErr = Join-Path $logDir "frontend.err.log"
 if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli ui")) {
     Start-Process `
         -FilePath "powershell.exe" `
-        -ArgumentList @(
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            (Join-Path $repoRoot "scripts\start_backend.ps1"),
-            "-ConfigPath",
-            $ConfigPath,
-            "-LogLevel",
-            $LogLevel
-        ) `
+        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$backendScript`" -ConfigPath `"$configAbsolute`" -LogLevel `"$LogLevel`"" `
         -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $backendOut `
         -RedirectStandardError $backendErr | Out-Null
@@ -54,17 +52,7 @@ if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli 
 if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli telegram_bot")) {
     Start-Process `
         -FilePath "powershell.exe" `
-        -ArgumentList @(
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            (Join-Path $repoRoot "scripts\start_telegram_worker.ps1"),
-            "-ConfigPath",
-            $ConfigPath,
-            "-LogLevel",
-            $LogLevel
-        ) `
+        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$workerScript`" -ConfigPath `"$configAbsolute`" -LogLevel `"$LogLevel`"" `
         -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $workerOut `
         -RedirectStandardError $workerErr | Out-Null
