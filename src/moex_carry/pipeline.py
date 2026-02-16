@@ -805,7 +805,10 @@ def _apply_spread_carry_signals(
     settings: AppSettings,
     future_spec: ContractSpec,
     alpha_cfg: object,
-) -> pd.DataFrame:
+    *,
+    initial_state: dict[str, object] | None = None,
+    return_state: bool = False,
+) -> pd.DataFrame | tuple[pd.DataFrame, dict[str, object]]:
     if series_df.empty:
         return series_df
     series_df = series_df.copy()
@@ -862,6 +865,32 @@ def _apply_spread_carry_signals(
         for idx in range(n)
     ]
     spreads_pct = series_df["spread_pct"].tolist()
+    state_payload = initial_state if isinstance(initial_state, dict) else {}
+    spread_history_raw = state_payload.get("spread_history")
+    spread_history: list[float] = []
+    if isinstance(spread_history_raw, list):
+        for item in spread_history_raw:
+            try:
+                spread_history.append(float(item))
+            except (TypeError, ValueError):
+                continue
+
+    def _restore_state_mapping(value: object) -> dict[str, object] | None:
+        if not isinstance(value, dict):
+            return None
+        restored: dict[str, object] = {}
+        for key, item in value.items():
+            if key.endswith("_ts"):
+                restored_ts = _as_naive_datetime(item)
+                restored[key] = restored_ts if restored_ts is not None else item
+            elif key.endswith("_day"):
+                try:
+                    restored[key] = _as_date(item)
+                except Exception:
+                    restored[key] = item
+            else:
+                restored[key] = item
+        return restored
 
     def _submit_timestamp(signal_idx: int, signal_ts: datetime) -> datetime | None:
         if lag_days <= 0:
@@ -910,10 +939,13 @@ def _apply_spread_carry_signals(
     liquidity_passes: list[bool] = [False] * n
     zscores: list[float] = [0.0] * n
 
-    pending_entry: dict[str, object] | None = None
-    pending_exit: dict[str, object] | None = None
-    open_position: dict[str, object] | None = None
-    current_cycle = 0
+    pending_entry = _restore_state_mapping(state_payload.get("pending_entry"))
+    pending_exit = _restore_state_mapping(state_payload.get("pending_exit"))
+    open_position = _restore_state_mapping(state_payload.get("open_position"))
+    try:
+        current_cycle = int(state_payload.get("current_cycle") or 0)
+    except (TypeError, ValueError):
+        current_cycle = 0
 
     for idx in range(n):
         row = series_df.iloc[idx]
@@ -1010,10 +1042,14 @@ def _apply_spread_carry_signals(
             max_days_to_exit=alpha_cfg.max_days_to_exit,
         )
 
+        try:
+            spread_history.append(float(spreads_pct[idx]))
+        except (TypeError, ValueError):
+            spread_history.append(0.0)
         z = 0.0
         entry_filter_ok = True
         if alpha_cfg.z_entry_threshold is not None:
-            z = zscore(spreads_pct[: idx + 1], window=alpha_cfg.z_window, min_window=10)
+            z = zscore(spread_history, window=alpha_cfg.z_window, min_window=10)
             entry_filter_ok = z <= alpha_cfg.z_entry_threshold
 
         spread_entry_exec_value = spread_entry_exec(
@@ -1039,8 +1075,9 @@ def _apply_spread_carry_signals(
             deadline_ts = pending_entry["deadline_ts"]
             if isinstance(submit_ts, datetime) and isinstance(deadline_ts, datetime):
                 if row_ts > deadline_ts:
-                    entry_fill_statuses[signal_idx] = "entry_unfilled"
-                    unfilled_reasons[signal_idx] = "entry_timeout"
+                    if 0 <= signal_idx < n:
+                        entry_fill_statuses[signal_idx] = "entry_unfilled"
+                        unfilled_reasons[signal_idx] = "entry_timeout"
                     pending_entry = None
                 elif row_ts >= submit_ts and _execution_band_ok(
                     target_spot=float(pending_entry["target_spot"]),
@@ -1086,11 +1123,12 @@ def _apply_spread_carry_signals(
                     trade_cycles[idx] = current_cycle
                     entry_spread_pcts[idx] = entry_spread_value
                     for target_idx in {signal_idx, idx}:
-                        entry_signal_days[target_idx] = str(pending_entry["signal_day"])
-                        entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
-                        entry_fill_tss[target_idx] = _iso_or_none(row_ts)
-                        entry_wait_minutes[target_idx] = wait_mins
-                        entry_fill_statuses[target_idx] = "filled"
+                        if 0 <= target_idx < n:
+                            entry_signal_days[target_idx] = str(pending_entry["signal_day"])
+                            entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
+                            entry_fill_tss[target_idx] = _iso_or_none(row_ts)
+                            entry_wait_minutes[target_idx] = wait_mins
+                            entry_fill_statuses[target_idx] = "filled"
                     pending_entry = None
 
         if pending_exit is not None and open_position is not None:
@@ -1215,14 +1253,16 @@ def _apply_spread_carry_signals(
                         entry_fill_statuses[idx] = "filled"
 
                         for target_idx in {signal_idx, idx}:
-                            exit_signal_days[target_idx] = str(pending_exit["signal_day"])
-                            exit_submit_tss[target_idx] = _iso_or_none(submit_ts)
-                            exit_fill_tss[target_idx] = _iso_or_none(row_ts)
-                            exit_wait_minutes[target_idx] = wait_mins
-                            exit_fill_statuses[target_idx] = "forced" if forced else "filled"
-                            exit_forced_flags[target_idx] = forced
+                            if 0 <= target_idx < n:
+                                exit_signal_days[target_idx] = str(pending_exit["signal_day"])
+                                exit_submit_tss[target_idx] = _iso_or_none(submit_ts)
+                                exit_fill_tss[target_idx] = _iso_or_none(row_ts)
+                                exit_wait_minutes[target_idx] = wait_mins
+                                exit_fill_statuses[target_idx] = "forced" if forced else "filled"
+                                exit_forced_flags[target_idx] = forced
                         if forced:
-                            unfilled_reasons[signal_idx] = "exit_timeout_forced"
+                            if 0 <= signal_idx < n:
+                                unfilled_reasons[signal_idx] = "exit_timeout_forced"
                             unfilled_reasons[idx] = "exit_timeout_forced"
 
                     pending_exit = None
@@ -1312,13 +1352,13 @@ def _apply_spread_carry_signals(
 
     if pending_entry is not None:
         signal_idx = int(pending_entry["signal_index"])
-        if entry_fill_statuses[signal_idx] in {None, "pending"}:
+        if 0 <= signal_idx < n and entry_fill_statuses[signal_idx] in {None, "pending"}:
             entry_fill_statuses[signal_idx] = "entry_unfilled"
             unfilled_reasons[signal_idx] = unfilled_reasons[signal_idx] or "entry_no_fill_in_window"
 
     if pending_exit is not None:
         signal_idx = int(pending_exit["signal_index"])
-        if exit_fill_statuses[signal_idx] in {None, "pending"}:
+        if 0 <= signal_idx < n and exit_fill_statuses[signal_idx] in {None, "pending"}:
             exit_fill_statuses[signal_idx] = "exit_unfilled"
             unfilled_reasons[signal_idx] = unfilled_reasons[signal_idx] or "exit_no_fill_in_window"
 
@@ -1357,7 +1397,17 @@ def _apply_spread_carry_signals(
     series_df["exit_fill_status"] = exit_fill_statuses
     series_df["exit_forced"] = exit_forced_flags
     series_df["unfilled_reason"] = unfilled_reasons
-    return series_df
+    if not return_state:
+        return series_df
+    state_out = {
+        "pending_entry": pending_entry,
+        "pending_exit": pending_exit,
+        "open_position": open_position,
+        "current_cycle": int(current_cycle),
+        "spread_history": spread_history[-2048:],
+        "last_processed_exec_ts": _iso_or_none(series_exec_ts[-1]) if series_exec_ts else None,
+    }
+    return series_df, state_out
 
 def _avg_recent_trade_return_annual(series_df: pd.DataFrame) -> float | None:
     if series_df.empty or "trade_return_annual" not in series_df.columns:
