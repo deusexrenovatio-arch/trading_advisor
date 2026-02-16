@@ -17,7 +17,7 @@
 - decision-action -> TC-DEC-API-004, TC-DEC-UI-002
 - params-specs -> TC-PARAMS-API-001
 - frontend-params-specs -> TC-BACK-V2-UI-001, TC-BACK-V2-UI-002
-- top-pairs -> TC-TOP-API-001, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
+- top-pairs -> TC-TOP-API-001, TC-TOP-API-002, TC-TOP-UI-001, TC-TOP-UI-002, TC-TOP-UI-003, TC-TOP-UI-004
 - signals-active -> TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001, TC-TG-UI-002, TC-TG-UI-003, TC-TG-WRK-002, TC-TG-WRK-003
 - signals-action-v2 -> TC-SIG-ACT-API-003
 - signals-history -> TC-SIG-HIST-API-001, TC-SIG-HIST-API-003, TC-SIG-CONTRACT-API-001, TC-SIG-HIST-UI-001, TC-SIG-HIST-UI-002
@@ -29,11 +29,12 @@
 - signals-history-range -> TC-SIG-HIST-API-002, TC-SIG-HIST-UI-001
 - backtests -> TC-BACK-API-001, TC-BACK-UI-001
 - backtest-run -> TC-BACK-V2-API-001, TC-BACK-V2-API-002
-- spread-series -> TC-SPREAD-API-001, TC-SPREAD-UI-001
+- spread-series -> TC-SPREAD-API-001, TC-SPREAD-UI-001, TC-SPREAD-UI-002
 - forward-start -> TC-FWD-API-001
 - forward-status -> TC-FWD-API-002
 - frontend -> TC-FE-HTTP-001
 - frontend-proxy -> TC-FE-PROXY-001
+- unified-minute-runtime -> TC-UNI-API-001, TC-UNI-API-002, TC-UNI-API-003, TC-PERF-GATE-MAN-001, TC-PERF-ARCH-UNIT-001
 - hpo -> TC-HPO-API-001, TC-HPO-UNIT-001
 - hpo-status -> TC-HPO-API-002
 - ui-domain-boundary -> TC-UI-DOMAIN-001
@@ -200,6 +201,16 @@ Steps:
 2. Click Details on a row.
 Expected:
 - Spread chart renders with spread_mid and spread_pct data.
+
+### TC-SPREAD-UI-002 Spread chart supports timeframe switch
+Acceptance: spread-series
+Automation: ui-web/tests/top-signals.spec.ts
+Steps:
+1. Open Top pairs and expand row details.
+2. Switch chart timeframe between `1H`, `5m`, and `1D`.
+Expected:
+- Candle chart updates without errors for each interval.
+- Active interval button reflects selected timeframe.
 
 ### TC-SIG-ACT-UI-001 Active signals auto refresh
 Acceptance: signals-active
@@ -502,6 +513,15 @@ Expected:
 - Required keys include spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
 - signal_reasons/signal_metrics are absent.
 
+### TC-TOP-API-002 Top pairs score gate compatibility
+Acceptance: top-pairs
+Automation: tests/test_ui_api.py
+Request:
+- GET /api/v2/top-pairs?limit=5&require_score_gate=true
+Expected:
+- Response remains JSON-compatible for UI tables.
+- For non-empty rows, score-related keys (`score_gate_pass`, `score_exec_probability`, `score_earn_probability`) are present.
+
 ### TC-SIG-ACT-API-001 Active signals actionable
 Acceptance: signals-active
 Automation: scripts/acceptance_check.py (signals-active)
@@ -713,6 +733,32 @@ Request:
 - GET /api/spread-series?stock=...&future=...&window_days=60
 Expected:
 - Fields spread_mid, spread_pct, entry/exit flags.
+- Scenario is skipped (not failed) when top-pairs source is empty in the runtime dataset.
+
+### TC-UNI-API-001 Unified runtime top-pairs compatibility
+Acceptance: unified-minute-runtime
+Automation: tests/test_ui_api.py
+Request:
+- GET /api/top-pairs?limit=5
+Expected:
+- Response remains compatible with legacy UI consumers.
+- Rows include `stock`, `future`, `signal_action`, `signal_score` when data is available.
+
+### TC-UNI-API-002 Unified runtime signals compatibility
+Acceptance: unified-minute-runtime
+Automation: tests/test_signal_api.py
+Request:
+- GET /api/signals?limit=5
+Expected:
+- Endpoint response keeps legacy field compatibility for consumers using v1 routes.
+
+### TC-UNI-API-003 Unified runtime backtests compatibility
+Acceptance: unified-minute-runtime
+Automation: tests/test_ui_api.py
+Request:
+- GET /api/backtests?limit=5
+Expected:
+- Backtest list remains available and JSON-compatible after minute-runtime integration.
 
 ### TC-FWD-API-001 Forward start
 Acceptance: forward-start
@@ -769,8 +815,26 @@ Steps:
 1. Run `pytest -q tests/hpo`.
 Expected:
 - Walk-forward folds respect embargo math.
-- Constraint violations yield -INF objective.
+- Constraint violations yield an invalid-objective sentinel for objective mode.
 - Leaderboard orders by objective and best_config matches the top trial.
+
+### TC-PERF-GATE-MAN-001 Manual performance gate checklist
+Acceptance: unified-minute-runtime
+Automation: manual
+Steps:
+1. Run minute-runtime compute in cold mode and warm mode.
+2. Capture hardware profile and cache mode in the report.
+Expected:
+- Cold/warm results are recorded separately.
+- No regression beyond approved threshold versus baseline.
+
+### TC-PERF-ARCH-UNIT-001 Runtime architecture/perf unit checks
+Acceptance: unified-minute-runtime
+Automation: tests/perf/*
+Steps:
+1. Run targeted performance unit suite for minute-runtime components.
+Expected:
+- Runtime modules pass architecture/performance guards used by CI.
 
 ## Regression Checklist (minimum)
 - /api/v2/signals/history returns JSON (no HTML).

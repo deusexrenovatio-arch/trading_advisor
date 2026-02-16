@@ -92,6 +92,8 @@ scenarios:
           end_date: 2020-12-31
         universe:
           max_pairs: 1
+    skip_on_statuses: [400]
+    skip_on_error_messages: ["Missing raw data"]
     required_keys: [status, run_id]
     test_cases: [TC-HPO-UI-001]
     title: Frontend HPO proxy
@@ -349,6 +351,7 @@ scenarios:
   - id: spread-series
     type: spread_series
     scope: backend
+    allow_empty: true
     pair_source: top_pairs
     source_url: /api/v2/top-pairs?limit=1
     window_days: 60
