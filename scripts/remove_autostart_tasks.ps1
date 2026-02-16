@@ -30,3 +30,4 @@ function Remove-TaskIfExists {
 
 Remove-TaskIfExists -TaskName "$TaskPrefix-Backend"
 Remove-TaskIfExists -TaskName "$TaskPrefix-TelegramWorker"
+Remove-TaskIfExists -TaskName "$TaskPrefix-Frontend"
