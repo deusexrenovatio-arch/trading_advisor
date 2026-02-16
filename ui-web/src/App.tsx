@@ -467,15 +467,15 @@ function App() {
           ) : null}
           <Paper variant="outlined" sx={{ p: 1.25 }}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
-              <Chip label={`tab_switch_count: ${tabSwitchCount}`} size="small" />
+              <Chip label={`Переключений вкладок: ${tabSwitchCount}`} size="small" />
               <Chip
-                label={`time_to_first_action_sec: ${
+                label={`Время до первого действия (сек): ${
                   timeToFirstActionSec === null ? 'n/a' : timeToFirstActionSec
                 }`}
                 size="small"
               />
               <Chip
-                label={`blocked_action_rate: ${
+                label={`Доля блокировок входа: ${
                   blockedActionRate === null ? 'n/a' : `${(blockedActionRate * 100).toFixed(1)}%`
                 }`}
                 size="small"

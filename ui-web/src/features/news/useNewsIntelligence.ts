@@ -22,7 +22,7 @@ export const useNewsIntelligence = () => {
       })
       setRows(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load news feed')
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить ленту новостей')
     } finally {
       setLoading(false)
     }

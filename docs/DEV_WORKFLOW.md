@@ -9,6 +9,7 @@
 
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
+- `python scripts/sync_architecture_map.py --check`
 - `pytest`
 
 ### Frontend (UI)

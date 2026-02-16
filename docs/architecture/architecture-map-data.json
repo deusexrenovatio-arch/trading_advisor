@@ -1,4 +1,4 @@
-window.ARCH_MAP_DATA = {
+{
   "title": "Trading Advisor Architecture Map v2",
   "subtitle": "Components, entities, APIs, storages, and dependency flows (worktree-aware).",
   "generated_from": [
@@ -1500,4 +1500,4 @@ window.ARCH_MAP_DATA = {
       "type": "links"
     }
   ]
-};
+}

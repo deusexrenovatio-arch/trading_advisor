@@ -19,7 +19,7 @@ export const usePortfolioControl = () => {
       const data = await fetchRebalancePreviewV2(normalizedLimit)
       setPreview(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load rebalance preview')
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить предпросмотр ребаланса')
     } finally {
       setLoading(false)
     }
@@ -36,9 +36,9 @@ export const usePortfolioControl = () => {
         actor_id: 'ui-operator',
         positions: preview.positions as Array<Record<string, unknown>>,
       })
-      setCommitStatus(`Committed ${response.positions_committed} positions (${response.commit_id})`)
+      setCommitStatus(`Ребаланс применён: ${response.positions_committed} позиций (commit ${response.commit_id})`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to commit rebalance plan')
+      setError(err instanceof Error ? err.message : 'Не удалось применить план ребаланса')
     } finally {
       setLoading(false)
     }

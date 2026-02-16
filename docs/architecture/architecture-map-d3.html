@@ -95,7 +95,7 @@
       border-bottom: 1px solid var(--border);
       padding: 12px;
       display: grid;
-      grid-template-columns: 1fr auto auto;
+      grid-template-columns: 1fr auto auto auto;
       gap: 10px;
       align-items: center;
       background: linear-gradient(180deg, #ffffff, #f8fcff);
@@ -353,8 +353,13 @@
       <section class="graph-panel panel">
         <div class="toolbar">
           <input id="search" type="search" placeholder="Search node id or label..." />
+          <select id="view-mode">
+            <option value="overview" selected>View: Clean overview</option>
+            <option value="full">View: Full dependency graph</option>
+          </select>
           <select id="preset">
-            <option value="all">Preset: All dependencies</option>
+            <option value="overview" selected>Preset: Core flow (clean default)</option>
+            <option value="all">Preset: Full graph</option>
             <option value="trade">Preset: Trade path</option>
             <option value="research">Preset: Research path</option>
             <option value="news_portfolio">Preset: News + Portfolio</option>
@@ -439,9 +444,52 @@
         operates: { color: "#e11d48", dash: "" },
       };
 
+      const overviewNodeIds = new Set([
+        "ext.moex_iss",
+        "ext.news_sources",
+        "ext.telegram",
+        "ext.operator",
+        "layer.analytics",
+        "layer.signal_decision",
+        "layer.research",
+        "layer.news",
+        "layer.portfolio",
+        "layer.execution_audit",
+        "mod.data_adapters",
+        "mod.strategy_spread_alpha",
+        "mod.decision_engine",
+        "mod.pretrade_service",
+        "mod.backtest_v2",
+        "mod.news_projection",
+        "mod.portfolio_rebalance",
+        "mod.api_ui",
+        "api.v2.signals.active",
+        "api.v2.signals.actions",
+        "api.v2.decisions.view",
+        "api.v2.research.backtest",
+        "api.v2.news.feed",
+        "api.v2.portfolio.preview",
+        "ws.trade_console",
+        "ws.decision_audit",
+        "ws.research_lab",
+        "ws.news_intelligence",
+        "ws.portfolio_control",
+      ]);
+
+      const overviewLinkTypes = new Set([
+        "contains",
+        "depends_on",
+        "feeds",
+        "governs",
+        "calls",
+        "serves",
+        "operates",
+      ]);
+
       const titleEl = document.getElementById("title");
       const subtitleEl = document.getElementById("subtitle");
       const searchEl = document.getElementById("search");
+      const viewModeEl = document.getElementById("view-mode");
       const presetEl = document.getElementById("preset");
       const kindFiltersEl = document.getElementById("kind-filters");
       const linkFiltersEl = document.getElementById("link-filters");
@@ -450,6 +498,7 @@
       const tooltipEl = document.getElementById("tooltip");
       const resetEl = document.getElementById("reset");
       const svgEl = document.getElementById("graph");
+      const graphWrapEl = document.querySelector(".graph-wrap");
 
       titleEl.textContent = data.title || "Architecture Map";
       subtitleEl.textContent = data.subtitle || "";
@@ -465,15 +514,17 @@
       );
       const linkTypes = [...new Set(data.links.map((l) => l.type))].sort();
 
-      const selectedKinds = new Set(kinds);
-      const selectedLinkTypes = new Set(linkTypes);
+      const selectedKinds = new Set();
+      const selectedLinkTypes = new Set();
+      const kindChipByValue = new Map();
+      const linkChipByValue = new Map();
       let selectedNodeId = null;
       let searchTerm = "";
 
-      function createChip(label, activeSet, value, container) {
+      function createChip(label, activeSet, value, container, chipMap) {
         const chip = document.createElement("button");
         chip.type = "button";
-        chip.className = "chip active";
+        chip.className = "chip";
         chip.textContent = label;
         chip.dataset.value = value;
         chip.onclick = () => {
@@ -486,20 +537,21 @@
           }
           updateVisibility();
         };
+        chipMap.set(value, chip);
         container.appendChild(chip);
       }
 
-      kinds.forEach((kind) => createChip(kind, selectedKinds, kind, kindFiltersEl));
-      linkTypes.forEach((type) => createChip(type, selectedLinkTypes, type, linkFiltersEl));
+      kinds.forEach((kind) =>
+        createChip(kind, selectedKinds, kind, kindFiltersEl, kindChipByValue),
+      );
+      linkTypes.forEach((type) =>
+        createChip(type, selectedLinkTypes, type, linkFiltersEl, linkChipByValue),
+      );
 
-      const bounds = svgEl.getBoundingClientRect();
-      const width = Math.max(880, Math.floor(bounds.width));
-      const height = Math.max(580, Math.floor(bounds.height));
+      let width = 0;
+      let height = 0;
 
-      const svg = d3
-        .select(svgEl)
-        .attr("viewBox", [0, 0, width, height])
-        .attr("preserveAspectRatio", "xMidYMid meet");
+      const svg = d3.select(svgEl).attr("preserveAspectRatio", "xMidYMid meet");
 
       const defs = svg.append("defs");
       defs
@@ -516,6 +568,7 @@
         .attr("fill", "#8ca3b8");
 
       const zoomLayer = svg.append("g");
+      const laneLayer = zoomLayer.append("g");
       const linkLayer = zoomLayer.append("g").attr("stroke-linecap", "round");
       const nodeLayer = zoomLayer.append("g");
 
@@ -536,6 +589,9 @@
           return { ...link, source, target };
         })
         .filter(Boolean);
+      const overviewKinds = new Set(
+        nodes.filter((node) => overviewNodeIds.has(node.id)).map((node) => node.kind),
+      );
 
       function nodeRadius(node) {
         if (node.kind === "layer") return 14;
@@ -544,31 +600,96 @@
         return 7;
       }
 
-      function laneX(node) {
-        const lane = laneOrder[node.kind] || 4;
-        const lanes = Object.keys(laneOrder).length + 1;
-        return (width / lanes) * lane;
+      function resolveRank(node) {
+        if (node.kind === "layer") return node.layer_rank || 1;
+        if (node.layer && layerRank.has(node.layer)) return layerRank.get(node.layer);
+        const fallback = { external: 1, module: 3, api: 4, entity: 5, store: 6, workspace: 6 };
+        return fallback[node.kind] || 3;
       }
 
-      function rankY(node) {
-        const rank =
-          node.kind === "layer"
-            ? node.layer_rank || 1
-            : layerRank.get(node.layer) || 3;
-        const minY = 70;
-        const maxY = height - 50;
-        const maxRank = 6;
-        return minY + ((rank - 1) / (maxRank - 1)) * (maxY - minY);
+      function getDimensions() {
+        const bounds = graphWrapEl.getBoundingClientRect();
+        width = Math.max(880, Math.floor(bounds.width));
+        height = Math.max(580, Math.floor(bounds.height));
+        svg.attr("viewBox", [0, 0, width, height]);
+      }
+
+      function sortedLaneKinds() {
+        return [...new Set(nodes.map((n) => n.kind))].sort(
+          (a, b) => (laneOrder[a] || 99) - (laneOrder[b] || 99),
+        );
+      }
+
+      function assignCoordinates() {
+        const marginTop = 70;
+        const marginBottom = 44;
+        const laneKinds = sortedLaneKinds();
+        const laneX = d3
+          .scalePoint()
+          .domain(laneKinds)
+          .range([120, width - 130])
+          .padding(0.38);
+
+        laneKinds.forEach((laneKind) => {
+          const laneNodes = nodes
+            .filter((n) => n.kind === laneKind)
+            .sort((a, b) => resolveRank(a) - resolveRank(b) || a.label.localeCompare(b.label));
+          const count = laneNodes.length;
+          if (!count) return;
+          const span = Math.max(height - marginTop - marginBottom, 180);
+          laneNodes.forEach((node, index) => {
+            const ratio = count === 1 ? 0.5 : index / (count - 1);
+            const y = marginTop + ratio * span;
+            const x = laneX(laneKind) + (resolveRank(node) - 3) * 11;
+            node.x = x;
+            node.y = y;
+          });
+        });
+
+        drawLaneGuides(laneKinds, laneX);
+      }
+
+      function drawLaneGuides(laneKinds, laneX) {
+        const laneItems = laneKinds.map((kind) => ({ kind, x: laneX(kind) }));
+        const laneGroups = laneLayer.selectAll("g.lane").data(laneItems, (d) => d.kind);
+        const laneEnter = laneGroups.join((enter) => {
+          const g = enter.append("g").attr("class", "lane");
+          g.append("line");
+          g.append("text");
+          return g;
+        });
+
+        laneEnter
+          .select("line")
+          .attr("x1", (d) => d.x)
+          .attr("x2", (d) => d.x)
+          .attr("y1", 34)
+          .attr("y2", height - 26)
+          .attr("stroke", "#d5e3f1")
+          .attr("stroke-width", 1)
+          .attr("stroke-dasharray", "3 7");
+
+        laneEnter
+          .select("text")
+          .attr("x", (d) => d.x)
+          .attr("y", 20)
+          .attr("text-anchor", "middle")
+          .attr("font-size", 10.5)
+          .attr("font-family", "Space Grotesk, IBM Plex Sans, sans-serif")
+          .attr("letter-spacing", "0.07em")
+          .attr("fill", "#5b748b")
+          .text((d) => d.kind.toUpperCase());
       }
 
       const linkSelection = linkLayer
-        .selectAll("line")
+        .selectAll("path")
         .data(links)
-        .join("line")
+        .join("path")
+        .attr("fill", "none")
         .attr("stroke", (d) => (edgeStyle[d.type] || edgeStyle.depends_on).color)
         .attr("stroke-dasharray", (d) => (edgeStyle[d.type] || edgeStyle.depends_on).dash)
-        .attr("stroke-width", (d) => (d.type === "contains" ? 1.1 : 1.4))
-        .attr("stroke-opacity", 0.58)
+        .attr("stroke-width", (d) => (d.type === "contains" ? 1.05 : 1.25))
+        .attr("stroke-opacity", 0.48)
         .attr("marker-end", "url(#arrow)");
 
       const nodeSelection = nodeLayer
@@ -598,36 +719,17 @@
         .attr("stroke-width", 3.2)
         .attr("stroke-linejoin", "round");
 
-      const simulation = d3
-        .forceSimulation(nodes)
-        .force(
-          "link",
-          d3
-            .forceLink(links)
-            .id((d) => d.id)
-            .distance((d) => {
-              if (d.type === "contains") return 70;
-              if (d.type === "calls") return 110;
-              if (d.type === "depends_on") return 95;
-              if (d.type === "returns") return 92;
-              return 84;
-            })
-            .strength((d) => (d.type === "contains" ? 0.22 : 0.36)),
-        )
-        .force("charge", d3.forceManyBody().strength(-155))
-        .force("collision", d3.forceCollide().radius((d) => nodeRadius(d) + 6))
-        .force("x", d3.forceX((d) => laneX(d)).strength(0.21))
-        .force("y", d3.forceY((d) => rankY(d)).strength(0.24))
-        .alpha(1)
-        .alphaDecay(0.033)
-        .on("tick", ticked);
-
-      function ticked() {
+      function redrawGraph() {
         linkSelection
-          .attr("x1", (d) => d.source.x)
-          .attr("y1", (d) => d.source.y)
-          .attr("x2", (d) => d.target.x)
-          .attr("y2", (d) => d.target.y);
+          .attr("d", (d) => {
+            const x1 = d.source.x;
+            const y1 = d.source.y;
+            const x2 = d.target.x;
+            const y2 = d.target.y;
+            const delta = Math.abs(x2 - x1);
+            const curve = Math.max(26, delta * 0.45);
+            return `M${x1},${y1} C${x1 + curve},${y1} ${x2 - curve},${y2} ${x2},${y2}`;
+          });
 
         nodeSelection.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
       }
@@ -636,19 +738,10 @@
         .call(
           d3
             .drag()
-            .on("start", (event, d) => {
-              if (!event.active) simulation.alphaTarget(0.2).restart();
-              d.fx = d.x;
-              d.fy = d.y;
-            })
             .on("drag", (event, d) => {
-              d.fx = event.x;
-              d.fy = event.y;
-            })
-            .on("end", (event, d) => {
-              if (!event.active) simulation.alphaTarget(0);
-              d.fx = null;
-              d.fy = null;
+              d.x = Math.max(20, Math.min(width - 20, event.x));
+              d.y = Math.max(30, Math.min(height - 20, event.y));
+              redrawGraph();
             }),
         )
         .on("mouseenter", (_, d) => {
@@ -680,6 +773,7 @@
       });
 
       const presets = {
+        overview: new Set([...overviewNodeIds]),
         all: null,
         trade: new Set([
           "ws.trade_console",
@@ -751,6 +845,43 @@
         entities: new Set(data.nodes.filter((n) => n.kind === "entity").map((n) => n.id)),
       };
 
+      function setValues(target, values) {
+        target.clear();
+        values.forEach((value) => target.add(value));
+      }
+
+      function syncChipState() {
+        kindChipByValue.forEach((chip, kind) => {
+          chip.classList.toggle("active", selectedKinds.has(kind));
+        });
+        linkChipByValue.forEach((chip, type) => {
+          chip.classList.toggle("active", selectedLinkTypes.has(type));
+        });
+      }
+
+      function applyViewMode(mode) {
+        if (mode === "overview") {
+          setValues(
+            selectedKinds,
+            kinds.filter((kind) => overviewKinds.has(kind)),
+          );
+          setValues(
+            selectedLinkTypes,
+            linkTypes.filter((type) => overviewLinkTypes.has(type)),
+          );
+          if (presetEl.value === "all" || presetEl.value === "entities") {
+            presetEl.value = "overview";
+          }
+        } else {
+          setValues(selectedKinds, kinds);
+          setValues(selectedLinkTypes, linkTypes);
+          if (presetEl.value === "overview") {
+            presetEl.value = "all";
+          }
+        }
+        syncChipState();
+      }
+
       function getVisibleNodeIds() {
         const preset = presets[presetEl.value] || null;
         const ids = new Set();
@@ -764,6 +895,10 @@
 
       function updateVisibility() {
         const visibleNodeIds = getVisibleNodeIds();
+        if (selectedNodeId && !visibleNodeIds.has(selectedNodeId)) {
+          selectedNodeId = null;
+          renderDetail(null);
+        }
 
         const term = searchTerm.trim().toLowerCase();
         const nodeVisible = (node) => visibleNodeIds.has(node.id);
@@ -771,6 +906,12 @@
           if (!term) return true;
           return `${node.id} ${node.label}`.toLowerCase().includes(term);
         };
+        const focusedNeighborhood = new Set();
+        if (selectedNodeId) {
+          focusedNeighborhood.add(selectedNodeId);
+          (adjacencyOut.get(selectedNodeId) || []).forEach((edge) => focusedNeighborhood.add(edge.target.id));
+          (adjacencyIn.get(selectedNodeId) || []).forEach((edge) => focusedNeighborhood.add(edge.source.id));
+        }
 
         nodeSelection.attr("display", (d) => (nodeVisible(d) ? null : "none"));
 
@@ -786,7 +927,10 @@
             if (!nodeVisible(d)) return 0;
             const match = nodeMatched(d);
             if (selectedNodeId && d.id === selectedNodeId) return 1;
-            return match ? 0.95 : 0.2;
+            if (selectedNodeId) {
+              return focusedNeighborhood.has(d.id) ? 0.93 : 0.13;
+            }
+            return match ? 0.9 : 0.18;
           })
           .attr("stroke-width", (d) => (selectedNodeId && d.id === selectedNodeId ? 2.7 : 1.2))
           .attr("stroke", (d) => (selectedNodeId && d.id === selectedNodeId ? "#f59e0b" : "#ffffff"));
@@ -795,9 +939,26 @@
           .select("text")
           .attr("opacity", (d) => {
             if (!nodeVisible(d)) return 0;
+            const denseFullMode =
+              viewModeEl.value === "full" &&
+              !selectedNodeId &&
+              !term &&
+              visibleNodeIds.size > 45;
+            if (denseFullMode) {
+              return ["layer", "workspace", "external", "api"].includes(d.kind) ? 0.92 : 0.24;
+            }
             if (!term) return 0.95;
             return nodeMatched(d) ? 0.98 : 0.16;
           });
+
+        linkSelection.attr("stroke-opacity", (d) => {
+          if (!selectedNodeId) {
+            return viewModeEl.value === "overview" ? 0.5 : 0.28;
+          }
+          if (d.source.id === selectedNodeId || d.target.id === selectedNodeId) return 0.88;
+          if (focusedNeighborhood.has(d.source.id) && focusedNeighborhood.has(d.target.id)) return 0.42;
+          return 0.08;
+        });
 
         const visibleLinksCount = links.filter((d) => {
           if (!selectedLinkTypes.has(d.type)) return false;
@@ -814,7 +975,15 @@
       function renderDetail(nodeId) {
         const node = nodeById.get(nodeId);
         if (!node) {
-          detailEl.innerHTML = "<p>Select a node to inspect.</p>";
+          detailEl.innerHTML = `
+            <h3>Clean View Tips</h3>
+            <ul>
+              <li>Start from <strong>Core flow</strong> preset.</li>
+              <li>Switch to <strong>Trade path</strong> or <strong>Research path</strong> for local analysis.</li>
+              <li>Use <strong>Full view</strong> only for deep dependency audits.</li>
+            </ul>
+            <p class="footer">Click any node to inspect incoming/outgoing dependencies.</p>
+          `;
           return;
         }
 
@@ -868,22 +1037,41 @@
         updateVisibility();
       });
 
+      viewModeEl.addEventListener("change", (event) => {
+        selectedNodeId = null;
+        renderDetail(null);
+        applyViewMode(event.target.value || "overview");
+        updateVisibility();
+      });
+
       resetEl.addEventListener("click", () => {
-        selectedKinds.clear();
-        kinds.forEach((kind) => selectedKinds.add(kind));
-        selectedLinkTypes.clear();
-        linkTypes.forEach((type) => selectedLinkTypes.add(type));
-        [...document.querySelectorAll(".chip")].forEach((chip) => chip.classList.add("active"));
-        presetEl.value = "all";
+        viewModeEl.value = "overview";
+        presetEl.value = "overview";
         searchEl.value = "";
         searchTerm = "";
         selectedNodeId = null;
+        applyViewMode("overview");
         renderDetail(null);
         updateVisibility();
       });
 
+      function refreshLayout() {
+        getDimensions();
+        assignCoordinates();
+        redrawGraph();
+        updateVisibility();
+      }
+
+      applyViewMode("overview");
+      getDimensions();
+      assignCoordinates();
+      redrawGraph();
       renderDetail(null);
       updateVisibility();
+
+      window.addEventListener("resize", () => {
+        refreshLayout();
+      });
     })();
   </script>
 </body>

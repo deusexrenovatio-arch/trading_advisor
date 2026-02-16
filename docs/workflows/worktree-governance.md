@@ -7,12 +7,25 @@
 - `d:/wt-bot` -> `feat/bot-integration` (ACK/actions integration)
 - `d:/wt-integration` -> `chore/integration-sync` (conflict detection and smoke checks)
 
+## Dev ports policy
+- Reserved for `main` worktree:
+  - Backend API: `8050`
+  - Frontend Vite: `5176`
+- Feature worktrees must use dedicated ports (example baseline):
+  - `d:/wt-refactor`: backend `8061`, frontend `5186`
+  - `d:/wt-signals-backtest`: backend `8062`, frontend `5187`
+  - `d:/wt-bot`: backend `8063`, frontend `5188`
+  - `d:/wt-integration`: backend `8064`, frontend `5189`
+- Frontend proxy override for worktrees:
+  - Use `VITE_API_PROXY_TARGET=http://127.0.0.1:<backend-port>` when running Vite.
+
 ## Daily routine
 1. `git fetch origin`
 2. `git rebase origin/main` in each active feature worktree.
-3. Run targeted stream tests.
-4. Push feature branch with `--force-with-lease` only for owned feature branches.
-5. Sync integration branch with no-ff merges for early conflict detection.
+3. `python scripts/sync_architecture_map.py --check` (docs-as-code consistency gate).
+4. Run targeted stream tests.
+5. Push feature branch with `--force-with-lease` only for owned feature branches.
+6. Sync integration branch with no-ff merges for early conflict detection.
 
 ## Merge order policy
 1. `refactor/app-core`
@@ -25,6 +38,18 @@
 - `chat/signals-backtest-lab`: minute replay canon, compute stack policy, HPO quality gates.
 - `feat/bot-integration`: Telegram ACK and action ingestion.
 - `chore/integration-sync`: integration-only conflict fixes and smoke verification.
+
+## Minute Replay Parameter Baseline
+- Runtime default profile (`configs/default.yaml`):
+  - `strategy.execution_lag_minutes = 30`
+  - `strategy.execution_max_wait_minutes = 360`
+  - `strategy.entry_price_tolerance_pct = 0.02`
+- Contract defaults (`src/moex_carry/contracts/strategy_test.py`) remain conservative:
+  - `execution_lag_minutes = 20`
+  - `execution_max_wait_minutes = 1440`
+  - `entry_price_tolerance_pct = 0.0015`
+- Validation gate (`src/moex_carry/config_resolver.py`):
+  - `INTRADAY_MINUTE` requires `strategy.execution_lag_minutes >= 20`.
 
 ## Integration gate
 - Required before merge to `main`:

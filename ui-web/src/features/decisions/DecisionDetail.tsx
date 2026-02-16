@@ -168,7 +168,7 @@ const DecisionDetail = ({
                 disabled={!selectedId || decisionActionSubmitting}
                 onClick={() => onSubmitDecisionAction('reject')}
               >
-                Отклонить и исполнить
+                Отклонить
               </Button>
             </Stack>
             {decisionActionError ? (
