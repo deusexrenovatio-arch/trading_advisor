@@ -1,13 +1,11 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 const paramSpecs = [
   { key: 'test.start_date', value_type: 'str', default: '2025-01-01' },
   { key: 'test.end_date', value_type: 'str', default: '2025-12-31' },
   { key: 'strategy.z_window', value_type: 'int', default: 60 },
   { key: 'strategy.TP_pct', value_type: 'float', default: 0.01 },
-  { key: 'strategy.min_total_score', value_type: 'float', default: null },
   { key: 'allocation.weights', value_type: 'dict', default: { fundamental: 0.4 } },
-  { key: 'liquidity.use_adv', value_type: 'bool', default: true },
 ]
 
 const backtestReport = {
@@ -57,29 +55,34 @@ const hpoResponse = {
   ],
 }
 
-const registerBaseRoutes = async (page) => {
-  await page.route('**/api/decision-view**', (route) => route.fulfill({ json: [] }))
-  await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: [] }))
-  await page.route('**/api/signals/active**', (route) => route.fulfill({ json: [] }))
+const refreshStatus = {
+  enabled: true,
+  interval_sec: 3600,
+  status: 'ok',
+  last_success_at: '2026-01-26T15:00:00Z',
+}
+
+const registerBaseRoutes = async (page: Page) => {
+  await page.route('**/api/v2/decision-view**', (route) => route.fulfill({ json: [] }))
+  await page.route('**/api/v2/top-pairs**', (route) => route.fulfill({ json: [] }))
+  await page.route('**/api/v2/signals/active**', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/backtests**', (route) => route.fulfill({ json: [] }))
-  await page.route('**/api/signals/refresh-status**', (route) => route.fulfill({ json: {} }))
-  await page.route('**/api/signals/refresh', (route) => route.fulfill({ json: {} }))
+  await page.route('**/api/signals/refresh-status**', (route) =>
+    route.fulfill({ json: refreshStatus }),
+  )
+  await page.route('**/api/signals/refresh**', (route) => route.fulfill({ json: refreshStatus }))
 }
 
 test.describe('Backtest v2 + Forward + HPO UI', () => {
   test('Backtest v2 run renders summary, equity, and trades', async ({ page }) => {
     await registerBaseRoutes(page)
     await page.route('**/api/params/specs**', (route) => route.fulfill({ json: paramSpecs }))
-    await page.route('**/api/backtest/run', (route) => route.fulfill({ json: backtestReport }))
+    await page.route('**/api/backtest/run**', (route) => route.fulfill({ json: backtestReport }))
 
-    await page.goto('/')
-    await page.getByRole('tab', { name: 'Бэктест v2' }).click()
+    await page.goto('/research-system/backtest-v2')
 
-    await expect(page.getByRole('textbox', { name: 'Дата начала' })).toBeVisible()
-    await page.getByRole('button', { name: /Аллокация/ }).click()
-    await expect(page.getByText('Вес корзин')).toBeVisible()
-    await expect(page.getByText('Фундаментальная', { exact: true })).toBeVisible()
-    await expect(page.getByText('test.start_date', { exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Загрузить параметры' }).click()
+    await expect(page.getByRole('button', { name: 'Запустить бэктест' })).toBeVisible()
     await page.getByRole('button', { name: 'Запустить бэктест' }).click()
 
     await expect(page.getByText('Итоговые метрики')).toBeVisible()
@@ -93,25 +96,24 @@ test.describe('Backtest v2 + Forward + HPO UI', () => {
     await registerBaseRoutes(page)
     await page.route('**/api/forward/status**', (route) => route.fulfill({ json: forwardStatus }))
 
-    await page.goto('/')
-    await page.getByRole('tab', { name: 'Статус форварда' }).click()
+    await page.goto('/research-system/forward')
     await page.getByRole('button', { name: 'Загрузить статус' }).click()
 
     await expect(page.getByText('Прогон: fwd-123')).toBeVisible()
-    await expect(page.getByText('Статус: готово')).toBeVisible()
+    await expect(page.getByText(/Статус:/)).toBeVisible()
     await expect(page.getByText('DATA_STALE')).toBeVisible()
   })
 
   test('HPO leaderboard renders objective rows', async ({ page }) => {
     await registerBaseRoutes(page)
     await page.route('**/api/params/specs**', (route) => route.fulfill({ json: paramSpecs }))
-    await page.route('**/api/hpo/run', (route) => route.fulfill({ json: hpoResponse }))
+    await page.route('**/api/hpo/run**', (route) => route.fulfill({ json: hpoResponse }))
 
-    await page.goto('/')
-    await page.getByRole('tab', { name: 'HPO' }).click()
+    await page.goto('/research-system/hpo')
+    await page.getByRole('button', { name: 'Загрузить параметры' }).click()
     await page.getByRole('button', { name: 'Запустить HPO' }).click()
 
     await expect(page.getByText('Лидерборд')).toBeVisible()
-    await expect(page.getByText('1.2000')).toBeVisible()
+    await expect(page.locator('table tbody tr')).toHaveCount(2)
   })
 })

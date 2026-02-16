@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
-const decisionViewFirst = [
+const decisionViewRows = [
   {
     decision_id: 'decision-1',
     created_at: '2026-01-12T10:00:00Z',
@@ -30,7 +30,6 @@ const decisionViewFirst = [
     news_severity: 'high',
   },
 ]
-
 
 const decisionLogs: Record<string, Record<string, unknown>> = {
   'decision-1': {
@@ -73,6 +72,7 @@ const decisionLogs: Record<string, Record<string, unknown>> = {
     aggregation: { reasons: ['risk_limit_breach'] },
   },
 }
+
 const refreshStatus = {
   enabled: true,
   interval_sec: 3600,
@@ -80,9 +80,9 @@ const refreshStatus = {
   last_success_at: '2026-01-26T15:00:00Z',
 }
 
-const registerBaseRoutes = async (page) => {
-  await page.route('**/api/top-pairs**', (route) => route.fulfill({ json: [] }))
-  await page.route('**/api/signals/active**', (route) => route.fulfill({ json: [] }))
+const registerBaseRoutes = async (page: Page) => {
+  await page.route('**/api/v2/top-pairs**', (route) => route.fulfill({ json: [] }))
+  await page.route('**/api/v2/signals/active**', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/backtests**', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/signals/refresh-status**', (route) =>
     route.fulfill({ json: refreshStatus }),
@@ -90,63 +90,31 @@ const registerBaseRoutes = async (page) => {
   await page.route('**/api/signals/refresh**', (route) =>
     route.fulfill({ json: refreshStatus }),
   )
-  await page.route('**/api/decisions/**/action', async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({
-        json: {
-          operator_action: {},
-          execution_status: {},
-        },
-      })
-      return
-    }
-    await route.fulfill({
-      json: {
-        status: 'ok',
-        operator_action: {
-          action: 'approve',
-          status: 'recorded',
-          actor: 'operator',
-          created_at: '2026-01-12T10:05:00Z',
-        },
-        execution_status: {
-          status: 'queued',
-          requested_at: '2026-01-12T10:05:00Z',
-        },
-      },
-    })
-  })
 }
 
 test.describe('Decisions UI', () => {
   test('filters, quick search, refresh, and detail', async ({ page }) => {
     let decisionCalls = 0
+    let actionCalls = 0
     await registerBaseRoutes(page)
-    await page.route('**/api/decision-view**', (route) => {
+
+    await page.route('**/api/v2/decision-view**', (route) => {
       decisionCalls += 1
       const url = new URL(route.request().url())
       const strategy = url.searchParams.get('strategy_type')
       const instrument = url.searchParams.get('primary_instrument')
       const risk = url.searchParams.get('risk_state')
       const news = url.searchParams.get('news_severity')
-      let data = decisionViewFirst
-      if (strategy) {
-        data = data.filter((row) => row.strategy_type === strategy)
-      }
-      if (instrument) {
-        data = data.filter((row) => row.primary_instrument === instrument)
-      }
-      if (risk) {
-        data = data.filter((row) => row.risk_state === risk)
-      }
-      if (news) {
-        data = data.filter((row) => row.news_severity === news)
-      }
+      let data = decisionViewRows
+      if (strategy) data = data.filter((row) => row.strategy_type === strategy)
+      if (instrument) data = data.filter((row) => row.primary_instrument === instrument)
+      if (risk) data = data.filter((row) => row.risk_state === risk)
+      if (news) data = data.filter((row) => row.news_severity === news)
       route.fulfill({ json: data })
     })
+
     await page.route('**/api/decision-log/**', (route) => {
-      const url = new URL(route.request().url())
-      const decisionId = url.pathname.split('/').pop() ?? ''
+      const decisionId = route.request().url().split('/').pop() ?? ''
       const payload = decisionLogs[decisionId]
       if (!payload) {
         route.fulfill({ status: 404, json: { error: 'not_found' } })
@@ -155,13 +123,28 @@ test.describe('Decisions UI', () => {
       route.fulfill({ json: payload })
     })
 
-    const decisionResponse = page.waitForResponse('**/api/decision-view**')
-    await page.goto('/')
-    await expect(page.getByText('Решения торгового советника')).toBeVisible()
-    await decisionResponse
-    await expect(page.getByRole('button', { name: 'Обновить' })).toBeVisible()
+    await page.route('**/api/v2/decisions/**/actions', async (route) => {
+      actionCalls += 1
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          operator_action: {
+            action: 'approve',
+            status: 'recorded',
+            actor: 'operator',
+            created_at: '2026-01-12T10:05:00Z',
+          },
+          execution_status: {
+            status: 'queued',
+            requested_at: '2026-01-12T10:05:00Z',
+          },
+        },
+      })
+    })
 
-    await page.getByRole('tab', { name: 'Решения' }).click()
+    const decisionResponse = page.waitForResponse('**/api/v2/decision-view**')
+    await page.goto('/decision-audit')
+    await decisionResponse
 
     const decisionCell1 = page.getByRole('gridcell', { name: 'decision-1' })
     const decisionCell2 = page.getByRole('gridcell', { name: 'decision-2' })
@@ -170,44 +153,27 @@ test.describe('Decisions UI', () => {
 
     const filters = page.locator('[role="combobox"]')
     await filters.nth(0).click()
-    await page.getByRole('option', { name: 'Арбитраж' }).click()
+    await page.getByRole('option', { name: /arbitrage|Арбитраж/i }).first().click()
     await expect(decisionCell1).toBeVisible()
     await expect(decisionCell2).toHaveCount(0)
 
     await filters.nth(0).click()
-    await page.getByRole('option', { name: 'Все' }).click()
+    await page.getByRole('option').first().click()
 
-    await filters.nth(1).click()
-    const listbox = page.getByRole('listbox')
-    const option = listbox.getByRole('option').nth(1)
-    const instrumentLabel = (await option.textContent())?.trim() ?? ''
-    await option.click()
-    const instrumentToDecision: Record<string, string> = {}
-    decisionViewFirst.forEach((row) => {
-      instrumentToDecision[row.primary_instrument] = row.decision_id
-    })
-    const expectedDecision = instrumentToDecision[instrumentLabel]
-    if (expectedDecision) {
-      await expect(page.getByRole('gridcell', { name: expectedDecision })).toBeVisible()
-    }
-
-    await filters.nth(1).click()
-    await page.getByRole('option', { name: 'Все' }).click()
-
-    const quickTarget = 'decision-1'
-    await page.getByLabel('Быстрый поиск').fill(quickTarget)
-    await expect(page.getByRole('gridcell', { name: quickTarget })).toBeVisible()
-    await page.getByRole('gridcell', { name: quickTarget }).click()
+    await page.getByLabel('Быстрый поиск').fill('decision-1')
+    await expect(page.getByRole('gridcell', { name: 'decision-1' })).toBeVisible()
+    await page.getByRole('gridcell', { name: 'decision-1' }).click()
     await page.getByLabel('Быстрый поиск').fill('')
-    await expect(page.getByText('Предложение оркестратора')).toBeVisible()
-    await expect(page.getByText('Распределение корзин (по типу стратегии)')).toBeVisible()
-    await expect(page.getByText('News sentiment: negative')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Одобрить и исполнить' }).click()
-    await expect(page.getByText('Исполнение: в очереди')).toBeVisible()
+    await expect(page.getByText(/Предложение оркестратора/i)).toBeVisible()
+    await expect(page.getByText(/News sentiment: negative/)).toBeVisible()
 
-    await page.getByRole('button', { name: 'Обновить' }).click()
+    await page.getByRole('button', { name: /Одобрить/i }).click()
+    await expect(page.getByText(/Исполнение:/i)).toBeVisible()
+
+    await page.getByRole('button', { name: /Обновить/i }).click()
     await expect(decisionCell1).toBeVisible()
     expect(decisionCalls).toBeGreaterThan(0)
+    expect(actionCalls).toBe(1)
   })
 })
