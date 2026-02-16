@@ -60,14 +60,12 @@ jobs:
         with:
           node-version: "20"
       - name: Lint commit messages
-        run: >
-          npx --yes
-          --package @commitlint/cli
-          --package @commitlint/config-conventional
-          commitlint
-          --from ${{ github.event.pull_request.base.sha }}
-          --to ${{ github.event.pull_request.head.sha }}
-          --config commitlint.config.cjs
+        run: |
+          npm install --no-save @commitlint/cli @commitlint/config-conventional
+          npx commitlint \
+            --from ${{ github.event.pull_request.base.sha }} \
+            --to ${{ github.event.pull_request.head.sha }} \
+            --config commitlint.config.cjs
 
   release-notes:
     runs-on: ubuntu-latest
