@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -121,6 +122,7 @@ def _settings(tmp_path: Path, *, allow_legacy_fallback: bool) -> AppSettings:
         unified_front_only=True,
         unified_front_roll_days=7,
         require_score_gate_by_default=False,
+        incremental_replay_enabled=False,
     )
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path), compute_lookback_days=120),
@@ -244,3 +246,33 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert "signal_reasons" in history_data[0]
     assert "signal_metrics" in history_data[0]
     assert "trades_closed" in history_data[0]
+
+
+def test_manual_refresh_defaults_to_incremental_and_supports_force_full(tmp_path, monkeypatch):
+    _seed_unified_fixture(tmp_path)
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+    settings.ui.incremental_replay_enabled = True
+
+    calls: list[str] = []
+
+    def _fake_incremental_ingest(**_kwargs):
+        calls.append("incremental")
+        return SimpleNamespace(
+            global_watermark_before="before",
+            global_watermark_after="after",
+            pair_results={},
+            degraded=False,
+        )
+
+    monkeypatch.setattr("moex_carry.ui.app.run_incremental_minute_ingest", _fake_incremental_ingest)
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    refresh = client.post("/api/signals/refresh")
+    assert refresh.status_code == 200
+    assert calls == ["incremental"]
+
+    refresh_force = client.post("/api/signals/refresh", json={"force_full": True})
+    assert refresh_force.status_code == 200
+    assert calls == ["incremental"]
