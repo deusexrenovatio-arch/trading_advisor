@@ -88,7 +88,6 @@ const toOrderedEntries = (
 type Props = {
   tab: MarketTab
   market: MarketTablesState
-  autoRefreshLabel: string
   formatCellValue: (value: unknown, column?: string) => string
   renderFieldLabel: (column: string) => ReactNode
   formatDate: (value?: string) => string
@@ -98,7 +97,6 @@ type Props = {
 const MarketTablesTab = ({
   tab,
   market,
-  autoRefreshLabel,
   formatCellValue,
   renderFieldLabel,
   formatDate,
@@ -192,15 +190,6 @@ const MarketTablesTab = ({
         >
           {market.recomputeLoading ? 'Пересчёт...' : 'Обновить'}
         </Button>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={market.autoRefresh}
-              onChange={(event) => market.setAutoRefresh(event.target.checked)}
-            />
-          }
-          label={`Автообновление (${autoRefreshLabel})`}
-        />
         <Typography variant="body2" color="text.secondary">
           {market.auxLastUpdated
             ? `Обновлено ${formatDate(market.auxLastUpdated)}`
