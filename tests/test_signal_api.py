@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from moex_carry.config import AppSettings, DataConfig, DatabaseConfig
+from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_open_executions,
@@ -20,6 +20,7 @@ def _build_settings(tmp_path):
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path)),
         database=DatabaseConfig(url=f"sqlite:///{tmp_path}/signals.db"),
+        ui=UiConfig(require_score_gate_by_default=False),
     )
 
 
@@ -241,6 +242,42 @@ def test_signals_execute_endpoint_generates_order_id_for_legged_entries(tmp_path
         rows = load_open_executions(session)
         assert len(rows) == 1
         assert rows[0].order_id == payload["order_id"]
+
+
+def test_signals_execute_endpoint_v1_adapter_idempotency(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    payload = {
+        "stock": "AAA",
+        "future": "AAH6",
+        "direction": "cash_and_carry",
+        "action": "enter",
+        "price": 100.5,
+        "quantity": 1,
+        "side": "stock",
+        "idempotency_key": "sig-exec-idem-1",
+    }
+    first = client.post("/api/signals/execute", json=payload)
+    assert first.status_code == 200
+    assert first.headers.get("Deprecation") == "true"
+    first_data = first.get_json()
+    assert first_data["status"] == "ok"
+    assert isinstance(first_data.get("order_id"), str)
+
+    duplicate = client.post("/api/signals/execute", json=payload)
+    assert duplicate.status_code == 200
+    duplicate_data = duplicate.get_json()
+    assert duplicate_data["status"] == "duplicate"
+    assert duplicate_data.get("order_id") == first_data.get("order_id")
+
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        rows = load_open_executions(session)
+        assert len(rows) == 1
 
 
 def test_signals_execute_normalizes_hold_open_action_to_enter(tmp_path):
@@ -681,3 +718,59 @@ def test_signals_active_includes_execution_only_open_pairs(tmp_path):
     assert missing_row["position_open"] is True
     assert missing_row["signal_reasons"] == ["position_open_no_active_signal"]
     _assert_signal_metric_contract(missing_row)
+
+
+def test_signals_active_requires_score_gate_by_default_and_supports_override(tmp_path):
+    settings = AppSettings(
+        data=DataConfig(data_dir=str(tmp_path)),
+        database=DatabaseConfig(url=f"sqlite:///{tmp_path}/signals.db"),
+        ui=UiConfig(require_score_gate_by_default=True),
+    )
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-1",
+            datetime(2025, 1, 4, 12, 0, 0),
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.1,
+                    "score_gate_pass": False,
+                    "signal_reasons": [],
+                    "signal_metrics": {"score_gate_pass": False},
+                },
+                {
+                    "stock": "BBB",
+                    "future": "BBH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.2,
+                    "score_gate_pass": True,
+                    "signal_reasons": [],
+                    "signal_metrics": {"score_gate_pass": True},
+                },
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response_default = client.get("/api/signals/active")
+    assert response_default.status_code == 200
+    data_default = response_default.get_json()
+    assert isinstance(data_default, list)
+    assert len(data_default) == 1
+    assert data_default[0]["stock"] == "BBB"
+    assert data_default[0]["score_gate_pass"] is True
+
+    response_all = client.get("/api/signals/active?require_score_gate=false")
+    assert response_all.status_code == 200
+    data_all = response_all.get_json()
+    assert isinstance(data_all, list)
+    assert len(data_all) == 2

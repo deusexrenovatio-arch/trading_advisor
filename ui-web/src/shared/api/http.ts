@@ -5,6 +5,18 @@ export type RequestOptions = Omit<RequestInit, 'body'> & {
   cache?: RequestCache
 }
 
+export class ApiError extends Error {
+  status: number
+  payload?: Record<string, unknown>
+
+  constructor(message: string, status: number, payload?: Record<string, unknown>) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.payload = payload
+  }
+}
+
 const isJsonResponse = (response: Response) => {
   const contentType = response.headers.get('content-type') ?? ''
   return contentType.includes('application/json')
@@ -27,18 +39,18 @@ export const requestJson = async <T>(
   if (!response.ok) {
     const fallback = `HTTP ${response.status}`
     if (!isJsonResponse(response)) {
-      throw new Error(fallback)
+      throw new ApiError(fallback, response.status)
     }
     const payload = await response.json().catch(() => null)
     if (!payload || typeof payload !== 'object') {
-      throw new Error(fallback)
+      throw new ApiError(fallback, response.status)
     }
     const record = payload as Record<string, unknown>
     const messageKey = ['detail', 'message', 'last_error', 'error'].find(
       (key) => typeof record[key] === 'string' && String(record[key]).trim().length > 0,
     )
     const message = messageKey ? String(record[messageKey]) : fallback
-    throw new Error(message)
+    throw new ApiError(message, response.status, record)
   }
 
   if (!isJsonResponse(response)) {

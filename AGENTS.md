@@ -1,4 +1,4 @@
-# AGENTS.md instructions for d:\New Project
+﻿# AGENTS.md instructions for d:\New Project
 
 <INSTRUCTIONS>
 ## Skills
@@ -6,6 +6,9 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
 ### Available skills
 - frontend-behavior-check: Verifies trading UI behavior via API smoke checks, Vite proxy validation, chart data checks, and basic table expectations. Use when frontend/UI/React/Vite/MUI table or chart changes are made, or when the user asks to validate the UI. (file: D:/New Project/.cursor/skills/frontend-behavior-check/SKILL.md)
 - intraday-futures-trading-advisor: Provides intraday futures trading strategy guidance focused on commissions, taxes, risk management, and portfolio risk allocation. Use when the user asks for intraday trading advice, futures strategies, cost accounting, or portfolio risk distribution. (file: D:/New Project/.cursor/skills/intraday-futures-trading-advisor/SKILL.md)
+- parallel-worktree-flow: Baseline multi-stream development workflow for this repository using git worktree: clean bootstrap from main, branch-per-worktree isolation, daily rebase routine, integration branch checks, and merge ordering. Use when requests mention parallel development, several tasks at once, worktree, rebase strategy, branch synchronization, or conflict minimization. (file: D:/New Project/.cursor/skills/parallel-worktree-flow/SKILL.md)
+- minute-candle-performance: Performance engineering workflow for high-volume candle computations in this repository: compute architecture and stack selection (numpy/numba/pandas boundaries), minute-candle ingestion, replay acceleration, cache design, chunking, and deterministic parallelization across pairs/scenarios. Use when requests mention optimization, performance, speed-up, parallelization, multiprocessing, bottlenecks, large candle exports, minute candles, heavy backtest batches, preload cache, runtime scaling, or architecture/stack choices for high-load calculations (РѕРїС‚РёРјРёР·Р°С†РёСЏ, РїР°СЂР°Р»Р»РµР»РёР·Р°С†РёСЏ, СѓР·РєРёРµ РјРµСЃС‚Р°, РјРёРЅСѓС‚РЅС‹Рµ СЃРІРµС‡Рё, Р±РѕР»СЊС€РёРµ РІС‹РіСЂСѓР·РєРё). Use together with `architecture-review` when module boundaries/dependencies are changed. (file: D:/New Project/.cursor/skills/minute-candle-performance/SKILL.md)
+- ml-backtest-hpo-lab: End-to-end research workflow for data-analyst and ML-engineer tasks in this MOEX carry repository: Backtest v2, forward checks, HPO runs, leakage-safe walk-forward validation, objective/metric sanity checks, robustness stress tests, and experiment reporting. Use when requests mention backtest, forward test, walk-forward, CV folds, embargo, HPO, hyperparameter search, overfitting, leakage, model or strategy evaluation, or experiment comparison. (file: D:/New Project/.cursor/skills/ml-backtest-hpo-lab/SKILL.md)
 - moex-instruments-costs: Cost model template and checks for MOEX futures instruments. (file: D:/New Project/.cursor/skills/moex-instruments-costs/SKILL.md)
 - news-geopolitics-filter: Deterministic gate for high-impact news and geopolitics events. (file: D:/New Project/.cursor/skills/news-geopolitics-filter/SKILL.md)
 - risk-profile-gates: Deterministic risk profile gates for intraday futures decisions. (file: D:/New Project/.cursor/skills/risk-profile-gates/SKILL.md)
@@ -30,3 +33,4 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
   - When variants exist (frameworks, providers, domains), pick only the relevant reference file(s) and note that choice.
 - Safety and fallback: If a skill can't be applied cleanly (missing files, unclear instructions), state the issue, pick the next-best approach, and continue.
 </INSTRUCTIONS>
+

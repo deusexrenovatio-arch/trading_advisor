@@ -4,33 +4,47 @@ import type {
   GenericRow,
   PretradeCheckResult,
   RefreshStatus,
+  SignalActiveV2,
   SignalHistoryRow,
   SpreadSeriesPoint,
 } from '../../entities/decision/types'
 import {
-  executeSignal as executeSignalApi,
   fetchBacktests as fetchBacktestsApi,
   fetchPretradeCheck as fetchPretradeCheckApi,
   fetchRefreshStatus as fetchRefreshStatusApi,
   fetchSignalExecutions as fetchSignalExecutionsApi,
   fetchSignalHistory as fetchSignalHistoryApi,
-  fetchSignalsActive as fetchSignalsActiveApi,
+  fetchSignalsActiveV2 as fetchSignalsActiveV2Api,
   fetchSpreadSeries as fetchSpreadSeriesApi,
   fetchTopPairs as fetchTopPairsApi,
   refreshSignals as refreshSignalsApi,
+  submitSignalActionV2 as submitSignalActionV2Api,
 } from '../../shared/api/decisionApi'
+import { ApiError } from '../../shared/api/http'
 import { formatDateInputValue, parseDateInput } from '../../shared/utils/date'
 import { getTableColumns } from '../../shared/utils/tables'
+import {
+  PRETRADE_PREFETCH_LIMIT,
+  SIGNAL_ACTION_HOLD_OPEN_VALUE,
+  isEntrySignal,
+  mapSignalV2Row,
+  normalizeExecutionAction,
+  normalizeExecutionLeg,
+  resolveEffectiveSignalAction,
+  resolveSignalDirection,
+  toHistorySignalAction,
+  toSignalFilterAction,
+} from './signalViewModel'
 
 const AUTO_REFRESH_MS = 60_000
 const PRETRADE_SNAPSHOTS = 4
 const PRETRADE_MIN_HITS = 2
 const PRETRADE_POLL_SEC = 0
-const PRETRADE_PREFETCH_LIMIT = 12
-const SIGNAL_ACTION_ENTER = 'enter'
-const SIGNAL_ACTION_HOLD_PRETRADE = 'hold_pretrade'
-const SIGNAL_ACTION_CHECK_PRETRADE = 'check_pretrade'
-const SIGNAL_ACTION_HOLD_OPEN = 'hold_open'
+const SIGNALS_EXECUTION_PROFILE = {
+  entryStockTolerancePct: 0.02,
+  entryFutureTolerancePct: 0.025,
+  entrySpreadTolerancePct: 0.03,
+} as const
 const EXECUTION_LEG_STOCK = 'stock'
 const EXECUTION_LEG_FUTURE = 'future'
 
@@ -49,22 +63,6 @@ type PendingExecutionOrder = {
   legs: Set<string>
 }
 
-const normalizeExecutionLeg = (value: string) => {
-  const normalized = value.trim().toLowerCase()
-  if (normalized === EXECUTION_LEG_STOCK || normalized === 'акция') return EXECUTION_LEG_STOCK
-  if (normalized === EXECUTION_LEG_FUTURE || normalized === 'фьючерс') return EXECUTION_LEG_FUTURE
-  return ''
-}
-
-const normalizeExecutionAction = (value: unknown) => {
-  const normalized = String(value ?? '').trim().toLowerCase()
-  if (normalized === 'exit') return 'exit'
-  if (normalized === SIGNAL_ACTION_ENTER || normalized === SIGNAL_ACTION_HOLD_OPEN || normalized === 'hold') {
-    return SIGNAL_ACTION_ENTER
-  }
-  return SIGNAL_ACTION_ENTER
-}
-
 const createExecutionOrderId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -76,9 +74,36 @@ const createExecutionOrderId = () => {
 type Params = {
   tab: AppTab
   compareValues: (left: unknown, right: unknown) => number
+  onOperatorAction?: () => void
 }
 
-export const useMarketTables = ({ tab, compareValues }: Params) => {
+const formatExecutionActionError = (err: unknown) => {
+  if (err instanceof ApiError) {
+    const payload = err.payload
+    if (payload) {
+      const reasonCode = String(payload.reason_code ?? '').trim()
+      const reasonText = String(payload.message ?? err.message ?? '').trim()
+      const failClosedRaw = payload.fail_closed
+      const failClosed =
+        failClosedRaw && typeof failClosedRaw === 'object' && !Array.isArray(failClosedRaw)
+          ? (failClosedRaw as Record<string, unknown>)
+          : null
+      const failClosedCode = failClosed ? String(failClosed.reason_code ?? '').trim() : ''
+      const detailParts = [reasonCode, failClosedCode].filter(Boolean)
+      if (reasonText) {
+        return detailParts.length ? `${reasonText} (${detailParts.join(', ')})` : reasonText
+      }
+      if (detailParts.length) {
+        return detailParts.join(', ')
+      }
+    }
+    return err.message || `HTTP ${err.status}`
+  }
+  if (err instanceof Error) return err.message
+  return 'Не удалось выполнить действие по сигналу'
+}
+
+export const useMarketTables = ({ tab, compareValues, onOperatorAction }: Params) => {
   const [auxLoading, setAuxLoading] = useState(false)
   const [auxError, setAuxError] = useState<string | null>(null)
   const [auxLastUpdated, setAuxLastUpdated] = useState<string | null>(null)
@@ -140,23 +165,11 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
   }, [])
 
   const toEffectiveSignalAction = useCallback(
-    (row: GenericRow) => {
-      if (tab !== 'signals') return String(row.signal_action ?? '').toLowerCase()
-      return String(row.signal_action_effective ?? row.signal_action ?? '').toLowerCase()
-    },
+    (row: GenericRow) => toSignalFilterAction(row, tab === 'signals'),
     [tab],
   )
 
-  const toHistorySignalAction = useCallback((action: string) => {
-    if (!action) return undefined
-    if (action === SIGNAL_ACTION_HOLD_PRETRADE || action === SIGNAL_ACTION_CHECK_PRETRADE) {
-      return SIGNAL_ACTION_ENTER
-    }
-    if (action === SIGNAL_ACTION_HOLD_OPEN) {
-      return 'hold'
-    }
-    return action
-  }, [])
+  const toHistoryAction = toHistorySignalAction
 
   const fetchAuxData = useCallback(async () => {
     if (auxFetchInFlight.current) return
@@ -168,7 +181,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       const resolvedLimit = !Number.isNaN(limitValue) && limitValue >= 0 ? limitValue : 500
       const results = await Promise.allSettled([
         fetchTopPairsApi(resolvedLimit, topPairsAll),
-        fetchSignalsActiveApi(),
+        fetchSignalsActiveV2Api(),
         fetchBacktestsApi(500),
         fetchRefreshStatusApi(),
       ])
@@ -209,12 +222,19 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         results[0] as PromiseSettledResult<GenericRow[]>,
         setTopPairs,
       )
-      const signalsOk = parseRows(
-        'Сигналы',
-        results[1] as PromiseSettledResult<GenericRow[]>,
-        setSignals,
-        mergeSignalMetrics,
-      )
+      const signalsResult = results[1] as PromiseSettledResult<SignalActiveV2[]>
+      let signalsOk = false
+      if (signalsResult.status === 'rejected') {
+        const message =
+          signalsResult.reason instanceof Error
+            ? signalsResult.reason.message
+            : 'ошибка загрузки'
+        errors.push(`Сигналы: ${message}`)
+        setSignals([])
+      } else {
+        setSignals(mergeSignalMetrics(signalsResult.value.map(mapSignalV2Row)))
+        signalsOk = true
+      }
       parseRows('Бэктесты', results[2] as PromiseSettledResult<GenericRow[]>, setBacktests)
       parseStatus(
         'Статус обновления',
@@ -260,7 +280,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     setHistoryLoading(true)
     setHistoryError(null)
     try {
-      const historyActionFilter = toHistorySignalAction(tableSignalFilter || '')
+      const historyActionFilter = toHistoryAction(tableSignalFilter || '')
       const data = await fetchSignalHistoryApi(
         historyFrom || undefined,
         historyTo || undefined,
@@ -281,7 +301,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     tableFutureFilter,
     tableSignalFilter,
     tableStockFilter,
-    toHistorySignalAction,
+    toHistoryAction,
   ])
 
   const fetchExecutionLog = useCallback(async (pairKey: string, stock: string, future: string) => {
@@ -297,30 +317,6 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       setExecutionLoadingKey(null)
     }
   }, [])
-
-  const isEntrySignal = useCallback((row: GenericRow) => {
-    return String(row.signal_action ?? '').toLowerCase() === SIGNAL_ACTION_ENTER
-  }, [])
-
-  const resolveEffectiveSignalAction = useCallback(
-    (row: GenericRow): string => {
-      const action = String(row.signal_action ?? '').toLowerCase()
-      if (action !== SIGNAL_ACTION_ENTER) return action || 'hold'
-
-      const stock = row.stock ? String(row.stock) : ''
-      const future = row.future ? String(row.future) : ''
-      if (!stock || !future) return SIGNAL_ACTION_CHECK_PRETRADE
-
-      const pairKey = `${stock}-${future}`
-      if (pretradeLoadingKey === pairKey) return SIGNAL_ACTION_CHECK_PRETRADE
-      if (pretradeError[pairKey]) return SIGNAL_ACTION_CHECK_PRETRADE
-
-      const pretrade = pretradeChecks[pairKey]
-      if (!pretrade) return SIGNAL_ACTION_CHECK_PRETRADE
-      return pretrade.ready_to_place ? SIGNAL_ACTION_ENTER : SIGNAL_ACTION_HOLD_PRETRADE
-    },
-    [pretradeChecks, pretradeError, pretradeLoadingKey],
-  )
 
   const fetchPretradeCheck = useCallback(
     async (
@@ -338,6 +334,9 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
           direction,
           snapshots: PRETRADE_SNAPSHOTS,
           minHits: PRETRADE_MIN_HITS,
+          stockEps: SIGNALS_EXECUTION_PROFILE.entryStockTolerancePct,
+          futureEps: SIGNALS_EXECUTION_PROFILE.entryFutureTolerancePct,
+          spreadEps: SIGNALS_EXECUTION_PROFILE.entrySpreadTolerancePct,
           pollSec: PRETRADE_POLL_SEC,
         })
         setPretradeChecks((prev) => ({ ...prev, [pairKey]: data }))
@@ -362,22 +361,27 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       const future = row.future ? String(row.future) : ''
       if (!stock || !future || !isEntrySignal(row)) return
       const pairKey = `${stock}-${future}`
-      const directionValue =
-        String(row.signal_direction ?? '').toLowerCase() === 'reverse'
-          ? 'reverse'
-          : 'cash_and_carry'
+      const directionValue = resolveSignalDirection(row.signal_direction)
       void fetchPretradeCheck(pairKey, stock, future, directionValue, true)
     },
-    [fetchPretradeCheck, isEntrySignal],
+    [fetchPretradeCheck],
   )
 
   const handleExecuteSignal = useCallback(
     async (row: GenericRow) => {
+      onOperatorAction?.()
+      const signalId = row.signal_id ? String(row.signal_id) : ''
+      if (!signalId) {
+        throw new Error('signal_id is required for /api/v2/signals/{signal_id}/actions')
+      }
       const stock = row.stock ? String(row.stock) : ''
       const future = row.future ? String(row.future) : ''
       const pairKey = stock && future ? `${stock}-${future}` : null
       const actionKey = normalizeExecutionAction(row.signal_action)
       const pendingKey = pairKey ? `${pairKey}:${actionKey}` : null
+      if (pairKey) {
+        setExecutionError((prev) => ({ ...prev, [pairKey]: '' }))
+      }
       const normalizedLeg = normalizeExecutionLeg(executionForm.side)
       const isTwoLegCandidate =
         Boolean(stock) &&
@@ -400,17 +404,29 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       }
 
       const payload = {
+        action: actionKey,
         stock: row.stock,
         future: row.future,
         direction: row.signal_direction,
-        action: actionKey,
+        source: 'ui',
+        actor_id: 'operator',
         price: executionForm.price ? Number(executionForm.price) : null,
         quantity: executionForm.quantity ? Number(executionForm.quantity) : null,
         side: normalizedLeg || executionForm.side || null,
         order_id: orderId,
         note: executionForm.note || null,
       }
-      await executeSignalApi(payload)
+      try {
+        await submitSignalActionV2Api(signalId, payload)
+      } catch (err) {
+        if (pairKey) {
+          setExecutionError((prev) => ({
+            ...prev,
+            [pairKey]: formatExecutionActionError(err),
+          }))
+        }
+        return
+      }
       if (pendingKey && normalizedLeg && pendingOrderAfterExecute) {
         const isLinkedTwoLegOrder =
           pendingOrderAfterExecute.legs.has(EXECUTION_LEG_STOCK) &&
@@ -431,7 +447,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         note: '',
       })
     },
-    [executionForm, fetchExecutionLog],
+    [executionForm, fetchExecutionLog, onOperatorAction],
   )
 
   const fetchSpreadSeries = useCallback(
@@ -482,10 +498,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         void fetchExecutionLog(pairKey, stock, future)
       }
       if (tab === 'signals' && stock && future && isEntrySignal(row) && !pretradeChecks[pairKey]) {
-        const directionValue =
-          String(row.signal_direction ?? '').toLowerCase() === 'reverse'
-            ? 'reverse'
-            : 'cash_and_carry'
+        const directionValue = resolveSignalDirection(row.signal_direction)
         void fetchPretradeCheck(pairKey, stock, future, directionValue)
       }
     },
@@ -495,7 +508,6 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       fetchExecutionLog,
       fetchPretradeCheck,
       fetchSpreadSeries,
-      isEntrySignal,
       pretradeChecks,
       spreadSeries,
       tab,
@@ -516,7 +528,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     }
     if (tab === 'backtests') return backtests
     return []
-  }, [tab, topPairs, signals, backtests, resolveEffectiveSignalAction])
+  }, [tab, topPairs, signals, backtests])
 
   const tableColumns = useMemo(() => getTableColumns(tableRows), [tableRows])
   const tableVisibleColumns = useMemo(() => {
@@ -533,7 +545,15 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         'floor_rate_annual',
         'score_floor',
         'total_score',
+        'score_exec_probability',
+        'score_earn_probability',
+        'score_gate_pass',
+        'avg_trade_return_annual_operational_recent',
         'avg_trade_return_annual_recent',
+        'share_target_pass',
+        'unfilled_entry_rate',
+        'unfilled_exit_rate',
+        'forced_exit_rate',
         'decision',
         'signal_action',
         'signal_direction',
@@ -547,6 +567,12 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
         'signal_action_effective',
         'signal_direction',
         'signal_score',
+        'score_exec_probability',
+        'score_earn_probability',
+        'score_gate_pass',
+        'signal_used',
+        'signal_details_pending',
+        'signal_used_at',
         'entry_stock_min',
         'entry_stock_max',
         'entry_future_min_per_share',
@@ -636,12 +662,10 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     const future = String(candidate.future ?? '')
     if (!stock || !future) return
     const pairKey = `${stock}-${future}`
-    const directionValue =
-      String(candidate.signal_direction ?? '').toLowerCase() === 'reverse' ? 'reverse' : 'cash_and_carry'
+    const directionValue = resolveSignalDirection(candidate.signal_direction)
     void fetchPretradeCheck(pairKey, stock, future, directionValue)
   }, [
     fetchPretradeCheck,
-    isEntrySignal,
     pretradeChecks,
     pretradeError,
     pretradeLoadingKey,
@@ -654,7 +678,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     const query = tableFilter.trim().toLowerCase()
     const fromTs = parseDateInput(historyFrom, 'start')
     const toTs = parseDateInput(historyTo, 'end')
-    const historyActionFilter = toHistorySignalAction(tableSignalFilter || '')
+    const historyActionFilter = toHistoryAction(tableSignalFilter || '')
     return signalHistory.filter((row) => {
       const rowTs = Date.parse(row.timestamp)
       if ((fromTs !== null || toTs !== null) && Number.isNaN(rowTs)) return false
@@ -674,7 +698,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     tableSignalFilter,
     historyFrom,
     historyTo,
-    toHistorySignalAction,
+    toHistoryAction,
   ])
 
   const openSignalRows = useMemo<GenericRow[]>(() => {
@@ -682,7 +706,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
     const isOpenRow = (row: GenericRow) => {
       if (row.position_open === true) return true
       if (String(row.position_state ?? '').toLowerCase() === 'open') return true
-      return toEffectiveSignalAction(row) === SIGNAL_ACTION_HOLD_OPEN
+      return toEffectiveSignalAction(row) === SIGNAL_ACTION_HOLD_OPEN_VALUE
     }
 
     const latestByPair = new Map<string, GenericRow>()
@@ -715,6 +739,7 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       'spread_mid',
       'spread_pct',
       'rtc_pct',
+      'score_model',
       'total_score',
     ],
     [],
@@ -726,7 +751,9 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       'liquidity_pass',
       'dte',
       'floor_rate_annual',
+      'score_target_annual',
       'score_floor',
+      'score_floor_excess_annual',
       'r_cb_annual',
       'r_fund_annual',
       'r_disc_annual',
@@ -737,7 +764,16 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
 
   const alphaFields = useMemo(
     () => [
+      'avg_trade_return_annual_operational_recent',
       'avg_trade_return_annual_recent',
+      'share_target_pass',
+      'unfilled_entry_rate',
+      'unfilled_exit_rate',
+      'forced_exit_rate',
+      'score_exec_probability',
+      'score_earn_probability',
+      'score_edge_raw_annual',
+      'score_gate_pass',
       'score_alpha',
       'p_hit_tp',
       'p_hit_sl',
@@ -760,7 +796,15 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
   )
 
   const signalContextFields = useMemo(
-    () => ['signal_action', 'signal_direction', 'signal_score', 'decision', 'signal_reasons'],
+    () => [
+      'signal_action',
+      'signal_direction',
+      'signal_score',
+      'score_model',
+      'score_gate_pass',
+      'decision',
+      'signal_reasons',
+    ],
     [],
   )
 
@@ -821,10 +865,18 @@ export const useMarketTables = ({ tab, compareValues }: Params) => {
       'orderbook_stock_imbalance',
       'orderbook_fut_imbalance',
       'floor_rate_annual',
+      'score_target_annual',
       'rtc_pct',
       'spread_pct',
       'score_floor',
+      'score_floor_excess_annual',
       'score_alpha',
+      'score_edge_raw_annual',
+      'score_exec_probability',
+      'score_earn_probability',
+      'score_gate_exec_threshold',
+      'score_gate_earn_threshold',
+      'score_gate_pass',
       'total_score',
     ],
     [],

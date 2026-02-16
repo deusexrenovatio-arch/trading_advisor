@@ -23,6 +23,17 @@ from moex_carry.domain.portfolio import (
     SnapshotPerPairScores,
 )
 from moex_carry.domain.decision import DecisionRecord, NewsItem, RiskProfile
+from moex_carry.domain.decision_engine import DecisionActionRequest
+from moex_carry.domain.execution_policy import AutoUnwindCandidate, FailClosedResult
+from moex_carry.domain.entities_v2 import (
+    DecisionActionV2,
+    EntityRef,
+    ExecutionEventV2,
+    GateResult,
+    SignalLifecycleState,
+    SignalRef,
+)
+from moex_carry.domain.pretrade_service import PretradeRuntimeParams
 
 __all__ = [
     "BacktestRun",
@@ -48,4 +59,14 @@ __all__ = [
     "DecisionRecord",
     "NewsItem",
     "RiskProfile",
+    "EntityRef",
+    "GateResult",
+    "SignalRef",
+    "SignalLifecycleState",
+    "DecisionActionV2",
+    "ExecutionEventV2",
+    "DecisionActionRequest",
+    "FailClosedResult",
+    "AutoUnwindCandidate",
+    "PretradeRuntimeParams",
 ]

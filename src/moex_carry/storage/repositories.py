@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Iterable
 
 from sqlalchemy import delete, select
@@ -225,3 +226,105 @@ def load_signal_executions(
     if limit is not None and limit > 0:
         query = query.limit(limit)
     return session.execute(query).scalars().all()
+
+
+def upsert_decision_view_projection(
+    session: Session, rows: Iterable[dict[str, object]]
+) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        decision_id = str(row.get("decision_id") or "").strip()
+        if not decision_id:
+            continue
+        created_at = _parse_datetime_value(row.get("created_at"))
+        session.merge(
+            db.DecisionViewProjectionModel(
+                decision_id=decision_id,
+                created_at=created_at,
+                strategy_type=_str_or_none(row.get("strategy_type")),
+                primary_instrument=_str_or_none(row.get("primary_instrument")),
+                action=_str_or_none(row.get("action")),
+                risk_state=_str_or_none(row.get("risk_state")),
+                news_severity=_str_or_none(row.get("news_severity")),
+                payload={key: value for key, value in row.items()},
+                updated_at=now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_decision_view_projection(
+    session: Session,
+    *,
+    limit: int = 500,
+    strategy_type: str | None = None,
+    primary_instrument: str | None = None,
+    risk_state: str | None = None,
+    news_severity: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+) -> list[dict[str, object]]:
+    query = select(db.DecisionViewProjectionModel)
+    if strategy_type:
+        query = query.where(db.DecisionViewProjectionModel.strategy_type == strategy_type)
+    if primary_instrument:
+        query = query.where(db.DecisionViewProjectionModel.primary_instrument == primary_instrument)
+    if risk_state:
+        query = query.where(db.DecisionViewProjectionModel.risk_state == risk_state)
+    if news_severity:
+        query = query.where(db.DecisionViewProjectionModel.news_severity == news_severity)
+
+    from_dt = _parse_datetime_value(created_from)
+    to_dt = _parse_datetime_value(created_to)
+    if from_dt is not None:
+        query = query.where(db.DecisionViewProjectionModel.created_at >= from_dt)
+    if to_dt is not None:
+        query = query.where(db.DecisionViewProjectionModel.created_at <= to_dt)
+
+    query = query.order_by(db.DecisionViewProjectionModel.created_at.desc())
+    if limit > 0:
+        query = query.limit(limit)
+
+    result: list[dict[str, object]] = []
+    for row in session.execute(query).scalars().all():
+        payload = row.payload if isinstance(row.payload, dict) else {}
+        item: dict[str, object] = dict(payload)
+        item.setdefault("decision_id", row.decision_id)
+        item.setdefault("strategy_type", row.strategy_type)
+        item.setdefault("primary_instrument", row.primary_instrument)
+        item.setdefault("action", row.action)
+        item.setdefault("risk_state", row.risk_state)
+        item.setdefault("news_severity", row.news_severity)
+        if row.created_at is not None and not item.get("created_at"):
+            item["created_at"] = row.created_at.isoformat() + "Z"
+        result.append(item)
+    return result
+
+
+def _str_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_datetime_value(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed

@@ -71,3 +71,48 @@ def test_resolver_validates_weights_sum():
     )
     with pytest.raises(ValueError, match="w_floor"):
         resolve_backtest_request(request)
+
+
+def test_resolver_validates_ranking_primary_metric():
+    request = BacktestRequest(
+        strategy=BacktestStrategyConfig(ranking_primary_metric="unknown_metric")
+    )
+    with pytest.raises(ValueError, match="ranking_primary_metric"):
+        resolve_backtest_request(request)
+
+
+def test_resolver_allows_zero_signal_exec_lag_days():
+    request = BacktestRequest(
+        strategy=BacktestStrategyConfig(signal_exec_lag_days=0)
+    )
+    resolved = resolve_backtest_request(request)
+    assert resolved.resolved_config["strategy"]["signal_exec_lag_days"] == 0
+
+
+def test_resolver_requires_minute_execution_lag_at_least_20():
+    request = BacktestRequest(
+        strategy=BacktestStrategyConfig(execution_lag_minutes=15),
+    )
+    with pytest.raises(ValueError, match="execution_lag_minutes must be >= 20"):
+        resolve_backtest_request(request)
+
+
+def test_resolver_allows_short_execution_lag_in_daily_mode():
+    request = BacktestRequest(
+        execution=BacktestExecutionConfig(mode="DAILY_EOD"),
+        strategy=BacktestStrategyConfig(execution_lag_minutes=1),
+    )
+    resolved = resolve_backtest_request(request)
+    assert resolved.resolved_config["execution"]["mode"] == "DAILY_EOD"
+    assert resolved.resolved_config["strategy"]["execution_lag_minutes"] == 1
+
+
+def test_resolver_adds_anchor_warning_in_intraday_mode():
+    request = BacktestRequest(
+        execution=BacktestExecutionConfig(
+            mode="INTRADAY_MINUTE",
+            common_minute_anchor="last",
+        ),
+    )
+    resolved = resolve_backtest_request(request)
+    assert any("common_minute_anchor is ignored" in warning for warning in resolved.warnings)

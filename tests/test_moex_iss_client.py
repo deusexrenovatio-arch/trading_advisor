@@ -1,3 +1,5 @@
+from datetime import date
+
 import responses
 import requests
 import pytest
@@ -156,6 +158,66 @@ def test_request_does_not_use_fallback_on_non_retryable_http(monkeypatch):
         client.get_securities("stock", "shares")
 
 
+def test_request_uses_fallback_on_retryable_http(monkeypatch):
+    MoexIssClient._host_failover_until.clear()
+    client = MoexIssClient(
+        "https://iss.moex.com",
+        max_retries=0,
+        retry_backoff_sec=0.0,
+        fallback_ips=["85.118.181.8"],
+    )
+    calls: list[str] = []
+
+    def _primary_get(_url, params=None, timeout=None):
+        calls.append("primary")
+        return _FakeResponse(503, {"error": "temporary"})
+
+    class _FallbackSession:
+        def get(self, _url, params=None, timeout=None, headers=None):
+            calls.append("fallback")
+            return _FakeResponse(
+                200,
+                {"marketdata": {"columns": ["SECID"], "data": [["SBER"]]}},
+            )
+
+    monkeypatch.setattr(client.session, "get", _primary_get)
+    monkeypatch.setattr(client, "_get_fallback_session", lambda _ip: _FallbackSession())
+
+    rows = client.get_marketdata("stock", "shares", "TQBR", "SBER")
+    assert rows[0]["SECID"] == "SBER"
+    assert calls == ["primary", "fallback"]
+
+
+def test_force_fallback_skips_primary(monkeypatch):
+    MoexIssClient._host_failover_until.clear()
+    client = MoexIssClient(
+        "https://iss.moex.com",
+        max_retries=0,
+        retry_backoff_sec=0.0,
+        fallback_ips=["85.118.181.8"],
+        force_fallback=True,
+    )
+    calls: list[str] = []
+
+    def _must_not_call_primary(_url, params=None, timeout=None):
+        raise AssertionError("primary must be skipped in force_fallback mode")
+
+    class _FallbackSession:
+        def get(self, _url, params=None, timeout=None, headers=None):
+            calls.append("fallback")
+            return _FakeResponse(
+                200,
+                {"marketdata": {"columns": ["SECID"], "data": [["SBER"]]}},
+            )
+
+    monkeypatch.setattr(client.session, "get", _must_not_call_primary)
+    monkeypatch.setattr(client, "_get_fallback_session", lambda _ip: _FallbackSession())
+
+    rows = client.get_marketdata("stock", "shares", "TQBR", "SBER")
+    assert rows[0]["SECID"] == "SBER"
+    assert calls == ["fallback"]
+
+
 def test_primary_failover_state_is_reused_across_clients(monkeypatch):
     MoexIssClient._host_failover_until.clear()
     first = MoexIssClient(
@@ -203,3 +265,77 @@ def test_primary_failover_state_is_reused_across_clients(monkeypatch):
     assert rows_second[0]["SECID"] == "SBER"
     assert calls.count("first_primary") == 1
     assert calls.count("fallback") >= 2
+
+
+def test_get_candles_paginates_using_cursor_total(monkeypatch):
+    client = MoexIssClient("https://iss.moex.com")
+    calls: list[dict[str, object]] = []
+    payloads = [
+        {
+            "candles": {
+                "columns": ["begin", "close"],
+                "data": [
+                    ["2026-01-01 10:00:00", 100.0],
+                    ["2026-01-01 10:01:00", 101.0],
+                ],
+            },
+            "candles.cursor": {"columns": ["INDEX", "TOTAL", "PAGESIZE"], "data": [[0, 3, 2]]},
+        },
+        {
+            "candles": {
+                "columns": ["begin", "close"],
+                "data": [["2026-01-01 10:02:00", 102.0]],
+            },
+            "candles.cursor": {"columns": ["INDEX", "TOTAL", "PAGESIZE"], "data": [[2, 3, 2]]},
+        },
+    ]
+
+    def _fake_request(_path: str, params=None):
+        calls.append(dict(params or {}))
+        return payloads[len(calls) - 1]
+
+    monkeypatch.setattr(client, "_request", _fake_request)
+    rows = client.get_candles("stock", "shares", "SBER", "TQBR", date(2026, 1, 1), date(2026, 1, 1), interval=1)
+    assert len(rows) == 3
+    assert [int(call.get("start", 0)) for call in calls] == [0, 2]
+
+
+def test_get_candles_uses_start_pagination_without_cursor(monkeypatch):
+    client = MoexIssClient("https://iss.moex.com")
+    calls: list[dict[str, object]] = []
+    full_page = [[f"b{i}", float(i)] for i in range(500)]
+    payloads = [
+        {"candles": {"columns": ["begin", "close"], "data": full_page}},
+        {"candles": {"columns": ["begin", "close"], "data": [["tail", 999.0]]}},
+    ]
+
+    def _fake_request(_path: str, params=None):
+        calls.append(dict(params or {}))
+        return payloads[len(calls) - 1]
+
+    monkeypatch.setattr(client, "_request", _fake_request)
+    rows = client.get_candles("stock", "shares", "SBER", "TQBR", date(2026, 1, 1), date(2026, 1, 1), interval=1)
+    assert len(rows) == 501
+    assert [int(call.get("start", 0)) for call in calls] == [0, 500]
+
+
+def test_get_candles_stops_on_repeated_page_signature(monkeypatch):
+    client = MoexIssClient("https://iss.moex.com")
+    calls: list[dict[str, object]] = []
+    repeating_payload = {
+        "candles": {
+            "columns": ["begin", "close"],
+            "data": [[f"b{i}", float(i)] for i in range(500)],
+        }
+    }
+
+    def _fake_request(_path: str, params=None):
+        calls.append(dict(params or {}))
+        if len(calls) > 2:
+            raise AssertionError("pagination loop should stop after repeated page")
+        return repeating_payload
+
+    monkeypatch.setattr(client, "_request", _fake_request)
+    rows = client.get_candles("stock", "shares", "SBER", "TQBR", date(2026, 1, 1), date(2026, 1, 1), interval=1)
+    assert len(rows) == 500
+    assert len(calls) == 2

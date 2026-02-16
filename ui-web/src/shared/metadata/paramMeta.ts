@@ -432,6 +432,41 @@ export const paramMeta: Record<string, ParamMeta> = {
   },
 }
 
+Object.assign(paramMeta, {
+  'execution.mode': {
+    label: 'Execution mode',
+    tooltip: 'Backtest execution model (intraday minute or daily variants).',
+  },
+  'execution.price_source': {
+    label: 'Price source',
+    tooltip: 'Input price source for spread execution simulation.',
+  },
+  'execution.common_minute_anchor': {
+    label: 'Common minute anchor',
+    tooltip: 'Used only for DAILY_COMMON_MINUTE mode.',
+  },
+  'strategy.entry_price_tolerance_pct': {
+    label: 'Entry tolerance (fallback)',
+    tooltip: 'Fallback tolerance if split tolerances are not set.',
+  },
+  'strategy.entry_stock_tolerance_pct': {
+    label: 'Entry stock tolerance',
+    tooltip: 'Stock-leg tolerance for executable entry/exit matching.',
+  },
+  'strategy.entry_future_tolerance_pct': {
+    label: 'Entry future tolerance',
+    tooltip: 'Future-leg tolerance for executable entry/exit matching.',
+  },
+  'strategy.entry_spread_tolerance_pct': {
+    label: 'Entry spread tolerance',
+    tooltip: 'Spread tolerance for executable entry/exit matching.',
+  },
+  'strategy.signal_cutoff_before_day_end_minutes': {
+    label: 'Signal cutoff before day end',
+    tooltip: 'Exclude late-day minute signals by cutoff minutes before session end.',
+  },
+})
+
 export const paramSectionOrder = [
   'test',
   'universe',

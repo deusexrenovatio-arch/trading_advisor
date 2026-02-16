@@ -30,6 +30,7 @@ but the API endpoints remain the primary backend interface for the React app.
 - Key files: `carry.py`, `rates.py`, `stats.py`, `time.py`, `alpha.py` (new).
 - Outputs: derived metrics used by strategies and ranking.
 - Notes: alpha matrix helpers can use optional numba acceleration for batch backtests.
+- Stack policy: keep alpha kernels numeric (`numpy`/`numba`) and keep DataFrame work at boundaries.
 
 ### `data/`
 - Responsibilities: data source adapters and normalization for MOEX ISS and CBR.
@@ -93,6 +94,7 @@ but the API endpoints remain the primary backend interface for the React app.
 - Outputs: `BacktestReport` with equity curve, trades, and summary metrics.
 - Notes: uses SnapshotBuilder + PortfolioRebalanceController; optional fast alpha cache when precomputed data is supplied.
 - Annualization: metrics respect `rates.use_trading_days` (252 vs 365) for ExcessAnn, Vol_ann, IR, Sharpe.
+- Stack policy: `batch.py` is the canonical vectorized hot path and should remain `numpy`-first.
 
 ### `hpo/`
 - Responsibilities: hyperparameter search on top of Backtest v2 (black-box), walk-forward splits with embargo,
@@ -139,6 +141,12 @@ but the API endpoints remain the primary backend interface for the React app.
   - Refresh endpoints: `POST /api/signals/refresh`, `GET /api/signals/refresh-status`.
   - Backtest/forward endpoints: `POST /api/backtest/run`, `POST /api/forward/start`, `GET /api/forward/status`.
   - HPO endpoints: `POST /api/hpo/run` (async start), `GET /api/hpo/status` (status + result).
+  - V2 endpoints:
+    - `GET /api/v2/signals/active`, `POST /api/v2/signals/<signal_id>/actions`
+    - `GET /api/v2/decisions/view`
+    - `GET /api/v2/news/feed`
+    - `POST /api/v2/research/backtests/run`, `POST /api/v2/research/hpo/run`, `GET /api/v2/research/hpo/status`
+    - `GET /api/v2/portfolio/rebalance/preview`, `POST /api/v2/portfolio/rebalance/commit`
 
 ## Parallel dev workflow
 - Run backend API: `python -m moex_carry.cli ui` (serves `/api/*` on `127.0.0.1:8050`).

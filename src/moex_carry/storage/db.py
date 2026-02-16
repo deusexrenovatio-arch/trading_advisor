@@ -1,13 +1,30 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from moex_carry.config import AppSettings
 from moex_carry.storage.models import Base
 
 
+def _ensure_sqlite_parent_dir(database_url: str) -> None:
+    try:
+        parsed = make_url(database_url)
+    except Exception:
+        return
+    if not parsed.drivername.startswith("sqlite"):
+        return
+    database = parsed.database
+    if not database or database == ":memory:" or database.startswith("file:"):
+        return
+    Path(database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+
+
 def create_engine_from_settings(settings: AppSettings):
+    _ensure_sqlite_parent_dir(settings.database.url)
     return create_engine(settings.database.url, echo=settings.database.echo, future=True)
 
 

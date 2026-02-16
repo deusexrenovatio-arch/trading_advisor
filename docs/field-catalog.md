@@ -16,6 +16,11 @@ Columns: key | label | format | units | digits | default display | schema paths 
 | allocation | Аллокация |  |  |  | - / Yes-No (bool) | - | - |
 | avg_hold_days | Средн. дни удержания | days | days | 1 | - / Yes-No (bool) | - | Backtest v2: summary_metrics (dynamic) |
 | avg_trade_return_annual_recent | Средн. годовая доходность (посл. 5) | percent | % | 2 | - / Yes-No (bool) | - | Top pairs / Signals details: Alpha, Top pairs table |
+| avg_trade_return_annual_operational_recent | Средн. годовая доходность (операц., посл. 5) | percent | % | 2 | - / Yes-No (bool) | - | Top pairs / Signals details: Alpha, Top pairs table |
+| share_target_pass | Доля прохода годового target | percent | % | 2 | - / Yes-No (bool) | - | Top pairs / Signals details: Alpha, Top pairs table |
+| unfilled_entry_rate | Доля неисполненных входов | percent | % | 2 | - / Yes-No (bool) | - | Top pairs / Signals details: Alpha, Top pairs table |
+| unfilled_exit_rate | Доля неисполненных выходов | percent | % | 2 | - / Yes-No (bool) | - | Top pairs / Signals details: Alpha, Top pairs table |
+| forced_exit_rate | Доля forced exit | percent | % | 2 | - / Yes-No (bool) | - | Top pairs / Signals details: Alpha, Top pairs table |
 | basket | Корзина |  |  |  | - / Yes-No (bool) | decision-log:basket_allocations.current.[].basket, decision-log:basket_allocations.delta.[].basket, decision-log:basket_allocations.target.[].basket, decision-view:basket_summary.current.[].basket, decision-view:basket_summary.delta.[].basket, decision-view:basket_summary.target.[].basket | Formatted via formatValue |
 | basket_weight | Вес корзины, % | percent | % | 2 | - / Yes-No (bool) | decision-log:basket_allocations.current.[].weight, decision-view:basket_summary.current.[].weight | Formatted via formatValue |
 | break_even_points | Безубыток, пунктов |  |  | 2 | - / Yes-No (bool) | decision-log:cost_model.break_even_points, decision-view:cost_summary.break_even_points | - |
@@ -158,8 +163,24 @@ Columns: key | label | format | units | digits | default display | schema paths 
 | trade_hold_days | Дней в сделке | days | days | 0 | - / Yes-No (bool) | - | Spread series / chart |
 | trade_pnl_cash | P&L, руб. | currency | RUB | 2 | - / Yes-No (bool) | - | Spread series / chart |
 | trade_return_annual | Годовая доходность (net), % | percent | % | 2 | - / Yes-No (bool) | - | Spread series / chart |
+| trade_return_annual_fill_to_fill | Годовая доходность (fill-to-fill), % | percent | % | 2 | - / Yes-No (bool) | - | Spread series / chart |
+| trade_return_annual_operational | Годовая доходность (операц.), % | percent | % | 2 | - / Yes-No (bool) | - | Spread series / chart |
+| annual_target_threshold | Годовой порог target, % | percent | % | 2 | - / Yes-No (bool) | - | Spread series / chart |
+| annual_target_pass | Target пройден |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
 | trade_return_pct | Доходность спреда, % | percent | % | 2 | - / Yes-No (bool) | - | Spread series / chart |
 | trade_return_pct_net | Доходность (net), % | percent | % | 2 | - / Yes-No (bool) | - | Spread series / chart |
+| entry_signal_day | День сигнала входа |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| entry_submit_ts | TS отправки входа |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| entry_fill_ts | TS исполнения входа |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| entry_wait_minutes | Ожидание входа, мин |  | min | 1 | - / Yes-No (bool) | - | Spread series / chart |
+| exit_signal_day | День сигнала выхода |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| exit_submit_ts | TS отправки выхода |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| exit_fill_ts | TS исполнения выхода |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| exit_wait_minutes | Ожидание выхода, мин |  | min | 1 | - / Yes-No (bool) | - | Spread series / chart |
+| entry_fill_status | Статус входа |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| exit_fill_status | Статус выхода |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| exit_forced | Forced exit |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
+| unfilled_reason | Причина неисполнения |  |  |  | - / Yes-No (bool) | - | Spread series / chart |
 | trail_peak_spread_pct | Пик трейла, % | percent | % | 2 | - / Yes-No (bool) | - | - |
 | trend | Тренд |  |  | 4 | - / Yes-No (bool) | - | - |
 | trend_pos | Отклонение от тренда |  |  | 4 | - / Yes-No (bool) | - | - |
@@ -172,6 +193,9 @@ Columns: key | label | format | units | digits | default display | schema paths 
 | zscore | Z-score |  |  | 2 | - / Yes-No (bool) | - | Spread series / chart |
 | zscore_raw | Z-score (raw) |  |  | 2 | - / Yes-No (bool) | - | - |
 
+
+
+Additional causal-replay keys: avg_trade_return_annual_operational_recent, share_target_pass, unfilled_entry_rate, unfilled_exit_rate, forced_exit_rate, trade_return_annual_fill_to_fill, trade_return_annual_operational, annual_target_threshold, annual_target_pass, entry_signal_day, entry_submit_ts, entry_fill_ts, entry_wait_minutes, exit_signal_day, exit_submit_ts, exit_fill_ts, exit_wait_minutes, entry_fill_status, exit_fill_status, exit_forced, unfilled_reason
 
 ## UI keys without schema mapping (likely other APIs / derived)
 

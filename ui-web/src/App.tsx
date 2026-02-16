@@ -1,5 +1,5 @@
-﻿import { useCallback, useMemo, useState } from 'react'
-import { Box, Container, Stack, Tab, Tabs, Typography } from '@mui/material'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Box, Chip, Container, Paper, Stack, Tab, Tabs, Typography } from '@mui/material'
 import type { GridRowParams } from '@mui/x-data-grid'
 import BacktestV2Tab from './features/backtest-run/BacktestV2Tab'
 import { useBacktestForwardHpo } from './features/backtest-run/useBacktestForwardHpo'
@@ -10,9 +10,12 @@ import ForwardTab from './features/forward/ForwardTab'
 import HpoTab from './features/hpo/HpoTab'
 import BacktestsTab from './features/backtests/BacktestsTab'
 import SignalsTab from './features/signals/SignalsTab'
+import NewsIntelligenceTab from './features/news/NewsIntelligenceTab'
+import PortfolioControlTab from './features/portfolio/PortfolioControlTab'
 import { formatDate } from './shared/utils/date'
 import TopPairsTab from './features/top-pairs/TopPairsTab'
 import { useMarketTables } from './features/market/useMarketTables'
+import type { AppTab } from './features/market/useMarketTables'
 import { formatNumber } from './shared/utils/format'
 import { getString } from './shared/utils/guards'
 import { isDateColumn } from './shared/utils/tables'
@@ -39,6 +42,141 @@ import type {
 import './App.css'
 
 const AUTO_REFRESH_LABEL = '60 с'
+type WorkspaceTab = 'trade_console' | 'research_lab' | 'news_intelligence' | 'portfolio_control'
+type TradeConsoleTab = 'decisions' | 'top_pairs' | 'signals' | 'backtests'
+type ResearchTab = 'backtest_v2' | 'forward' | 'hpo'
+const BLOCKED_SIGNAL_ACTIONS = new Set(['hold_pretrade', 'check_pretrade'])
+const APP_SESSION_STARTED_AT_MS = Date.now()
+
+type UiRouteState = {
+  workspace: WorkspaceTab
+  tradeTab: TradeConsoleTab
+  researchTab: ResearchTab
+  canonicalPath: string
+}
+
+const DEFAULT_PATH = '/trade-console/signals'
+
+const tradeTabToPath = (tab: TradeConsoleTab) => {
+  if (tab === 'decisions') return '/decision-audit'
+  if (tab === 'top_pairs') return '/trade-console/top-pairs'
+  if (tab === 'backtests') return '/trade-console/backtests'
+  return '/trade-console/signals'
+}
+
+const researchTabToPath = (tab: ResearchTab) => {
+  if (tab === 'forward') return '/research-system/forward'
+  if (tab === 'hpo') return '/research-system/hpo'
+  return '/research-system/backtest-v2'
+}
+
+const workspaceToPath = (
+  workspace: WorkspaceTab,
+  tradeTab: TradeConsoleTab,
+  researchTab: ResearchTab,
+) => {
+  if (workspace === 'research_lab') return researchTabToPath(researchTab)
+  if (workspace === 'news_intelligence') return '/news-intelligence'
+  if (workspace === 'portfolio_control') return '/portfolio-control'
+  return tradeTabToPath(tradeTab)
+}
+
+const normalizePath = (pathname: string) => {
+  const trimmed = pathname.trim()
+  if (!trimmed) return '/'
+  const normalized = trimmed.replace(/\/{2,}/g, '/')
+  if (normalized.length > 1 && normalized.endsWith('/')) {
+    return normalized.slice(0, -1)
+  }
+  return normalized
+}
+
+const parseRouteState = (pathname: string): UiRouteState => {
+  const normalized = normalizePath(pathname || '/')
+
+  if (normalized === '/decision-audit' || normalized === '/trade-console/decisions') {
+    return {
+      workspace: 'trade_console',
+      tradeTab: 'decisions',
+      researchTab: 'backtest_v2',
+      canonicalPath: '/decision-audit',
+    }
+  }
+  if (normalized === '/trade-console/top-pairs') {
+    return {
+      workspace: 'trade_console',
+      tradeTab: 'top_pairs',
+      researchTab: 'backtest_v2',
+      canonicalPath: '/trade-console/top-pairs',
+    }
+  }
+  if (normalized === '/trade-console/backtests') {
+    return {
+      workspace: 'trade_console',
+      tradeTab: 'backtests',
+      researchTab: 'backtest_v2',
+      canonicalPath: '/trade-console/backtests',
+    }
+  }
+  if (normalized === '/trade-console' || normalized === '/trade-console/signals') {
+    return {
+      workspace: 'trade_console',
+      tradeTab: 'signals',
+      researchTab: 'backtest_v2',
+      canonicalPath: '/trade-console/signals',
+    }
+  }
+
+  if (normalized === '/research-system' || normalized === '/research-system/backtest-v2') {
+    return {
+      workspace: 'research_lab',
+      tradeTab: 'signals',
+      researchTab: 'backtest_v2',
+      canonicalPath: '/research-system/backtest-v2',
+    }
+  }
+  if (normalized === '/research-system/forward') {
+    return {
+      workspace: 'research_lab',
+      tradeTab: 'signals',
+      researchTab: 'forward',
+      canonicalPath: '/research-system/forward',
+    }
+  }
+  if (normalized === '/research-system/hpo') {
+    return {
+      workspace: 'research_lab',
+      tradeTab: 'signals',
+      researchTab: 'hpo',
+      canonicalPath: '/research-system/hpo',
+    }
+  }
+
+  if (normalized === '/news-intelligence') {
+    return {
+      workspace: 'news_intelligence',
+      tradeTab: 'signals',
+      researchTab: 'backtest_v2',
+      canonicalPath: '/news-intelligence',
+    }
+  }
+
+  if (normalized === '/portfolio-control') {
+    return {
+      workspace: 'portfolio_control',
+      tradeTab: 'signals',
+      researchTab: 'backtest_v2',
+      canonicalPath: '/portfolio-control',
+    }
+  }
+
+  return {
+    workspace: 'trade_console',
+    tradeTab: 'signals',
+    researchTab: 'backtest_v2',
+    canonicalPath: DEFAULT_PATH,
+  }
+}
 
 function App() {
   const {
@@ -83,10 +221,21 @@ function App() {
     operatorAction,
     executionStatus,
   } = useDecisionView()
-  const [tab, setTab] = useState<
-    'decisions' | 'top_pairs' | 'signals' | 'backtests' | 'backtest_v2' | 'forward' | 'hpo'
-  >('decisions')
-  const market = useMarketTables({ tab, compareValues })
+  const [routePath, setRoutePath] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_PATH
+    return window.location.pathname || DEFAULT_PATH
+  })
+  const routeState = useMemo(() => parseRouteState(routePath), [routePath])
+  const workspace = routeState.workspace
+  const tradeTab = routeState.tradeTab
+  const researchTab = routeState.researchTab
+  const activeTab: AppTab = workspace === 'research_lab' ? researchTab : tradeTab
+  const [tabSwitchCount, setTabSwitchCount] = useState(0)
+  const [firstActionAtMs, setFirstActionAtMs] = useState<number | null>(null)
+  const markFirstAction = useCallback(() => {
+    setFirstActionAtMs((current) => current ?? Date.now())
+  }, [])
+  const market = useMarketTables({ tab: activeTab, compareValues, onOperatorAction: markFirstAction })
   const {
     paramSpecs,
     paramValues,
@@ -121,12 +270,75 @@ function App() {
     handleBacktestRun,
     fetchForwardStatus,
     handleHpoRun,
-  } = useBacktestForwardHpo({ tab, buildParamDefaults, collectParamRequest })
+  } = useBacktestForwardHpo({ tab: activeTab, buildParamDefaults, collectParamRequest })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const handlePopState = () => {
+      const nextPath = window.location.pathname || DEFAULT_PATH
+      setRoutePath((currentPath) => {
+        if (currentPath !== nextPath) {
+          setTabSwitchCount((value) => value + 1)
+        }
+        return nextPath
+      })
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const browserPath = normalizePath(window.location.pathname || DEFAULT_PATH)
+    if (routeState.canonicalPath === browserPath) return
+    window.history.replaceState(null, '', routeState.canonicalPath)
+  }, [routeState.canonicalPath])
+
+  const navigateTo = useCallback(
+    (nextPath: string) => {
+      if (typeof window === 'undefined') return
+      const canonicalPath = parseRouteState(nextPath).canonicalPath
+      if (canonicalPath === routePath) return
+      window.history.pushState(null, '', canonicalPath)
+      setTabSwitchCount((value) => value + 1)
+      setRoutePath(canonicalPath)
+    },
+    [routePath],
+  )
+
+  const handleWorkspaceChange = useCallback(
+    (_: unknown, value: WorkspaceTab) => {
+      navigateTo(workspaceToPath(value, tradeTab, researchTab))
+    },
+    [navigateTo, researchTab, tradeTab],
+  )
+
+  const handleTradeTabChange = useCallback(
+    (_: unknown, value: TradeConsoleTab) => {
+      navigateTo(tradeTabToPath(value))
+    },
+    [navigateTo],
+  )
+
+  const handleResearchTabChange = useCallback(
+    (_: unknown, value: ResearchTab) => {
+      navigateTo(researchTabToPath(value))
+    },
+    [navigateTo],
+  )
 
   const handleRefresh = useCallback(() => {
     fetchDecisionView()
     market.fetchAuxData()
   }, [fetchDecisionView, market])
+
+  const handleSubmitDecisionAction = useCallback(
+    async (action: 'approve' | 'reject') => {
+      markFirstAction()
+      await submitDecisionAction(action)
+    },
+    [markFirstAction, submitDecisionAction],
+  )
 
   const filteredParamSpecs = useMemo(
     () => filterParamSpecs(paramSpecs, paramFilter),
@@ -207,6 +419,24 @@ function App() {
     />
   )
 
+  const blockedActionRate = useMemo(() => {
+    if (workspace !== 'trade_console' || tradeTab !== 'signals') return null
+    const entryRows = market.sortedTableRows.filter((row) => market.isEntrySignal(row))
+    if (!entryRows.length) return null
+    const blockedCount = entryRows.filter((row) => {
+      const effectiveAction = String(
+        row.signal_action_effective ?? row.signal_action ?? '',
+      ).toLowerCase()
+      return BLOCKED_SIGNAL_ACTIONS.has(effectiveAction)
+    }).length
+    return blockedCount / entryRows.length
+  }, [workspace, tradeTab, market])
+
+  const timeToFirstActionSec =
+    firstActionAtMs === null
+      ? null
+      : Math.max(0, Math.round((firstActionAtMs - APP_SESSION_STARTED_AT_MS) / 1000))
+
   return (
     <Box className="app-root">
       <Container maxWidth="xl" sx={{ py: 3 }}>
@@ -214,16 +444,52 @@ function App() {
           <Typography variant="h5" fontWeight={600}>
             Решения торгового советника
           </Typography>
-          <Tabs value={tab} onChange={(_, value) => setTab(value)}>
-            <Tab label="Решения" value="decisions" />
-            <Tab label="Топ пар" value="top_pairs" />
-            <Tab label="Сигналы" value="signals" />
-            <Tab label="Бэктесты" value="backtests" />
-            <Tab label="Бэктест v2" value="backtest_v2" />
-            <Tab label="Статус форварда" value="forward" />
-            <Tab label="HPO" value="hpo" />
+          <Tabs value={workspace} onChange={handleWorkspaceChange}>
+            <Tab label="Trade Console" value="trade_console" />
+            <Tab label="Research Lab" value="research_lab" />
+            <Tab label="News Intelligence" value="news_intelligence" />
+            <Tab label="Portfolio Control" value="portfolio_control" />
           </Tabs>
-          {tab === 'decisions' ? (
+          {workspace === 'trade_console' ? (
+            <Tabs value={tradeTab} onChange={handleTradeTabChange}>
+              <Tab label="Решения" value="decisions" />
+              <Tab label="Топ пар" value="top_pairs" />
+              <Tab label="Сигналы" value="signals" />
+              <Tab label="Бэктесты" value="backtests" />
+            </Tabs>
+          ) : null}
+          {workspace === 'research_lab' ? (
+            <Tabs value={researchTab} onChange={handleResearchTabChange}>
+              <Tab label="Бэктест v2" value="backtest_v2" />
+              <Tab label="Статус форварда" value="forward" />
+              <Tab label="HPO" value="hpo" />
+            </Tabs>
+          ) : null}
+          <Paper variant="outlined" sx={{ p: 1.25 }}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+              <Chip label={`tab_switch_count: ${tabSwitchCount}`} size="small" />
+              <Chip
+                label={`time_to_first_action_sec: ${
+                  timeToFirstActionSec === null ? 'n/a' : timeToFirstActionSec
+                }`}
+                size="small"
+              />
+              <Chip
+                label={`blocked_action_rate: ${
+                  blockedActionRate === null ? 'n/a' : `${(blockedActionRate * 100).toFixed(1)}%`
+                }`}
+                size="small"
+                color={
+                  blockedActionRate === null
+                    ? 'default'
+                    : blockedActionRate > 0.3
+                      ? 'warning'
+                      : 'success'
+                }
+              />
+            </Stack>
+          </Paper>
+          {workspace === 'trade_console' && tradeTab === 'decisions' ? (
             <DecisionsTab
               quickFilter={quickFilter}
               onQuickFilterChange={setQuickFilter}
@@ -263,7 +529,7 @@ function App() {
               decisionActionNote={decisionActionNote}
               onDecisionActionNoteChange={setDecisionActionNote}
               decisionActionSubmitting={decisionActionSubmitting}
-              onSubmitDecisionAction={submitDecisionAction}
+              onSubmitDecisionAction={handleSubmitDecisionAction}
               decisionActionError={decisionActionError}
               decisionActionLoading={decisionActionLoading}
               operatorAction={operatorAction}
@@ -274,7 +540,7 @@ function App() {
               getString={getString}
             />
           ) : null}
-          {tab === 'top_pairs' ? (
+          {workspace === 'trade_console' && tradeTab === 'top_pairs' ? (
             <TopPairsTab
               market={market}
               autoRefreshLabel={AUTO_REFRESH_LABEL}
@@ -284,7 +550,7 @@ function App() {
               formatValue={formatValue}
             />
           ) : null}
-          {tab === 'signals' ? (
+          {workspace === 'trade_console' && tradeTab === 'signals' ? (
             <SignalsTab
               market={market}
               autoRefreshLabel={AUTO_REFRESH_LABEL}
@@ -294,7 +560,7 @@ function App() {
               formatValue={formatValue}
             />
           ) : null}
-          {tab === 'backtests' ? (
+          {workspace === 'trade_console' && tradeTab === 'backtests' ? (
             <BacktestsTab
               market={market}
               autoRefreshLabel={AUTO_REFRESH_LABEL}
@@ -304,7 +570,7 @@ function App() {
               formatValue={formatValue}
             />
           ) : null}
-          {tab === 'backtest_v2' ? (
+          {workspace === 'research_lab' && researchTab === 'backtest_v2' ? (
             <BacktestV2Tab
               paramPreset={paramPreset}
               onParamPresetChange={setParamPreset}
@@ -336,7 +602,7 @@ function App() {
               isDateColumn={isDateColumn}
             />
           ) : null}
-          {tab === 'forward' ? (
+          {workspace === 'research_lab' && researchTab === 'forward' ? (
             <ForwardTab
               forwardRunId={forwardRunId}
               onForwardRunIdChange={setForwardRunId}
@@ -349,7 +615,7 @@ function App() {
               formatCellValue={formatCellValue}
             />
           ) : null}
-          {tab === 'hpo' ? (
+          {workspace === 'research_lab' && researchTab === 'hpo' ? (
             <HpoTab
               onFetchParamSpecs={() => fetchParamSpecs({ resetValues: false })}
               paramSpecsCount={paramSpecs.length}
@@ -371,6 +637,8 @@ function App() {
               isDateColumn={isDateColumn}
             />
           ) : null}
+          {workspace === 'news_intelligence' ? <NewsIntelligenceTab /> : null}
+          {workspace === 'portfolio_control' ? <PortfolioControlTab /> : null}
         </Stack>
       </Container>
     </Box>

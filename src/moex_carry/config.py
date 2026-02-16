@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -12,6 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class MoexIssConfig(BaseModel):
     base_url: str = "https://iss.moex.com"
     fallback_ips: list[str] = []
+    force_fallback: bool = False
     engine_shares: str = "stock"
     market_shares: str = "shares"
     shares_board: str = "TQBR"
@@ -63,6 +65,18 @@ class StrategyConfig(BaseModel):
 class SpreadCarryAlphaConfig(BaseModel):
     day_count: str = "ACT/365"
     use_trading_days: bool = False
+    # Price source for spread strategy/backtest inputs:
+    # - daily_close: end-of-day candle close (legacy behavior)
+    # - common_minute_close: last/first common minute close between stock/future per day
+    price_source: str = "daily_close"
+    common_minute_anchor: str = "last"
+    # 0 enables same-day submission at signal_ts + execution_lag_minutes.
+    signal_exec_lag_days: int = 1
+    execution_lag_minutes: int = 1
+    execution_max_wait_minutes: int = 1440
+    force_exit_policy: str = "next_anchor"
+    force_exit_penalty_bps: float = 0.0
+    annual_target_threshold: Optional[float] = None
 
     r_cb_annual: Optional[float] = None
     r_fund_annual: Optional[float] = None
@@ -112,6 +126,10 @@ class SpreadCarryAlphaConfig(BaseModel):
     z_window: int = 60
     z_entry_threshold: Optional[float] = None
     entry_price_tolerance_pct: float = 0.0015
+    entry_stock_tolerance_pct: Optional[float] = None
+    entry_future_tolerance_pct: Optional[float] = None
+    entry_spread_tolerance_pct: Optional[float] = None
+    signal_cutoff_before_day_end_minutes: int = 0
 
     max_gross_notional: Optional[float] = None
     max_contracts_per_pair: int = 1
@@ -129,6 +147,7 @@ class SpreadCarryAlphaConfig(BaseModel):
     min_floor_score: Optional[float] = None
     min_alpha_score: Optional[float] = None
     min_total_score: Optional[float] = None
+    ranking_primary_metric: str = "avg_trade_return_annual_operational_recent"
     allowed_expiry_months: Optional[list[int]] = None
     allowed_expiry_years: Optional[list[int]] = None
 
@@ -158,6 +177,32 @@ class UiConfig(BaseModel):
     signal_refresh_max_pairs: Optional[int] = None
     signal_refresh_save_csv: bool = True
     pretrade_fail_open_on_transport_error: bool = True
+    ff_db_projection_source: bool = False
+    ff_fail_closed_execution: bool = False
+    auto_unwind_timeout_sec: int = 600
+    use_unified_signal_engine: bool = True
+    unified_allow_legacy_fallback: bool = True
+    unified_snapshot_ttl_sec: int = 120
+    unified_pair_workers: int = 4
+    unified_front_only: bool = True
+    unified_front_roll_days: int = 7
+    require_score_gate_by_default: bool = True
+    require_score_gate_top_pairs_by_default: bool = False
+
+
+class TelegramConfig(BaseModel):
+    enabled: bool = False
+    bot_token: str | None = None
+    backend_base_url: str = "http://127.0.0.1:8050"
+    allowed_user_ids: list[int] = []
+    poll_timeout_sec: int = 25
+    signal_fetch_interval_sec: int = 30
+    hold_open_daily_limit: int = 1
+    callback_ttl_hours: int = 72
+    daily_healthcheck_enabled: bool = True
+    daily_healthcheck_time_local: str = "09:00"
+    state_path: str = "./data/telegram/bot_state.json"
+    ui_base_url: str | None = None
 
 
 class DataConfig(BaseModel):
@@ -211,6 +256,7 @@ class AppSettings(BaseSettings):
     spread_carry_alpha: SpreadCarryAlphaConfig = SpreadCarryAlphaConfig()
     aggregation: AggregationConfig = AggregationConfig()
     ui: UiConfig = UiConfig()
+    telegram: TelegramConfig = TelegramConfig()
     data: DataConfig = DataConfig()
     environment: EnvironmentConfig = EnvironmentConfig()
     risk_profile: RiskProfileConfig = RiskProfileConfig()
@@ -230,20 +276,62 @@ def _default_config_path() -> Path:
     return Path(__file__).resolve().parents[2] / "configs" / "default.yaml"
 
 
+def _drop_yaml_keys_overridden_by_env(config_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove YAML values that are explicitly overridden via environment variables.
+
+    AppSettings receives YAML as init kwargs, which otherwise has higher priority
+    than env in pydantic-settings resolution order.
+    """
+
+    updated = dict(config_data)
+    env_prefix = "MOEX_CARRY_"
+    env_delimiter = "__"
+
+    for section_key in list(updated.keys()):
+        section_value = updated.get(section_key)
+        section_env_key = f"{env_prefix}{str(section_key).upper()}"
+
+        # Full-section override, e.g. MOEX_CARRY_TELEGRAM='{"enabled": true}'.
+        if section_env_key in os.environ:
+            updated.pop(section_key, None)
+            continue
+
+        if not isinstance(section_value, dict):
+            continue
+
+        section_copy = dict(section_value)
+        for field_key in list(section_copy.keys()):
+            field_env_key = f"{section_env_key}{env_delimiter}{str(field_key).upper()}"
+            if field_env_key in os.environ:
+                section_copy.pop(field_key, None)
+
+        if section_copy:
+            updated[section_key] = section_copy
+        else:
+            updated.pop(section_key, None)
+
+    return updated
+
+
 def load_settings(config_path: Optional[str] = None) -> AppSettings:
     config_data: dict[str, Any] = {}
-    path: Optional[Path] = None
+    default_path = _default_config_path()
+    config_paths: list[Path] = []
+
+    if default_path.exists():
+        config_paths.append(default_path)
     if config_path:
-        path = Path(config_path)
-    else:
-        default_path = _default_config_path()
-        if default_path.exists():
-            path = default_path
-    if path and path.exists():
+        override_path = Path(config_path)
+        if override_path.exists():
+            config_paths.append(override_path)
+
+    for path in config_paths:
         with path.open("r", encoding="utf-8") as handle:
             yaml_data = yaml.safe_load(handle) or {}
         if isinstance(yaml_data, dict):
             config_data = _merge_dicts(config_data, yaml_data)
+    config_data = _drop_yaml_keys_overridden_by_env(config_data)
     return AppSettings(**config_data)
 
 

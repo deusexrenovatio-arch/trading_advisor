@@ -16,6 +16,8 @@ TRANSPORT_EXCEPTIONS = (
     requests.exceptions.ConnectionError,
     requests.exceptions.Timeout,
 )
+CANDLES_PAGE_LIMIT = 500
+MAX_CANDLES_PAGES = 20_000
 
 
 class _HostHeaderSSLAdapter(HTTPAdapter):
@@ -44,6 +46,7 @@ class MoexIssClient:
         retry_backoff_sec: float = 0.5,
         retry_max_backoff_sec: float = 4.0,
         fallback_ips: Optional[list[str]] = None,
+        force_fallback: bool = False,
         fallback_failover_ttl_sec: float = 300.0,
     ) -> None:
         self.base_url = base_url.rstrip("/") + "/"
@@ -53,6 +56,7 @@ class MoexIssClient:
         self.retry_backoff_sec = max(0.0, float(retry_backoff_sec))
         self.retry_max_backoff_sec = max(0.0, float(retry_max_backoff_sec))
         self.fallback_failover_ttl_sec = max(1.0, float(fallback_failover_ttl_sec))
+        self.force_fallback = bool(force_fallback)
 
         parsed = urlparse(self.base_url)
         self._base_scheme = parsed.scheme or "https"
@@ -206,6 +210,8 @@ class MoexIssClient:
         clean_path = self._normalize_path(path)
         base = self.base_url.rstrip("/")
         primary_url = urljoin(base + "/", clean_path)
+        if self.force_fallback and self.fallback_ips and self._base_host:
+            return self._request_via_fallback_ips(clean_path, params)
         if self._is_primary_in_failover():
             return self._request_via_fallback_ips(clean_path, params)
 
@@ -220,9 +226,12 @@ class MoexIssClient:
             self._clear_primary_failover()
             return payload
         except Exception as exc:
-            if not self._is_transport_error(exc):
+            can_fallback = bool(self.fallback_ips and self._base_host)
+            if not can_fallback:
                 raise
-            if not self.fallback_ips or not self._base_host:
+            is_transport = self._is_transport_error(exc)
+            is_retryable_http = isinstance(exc, requests.HTTPError) and self._is_retryable_http_error(exc)
+            if not is_transport and not is_retryable_http:
                 raise
             self._mark_primary_failed()
             return self._request_via_fallback_ips(clean_path, params)
@@ -327,13 +336,49 @@ class MoexIssClient:
             path = f"/iss/engines/{engine}/markets/{market}/boards/{board}/securities/{secid}/candles.json"
         else:
             path = f"/iss/engines/{engine}/markets/{market}/securities/{secid}/candles.json"
-        params = {
+        base_params = {
             "from": from_date.isoformat(),
             "till": till_date.isoformat(),
             "interval": interval,
+            "limit": CANDLES_PAGE_LIMIT,
         }
-        payload = self._request(path, params=params)
-        return self._parse_table(payload, "candles")
+        rows_all: list[dict[str, Any]] = []
+        start = 0
+        pages = 0
+        seen_page_signatures: set[tuple[str, str, int]] = set()
+
+        while pages < MAX_CANDLES_PAGES:
+            pages += 1
+            params = dict(base_params)
+            if start > 0:
+                params["start"] = start
+            payload = self._request(path, params=params)
+            rows = self._parse_table(payload, "candles")
+            if not rows:
+                break
+
+            first_begin = str(rows[0].get("begin") or "")
+            last_begin = str(rows[-1].get("begin") or "")
+            page_signature = (first_begin, last_begin, len(rows))
+            if page_signature in seen_page_signatures:
+                # Defensive guard for APIs that ignore `start` and return the same page forever.
+                break
+            seen_page_signatures.add(page_signature)
+            rows_all.extend(rows)
+
+            total = self._parse_cursor_total(payload, "candles.cursor")
+            if total is not None:
+                next_start = start + len(rows)
+                if next_start >= total:
+                    break
+                start = next_start
+                continue
+
+            if len(rows) < CANDLES_PAGE_LIMIT:
+                break
+            start += len(rows)
+
+        return rows_all
 
     def get_dividends(self, secid: str) -> list[dict[str, Any]]:
         path = f"/iss/securities/{secid}/dividends.json"

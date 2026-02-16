@@ -32,6 +32,11 @@ class BacktestUniverseConfig(BaseModel):
 class BacktestExecutionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    mode: Literal["INTRADAY_MINUTE", "DAILY_COMMON_MINUTE", "DAILY_EOD", "DAILY_NEXT_OPEN"] = (
+        "INTRADAY_MINUTE"
+    )
+    price_source: str = "common_minute_close"
+    common_minute_anchor: str = "last"
     price_mode: str = "BIDASK"
     half_spread_bps: float = 0.0
     slip_stock_bps: float = 0.0
@@ -76,6 +81,17 @@ class BacktestLiquidityConfig(BaseModel):
 class BacktestStrategyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    signal_exec_lag_days: int = 1
+    execution_lag_minutes: int = 20
+    execution_max_wait_minutes: int = 1440
+    entry_price_tolerance_pct: float = 0.0015
+    entry_stock_tolerance_pct: float | None = None
+    entry_future_tolerance_pct: float | None = None
+    entry_spread_tolerance_pct: float | None = None
+    signal_cutoff_before_day_end_minutes: int = 0
+    force_exit_policy: str = "next_anchor"
+    force_exit_penalty_bps: float = 0.0
+    annual_target_threshold: float | None = None
     floor_tolerance: float = 0.0
     riskbuffer_floor: float = 0.0
     capital_base_mode: str = "FULL_CASH"
@@ -94,6 +110,7 @@ class BacktestStrategyConfig(BaseModel):
     min_floor_score: float | None = None
     min_alpha_score: float | None = None
     min_total_score: float | None = None
+    ranking_primary_metric: str = "avg_trade_return_annual_operational_recent"
     w_floor: float = 0.5
     w_alpha: float = 0.5
     w_liq: float = 1.0

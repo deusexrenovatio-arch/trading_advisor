@@ -41,6 +41,10 @@ def resolve_backtest_request(request: BacktestRequest) -> ResolvedBacktestConfig
 
     _apply_cost_stress(resolved, cost_stress_mult)
 
+    execution_mode = str(request.execution.mode or "INTRADAY_MINUTE").upper()
+    if execution_mode == "INTRADAY_MINUTE":
+        warnings.append("execution.common_minute_anchor is ignored in INTRADAY_MINUTE mode")
+
     return ResolvedBacktestConfig(resolved_config=resolved, warnings=warnings)
 
 
@@ -138,6 +142,7 @@ def _apply_cost_stress(resolved: dict[str, Any], mult: float) -> None:
 
 def _validate_request(request: BacktestRequest) -> None:
     test_cfg = request.test
+    execution = request.execution
     strategy = request.strategy
     liquidity = request.liquidity
     allocation = request.allocation
@@ -146,6 +151,18 @@ def _validate_request(request: BacktestRequest) -> None:
 
     if test_cfg.start_date and test_cfg.end_date and test_cfg.start_date > test_cfg.end_date:
         raise ValueError("test.start_date must be <= test.end_date")
+
+    execution_mode = str(execution.mode or "INTRADAY_MINUTE").upper()
+    if execution_mode not in {"INTRADAY_MINUTE", "DAILY_COMMON_MINUTE", "DAILY_EOD", "DAILY_NEXT_OPEN"}:
+        raise ValueError(
+            "execution.mode must be INTRADAY_MINUTE, DAILY_COMMON_MINUTE, DAILY_EOD, or DAILY_NEXT_OPEN"
+        )
+    price_source = str(execution.price_source or "common_minute_close").strip().lower()
+    if price_source not in {"common_minute_close", "daily_close"}:
+        raise ValueError("execution.price_source must be common_minute_close or daily_close")
+    anchor = str(execution.common_minute_anchor or "last").strip().lower()
+    if anchor not in {"first", "last"}:
+        raise ValueError("execution.common_minute_anchor must be first or last")
 
     w_floor = float(strategy.w_floor)
     w_alpha = float(strategy.w_alpha)
@@ -170,11 +187,66 @@ def _validate_request(request: BacktestRequest) -> None:
     _require_positive(strategy.spread_history_days, "strategy.spread_history_days", allow_zero=False)
     _require_positive(strategy.z_window, "strategy.z_window", allow_zero=False)
     _require_positive(strategy.min_DTE_entry, "strategy.min_DTE_entry", allow_zero=False)
+    _require_positive(strategy.signal_exec_lag_days, "strategy.signal_exec_lag_days", allow_zero=True)
+    _require_positive(strategy.execution_lag_minutes, "strategy.execution_lag_minutes", allow_zero=True)
+    if execution_mode == "INTRADAY_MINUTE" and float(strategy.execution_lag_minutes) < 20:
+        raise ValueError("strategy.execution_lag_minutes must be >= 20 in INTRADAY_MINUTE mode")
+    _require_positive(
+        strategy.execution_max_wait_minutes,
+        "strategy.execution_max_wait_minutes",
+        allow_zero=True,
+    )
+    _require_positive(
+        strategy.entry_price_tolerance_pct,
+        "strategy.entry_price_tolerance_pct",
+        allow_zero=True,
+        allow_none=True,
+    )
+    _require_positive(
+        strategy.entry_stock_tolerance_pct,
+        "strategy.entry_stock_tolerance_pct",
+        allow_zero=True,
+        allow_none=True,
+    )
+    _require_positive(
+        strategy.entry_future_tolerance_pct,
+        "strategy.entry_future_tolerance_pct",
+        allow_zero=True,
+        allow_none=True,
+    )
+    _require_positive(
+        strategy.entry_spread_tolerance_pct,
+        "strategy.entry_spread_tolerance_pct",
+        allow_zero=True,
+        allow_none=True,
+    )
+    _require_positive(
+        strategy.signal_cutoff_before_day_end_minutes,
+        "strategy.signal_cutoff_before_day_end_minutes",
+        allow_zero=True,
+    )
+    _require_positive(
+        strategy.force_exit_penalty_bps,
+        "strategy.force_exit_penalty_bps",
+        allow_zero=True,
+        allow_none=True,
+    )
     _require_positive(strategy.close_buffer_days, "strategy.close_buffer_days", allow_zero=True)
     _require_positive(strategy.roll_trigger_days, "strategy.roll_trigger_days", allow_zero=True)
     _require_positive(liquidity.max_days_to_exit, "liquidity.max_days_to_exit", allow_zero=False, allow_none=True)
     _require_positive(portfolio.max_contracts_per_pair, "portfolio.max_contracts_per_pair", allow_zero=False, allow_none=True)
     _require_positive(portfolio.account_equity, "portfolio.account_equity", allow_zero=False, allow_none=True)
+    if strategy.force_exit_policy not in {"next_anchor", "market_worse"}:
+        raise ValueError("strategy.force_exit_policy must be next_anchor or market_worse")
+    if strategy.ranking_primary_metric not in {
+        "avg_trade_return_annual_operational_recent",
+        "avg_trade_return_annual_recent",
+        "total_score",
+    }:
+        raise ValueError(
+            "strategy.ranking_primary_metric must be avg_trade_return_annual_operational_recent, "
+            "avg_trade_return_annual_recent, or total_score"
+        )
 
     _validate_min_max_pairs(request.model_dump(mode="python"))
 

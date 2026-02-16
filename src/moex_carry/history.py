@@ -47,6 +47,7 @@ def collect_history(
         retry_backoff_sec=settings.moex.request_retry_backoff_sec,
         retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
         fallback_ips=settings.moex.fallback_ips,
+        force_fallback=settings.moex.force_fallback,
     )
 
     for dataset in kinds:

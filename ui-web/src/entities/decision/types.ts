@@ -27,13 +27,44 @@ export type OperatorAction = {
   created_at?: string
 }
 export type ExecutionStatus = {
+  request_id?: string
+  action?: string
   status?: string
   requested_at?: string
   executed_at?: string
+  actor?: string
+  source?: string
+  reason_code?: string
+  idempotency_key?: string
+}
+
+export type DecisionRefV2 = {
+  decision_id?: string | null
+  action_id?: string | null
+  latest_action?: string | null
+  latest_status?: string | null
+  actor_id?: string | null
+  source?: string | null
+  idempotency_key?: string | null
+  updated_at?: string | null
+}
+
+export type ExecutionRefV2 = {
+  request_id?: string | null
+  action?: string | null
+  status?: string | null
+  requested_at?: string | null
+  executed_at?: string | null
+  actor_id?: string | null
+  source?: string | null
+  reason_code?: string | null
+  idempotency_key?: string | null
 }
 
 export type DecisionView = {
   decision_id: string
+  projection_version?: string
+  projection_source?: 'jsonl' | 'db' | 'jsonl_fallback'
   decision_view_id?: string
   created_at?: string
   strategy_type?: string
@@ -52,12 +83,15 @@ export type DecisionView = {
   basket_summary?: BasketSummary
   operator_action?: OperatorAction
   execution_status?: ExecutionStatus
+  decision_ref?: DecisionRefV2
+  execution_ref?: ExecutionRefV2
 }
 
 export type DecisionLog = Record<string, unknown>
 export type GenericRow = Record<string, unknown>
 export type SpreadSeriesPoint = {
   date: string
+  exec_ts?: string | null
   spread_mid?: number | null
   spread_pct?: number | null
   spread?: number | null
@@ -78,7 +112,23 @@ export type SpreadSeriesPoint = {
   trade_pnl_cash?: number | null
   trade_return_pct_net?: number | null
   trade_return_annual?: number | null
+  trade_return_annual_fill_to_fill?: number | null
+  trade_return_annual_operational?: number | null
+  annual_target_threshold?: number | null
+  annual_target_pass?: boolean | null
   trade_hold_days?: number | null
+  entry_signal_day?: string | null
+  entry_submit_ts?: string | null
+  entry_fill_ts?: string | null
+  entry_wait_minutes?: number | null
+  exit_signal_day?: string | null
+  exit_submit_ts?: string | null
+  exit_fill_ts?: string | null
+  exit_wait_minutes?: number | null
+  entry_fill_status?: string | null
+  exit_fill_status?: string | null
+  exit_forced?: boolean | null
+  unfilled_reason?: string | null
   zscore?: number | null
 }
 export type SignalHistoryRow = {
@@ -184,6 +234,8 @@ export type BacktestReport = {
   trades?: BacktestTrade[]
   resolved_config?: Record<string, unknown>
   warnings?: string[]
+  fill_quality_summary?: Record<string, unknown> | null
+  execution_model?: Record<string, unknown> | null
 }
 
 export type ForwardStatus = {
@@ -223,4 +275,94 @@ export type HpoResponse = {
     leaderboard?: HpoTrial[]
     trials?: HpoTrial[]
   }
+}
+
+export type EntityRef = {
+  entity_type: 'instrument' | 'pair' | 'portfolio'
+  entity_id: string
+  asset_id?: string | null
+  ticker?: string | null
+}
+
+export type SignalLifecycleState =
+  | 'candidate'
+  | 'blocked'
+  | 'ready'
+  | 'acknowledged'
+  | 'entered'
+  | 'hold_open'
+  | 'exit_ready'
+  | 'closed'
+  | 'rejected'
+
+export type GateResultV2 = {
+  gate_result_id: string
+  gate_type: string
+  status: 'pass' | 'warn' | 'block'
+  reasons?: string[]
+}
+
+export type SignalActiveV2 = {
+  signal_id: string
+  entity_ref: EntityRef
+  lifecycle_state: SignalLifecycleState
+  gate_results: GateResultV2[]
+  decision_ref?: {
+    decision_id?: string | null
+  }
+  execution_ref?: Record<string, unknown>
+  run_id?: string
+  timestamp?: string
+  signal_action?: string
+  signal_action_effective?: string
+  signal_direction?: string | null
+  signal_score?: number
+  signal_reasons?: string[]
+  signal_metrics?: Record<string, unknown>
+  stock?: string
+  future?: string
+  pretrade_status?: string
+  pretrade_reasons?: string[]
+  position_open?: boolean
+  position_state?: string
+  position_open_leg_total?: number
+  position_net_orders?: number
+  [key: string]: unknown
+}
+
+export type NewsEventV2 = {
+  news_event_id: string
+  published_at: string
+  severity: string
+  headline: string
+  summary?: string
+  headline_count?: number
+  decision_ref?: {
+    decision_id?: string | null
+  }
+  entity_links?: EntityRef[]
+}
+
+export type RebalancePreviewV2 = {
+  rebalance_plan_id: string
+  generated_at: string
+  positions: Array<{
+    entity_ref: EntityRef
+    target_weight: number
+    signal_id?: string
+    lifecycle_state?: SignalLifecycleState
+    signal_action?: string
+    signal_score?: number
+    reasons?: string[]
+  }>
+  summary?: Record<string, unknown>
+  risk_checks?: Array<Record<string, unknown>>
+}
+
+export type RebalanceCommitV2 = {
+  status: string
+  commit_id: string
+  rebalance_plan_id: string
+  positions_committed: number
+  committed_at: string
 }

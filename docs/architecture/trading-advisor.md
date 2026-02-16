@@ -14,6 +14,20 @@ Success criteria:
 - Backtest outputs match the fields in `decision_log` and `decision_view`.
 - Clear module boundaries with explicit contracts and observability.
 - StockFuturesSpreadCarryAlpha delivers floor + alpha metrics with early exit logic.
+- High-load compute paths (minute replay, backtest sweeps, HPO) use stack-appropriate kernels and scale predictably.
+
+## Compute stack architecture policy
+
+- Layer separation is mandatory:
+  - Boundary I/O layer for ingestion/normalization and persistence.
+  - Numeric kernel layer for heavy computations.
+  - Orchestration layer for sharding, caching, and retries.
+- Stack choices:
+  - `pandas` at boundaries.
+  - `numpy` in hot-path kernels by default.
+  - `numba` for profiled numeric hotspots with deterministic fallback.
+- Any optimization change must pass both correctness and performance gates.
+- Canonical policy details are defined in `docs/architecture/modules/compute-stack-policy.md`.
 
 ## Module boundaries
 
@@ -104,10 +118,19 @@ flowchart LR
 - `docs/architecture/glossary.md`
 - `docs/architecture/modules/backend-core.md`
 - `docs/architecture/modules/contracts-configs.md`
+- `docs/architecture/modules/compute-stack-policy.md`
 - `docs/architecture/modules/entities.md`
 - `docs/architecture/modules/strategy-signal-interface.md`
 - `docs/architecture/modules/stock-futures-spread-carry-alpha.md`
 - `docs/architecture/modules/ui-web.md`
+- `docs/architecture/layers-v2.md`
+- `docs/architecture/entities-v2.md`
+- `docs/architecture/architecture-map-v2.md`
+- `docs/architecture/architecture-map-d3.html`
+- `docs/contracts/api-v2.yaml`
+- `docs/ux/workspaces-map.md`
+- `docs/research/evaluation-policy.md`
+- `docs/runbooks/signal-action-audit.md`
 - `docs/user-scenarios.md`
 
 ## QC checkpoints and self-correction
@@ -158,6 +181,8 @@ Traces:
 - Canonical contracts:
   - `contracts/decision-log.schema.json`
   - `contracts/decision-view.schema.json`
+- v2 API surface:
+  - `docs/contracts/api-v2.yaml`
 - DecisionView is strictly derived from DecisionLog.
 - All modules must include snapshot_id references for MOEX ISS/QUIK inputs.
 
