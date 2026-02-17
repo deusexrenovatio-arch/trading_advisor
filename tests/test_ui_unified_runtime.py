@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -121,6 +122,7 @@ def _settings(tmp_path: Path, *, allow_legacy_fallback: bool) -> AppSettings:
         unified_front_only=True,
         unified_front_roll_days=7,
         require_score_gate_by_default=False,
+        incremental_replay_enabled=False,
     )
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path), compute_lookback_days=120),
@@ -145,6 +147,62 @@ def test_unified_runtime_selects_front_pair_and_builds_snapshot(tmp_path):
     assert snapshot.top_pairs.iloc[0]["future"] == "AAH6"
     assert snapshot.signals.iloc[0]["stock"] == "AAA"
     assert isinstance(snapshot.signals.iloc[0]["signal_metrics"], dict)
+
+
+def test_unified_runtime_parallel_workers_consistency(tmp_path):
+    _seed_unified_fixture(tmp_path)
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+    settings.ui.unified_pair_workers = 1
+    single = build_unified_market_snapshot(
+        settings,
+        tmp_path,
+        force=True,
+        ttl_sec=60,
+        as_of=date(2026, 2, 12),
+    )
+
+    settings.ui.unified_pair_workers = 4
+    parallel = build_unified_market_snapshot(
+        settings,
+        tmp_path,
+        force=True,
+        ttl_sec=60,
+        as_of=date(2026, 2, 12),
+    )
+
+    top_columns = [
+        "stock",
+        "future",
+        "signal_action",
+        "total_score",
+        "score_exec_probability",
+        "score_earn_probability",
+    ]
+    signal_columns = [
+        "stock",
+        "future",
+        "signal_action",
+        "total_score",
+        "score_exec_probability",
+        "score_earn_probability",
+    ]
+
+    pd.testing.assert_frame_equal(
+        single.top_pairs[top_columns].reset_index(drop=True),
+        parallel.top_pairs[top_columns].reset_index(drop=True),
+        check_dtype=False,
+        check_exact=False,
+        atol=1e-12,
+        rtol=1e-12,
+    )
+    pd.testing.assert_frame_equal(
+        single.signals[signal_columns].reset_index(drop=True),
+        parallel.signals[signal_columns].reset_index(drop=True),
+        check_dtype=False,
+        check_exact=False,
+        atol=1e-12,
+        rtol=1e-12,
+    )
 
 
 def test_unified_spread_series_and_api_endpoints(tmp_path):
@@ -180,6 +238,9 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert "score_gate_pass" in top_pairs_data[0]
     assert isinstance(top_pairs_data[0]["signal_metrics"], dict)
     assert "score_exec_probability" in top_pairs_data[0]["signal_metrics"]
+    assert isinstance(top_pairs_data[0]["execution_quality"], dict)
+    assert "unfilled_entry_rate" in top_pairs_data[0]["execution_quality"]
+    assert "forced_exit_rate" in top_pairs_data[0]["execution_quality"]
 
     signals = client.get("/api/signals?limit=5")
     assert signals.status_code == 200
@@ -209,6 +270,32 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert status_payload["status"] == "ok"
     assert status_payload["engine"] == "unified_minute_replay"
     assert int(status_payload["rows"]) >= 0
+    for key in (
+        "incremental_enabled",
+        "data_watermark_before",
+        "data_watermark_after",
+        "pairs_total",
+        "pairs_recomputed",
+        "pairs_reused",
+        "pairs_skipped",
+        "skip_reason",
+    ):
+        assert key in status_payload
+
+    refresh_status = client.get("/api/signals/refresh-status")
+    assert refresh_status.status_code == 200
+    refresh_status_payload = refresh_status.get_json()
+    for key in (
+        "incremental_enabled",
+        "data_watermark_before",
+        "data_watermark_after",
+        "pairs_total",
+        "pairs_recomputed",
+        "pairs_reused",
+        "pairs_skipped",
+        "skip_reason",
+    ):
+        assert key in refresh_status_payload
 
     history = client.get("/api/signals/history?limit=5")
     assert history.status_code == 200
@@ -218,3 +305,33 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert "signal_reasons" in history_data[0]
     assert "signal_metrics" in history_data[0]
     assert "trades_closed" in history_data[0]
+
+
+def test_manual_refresh_defaults_to_incremental_and_supports_force_full(tmp_path, monkeypatch):
+    _seed_unified_fixture(tmp_path)
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+    settings.ui.incremental_replay_enabled = True
+
+    calls: list[str] = []
+
+    def _fake_incremental_ingest(**_kwargs):
+        calls.append("incremental")
+        return SimpleNamespace(
+            global_watermark_before="before",
+            global_watermark_after="after",
+            pair_results={},
+            degraded=False,
+        )
+
+    monkeypatch.setattr("moex_carry.ui.app.run_incremental_minute_ingest", _fake_incremental_ingest)
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    refresh = client.post("/api/signals/refresh")
+    assert refresh.status_code == 200
+    assert calls == ["incremental"]
+
+    refresh_force = client.post("/api/signals/refresh", json={"force_full": True})
+    assert refresh_force.status_code == 200
+    assert calls == ["incremental"]

@@ -20,6 +20,9 @@ def invalid_objective(mode: str) -> float:
 
 
 def compute_objective(metrics: Mapping[str, float], config: ObjectiveConfig) -> float:
+    if str(config.scope or "PORTFOLIO").upper() == "PORTFOLIO":
+        return _compute_portfolio_objective(metrics, config)
+
     metric_value = _metric_value(metrics, config.metric)
     if not math.isfinite(metric_value):
         return invalid_objective(config.mode)
@@ -40,6 +43,53 @@ def compute_objective(metrics: Mapping[str, float], config: ObjectiveConfig) -> 
     if str(config.mode).lower() == "min":
         return metric_value + penalty_dd + penalty_to
     return metric_value - penalty_dd - penalty_to
+
+
+def _compute_portfolio_objective(metrics: Mapping[str, float], config: ObjectiveConfig) -> float:
+    max_dd = abs(float(metrics.get("PortfolioMaxDD", metrics.get("MaxDD", 0.0)) or 0.0))
+    idle_ratio = float(metrics.get("PortfolioIdleRatio", 0.0) or 0.0)
+    forced_exit_rate = float(metrics.get("PortfolioForcedExitRate", 0.0) or 0.0)
+    unfilled_entry_rate = float(metrics.get("PortfolioUnfilledEntryRate", 0.0) or 0.0)
+    turnover = float(metrics.get("PortfolioTurnover", metrics.get("AvgTurnover", 0.0)) or 0.0)
+
+    hard_max_dd = _none_or_float(config.hard_max_dd)
+    hard_max_idle = _none_or_float(config.hard_max_idle_ratio)
+    hard_max_forced = _none_or_float(config.hard_max_forced_exit_rate)
+    hard_max_unfilled = _none_or_float(config.hard_max_unfilled_entry_rate)
+
+    if hard_max_dd is not None and max_dd > hard_max_dd:
+        return invalid_objective(config.mode)
+    if hard_max_idle is not None and idle_ratio > hard_max_idle:
+        return invalid_objective(config.mode)
+    if hard_max_forced is not None and forced_exit_rate > hard_max_forced:
+        return invalid_objective(config.mode)
+    if hard_max_unfilled is not None and unfilled_entry_rate > hard_max_unfilled:
+        return invalid_objective(config.mode)
+
+    metric_key = str(config.portfolio_metric or "utility").lower()
+    if metric_key == "cagr":
+        base = float(metrics.get("PortfolioCAGR", metrics.get("CAGR", 0.0)) or 0.0)
+    else:
+        base = float(metrics.get("PortfolioExcessAnn", metrics.get("ExcessAnn", 0.0)) or 0.0)
+    if not math.isfinite(base):
+        return invalid_objective(config.mode)
+
+    dd_soft_limit = abs(float(config.dd_soft_limit))
+    penalty = 0.0
+    penalty += float(config.lambda_dd) * max(0.0, max_dd - dd_soft_limit)
+    penalty += float(config.lambda_idle) * idle_ratio
+    penalty += float(config.lambda_forced) * forced_exit_rate
+    penalty += float(config.lambda_unfilled) * unfilled_entry_rate
+    penalty += float(config.lambda_turnover) * turnover
+
+    score = base - penalty
+    if metric_key == "utility":
+        objective = score
+    else:
+        objective = base
+    if str(config.mode).lower() == "min":
+        return -objective
+    return objective
 
 
 def aggregate_objectives(
@@ -117,6 +167,56 @@ def _metric_value(metrics: Mapping[str, float], metric: str | None) -> float:
     key = (metric or "excess_ann").strip().lower()
     if key in {"excessann", "excess_ann", "excess"}:
         return _excess_ann(metrics)
+    if key in {"minute_excess_ann", "minute_excess_annual", "excess_annual_vs_target"}:
+        return float(
+            metrics.get("MinuteExcessAnnMean")
+            or metrics.get("excess_annual_vs_target")
+            or metrics.get("ExcessAnn")
+            or 0.0
+        )
+    if key in {"realized_annualized_return", "minute_realized_annual", "minute_cagr"}:
+        return float(
+            metrics.get("MinuteRealizedAnnualMean")
+            or metrics.get("realized_annualized_return")
+            or metrics.get("CAGR")
+            or 0.0
+        )
+    if key in {"realized_period_return", "minute_period_return"}:
+        return float(metrics.get("realized_period_return") or metrics.get("MinuteRealizedPeriodReturnMean") or 0.0)
+    if key in {"unfilled_entry_rate", "minute_unfilled_entry_rate"}:
+        return float(
+            metrics.get("unfilled_entry_rate")
+            or metrics.get("MinuteUnfilledEntryRateMean")
+            or metrics.get("MinuteUnfilledEntryMean")
+            or 0.0
+        )
+    if key in {"forced_exit_rate", "minute_forced_exit_rate"}:
+        return float(
+            metrics.get("forced_exit_rate")
+            or metrics.get("MinuteForcedExitRateMean")
+            or metrics.get("MinuteForcedExitMean")
+            or 0.0
+        )
+    if key in {"idle_ratio", "minute_idle_ratio"}:
+        return float(metrics.get("MinuteIdleRatioMean") or 0.0)
+    if key in {"active_ratio", "minute_active_ratio"}:
+        return float(metrics.get("MinuteActiveRatioMean") or 0.0)
+    if key in {"portfolio_excessann", "portfolio_excess_ann", "portfolio_excess"}:
+        return float(metrics.get("PortfolioExcessAnn", metrics.get("ExcessAnn", 0.0)) or 0.0)
+    if key in {"portfolio_cagr"}:
+        return float(metrics.get("PortfolioCAGR", metrics.get("CAGR", 0.0)) or 0.0)
+    if key in {"portfolio_maxdd", "portfolio_max_dd"}:
+        return abs(float(metrics.get("PortfolioMaxDD", metrics.get("MaxDD", 0.0)) or 0.0))
+    if key in {"portfolio_idle_ratio"}:
+        return float(metrics.get("PortfolioIdleRatio", 0.0) or 0.0)
+    if key in {"portfolio_utilization", "portfolio_utilization_mean"}:
+        return float(metrics.get("PortfolioUtilizationMean", 0.0) or 0.0)
+    if key in {"portfolio_forced_exit_rate"}:
+        return float(metrics.get("PortfolioForcedExitRate", 0.0) or 0.0)
+    if key in {"portfolio_unfilled_entry_rate"}:
+        return float(metrics.get("PortfolioUnfilledEntryRate", 0.0) or 0.0)
+    if key in {"portfolio_turnover"}:
+        return float(metrics.get("PortfolioTurnover", metrics.get("AvgTurnover", 0.0)) or 0.0)
     if key in {"cagr"}:
         return float(metrics.get("CAGR") or 0.0)
     if key in {"ir", "information_ratio"}:
@@ -154,6 +254,15 @@ def _normalize_drawdown(value: float | None) -> float:
         return 0.0
     value = float(value)
     return abs(value)
+
+
+def _none_or_float(value: float | None) -> float | None:
+    if value is None:
+        return None
+    numeric = float(value)
+    if math.isnan(numeric):
+        return None
+    return numeric
 
 
 def _percentile(values: list[float], q: float) -> float:

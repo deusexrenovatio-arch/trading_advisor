@@ -4,6 +4,7 @@ import json
 import hashlib
 import logging
 import math
+from pathlib import Path
 import threading
 import uuid
 from datetime import datetime, time as dt_time, timedelta, timezone
@@ -38,6 +39,7 @@ from moex_carry.domain.pretrade_service import (
 )
 from moex_carry.forward.runtime import load_forward_status, start_forward_run
 from moex_carry.hpo.runtime import load_hpo_status, start_hpo_run
+from moex_carry.minute_ingest.runner import run_incremental_minute_ingest
 from moex_carry.observability.runtime_metrics import ApiObservability
 from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
@@ -66,6 +68,8 @@ from moex_carry.ui.unified_runtime import (
     UnifiedMarketSnapshot,
     build_unified_market_snapshot,
     build_unified_spread_series,
+    get_last_refresh_telemetry,
+    list_unified_ingest_pairs,
     persist_snapshot_to_csv,
 )
 
@@ -492,6 +496,29 @@ def _merge_signal_metrics(record: dict[str, object]) -> dict[str, object]:
         if key not in merged:
             merged[key] = _sanitize_value(value)
     return merged
+
+
+def _build_execution_quality(record: dict[str, object]) -> dict[str, object]:
+    metrics = _normalize_signal_metrics(record.get("signal_metrics"))
+
+    def _pick(*keys: str):
+        for key in keys:
+            if key in record and record.get(key) is not None:
+                return _sanitize_value(record.get(key))
+            if key in metrics and metrics.get(key) is not None:
+                return _sanitize_value(metrics.get(key))
+        return None
+
+    return {
+        "unfilled_entry_rate": _pick("unfilled_entry_rate"),
+        "unfilled_exit_rate": _pick("unfilled_exit_rate"),
+        "forced_exit_rate": _pick("forced_exit_rate"),
+        "entry_wait_minutes_mean": _pick("avg_entry_wait_min_closed"),
+        "exit_wait_minutes_mean": _pick("avg_exit_wait_min_closed"),
+        "trades_closed_sample": _pick("trades_closed"),
+        "entry_signals_sample": _pick("entry_signals"),
+        "exit_signals_sample": _pick("exit_signals"),
+    }
 
 
 def _normalize_datetime(value: datetime) -> datetime:
@@ -922,12 +949,28 @@ def create_app(settings: AppSettings) -> Dash:
     refresh_daily_time = _parse_daily_time(settings.ui.signal_refresh_daily_time)
     refresh_tz = _resolve_tz(settings.ui.signal_refresh_timezone, settings.environment.timezone)
     refresh_mode = "daily" if refresh_daily_time else "interval"
+    incremental_enabled = bool(getattr(settings.ui, "incremental_replay_enabled", True))
+    refresh_durations_ms: list[float] = []
     refresh_state = {
         "enabled": refresh_enabled,
         "interval_sec": refresh_interval,
         "mode": refresh_mode,
         "daily_time": settings.ui.signal_refresh_daily_time,
         "timezone": settings.ui.signal_refresh_timezone or settings.environment.timezone,
+        "incremental_enabled": incremental_enabled,
+        "data_watermark_before": None,
+        "data_watermark_after": None,
+        "pairs_total": 0,
+        "pairs_recomputed": 0,
+        "pairs_reused": 0,
+        "pairs_skipped": 0,
+        "skip_reason": None,
+        "ingest_lag_sec": None,
+        "cache_hit_ratio": 0.0,
+        "fallback_full_replay_count": 0,
+        "refresh_duration_ms_p50": 0.0,
+        "refresh_duration_ms_p95": 0.0,
+        "staleness_age_sec": None,
         "status": "disabled",
         "last_started_at": None,
         "last_success_at": None,
@@ -951,17 +994,50 @@ def create_app(settings: AppSettings) -> Dash:
             return int(fallback)
         return None
 
-    def _unified_snapshot(max_pairs: int | None, *, force: bool = False) -> UnifiedMarketSnapshot:
+    def _resolve_incremental_checkpoint_root() -> Path:
+        configured = Path(str(getattr(settings.ui, "incremental_checkpoint_dir", "./data/state/incremental_replay")))
+        if configured.is_absolute():
+            return configured
+        text = str(configured).replace("\\", "/")
+        if text.startswith("./data/"):
+            return paths.data_dir.parent / text[2:]
+        if text.startswith("data/"):
+            return paths.data_dir.parent / text
+        return paths.data_dir / configured
+
+    def _percentile(values: list[float], q: float) -> float:
+        if not values:
+            return 0.0
+        data = sorted(float(item) for item in values)
+        if len(data) == 1:
+            return data[0]
+        rank = (len(data) - 1) * max(0.0, min(float(q), 100.0)) / 100.0
+        lower = int(rank)
+        upper = min(lower + 1, len(data) - 1)
+        if lower == upper:
+            return data[lower]
+        weight = rank - lower
+        return data[lower] * (1.0 - weight) + data[upper] * weight
+
+    def _unified_snapshot(
+        max_pairs: int | None,
+        *,
+        force: bool = False,
+        ingest_cycle=None,
+    ) -> UnifiedMarketSnapshot:
         return build_unified_market_snapshot(
             settings,
             paths.data_dir,
             force=force,
             ttl_sec=_unified_ttl_sec(),
             max_pairs=max_pairs,
+            ingest_result_map=(ingest_cycle.pair_results if ingest_cycle is not None else None),
+            global_data_watermark_before=(ingest_cycle.global_watermark_before if ingest_cycle is not None else None),
+            global_data_watermark_after=(ingest_cycle.global_watermark_after if ingest_cycle is not None else None),
         )
 
-    def _persist_unified_signal_run(max_pairs: int | None) -> int:
-        snapshot = _unified_snapshot(max_pairs=max_pairs, force=True)
+    def _persist_unified_signal_run(max_pairs: int | None, *, force: bool, ingest_cycle=None) -> dict[str, object]:
+        snapshot = _unified_snapshot(max_pairs=max_pairs, force=force, ingest_cycle=ingest_cycle)
         require_score_gate_signals = _default_require_score_gate_for_signals(settings)
         signals_all = snapshot.signals.copy()
         top_pairs = snapshot.top_pairs.copy()
@@ -996,10 +1072,40 @@ def create_app(settings: AppSettings) -> Dash:
             store_signal_run(session, run_id, as_of, params)
             if records:
                 store_signal_history(session, run_id, as_of, records)
-        return int(len(signals_actionable))
+        fallback_count = sum(1 for item in snapshot.warnings if ":fallback:" in str(item))
+        return {
+            "rows": int(len(signals_actionable)),
+            "warnings": list(snapshot.warnings),
+            "errors": list(snapshot.errors),
+            "fallback_full_replay_count": int(fallback_count),
+            "telemetry": get_last_refresh_telemetry(),
+        }
+
+    def _load_latest_unified_output(
+        *,
+        max_pairs: int | None,
+        fresh: bool = False,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        top_pairs = pd.DataFrame()
+        signals = pd.DataFrame()
+        backtests = pd.DataFrame()
+        # Default path: serve the latest backend-produced projection (last-good CSV outputs).
+        if not fresh:
+            top_pairs = load_top_pairs(paths.data_dir)
+            signals = load_signals(paths.data_dir)
+            backtests = load_backtest_summary(paths.data_dir)
+        if top_pairs.empty or signals.empty or backtests.empty:
+            snapshot = _unified_snapshot(max_pairs=max_pairs, force=False)
+            if top_pairs.empty:
+                top_pairs = snapshot.top_pairs.copy()
+            if signals.empty:
+                signals = snapshot.signals.copy()
+            if backtests.empty:
+                backtests = snapshot.backtests.copy()
+        return top_pairs, signals, backtests
 
     def _run_signal_refresh(trigger: str, force: bool = False) -> bool:
-        if not refresh_enabled and not force:
+        if not refresh_enabled and trigger != "manual":
             refresh_state["status"] = "disabled"
             refresh_state["last_error"] = f"skip:{trigger}"
             return False
@@ -1008,16 +1114,76 @@ def create_app(settings: AppSettings) -> Dash:
             refresh_state["last_error"] = f"skip:{trigger}"
             return False
         with refresh_lock:
+            started = datetime.now(timezone.utc)
             refresh_state["status"] = "running"
             refresh_state["last_started_at"] = _iso_now()
             refresh_state["last_error"] = None
             try:
                 if settings.ui.use_unified_signal_engine:
-                    rows = _persist_unified_signal_run(
-                        _resolved_unified_max_pairs(settings.ui.signal_refresh_max_pairs)
+                    max_pairs = _resolved_unified_max_pairs(settings.ui.signal_refresh_max_pairs)
+                    ingest_cycle = None
+                    if incremental_enabled and not force:
+                        ingest_pairs = list_unified_ingest_pairs(
+                            settings,
+                            paths.data_dir,
+                            max_pairs=max_pairs,
+                        )
+                        ingest_cycle = run_incremental_minute_ingest(
+                            settings=settings,
+                            data_dir=paths.data_dir,
+                            checkpoint_root=_resolve_incremental_checkpoint_root(),
+                            pairs=ingest_pairs,
+                            overlap_minutes=max(int(getattr(settings.ui, "incremental_overlap_minutes", 180) or 0), 1),
+                        )
+                        refresh_state["data_watermark_before"] = ingest_cycle.global_watermark_before
+                        refresh_state["data_watermark_after"] = ingest_cycle.global_watermark_after
+                        lag_values = [
+                            float(item.ingest_lag_sec)
+                            for item in ingest_cycle.pair_results.values()
+                            if item.ingest_lag_sec is not None
+                        ]
+                        refresh_state["ingest_lag_sec"] = max(lag_values) if lag_values else None
+                        if ingest_cycle.degraded:
+                            observability.mark_event("incremental_ingest_degraded")
+                    refresh_payload = _persist_unified_signal_run(
+                        max_pairs,
+                        force=force,
+                        ingest_cycle=ingest_cycle,
                     )
-                    refresh_state["rows"] = int(rows)
+                    refresh_state["rows"] = int(refresh_payload.get("rows") or 0)
                     refresh_state["engine"] = "unified_minute_replay"
+                    refresh_state["fallback_full_replay_count"] = int(
+                        refresh_payload.get("fallback_full_replay_count") or 0
+                    )
+                    telemetry = refresh_payload.get("telemetry")
+                    if isinstance(telemetry, dict):
+                        refresh_state["incremental_enabled"] = bool(
+                            telemetry.get("incremental_enabled", incremental_enabled)
+                        )
+                        refresh_state["data_watermark_before"] = telemetry.get("data_watermark_before")
+                        refresh_state["data_watermark_after"] = telemetry.get("data_watermark_after")
+                        refresh_state["pairs_total"] = int(telemetry.get("pairs_total") or 0)
+                        refresh_state["pairs_recomputed"] = int(telemetry.get("pairs_recomputed") or 0)
+                        refresh_state["pairs_reused"] = int(telemetry.get("pairs_reused") or 0)
+                        refresh_state["pairs_skipped"] = int(telemetry.get("pairs_skipped") or 0)
+                        refresh_state["skip_reason"] = telemetry.get("skip_reason")
+                        pairs_total = max(int(refresh_state["pairs_total"]), 1)
+                        refresh_state["cache_hit_ratio"] = float(refresh_state["pairs_reused"]) / float(pairs_total)
+                        if refresh_state["skip_reason"]:
+                            observability.mark_event(
+                                f"refresh_skip_{str(refresh_state['skip_reason']).strip().lower()}",
+                            )
+                    if refresh_state["fallback_full_replay_count"] > 0:
+                        observability.mark_event(
+                            "incremental_full_fallback",
+                            count=int(refresh_state["fallback_full_replay_count"]),
+                        )
+                    degraded_mode = bool(ingest_cycle is not None and ingest_cycle.degraded)
+                    if degraded_mode:
+                        refresh_state["status"] = "degraded"
+                    else:
+                        refresh_state["status"] = "ok"
+                        refresh_state["last_success_at"] = _iso_now()
                 else:
                     run_signal_cycle(
                         settings,
@@ -1025,13 +1191,31 @@ def create_app(settings: AppSettings) -> Dash:
                         save_csv=settings.ui.signal_refresh_save_csv,
                     )
                     refresh_state["engine"] = "legacy_pipeline"
-                refresh_state["last_success_at"] = _iso_now()
-                refresh_state["status"] = "ok"
+                    refresh_state["status"] = "ok"
+                    refresh_state["last_success_at"] = _iso_now()
             except Exception as exc:
                 refresh_state["last_error"] = str(exc)
                 refresh_state["status"] = "error"
                 logger.exception("Signal refresh failed")
                 return False
+            finally:
+                duration_ms = max((datetime.now(timezone.utc) - started).total_seconds() * 1000.0, 0.0)
+                refresh_durations_ms.append(duration_ms)
+                if len(refresh_durations_ms) > 500:
+                    del refresh_durations_ms[: len(refresh_durations_ms) - 500]
+                refresh_state["refresh_duration_ms_p50"] = _percentile(refresh_durations_ms, 50.0)
+                refresh_state["refresh_duration_ms_p95"] = _percentile(refresh_durations_ms, 95.0)
+                if refresh_state.get("status") == "degraded":
+                    last_success = pd.to_datetime(refresh_state.get("last_success_at"), errors="coerce")
+                    if not pd.isna(last_success):
+                        refresh_state["staleness_age_sec"] = max(
+                            (datetime.now(timezone.utc) - last_success.to_pydatetime().replace(tzinfo=timezone.utc)).total_seconds(),
+                            0.0,
+                        )
+                    else:
+                        refresh_state["staleness_age_sec"] = None
+                else:
+                    refresh_state["staleness_age_sec"] = 0.0
         return True
 
     def _refresh_loop() -> None:
@@ -1246,7 +1430,13 @@ def create_app(settings: AppSettings) -> Dash:
     def signals_refresh_api():
         if refresh_lock.locked():
             return jsonify({**refresh_state, "status": "busy"}), 409
-        ok = _run_signal_refresh("manual", force=True)
+        payload = request.get_json(silent=True)
+        force_full = False
+        if isinstance(payload, dict):
+            force_full = bool(_parse_bool(payload.get("force_full")))
+        elif request.args:
+            force_full = bool(_parse_bool(request.args.get("force_full")))
+        ok = _run_signal_refresh("manual", force=force_full)
         status_code = 200 if ok else 500
         return jsonify(refresh_state), status_code
 
@@ -1531,23 +1721,38 @@ def create_app(settings: AppSettings) -> Dash:
         if payload is None:
             return _bad_request("invalid_json")
         precompute = None
+        compute_fill_quality = None
         request_payload = payload
         if isinstance(payload, dict):
             if "request" in payload:
                 request_payload = payload.get("request")
                 precompute = _parse_bool(payload.get("precompute"))
+                compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
             elif "precompute" in payload:
                 precompute = _parse_bool(payload.get("precompute"))
                 request_payload = dict(payload)
                 request_payload.pop("precompute", None)
+                compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
+                request_payload.pop("compute_fill_quality", None)
+            elif "compute_fill_quality" in payload:
+                compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
+                request_payload = dict(payload)
+                request_payload.pop("compute_fill_quality", None)
         if not isinstance(request_payload, dict):
             return _bad_request("missing_request")
         try:
             backtest_request = BacktestRequest.model_validate(request_payload)
         except ValidationError as exc:
             return _bad_request("validation_error", details=exc.errors())
+        if compute_fill_quality is None:
+            compute_fill_quality = True
         try:
-            report = run_backtest_v2_cached(backtest_request, paths.data_dir, precompute=precompute)
+            report = run_backtest_v2_cached(
+                backtest_request,
+                paths.data_dir,
+                precompute=precompute,
+                compute_fill_quality=compute_fill_quality,
+            )
         except ValueError as exc:
             return _bad_request(str(exc))
         except Exception as exc:
@@ -1641,18 +1846,30 @@ def create_app(settings: AppSettings) -> Dash:
             return _bad_request("invalid_json")
         experiment_id = str(payload.get("experiment_id") or f"exp-{uuid.uuid4().hex[:12]}")
         precompute = _parse_bool(payload.get("precompute"))
+        compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
         if precompute is None:
             precompute = True
+        if compute_fill_quality is None:
+            compute_fill_quality = True
         request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else payload
         if not isinstance(request_payload, dict):
             return _bad_request("missing_request")
-        request_payload = {key: value for key, value in request_payload.items() if key != "precompute"}
+        request_payload = {
+            key: value
+            for key, value in request_payload.items()
+            if key not in {"precompute", "compute_fill_quality"}
+        }
         try:
             backtest_request = BacktestRequest.model_validate(request_payload)
         except ValidationError as exc:
             return _bad_request("validation_error", details=exc.errors())
         try:
-            report = run_backtest_v2_cached(backtest_request, paths.data_dir, precompute=precompute)
+            report = run_backtest_v2_cached(
+                backtest_request,
+                paths.data_dir,
+                precompute=precompute,
+                compute_fill_quality=compute_fill_quality,
+            )
         except ValueError as exc:
             return _bad_request(str(exc))
         except Exception as exc:
@@ -1732,15 +1949,31 @@ def create_app(settings: AppSettings) -> Dash:
         run_state = str(payload.get("status") or "").lower()
         result = payload.get("result")
         leaderboard = []
+        quality_review = None
         if isinstance(result, dict):
             raw = result.get("leaderboard")
             if isinstance(raw, list):
                 leaderboard = raw
+            quality_candidate = result.get("quality_review")
+            if isinstance(quality_candidate, dict):
+                quality_review = quality_candidate
         if not leaderboard and isinstance(payload.get("leaderboard"), list):
             leaderboard = payload.get("leaderboard")
 
-        if run_state == "completed" and leaderboard:
+        quality_checks: list[str] = []
+        if isinstance(quality_review, dict) and not bool(quality_review.get("skipped")):
+            pass_count = int(quality_review.get("quality_gate_pass_count") or 0)
+            if pass_count > 0:
+                quality_checks.append("quality_gate_pass")
+            else:
+                quality_checks.append("quality_gate_fail")
+
+        if run_state == "completed" and leaderboard and ("quality_gate_fail" not in quality_checks):
             promotion_gate = {"status": "pass", "checks": ["leaderboard_present", "completed"]}
+            if quality_checks:
+                promotion_gate["checks"].extend(quality_checks)
+        elif run_state == "completed" and "quality_gate_fail" in quality_checks:
+            promotion_gate = {"status": "fail", "checks": ["quality_gate_fail", "leaderboard_present"]}
         elif run_state == "completed":
             promotion_gate = {"status": "fail", "checks": ["leaderboard_missing"]}
         elif run_state == "failed":
@@ -1754,6 +1987,7 @@ def create_app(settings: AppSettings) -> Dash:
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
         all_pairs = request.args.get("all", "").lower() in {"1", "true", "yes"}
+        fresh = request.args.get("fresh", "").lower() in {"1", "true", "yes"}
         require_score_gate = _resolve_require_score_gate(
             request.args.get("require_score_gate"),
             default=_default_require_score_gate_for_top_pairs(settings),
@@ -1763,8 +1997,11 @@ def create_app(settings: AppSettings) -> Dash:
         if settings.ui.use_unified_signal_engine:
             try:
                 max_pairs = None if all_pairs else _resolved_unified_max_pairs(limit)
-                snapshot = _unified_snapshot(max_pairs=max_pairs, force=False)
-                df = snapshot.top_pairs.copy()
+                top_pairs, _, _ = _load_latest_unified_output(
+                    max_pairs=max_pairs,
+                    fresh=fresh,
+                )
+                df = top_pairs.copy()
             except Exception:
                 logger.exception("Unified top-pairs failed")
                 if not settings.ui.unified_allow_legacy_fallback:
@@ -1783,11 +2020,14 @@ def create_app(settings: AppSettings) -> Dash:
         if not all_pairs:
             df = df.head(max(limit, 0)) if limit else df
         records = [_merge_signal_metrics(record) for record in _df_to_records(df)]
+        for record in records:
+            record["execution_quality"] = _build_execution_quality(record)
         return jsonify(records)
 
     @server.route("/api/signals", methods=["GET"])
     def signals_api():
         df = pd.DataFrame()
+        fresh = request.args.get("fresh", "").lower() in {"1", "true", "yes"}
         require_score_gate = _resolve_require_score_gate(
             request.args.get("require_score_gate"),
             default=_default_require_score_gate_for_signals(settings),
@@ -1795,8 +2035,11 @@ def create_app(settings: AppSettings) -> Dash:
         if settings.ui.use_unified_signal_engine:
             limit = int(request.args.get("limit", "500"))
             try:
-                snapshot = _unified_snapshot(max_pairs=_resolved_unified_max_pairs(limit), force=False)
-                df = snapshot.signals.copy()
+                _, signals, _ = _load_latest_unified_output(
+                    max_pairs=_resolved_unified_max_pairs(limit),
+                    fresh=fresh,
+                )
+                df = signals.copy()
             except Exception:
                 logger.exception("Unified signals failed")
                 if not settings.ui.unified_allow_legacy_fallback:
@@ -2664,6 +2907,17 @@ def create_app(settings: AppSettings) -> Dash:
                     "auto_unwind_triggered": auto_unwind_triggered_15m,
                     "auto_unwind_errors": auto_unwind_errors_15m,
                 },
+                "signal_refresh_runtime": {
+                    "status": refresh_state.get("status"),
+                    "duration_ms": {
+                        "p50": float(refresh_state.get("refresh_duration_ms_p50") or 0.0),
+                        "p95": float(refresh_state.get("refresh_duration_ms_p95") or 0.0),
+                    },
+                    "ingest_lag_sec": refresh_state.get("ingest_lag_sec"),
+                    "cache_hit_ratio": float(refresh_state.get("cache_hit_ratio") or 0.0),
+                    "skip_reason": refresh_state.get("skip_reason"),
+                    "fallback_full_replay_count": int(refresh_state.get("fallback_full_replay_count") or 0),
+                },
                 "alerts": alerts,
             }
         )
@@ -2768,11 +3022,15 @@ def create_app(settings: AppSettings) -> Dash:
     @server.route("/api/backtests", methods=["GET"])
     def backtests_api():
         df = pd.DataFrame()
+        fresh = request.args.get("fresh", "").lower() in {"1", "true", "yes"}
         if settings.ui.use_unified_signal_engine:
             limit = int(request.args.get("limit", "500"))
             try:
-                snapshot = _unified_snapshot(max_pairs=_resolved_unified_max_pairs(limit), force=False)
-                df = snapshot.backtests.copy()
+                _, _, backtests = _load_latest_unified_output(
+                    max_pairs=_resolved_unified_max_pairs(limit),
+                    fresh=fresh,
+                )
+                df = backtests.copy()
             except Exception:
                 logger.exception("Unified backtests failed")
                 if not settings.ui.unified_allow_legacy_fallback:
@@ -3249,19 +3507,19 @@ def create_app(settings: AppSettings) -> Dash:
     def _refresh(_):
         if settings.ui.use_unified_signal_engine:
             try:
-                snapshot = _unified_snapshot(
+                top_pairs, signals, backtest = _load_latest_unified_output(
                     max_pairs=_resolved_unified_max_pairs(settings.ui.signal_refresh_max_pairs),
-                    force=False,
+                    fresh=False,
                 )
                 top_pairs = _apply_score_gate_filter(
-                    snapshot.top_pairs.copy(),
+                    top_pairs.copy(),
                     require_score_gate=_default_require_score_gate_for_top_pairs(settings),
                 )
                 signals = _apply_score_gate_filter(
-                    snapshot.signals.copy(),
+                    signals.copy(),
                     require_score_gate=_default_require_score_gate_for_signals(settings),
                 )
-                backtest = snapshot.backtests.copy()
+                backtest = backtest.copy()
             except Exception:
                 logger.exception("Unified Dash refresh failed")
                 top_pairs = pd.DataFrame()

@@ -236,6 +236,7 @@ export type BacktestReport = {
   warnings?: string[]
   fill_quality_summary?: Record<string, unknown> | null
   execution_model?: Record<string, unknown> | null
+  parity_signature?: string | null
 }
 
 export type ForwardStatus = {

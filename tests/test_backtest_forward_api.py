@@ -125,6 +125,7 @@ def test_backtest_run_api_handles_precompute(tmp_path):
     client = app.server.test_client()
 
     payload = _build_backtest_payload()
+    payload["execution"]["pair_workers"] = 2
     response = client.post("/api/backtest/run", json={**payload, "precompute": True})
     assert response.status_code == 200
     data = response.get_json()
@@ -133,6 +134,7 @@ def test_backtest_run_api_handles_precompute(tmp_path):
     assert "trades" in data
     assert "fill_quality_summary" in data
     assert "execution_model" in data
+    assert int(data["execution_model"]["pair_workers"]) == 2
 
     response = client.post("/api/backtest/run", json={**payload, "precompute": False})
     assert response.status_code == 200
@@ -140,6 +142,15 @@ def test_backtest_run_api_handles_precompute(tmp_path):
     assert "summary_metrics" in data
     assert "fill_quality_summary" in data
     assert "execution_model" in data
+    assert int(data["execution_model"]["pair_workers"]) == 2
+
+    response = client.post(
+        "/api/backtest/run",
+        json={**payload, "precompute": False, "compute_fill_quality": False},
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["fill_quality_summary"] is None
 
 
 def test_backtest_run_api_validation_error(tmp_path):

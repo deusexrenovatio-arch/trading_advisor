@@ -24,10 +24,21 @@ class WalkForwardFold:
 class ObjectiveConfig:
     metric: str = "excess_ann"
     mode: ObjectiveMode = "max"
-    lambda_dd: float = 0.0
+    scope: Literal["PAIR_MEAN", "PORTFOLIO"] = "PORTFOLIO"
+    portfolio_metric: Literal["utility", "excess_ann", "cagr"] = "utility"
+    lambda_dd: float = 2.0
     dd_max: float | None = None
     lambda_to: float = 0.0
     to_max: float | None = None
+    dd_soft_limit: float = 0.20
+    lambda_idle: float = 0.6
+    lambda_forced: float = 0.4
+    lambda_unfilled: float = 0.3
+    lambda_turnover: float = 0.1
+    hard_max_dd: float | None = 0.30
+    hard_max_idle_ratio: float | None = 0.75
+    hard_max_forced_exit_rate: float | None = 0.40
+    hard_max_unfilled_entry_rate: float | None = 0.50
 
 
 @dataclass(frozen=True)
@@ -55,6 +66,8 @@ class TrialResult:
     objective: float
     fold_objectives: list[float] = field(default_factory=list)
     fold_results: list[FoldResult] = field(default_factory=list)
+    evaluation_scope: str | None = None
+    objective_breakdown: dict[str, float] | None = None
 
 
 @dataclass

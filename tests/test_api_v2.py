@@ -635,6 +635,31 @@ def test_v2_research_wrappers(tmp_path, monkeypatch):
     assert hpo_status_data["promotion_gate"]["status"] == "pass"
 
 
+def test_v2_hpo_status_fails_on_quality_gate(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    monkeypatch.setattr(
+        ui_app,
+        "load_hpo_status",
+        lambda *_args, **_kwargs: {
+            "run_id": "hpo-1",
+            "status": "completed",
+            "result": {
+                "leaderboard": [{"objective": 1.0}],
+                "quality_review": {"skipped": False, "quality_gate_pass_count": 0},
+            },
+        },
+    )
+
+    response = client.get("/api/v2/research/hpo/status?run_id=hpo-1")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["promotion_gate"]["status"] == "fail"
+    assert "quality_gate_fail" in payload["promotion_gate"]["checks"]
+
+
 def test_v2_portfolio_rebalance_preview_and_commit(tmp_path):
     settings = _build_settings(tmp_path)
     engine = create_engine_from_settings(settings)

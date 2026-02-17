@@ -65,7 +65,12 @@ def run_hpo(
 
 
 def _default_backtest_runner(request: BacktestRequest, data_dir: Path, precompute: bool | None) -> Any:
-    return run_backtest_v2_cached(request, data_dir, precompute=precompute)
+    return run_backtest_v2_cached(
+        request,
+        data_dir,
+        precompute=precompute,
+        compute_fill_quality=False,
+    )
 
 
 def _evaluate_trial(
