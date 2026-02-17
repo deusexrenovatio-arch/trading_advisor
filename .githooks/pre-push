@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+BLOCK_MAIN_PUSH="${MOEX_CARRY_BLOCK_MAIN_PUSH:-1}"
+ALLOW_MAIN_PUSH="${MOEX_CARRY_ALLOW_MAIN_PUSH:-0}"
+PUSHES_TO_MAIN=0
+
+if [[ "$BLOCK_MAIN_PUSH" == "1" ]]; then
+  while read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ "${remote_ref:-}" == "refs/heads/main" ]]; then
+      PUSHES_TO_MAIN=1
+    fi
+  done
+
+  if [[ "$PUSHES_TO_MAIN" == "1" && "$ALLOW_MAIN_PUSH" != "1" ]]; then
+    echo "[pre-push] blocked: direct push to main is disabled"
+    echo "[pre-push] use a feature branch + PR flow"
+    echo "[pre-push] override (one command):"
+    echo "  MOEX_CARRY_ALLOW_MAIN_PUSH=1 git push"
+    echo "[pre-push] to disable this rule globally for your shell/session:"
+    echo "  MOEX_CARRY_BLOCK_MAIN_PUSH=0"
+    exit 1
+  fi
+fi
+
+echo "[pre-push] running required local gates"
+
+echo "[pre-push] install python dev dependencies"
+python -m pip install -e ".[dev]"
+
+echo "[pre-push] architecture map consistency"
+python scripts/sync_architecture_map.py --check
+
+echo "[pre-push] acceptance mapping consistency"
+python scripts/validate_test_cases.py
+
+echo "[pre-push] skill consistency"
+python scripts/validate_skills.py
+
+echo "[pre-push] backend test suite"
+pytest
+
+echo "[pre-push] frontend install/lint/build"
+npm --prefix ui-web ci
+npm --prefix ui-web run lint
+npm --prefix ui-web run build
+
+echo "[pre-push] all required gates passed"

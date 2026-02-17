@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
+  governance:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,10 +25,31 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Verify architecture map sync
         run: python scripts/sync_architecture_map.py --check
+      - name: Validate acceptance mapping
+        run: python scripts/validate_test_cases.py
+      - name: Validate skills
+        run: python scripts/validate_skills.py
+
+  backend:
+    needs: governance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
       - name: Run pytest
         run: pytest
 
   frontend:
+    needs: governance
     runs-on: ubuntu-latest
     defaults:
       run:

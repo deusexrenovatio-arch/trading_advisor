@@ -61,6 +61,25 @@ python scripts/run_ui.py
 See `docs/DEV_WORKFLOW.md` for required checks (backend tests, UI lint/build)
 and optional acceptance/E2E smoke checks.
 
+Recommended: enable pre-push blocker checks once per clone:
+
+```
+python scripts/install_git_hooks.py
+```
+
+By default, pre-push also blocks direct `main` pushes.
+Emergency override:
+
+```
+MOEX_CARRY_ALLOW_MAIN_PUSH=1 git push
+```
+
+PowerShell variant:
+
+```
+$env:MOEX_CARRY_ALLOW_MAIN_PUSH='1'; git push
+```
+
 ## Telegram Worker (MVP)
 
 The project includes a Telegram worker that sends actionable signals from

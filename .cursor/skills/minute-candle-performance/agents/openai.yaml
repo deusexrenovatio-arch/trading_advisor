@@ -1,3 +1,4 @@
 interface:
   display_name: "Minute Candle Performance"
-  short_description: "Architecture and stack for fast candle compute"
+  short_description: "Minute-runtime performance and parity gates"
+  default_prompt: "Use $minute-candle-performance to optimize minute workloads and report cold/warm runtime with correctness parity."

@@ -1,3 +1,4 @@
 interface:
   display_name: "ML Backtest HPO Lab"
-  short_description: "Backtest, forward, HPO experiment workflow"
+  short_description: "Backtest/HPO workflow with quality rechecks"
+  default_prompt: "Use $ml-backtest-hpo-lab to run a reproducible baseline vs candidate evaluation with leakage and stress checks."

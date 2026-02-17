@@ -1,3 +1,4 @@
 interface:
   display_name: "Parallel Worktree Flow"
-  short_description: "Parallel branches, rebases, and integration sync"
+  short_description: "Worktree bootstrap, sync, and pre-push gates"
+  default_prompt: "Use $parallel-worktree-flow to bootstrap worktrees, sync active branches, and run pre-push checks."

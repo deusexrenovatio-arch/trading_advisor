@@ -1,33 +1,38 @@
 ---
 name: spread-arbitrage
-description: Deterministic spread arbitrage checklist and JSON plan template.
+description: Deterministic spread arbitrage checklist and JSON plan template. Use for pair-spread strategy design, rechecks, and pre-push validation when spread logic changes. Co-use with moex-instruments-costs, risk-profile-gates, and news-geopolitics-filter.
 ---
 
 # Spread Arbitrage Checklist
 
 ## Purpose
-Audit spread arbitrage prototypes for data integrity, liquidity, and risk
-constraints before strategies are enabled.
+Audit spread arbitrage prototypes for data integrity, liquidity, and risk constraints before enabling strategies.
+
+## Skill dependencies and lifecycle gates
+- Cost phase: run `moex-instruments-costs` for each leg before spread checks.
+- Risk phase: run `risk-profile-gates` for portfolio and execution constraints.
+- Event-risk phase: run `news-geopolitics-filter` when market/event risk can invalidate spread entries.
+- Recheck/pre-push phase: rerun spread audit whenever hedge ratio, thresholds, or holding constraints change.
 
 ## Required inputs
-- leg_a (instrument, tick_size, tick_value, liquidity)
-- leg_b (instrument, tick_size, tick_value, liquidity)
-- hedge_ratio
-- entry_zscore
-- exit_zscore
-- stop_zscore
-- max_holding_minutes
-- cost_model (per-leg round-trip costs)
+- `leg_a` (`instrument`, `tick_size`, `tick_value`, `liquidity`)
+- `leg_b` (`instrument`, `tick_size`, `tick_value`, `liquidity`)
+- `hedge_ratio`
+- `entry_zscore`
+- `exit_zscore`
+- `stop_zscore`
+- `max_holding_minutes`
+- `cost_model` (per-leg round-trip costs)
 
 ## Deterministic checks
-- Both legs have liquidity >= configured minimum.
-- hedge_ratio > 0.
-- entry_zscore > exit_zscore and stop_zscore >= entry_zscore.
-- max_holding_minutes between 1 and 480.
-- Total round-trip cost < expected spread mean reversion move.
+- Both legs meet minimum configured liquidity.
+- `hedge_ratio > 0`.
+- `entry_zscore > exit_zscore` and `stop_zscore >= entry_zscore`.
+- `max_holding_minutes` is within `[1, 480]`.
+- Total round-trip cost is below expected mean-reversion move.
 
 ## Output JSON template
-```
+```json
 {
   "spread_strategy": {
     "pair": {

@@ -1,43 +1,48 @@
 ---
 name: risk-profile-gates
-description: Deterministic risk profile gates for intraday futures decisions.
+description: Deterministic risk profile gates for intraday futures decisions. Use for risk-limit validation, strategy rechecks, and mandatory pre-push gates on trading decision logic. Co-use with intraday-futures-trading-advisor and moex-instruments-costs.
 ---
 
 # Risk Profile Gates
 
 ## Purpose
-Define a fixed set of risk limits that must be satisfied before any decision is
-approved. The output is a deterministic pass/fail report with explicit reasons.
+Define fixed risk limits that must be satisfied before any decision is approved. Output must be deterministic pass/fail with explicit reasons.
+
+## Skill dependencies and lifecycle gates
+- Planning phase: use with `intraday-futures-trading-advisor`.
+- Cost consistency phase: pair with `moex-instruments-costs`.
+- Event-risk phase: add `news-geopolitics-filter` when external volatility risk is material.
+- Recheck/pre-push phase: rerun this gate whenever risk limits or execution constraints change.
 
 ## Required inputs
-- account_equity
-- account_currency
-- max_risk_per_trade_pct
-- max_daily_loss_pct
-- max_open_risk_pct
-- max_leverage
-- max_margin_pct
-- max_contracts_per_instrument
-- max_positions
-- max_correlated_exposure_pct
-- stop_loss_required
-- time_stop_minutes
-- slippage_tolerance_ticks
+- `account_equity`
+- `account_currency`
+- `max_risk_per_trade_pct`
+- `max_daily_loss_pct`
+- `max_open_risk_pct`
+- `max_leverage`
+- `max_margin_pct`
+- `max_contracts_per_instrument`
+- `max_positions`
+- `max_correlated_exposure_pct`
+- `stop_loss_required`
+- `time_stop_minutes`
+- `slippage_tolerance_ticks`
 
 ## Deterministic checks
-- All percentage limits are within 0.1 to 10.0 inclusive.
-- max_open_risk_pct >= max_risk_per_trade_pct.
-- max_daily_loss_pct >= 2 * max_risk_per_trade_pct.
-- max_leverage >= 1 and <= 10.
-- max_margin_pct between 10 and 100.
-- max_contracts_per_instrument is a positive integer.
-- max_positions is a positive integer.
-- stop_loss_required must be true.
-- time_stop_minutes between 1 and 240.
-- slippage_tolerance_ticks between 0 and 10.
+- All percentage limits are within `0.1` to `10.0` inclusive.
+- `max_open_risk_pct >= max_risk_per_trade_pct`.
+- `max_daily_loss_pct >= 2 * max_risk_per_trade_pct`.
+- `max_leverage` is within `[1, 10]`.
+- `max_margin_pct` is within `[10, 100]`.
+- `max_contracts_per_instrument` is a positive integer.
+- `max_positions` is a positive integer.
+- `stop_loss_required` is `true`.
+- `time_stop_minutes` is within `[1, 240]`.
+- `slippage_tolerance_ticks` is within `[0, 10]`.
 
 ## Output JSON template
-```
+```json
 {
   "risk_profile": {
     "account_equity": 100000,

@@ -1,66 +1,78 @@
 ---
 name: parallel-worktree-flow
-description: "Baseline multi-stream development workflow for this repository using git worktree: clean bootstrap from main, branch-per-worktree isolation, daily rebase routine, integration branch checks, and merge ordering. Use when requests mention parallel development, several tasks at once, worktree, rebase strategy, branch synchronization, or conflict minimization."
+description: "Baseline multi-stream development workflow for this repository using git worktree: clean bootstrap from main, branch-per-worktree isolation, daily rebase routine, integration branch checks, merge ordering, and pre-push gates. Use at the start of new development, during stream synchronization, and before merge/push."
 ---
 
 # Parallel Worktree Flow
 
 ## Overview
-Use this skill to run several implementation streams on one machine without branch collisions.
+Use this skill to run parallel implementation streams on one machine without branch collisions and with deterministic pre-push gates.
+
+## Skill dependencies and lifecycle gates
+- Start phase: run this skill before any new feature/refactor stream.
+- Domain phase: after bootstrap, invoke domain skill(s) for the stream (`trading-ui-dashboard`, `ml-backtest-hpo-lab`, or strategy gates).
+- Recheck phase: ensure daily rebase + integration sync before rerunning domain verification.
+- Pre-push phase: run mandatory checks from `docs/DEV_WORKFLOW.md` and stream-specific validations.
 
 ## Default topology
 - Keep one task per branch and one branch per worktree.
 - Keep `main` clean and protected.
-- Keep a dedicated `wip/*` branch for unplanned local changes.
-- Use an optional integration branch to detect conflicts before PR merge.
+- Keep an integration branch for early conflict detection.
 
-Recommended set for this repository:
-- `wip/signals-backtest` in the current worktree (`d:/New Project`).
-- `feat/bot-integration` in `../wt-bot`.
-- `refactor/app-core` in `../wt-refactor`.
-- `chore/integration-sync` in `../wt-integration`.
+Repository baseline topology:
+- `d:/New Project` -> `main` (baseline, release prep).
+- `d:/wt-refactor` -> `refactor/app-core` (contracts/core entities).
+- `d:/wt-signals-backtest` -> `chat/signals-backtest-lab` (research/performance).
+- `d:/wt-bot` -> `feat/bot-integration` (ACK/actions integration).
+- `d:/wt-integration` -> `chore/integration-sync` (integration-only sync and smoke).
+
+## Dev ports policy
+- `main` worktree:
+  - backend: `8050`
+  - frontend: `5176`
+- Feature worktrees use dedicated ports:
+  - `d:/wt-refactor`: backend `8061`, frontend `5186`
+  - `d:/wt-signals-backtest`: backend `8062`, frontend `5187`
+  - `d:/wt-bot`: backend `8063`, frontend `5188`
+  - `d:/wt-integration`: backend `8064`, frontend `5189`
+- For frontend worktrees set:
+  - `VITE_API_PROXY_TARGET=http://127.0.0.1:<backend-port>`
 
 ## Bootstrap workflow (default start)
-1. Snapshot local dirty changes away from `main`:
-```bash
-git status --short --branch
-git switch -c wip/<topic>
-git add -A
-git commit -m "wip(<scope>): snapshot before worktree split"
-```
-
-2. Refresh `main`:
+1. Refresh `main`:
 ```bash
 git switch main
 git fetch origin
 git pull --ff-only
 ```
 
-3. Create worktrees:
+2. Create worktrees from `origin/main` (if missing):
 ```bash
-git worktree add ../wt-bot -b feat/bot-integration origin/main
 git worktree add ../wt-refactor -b refactor/app-core origin/main
+git worktree add ../wt-signals-backtest -b chat/signals-backtest-lab origin/main
+git worktree add ../wt-bot -b feat/bot-integration origin/main
 git worktree add ../wt-integration -b chore/integration-sync origin/main
 ```
 
-4. Validate setup:
+3. Validate setup:
 ```bash
 git worktree list
 ```
 
 ## Daily loop per stream
-Run in each active feature/refactor worktree:
+Run inside each active feature/refactor worktree:
 ```bash
 git fetch origin
 git rebase origin/main
-# run targeted tests for that stream
+python scripts/sync_architecture_map.py --check
+# run targeted stream tests
 git push --force-with-lease
 ```
 
 Rules:
-- `--force-with-lease` is allowed only on your own feature branches.
-- Rebase daily; do not let branches drift for multiple days.
-- Keep PRs small and scoped to one concern.
+- Use `--force-with-lease` only on owned feature branches.
+- Rebase daily; do not let branches drift.
+- Keep PRs small and single-concern.
 
 ## Integration branch loop
 Use `chore/integration-sync` to detect collisions early:
@@ -68,27 +80,34 @@ Use `chore/integration-sync` to detect collisions early:
 git fetch origin
 git rebase origin/main
 git merge --no-ff refactor/app-core
+git merge --no-ff chat/signals-backtest-lab
 git merge --no-ff feat/bot-integration
-# run cross-stream smoke tests
+# run integration smoke checks
 git push origin chore/integration-sync
 ```
 
-If conflicts appear, resolve them here first, then backport minimal fixes into source branches.
+If conflicts appear, resolve in integration branch, then backport minimal fixes to source branches.
 
 ## Merge order policy
-1. Foundation and contract-safe refactors.
-2. Dependent feature streams (for example bot integration).
-3. Runtime or strategy updates that depend on previous merges.
-4. Documentation-only follow-ups.
+1. `refactor/app-core`
+2. `chat/signals-backtest-lab`
+3. `feat/bot-integration`
+4. docs/release-only follow-ups
 
-## Conflict minimization rules
-- Define file ownership per stream before coding.
-- For shared interfaces, ship a small interface PR first.
-- Avoid mixed concerns in one commit.
-- If cross-stream risk is high, increase integration sync cadence.
+## Mandatory pre-push gate
+Run before push/PR finalization:
+```bash
+python -m pip install -e ".[dev]"
+python scripts/sync_architecture_map.py --check
+pytest
+npm --prefix ui-web ci
+npm --prefix ui-web run lint
+npm --prefix ui-web run build
+```
 
 ## Completion checklist
-- Every active stream is rebased on current `origin/main`.
-- Integration branch merges all active streams cleanly.
-- Stream tests and integration smoke checks pass.
+- Every active stream rebased on current `origin/main`.
+- Integration branch merges active streams cleanly.
+- Required pre-push gate commands pass.
+- Stream-specific checks and smoke checks pass.
 - PRs are atomic and reviewable.

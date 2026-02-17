@@ -1,5 +1,92 @@
 # Release Notes
 
+## 2026-02-17 - Skill governance gates in docs and acceptance coverage
+
+Summary
+- Added explicit process gates for skill lifecycle: start, recheck, and pre-push.
+- Linked development workflow policy to manual acceptance scenarios and test cases.
+- Clarified architecture map update rule for process-only documentation changes.
+- Added automated local and CI enforcement for governance gates.
+
+Changed
+- Updated skill governance and dependencies:
+  - `AGENTS.md`
+  - `.cursor/skills/*/SKILL.md`
+- Added process acceptance scenarios:
+  - `configs/acceptance_scenarios.yaml`
+    - `dev-skill-start-gate`
+    - `dev-skill-recheck-gate`
+    - `dev-skill-prepush-gate`
+- Extended acceptance runner with manual scenario type:
+  - `scripts/acceptance_check.py` (`type: manual` -> skip with explicit marker)
+- Added repository skill validator:
+  - `scripts/validate_skills.py`
+- Added git hook automation:
+  - `.githooks/pre-push`
+  - `scripts/install_git_hooks.py`
+- Added local branch safety in pre-push:
+  - direct push to `main` is blocked by default,
+  - explicit override via `MOEX_CARRY_ALLOW_MAIN_PUSH=1`.
+- CI now has fail-fast governance gate before backend/frontend jobs:
+  - `.github/workflows/ci.yml` (`governance` job)
+- Added process workflow test cases:
+  - `docs/test-cases.md`
+    - `TC-DEV-WF-001`
+    - `TC-DEV-WF-002`
+    - `TC-DEV-WF-003`
+- Linked workflow policy with acceptance coverage:
+  - `docs/DEV_WORKFLOW.md`
+- Added install note for local pre-push hooks:
+  - `README.md`
+- Updated architecture map maintenance instructions:
+  - `docs/architecture/architecture-map-v2.md`
+
+Verification
+- `python scripts/validate_test_cases.py`
+- `python scripts/validate_skills.py`
+- `python scripts/sync_architecture_map.py --check`
+- `python -m py_compile scripts/acceptance_check.py scripts/validate_test_cases.py scripts/validate_skills.py scripts/install_git_hooks.py`
+- skill validation (`quick_validate.py`) for all `.cursor/skills/*`
+
+## 2026-02-16 - Two-stage HPO quality review + canonical minute defaults
+
+Summary
+- Added two-stage HPO: fast objective search first, then minute execution quality review on top-N candidates.
+- Fixed canonical minute strategy defaults in `BacktestRequest` to match production baseline.
+- Kept optimization speed by computing heavy fill-quality only for shortlisted candidates.
+
+Changed
+- HPO optimization contract now includes quality-review controls:
+  - `quality_review_enabled`
+  - `quality_top_n`
+  - `quality_min_trades_closed_total`
+  - `quality_max_unfilled_entry_rate`
+  - `quality_max_forced_exit_rate`
+  - `quality_max_entry_wait_min_closed`
+  - `quality_max_exit_wait_min_closed`
+  - `quality_lambda_unfilled`
+  - `quality_lambda_forced`
+  - `quality_lambda_wait`
+- HPO runtime now writes `result.quality_review` with:
+  - gate pass/fail by candidate,
+  - quality penalty,
+  - quality-adjusted objective,
+  - minute execution metrics for reviewed candidates.
+- v2 HPO status gate now considers quality result:
+  - `promotion_gate=fail` when quality gate fails for all reviewed candidates.
+- Canonical minute defaults in `BacktestStrategyConfig`:
+  - `signal_exec_lag_days=0`
+  - `execution_lag_minutes=30`
+  - `execution_max_wait_minutes=360`
+  - `entry_price_tolerance_pct=0.02`
+  - `entry_stock_tolerance_pct=0.02`
+  - `entry_future_tolerance_pct=0.025`
+  - `entry_spread_tolerance_pct=0.03`
+
+Verification
+- `pytest -q tests/hpo/test_runtime_quality.py tests/hpo/test_runner.py tests/hpo/test_objective.py`
+- `pytest -q tests/test_api_v2.py tests/test_backtest_forward_api.py tests/test_backtest_defaults.py`
+
 ## 2026-02-16 - Minute default refresh + true incremental replay
 
 Summary
