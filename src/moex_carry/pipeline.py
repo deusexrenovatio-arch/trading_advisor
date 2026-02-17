@@ -2331,7 +2331,60 @@ def run_signal_cycle(
     max_pairs: int | None = None,
     save_csv: bool = True,
 ) -> pd.DataFrame:
-    from datetime import datetime, timezone
+    if settings.ui.use_unified_signal_engine:
+        paths = resolve_paths(settings)
+        _ensure_reference_data(settings)
+        resolved_max_pairs = _resolve_unified_max_pairs(settings, max_pairs)
+        ingest_cycle = _run_unified_incremental_ingest(
+            settings,
+            data_dir=paths.data_dir,
+            max_pairs=resolved_max_pairs,
+        )
+        snapshot = _build_unified_snapshot(
+            settings=settings,
+            data_dir=paths.data_dir,
+            max_pairs=resolved_max_pairs,
+            as_of=None,
+            ingest_cycle=ingest_cycle,
+        )
+        ranked = snapshot.signals.copy()
+        if ranked.empty:
+            return pd.DataFrame()
+        if save_csv:
+            from moex_carry.ui.unified_runtime import persist_snapshot_to_csv
+
+            persist_snapshot_to_csv(snapshot, paths.data_dir)
+
+        import uuid
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        with session_factory() as session:
+            run_id = f"signal-run-{uuid.uuid4().hex[:8]}"
+            as_of_dt = datetime.now(timezone.utc)
+            params = {
+                "max_pairs": max_pairs,
+                "max_pairs_resolved": resolved_max_pairs,
+                "intraday_marketdata": settings.strategy.intraday_marketdata,
+                "engine": "unified_minute_replay",
+                "signals_total": int(len(ranked)),
+                "warnings": list(snapshot.warnings),
+                "errors": list(snapshot.errors),
+            }
+            if ingest_cycle is not None:
+                params["ingest_degraded"] = bool(getattr(ingest_cycle, "degraded", False))
+                params["data_watermark_before"] = getattr(ingest_cycle, "global_watermark_before", None)
+                params["data_watermark_after"] = getattr(ingest_cycle, "global_watermark_after", None)
+            store_signal_run(session, run_id, as_of_dt, params)
+            store_signal_history(
+                session,
+                run_id,
+                as_of_dt,
+                ranked.to_dict("records"),
+            )
+        return ranked
+
     import uuid
 
     engine = create_engine_from_settings(settings)
@@ -2373,6 +2426,66 @@ def backfill_signal_history(
 ) -> int:
     if days <= 0:
         return 0
+
+    if settings.ui.use_unified_signal_engine:
+        paths = resolve_paths(settings)
+        _ensure_reference_data(settings)
+        resolved_max_pairs = _resolve_unified_max_pairs(settings, max_pairs)
+        ingest_cycle = _run_unified_incremental_ingest(
+            settings,
+            data_dir=paths.data_dir,
+            max_pairs=resolved_max_pairs,
+        )
+        from moex_carry.ui.unified_runtime import persist_snapshot_to_csv
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        today = date.today()
+        stored_runs = 0
+        with session_factory() as session:
+            for offset in range(days):
+                as_of_date = today - timedelta(days=offset)
+                snapshot = _build_unified_snapshot(
+                    settings=settings,
+                    data_dir=paths.data_dir,
+                    max_pairs=resolved_max_pairs,
+                    as_of=as_of_date,
+                    ingest_cycle=ingest_cycle if offset == 0 else None,
+                )
+                ranked = snapshot.signals.copy()
+                if ranked.empty:
+                    continue
+                if save_csv_latest and offset == 0:
+                    persist_snapshot_to_csv(snapshot, paths.data_dir)
+                run_id = f"signal-run-{as_of_date:%Y%m%d}"
+                if as_of_date == today:
+                    as_of_dt = datetime.now(timezone.utc)
+                else:
+                    as_of_dt = datetime.combine(as_of_date, datetime.max.time()).replace(
+                        tzinfo=timezone.utc
+                    )
+                params = {
+                    "max_pairs": max_pairs,
+                    "max_pairs_resolved": resolved_max_pairs,
+                    "intraday_marketdata": settings.strategy.intraday_marketdata,
+                    "engine": "unified_minute_replay",
+                    "as_of": as_of_date.isoformat(),
+                    "history_days": days,
+                    "signals_total": int(len(ranked)),
+                    "warnings": list(snapshot.warnings),
+                    "errors": list(snapshot.errors),
+                }
+                if offset == 0 and ingest_cycle is not None:
+                    params["ingest_degraded"] = bool(getattr(ingest_cycle, "degraded", False))
+                    params["data_watermark_before"] = getattr(ingest_cycle, "global_watermark_before", None)
+                    params["data_watermark_after"] = getattr(ingest_cycle, "global_watermark_after", None)
+                store_signal_run(session, run_id, as_of_dt, params)
+                delete_signal_history_run(session, run_id)
+                store_signal_history(session, run_id, as_of_dt, ranked.to_dict("records"))
+                stored_runs += 1
+        return stored_runs
+
     engine = create_engine_from_settings(settings)
     init_db(engine)
     session_factory = create_session_factory(engine)
@@ -2409,3 +2522,107 @@ def backfill_signal_history(
             store_signal_history(session, run_id, as_of_dt, ranked.to_dict("records"))
             stored_runs += 1
     return stored_runs
+
+
+REFERENCE_DATA_MAX_AGE_HOURS = 12.0
+
+
+def _resolve_unified_max_pairs(settings: AppSettings, max_pairs: int | None) -> int | None:
+    if max_pairs is not None:
+        configured = int(max_pairs)
+        return configured if configured > 0 else None
+    strategy_max = int(settings.strategy.max_pairs or 0)
+    return strategy_max if strategy_max > 0 else None
+
+
+def _resolve_incremental_checkpoint_root(settings: AppSettings, data_dir: Path) -> Path:
+    configured = Path(str(getattr(settings.ui, "incremental_checkpoint_dir", "./data/state/incremental_replay")))
+    if configured.is_absolute():
+        return configured
+    text = str(configured).replace("\\", "/")
+    if text.startswith("./data/"):
+        return data_dir.parent / text[2:]
+    if text.startswith("data/"):
+        return data_dir.parent / text
+    return data_dir / configured
+
+
+def _ensure_reference_data(settings: AppSettings) -> None:
+    paths = resolve_paths(settings)
+    dirs = _data_paths(paths.data_dir)
+    required = [
+        dirs["raw"] / "shares.csv",
+        dirs["raw"] / "futures.csv",
+        dirs["raw"] / "key_rates.csv",
+    ]
+    if _reference_data_stale(required, max_age_hours=REFERENCE_DATA_MAX_AGE_HOURS):
+        fetch_data(settings)
+
+
+def _reference_data_stale(paths: Iterable[Path], *, max_age_hours: float) -> bool:
+    now = datetime.now(timezone.utc)
+    max_age_seconds = max(float(max_age_hours), 0.0) * 3600.0
+    for path in paths:
+        if not path.exists():
+            return True
+        try:
+            modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        except OSError:
+            return True
+        if (now - modified).total_seconds() >= max_age_seconds:
+            return True
+    return False
+
+
+def _run_unified_incremental_ingest(
+    settings: AppSettings,
+    *,
+    data_dir: Path,
+    max_pairs: int | None,
+):
+    if not bool(getattr(settings.ui, "incremental_replay_enabled", True)):
+        return None
+    from moex_carry.minute_ingest.runner import run_incremental_minute_ingest
+    from moex_carry.ui.unified_runtime import list_unified_ingest_pairs
+
+    ingest_pairs = list_unified_ingest_pairs(
+        settings,
+        data_dir,
+        max_pairs=max_pairs,
+    )
+    if not ingest_pairs:
+        return None
+    return run_incremental_minute_ingest(
+        settings=settings,
+        data_dir=data_dir,
+        checkpoint_root=_resolve_incremental_checkpoint_root(settings, data_dir),
+        pairs=ingest_pairs,
+        overlap_minutes=max(int(getattr(settings.ui, "incremental_overlap_minutes", 180) or 0), 1),
+    )
+
+
+def _build_unified_snapshot(
+    *,
+    settings: AppSettings,
+    data_dir: Path,
+    max_pairs: int | None,
+    as_of: date | None,
+    ingest_cycle=None,
+):
+    from moex_carry.ui.unified_runtime import build_unified_market_snapshot
+
+    return build_unified_market_snapshot(
+        settings,
+        data_dir,
+        force=False,
+        ttl_sec=max(int(getattr(settings.ui, "unified_snapshot_ttl_sec", 120) or 0), 1),
+        as_of=as_of,
+        max_pairs=max_pairs,
+        ingest_result_map=(ingest_cycle.pair_results if ingest_cycle is not None else None),
+        global_data_watermark_before=(
+            ingest_cycle.global_watermark_before if ingest_cycle is not None else None
+        ),
+        global_data_watermark_after=(
+            ingest_cycle.global_watermark_after if ingest_cycle is not None else None
+        ),
+    )

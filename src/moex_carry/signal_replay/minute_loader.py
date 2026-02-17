@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 import threading
 from typing import Any
@@ -137,22 +137,50 @@ def load_pair_minute_series(
     start_date: date,
     end_date: date,
 ) -> MinuteSeriesPayload | None:
-    payload = _load_from_preload_cache(
+    preload_payload = _load_from_preload_cache(
         data_dir=data_dir,
         stock=stock,
         future=future,
         start_date=start_date,
         end_date=end_date,
     )
-    if payload is not None:
-        return payload
-    return _load_from_intraday_series_csv(
+    csv_payload = _load_from_intraday_series_csv(
         data_dir=data_dir,
         stock=stock,
         future=future,
         start_date=start_date,
         end_date=end_date,
     )
+    candidates = [payload for payload in (preload_payload, csv_payload) if payload is not None]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    return max(candidates, key=_payload_priority_key)
+
+
+def _payload_priority_key(payload: MinuteSeriesPayload) -> tuple[datetime, int, int]:
+    watermark = _payload_watermark(payload.series_base)
+    source_priority = 1 if "intraday_minute_series" in payload.source else 0
+    return (
+        watermark or datetime.fromtimestamp(0, tz=timezone.utc),
+        int(len(payload.series_base)),
+        source_priority,
+    )
+
+
+def _payload_watermark(frame: pd.DataFrame) -> datetime | None:
+    if frame.empty:
+        return None
+    for column in ("exec_ts", "timestamp", "date"):
+        if column not in frame.columns:
+            continue
+        parsed = pd.to_datetime(frame[column], errors="coerce", utc=True)
+        parsed = parsed.dropna()
+        if parsed.empty:
+            continue
+        return parsed.max().to_pydatetime()
+    return None
 
 
 def _filter_range(frame: pd.DataFrame, start_date: date, end_date: date) -> pd.DataFrame:

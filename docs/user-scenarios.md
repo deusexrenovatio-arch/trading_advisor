@@ -168,3 +168,27 @@ Expected:
 - Message includes bot status, backend status, and active signals count.
 - If backend is unavailable, heartbeat still arrives with `Backend: ERROR`.
 
+## US-14 Keep pending entry actionable until explicit usage
+Actor: Operator
+Goal: Continue seeing actionable `enter` while intent is still valid, even if latest strategy row is `hold`.
+Steps:
+1. Generate an `enter` signal for a pair.
+2. Let next cycle move pair to `hold` without explicit ACK/action usage.
+3. Open `/api/v2/signals/active` or Signals tab.
+Expected:
+- Pair remains actionable as `enter` within intent TTL.
+- Row contains origin references to original `enter` intent.
+- After explicit ACK/action for that fingerprint, promotion stops.
+
+## US-15 Telegram out-of-range update without spam
+Actor: Operator
+Goal: Get one update if sent entry leaves the original corridor, without repeated spam.
+Steps:
+1. Receive `enter` in Telegram and keep it unused.
+2. Let market move outside original entry bounds.
+3. Let worker run multiple polling cycles.
+Expected:
+- Worker sends one out-of-range update containing current vs planned bounds.
+- Repeated cycles with same fingerprint do not create additional out-of-range messages.
+- New fingerprint for same pair still respects pair-level cooldown.
+

@@ -45,6 +45,7 @@ from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.pretrade.delay_gate import run_delay_gate
 from moex_carry.signals_ack import build_signal_fingerprint, parse_ack_note
+from moex_carry.signals_delivery import signal_delivery_state
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_decision_view_projection,
@@ -96,6 +97,7 @@ BASE_TABLE_STYLE = {
 _CACHE_VERSION = "v5"
 _V1_DEPRECATION_SUNSET_HTTP = "Wed, 01 Jul 2026 00:00:00 GMT"
 _V1_DEPRECATION_SUNSET_DATE = "2026-07-01"
+_DEFAULT_ENTRY_PRICE_TOLERANCE_PCT = 0.0015
 
 
 def _append_jsonl(path, payload: dict[str, object]) -> None:
@@ -605,6 +607,15 @@ def _build_pair_entity_ref(stock: object, future: object) -> dict[str, object]:
 
 
 def _build_signal_id_from_row(row: dict[str, object]) -> str:
+    fingerprint = str(row.get("signal_fingerprint") or "").strip()
+    if fingerprint:
+        return _stable_id(
+            "sig",
+            fingerprint,
+            row.get("stock"),
+            row.get("future"),
+            row.get("signal_action"),
+        )
     return _stable_id(
         "sig",
         row.get("run_id"),
@@ -659,14 +670,42 @@ def _extract_response_payload(result) -> tuple[object | None, int]:
     return payload, status_code
 
 
-def _extract_idempotency_key(note: object) -> str | None:
-    if not isinstance(note, str) or not note.strip():
+def _parse_json_object(value: object) -> dict[str, object] | None:
+    if not isinstance(value, str) or not value.strip():
         return None
     try:
-        payload = json.loads(note)
+        payload = json.loads(value)
     except json.JSONDecodeError:
         return None
     if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _parse_signal_action_note(note: object) -> dict[str, object] | None:
+    payload = _parse_json_object(note)
+    if not isinstance(payload, dict):
+        return None
+    kind = str(payload.get("kind") or "").strip()
+    if kind not in {"signal_action_v1_adapter", "signal_action_v2"}:
+        return None
+    return payload
+
+
+def _parse_ack_note_from_execution_note(note: object) -> dict[str, object] | None:
+    direct = parse_ack_note(note)
+    if direct is not None:
+        return direct
+    payload = _parse_signal_action_note(note)
+    if payload is None:
+        return None
+    nested_note = payload.get("note")
+    return parse_ack_note(nested_note)
+
+
+def _extract_idempotency_key(note: object) -> str | None:
+    payload = _parse_signal_action_note(note)
+    if payload is None:
         return None
     raw = payload.get("idempotency_key")
     if raw is None:
@@ -706,6 +745,174 @@ def _signal_used_by_from_ack(note_payload: dict[str, object]) -> str | None:
     if isinstance(user_id, int):
         return str(user_id)
     return None
+
+
+def _signal_used_by_from_action(note_payload: dict[str, object]) -> str | None:
+    actor = note_payload.get("actor_id")
+    if isinstance(actor, str) and actor.strip():
+        return actor.strip()
+    source = note_payload.get("source")
+    if isinstance(source, str) and source.strip():
+        return source.strip()
+    return None
+
+
+def _to_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def _coalesce_float(record: dict[str, object], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        if key not in record:
+            continue
+        parsed = _to_float(record.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _bounded_value_ok(*, current: float | None, lower: object, upper: object) -> bool:
+    lower_value = _to_float(lower)
+    upper_value = _to_float(upper)
+    if lower_value is None and upper_value is None:
+        return True
+    if current is None:
+        return False
+    if lower_value is not None and upper_value is not None and lower_value > upper_value:
+        lower_value, upper_value = upper_value, lower_value
+    if lower_value is not None and current < lower_value:
+        return False
+    if upper_value is not None and current > upper_value:
+        return False
+    return True
+
+
+def _resolve_entry_tolerance_from_settings(settings: AppSettings) -> float:
+    raw = getattr(settings.spread_carry_alpha, "entry_price_tolerance_pct", _DEFAULT_ENTRY_PRICE_TOLERANCE_PCT)
+    parsed = _to_float(raw)
+    if parsed is None:
+        parsed = _DEFAULT_ENTRY_PRICE_TOLERANCE_PCT
+    return min(max(float(parsed), 0.0001), 0.05)
+
+
+def _build_dynamic_entry_plan(
+    *,
+    spot_mid: float | None,
+    future_mid: float | None,
+    spread_mid: float | None,
+    spread_pct: float | None,
+    tolerance: float,
+) -> dict[str, float | None]:
+    spot = float(spot_mid) if spot_mid is not None else None
+    future = float(future_mid) if future_mid is not None else None
+    spread_value = float(spread_mid) if spread_mid is not None else None
+    spread_pct_value = float(spread_pct) if spread_pct is not None else None
+
+    if spread_value is None and spread_pct_value is not None and spot is not None:
+        spread_value = float(spread_pct_value * spot)
+    if spread_pct_value is None and spread_value is not None and spot is not None and spot != 0:
+        spread_pct_value = float(spread_value / spot)
+
+    spread_band = None
+    spread_pct_band = None
+    if spot is not None and spot > 0:
+        spread_band = float(spot * tolerance)
+        spread_pct_band = float(spread_band / spot)
+    elif spread_value is not None:
+        spread_band = float(max(abs(spread_value), 1.0) * tolerance)
+        spread_pct_band = float(tolerance)
+
+    return {
+        "entry_price_tolerance_pct": float(tolerance),
+        "entry_stock_min": float(spot * (1.0 - tolerance)) if spot is not None and spot > 0 else None,
+        "entry_stock_max": float(spot * (1.0 + tolerance)) if spot is not None and spot > 0 else None,
+        "entry_future_min_per_share": (
+            float(future * (1.0 - tolerance)) if future is not None and future > 0 else None
+        ),
+        "entry_future_max_per_share": (
+            float(future * (1.0 + tolerance)) if future is not None and future > 0 else None
+        ),
+        "entry_spread_min": (
+            float(spread_value - spread_band)
+            if spread_value is not None and spread_band is not None
+            else None
+        ),
+        "entry_spread_max": (
+            float(spread_value + spread_band)
+            if spread_value is not None and spread_band is not None
+            else None
+        ),
+        "entry_spread_pct_min": (
+            float(spread_pct_value - spread_pct_band)
+            if spread_pct_value is not None and spread_pct_band is not None
+            else None
+        ),
+        "entry_spread_pct_max": (
+            float(spread_pct_value + spread_pct_band)
+            if spread_pct_value is not None and spread_pct_band is not None
+            else None
+        ),
+    }
+
+
+def _enrich_entry_plan_metrics(
+    *,
+    settings: AppSettings,
+    current_metrics: dict[str, object] | None,
+    fallback_metrics: dict[str, object] | None = None,
+    force_rebuild: bool = False,
+) -> dict[str, object]:
+    merged: dict[str, object] = {}
+    if isinstance(fallback_metrics, dict):
+        merged.update(fallback_metrics)
+    if isinstance(current_metrics, dict):
+        merged.update(current_metrics)
+
+    has_existing_plan = any(
+        merged.get(key) is not None
+        for key in (
+            "entry_stock_min",
+            "entry_stock_max",
+            "entry_future_min_per_share",
+            "entry_future_max_per_share",
+            "entry_spread_min",
+            "entry_spread_max",
+            "entry_spread_pct_min",
+            "entry_spread_pct_max",
+        )
+    )
+    if has_existing_plan and not force_rebuild:
+        return merged
+
+    tolerance = _to_float(merged.get("entry_price_tolerance_pct"))
+    if tolerance is None:
+        tolerance = _resolve_entry_tolerance_from_settings(settings)
+    tolerance = min(max(float(tolerance), 0.0001), 0.05)
+
+    spot_mid = _coalesce_float(merged, ("spot_mid", "spot", "stock_mid", "stock_price", "stock_last_price"))
+    future_mid = _coalesce_float(
+        merged,
+        ("future_mid", "future_price", "future_last_price"),
+    )
+    spread_mid = _coalesce_float(merged, ("spread_mid", "spread"))
+    spread_pct = _coalesce_float(merged, ("spread_pct",))
+    dynamic_plan = _build_dynamic_entry_plan(
+        spot_mid=spot_mid,
+        future_mid=future_mid,
+        spread_mid=spread_mid,
+        spread_pct=spread_pct,
+        tolerance=tolerance,
+    )
+    merged.update(dynamic_plan)
+    return merged
 
 
 def _decrement_leg_bucket(open_legs: dict[str, int], preferred: str) -> None:
@@ -2066,9 +2273,29 @@ def create_app(settings: AppSettings) -> Dash:
                 return jsonify([])
             rows = load_active_signals(session, latest.run_id)
             executions = load_open_executions(session)
-            ack_by_fingerprint: dict[str, dict[str, object]] = {}
+            usage_by_fingerprint: dict[str, dict[str, object]] = {}
             pair_trade_timestamps: dict[tuple[str, str], list[datetime]] = {}
             position_state: dict[tuple[str, str], dict[str, object]] = {}
+
+            def _register_usage(
+                fingerprint: str,
+                *,
+                used_at: datetime,
+                used_by: str | None,
+            ) -> None:
+                existing = usage_by_fingerprint.get(fingerprint)
+                existing_ts_raw = existing.get("timestamp") if isinstance(existing, dict) else None
+                existing_ts = (
+                    _normalize_datetime(existing_ts_raw)
+                    if isinstance(existing_ts_raw, datetime)
+                    else None
+                )
+                if existing_ts is None or used_at >= existing_ts:
+                    usage_by_fingerprint[fingerprint] = {
+                        "timestamp": used_at,
+                        "used_by": used_by,
+                    }
+
             for exec_row in sorted(executions, key=lambda item: item.timestamp):
                 if not isinstance(exec_row.timestamp, datetime):
                     continue
@@ -2090,24 +2317,34 @@ def create_app(settings: AppSettings) -> Dash:
                 )
                 action = _normalize_execution_action(exec_row.action)
                 if action == "ack":
-                    ack_note = parse_ack_note(exec_row.note)
+                    ack_note = _parse_ack_note_from_execution_note(exec_row.note)
                     if isinstance(ack_note, dict):
                         fingerprint_raw = ack_note.get("fingerprint")
                         if isinstance(fingerprint_raw, str) and fingerprint_raw.strip():
-                            fingerprint = fingerprint_raw.strip()
-                            existing = ack_by_fingerprint.get(fingerprint)
-                            existing_ts_raw = existing.get("timestamp") if isinstance(existing, dict) else None
-                            existing_ts = (
-                                _normalize_datetime(existing_ts_raw)
-                                if isinstance(existing_ts_raw, datetime)
-                                else None
+                            _register_usage(
+                                fingerprint_raw.strip(),
+                                used_at=exec_ts,
+                                used_by=_signal_used_by_from_ack(ack_note),
                             )
-                            if existing_ts is None or exec_ts >= existing_ts:
-                                ack_by_fingerprint[fingerprint] = {
-                                    "timestamp": exec_ts,
-                                    "used_by": _signal_used_by_from_ack(ack_note),
-                                }
                     continue
+
+                action_note = _parse_signal_action_note(exec_row.note)
+                if isinstance(action_note, dict):
+                    fingerprint_raw = action_note.get("fingerprint")
+                    requested_action = str(action_note.get("requested_action") or "").strip().lower()
+                    source = str(action_note.get("source") or "").strip().lower()
+                    if (
+                        isinstance(fingerprint_raw, str)
+                        and fingerprint_raw.strip()
+                        and requested_action == "enter"
+                        and source in {"ui", "telegram", "v1_adapter"}
+                    ):
+                        _register_usage(
+                            fingerprint_raw.strip(),
+                            used_at=exec_ts,
+                            used_by=_signal_used_by_from_action(action_note),
+                        )
+
                 if action not in {"enter", "exit"}:
                     continue
                 pair_trade_timestamps.setdefault(key, []).append(exec_ts)
@@ -2177,33 +2414,36 @@ def create_app(settings: AppSettings) -> Dash:
                 stock: str,
                 future: str,
                 signal_action: str,
+                signal_fingerprint: str | None = None,
             ) -> dict[str, object]:
-                fingerprint = build_signal_fingerprint(
-                    run_id=run_id,
-                    timestamp=timestamp,
-                    stock=stock,
-                    future=future,
-                    signal_action=signal_action,
-                )
-                ack_entry = ack_by_fingerprint.get(fingerprint)
-                if not isinstance(ack_entry, dict):
+                fingerprint = str(signal_fingerprint or "").strip()
+                if not fingerprint:
+                    fingerprint = build_signal_fingerprint(
+                        run_id=run_id,
+                        timestamp=timestamp,
+                        stock=stock,
+                        future=future,
+                        signal_action=signal_action,
+                    )
+                usage_entry = usage_by_fingerprint.get(fingerprint)
+                if not isinstance(usage_entry, dict):
                     return {
                         "signal_used": False,
                         "signal_used_at": None,
                         "signal_used_by": None,
                         "signal_details_pending": False,
                     }
-                ack_ts_raw = ack_entry.get("timestamp")
-                ack_ts = _normalize_datetime(ack_ts_raw) if isinstance(ack_ts_raw, datetime) else None
-                has_trade_after_ack = False
-                if ack_ts is not None:
+                usage_ts_raw = usage_entry.get("timestamp")
+                usage_ts = _normalize_datetime(usage_ts_raw) if isinstance(usage_ts_raw, datetime) else None
+                has_trade_after_usage = False
+                if usage_ts is not None:
                     trades = pair_trade_timestamps.get((stock, future), [])
-                    has_trade_after_ack = any(trade_ts > ack_ts for trade_ts in trades)
+                    has_trade_after_usage = any(trade_ts > usage_ts for trade_ts in trades)
                 return {
                     "signal_used": True,
-                    "signal_used_at": ack_ts.isoformat() if ack_ts is not None else None,
-                    "signal_used_by": ack_entry.get("used_by"),
-                    "signal_details_pending": not has_trade_after_ack,
+                    "signal_used_at": usage_ts.isoformat() if usage_ts is not None else None,
+                    "signal_used_by": usage_entry.get("used_by"),
+                    "signal_details_pending": not has_trade_after_usage,
                 }
 
             for state in position_state.values():
@@ -2236,6 +2476,37 @@ def create_app(settings: AppSettings) -> Dash:
             open_pairs = {
                 key for key, state in position_state.items() if int(state.get("open_leg_total") or 0) > 0
             }
+            entry_intent_ttl_hours = max(
+                int(getattr(settings.ui, "signal_entry_intent_ttl_hours", 72) or 72),
+                1,
+            )
+            latest_as_of = getattr(latest, "as_of", None)
+            latest_as_of_dt = (
+                _normalize_datetime(latest_as_of) if isinstance(latest_as_of, datetime) else None
+            )
+            cutoff_anchor = (
+                latest_as_of_dt
+                if latest_as_of_dt is not None
+                else datetime.now(timezone.utc).astimezone(timezone.utc).replace(tzinfo=None)
+            )
+            entry_intent_cutoff = cutoff_anchor - timedelta(hours=entry_intent_ttl_hours)
+            latest_entry_intent_by_pair: dict[tuple[str, str], object] = {}
+            pairs_for_intent_lookup = set(open_pairs)
+            for row in rows:
+                pairs_for_intent_lookup.add((row.stock_secid, row.future_secid))
+            for stock, future in sorted(pairs_for_intent_lookup):
+                enter_rows = load_signal_history(
+                    session,
+                    from_ts=entry_intent_cutoff,
+                    limit=20,
+                    stock=stock,
+                    future=future,
+                    action="enter",
+                )
+                for enter_row in enter_rows:
+                    if isinstance(getattr(enter_row, "timestamp", None), datetime):
+                        latest_entry_intent_by_pair[(stock, future)] = enter_row
+                        break
             rows_by_pair = {(row.stock_secid, row.future_secid): row for row in rows}
             actionable: list[dict[str, object]] = []
             for row in rows:
@@ -2248,31 +2519,103 @@ def create_app(settings: AppSettings) -> Dash:
                     if isinstance(open_legs_raw, dict)
                     else {"stock": 0, "future": 0, "other": 0}
                 )
-                if row.action == "enter" and not is_open:
+                row_action = str(row.action or "").strip().lower()
+                if row_action == "enter":
                     action = "enter"
-                elif row.action == "exit" and is_open:
+                elif row_action == "exit":
+                    if not is_open:
+                        continue
                     action = "exit"
-                elif is_open:
-                    action = "hold_open"
+                elif row_action not in {"enter", "exit"}:
+                    action = "hold_open" if is_open else "hold_flat"
                 else:
                     continue
-                usage_fields = _signal_usage_fields(
-                    run_id=row.run_id,
-                    timestamp=row.timestamp.isoformat(),
+                signal_run_id = row.run_id
+                signal_timestamp = row.timestamp.isoformat()
+                signal_direction = row.direction
+                signal_score = row.score
+                signal_reasons = list(row.reasons) if isinstance(row.reasons, list) else []
+                current_metrics = row.metrics if isinstance(row.metrics, dict) else {}
+                fallback_metrics: dict[str, object] | None = None
+                pending_intent_promoted = False
+                signal_fingerprint = build_signal_fingerprint(
+                    run_id=signal_run_id,
+                    timestamp=signal_timestamp,
                     stock=row.stock_secid,
                     future=row.future_secid,
                     signal_action=action,
                 )
+                usage_fields = _signal_usage_fields(
+                    run_id=signal_run_id,
+                    timestamp=signal_timestamp,
+                    stock=row.stock_secid,
+                    future=row.future_secid,
+                    signal_action=action,
+                    signal_fingerprint=signal_fingerprint,
+                )
+                entry_intent_row = latest_entry_intent_by_pair.get(key)
+                if (
+                    action in {"hold_open", "hold_flat"}
+                    and entry_intent_row is not None
+                    and isinstance(getattr(entry_intent_row, "timestamp", None), datetime)
+                ):
+                    intent_run_id = str(entry_intent_row.run_id)
+                    intent_timestamp = entry_intent_row.timestamp.isoformat()
+                    intent_fingerprint = build_signal_fingerprint(
+                        run_id=intent_run_id,
+                        timestamp=intent_timestamp,
+                        stock=row.stock_secid,
+                        future=row.future_secid,
+                        signal_action="enter",
+                    )
+                    intent_usage = _signal_usage_fields(
+                        run_id=intent_run_id,
+                        timestamp=intent_timestamp,
+                        stock=row.stock_secid,
+                        future=row.future_secid,
+                        signal_action="enter",
+                        signal_fingerprint=intent_fingerprint,
+                    )
+                    if not bool(intent_usage.get("signal_used")):
+                        pending_intent_promoted = True
+                        action = "enter"
+                        signal_fingerprint = intent_fingerprint
+                        usage_fields = intent_usage
+                        signal_score = float(entry_intent_row.score or signal_score or 0.0)
+                        fallback_metrics = (
+                            entry_intent_row.metrics if isinstance(entry_intent_row.metrics, dict) else None
+                        )
+                        if signal_direction is None:
+                            signal_direction = entry_intent_row.direction
+                        if "pending_entry_intent_active" not in signal_reasons:
+                            signal_reasons.append("pending_entry_intent_active")
+                if action == "hold_flat":
+                    continue
+                signal_metrics = _enrich_entry_plan_metrics(
+                    settings=settings,
+                    current_metrics=current_metrics,
+                    fallback_metrics=fallback_metrics,
+                    force_rebuild=pending_intent_promoted,
+                )
+                if (
+                    pending_intent_promoted
+                    and not is_open
+                    and entry_intent_row is not None
+                    and isinstance(entry_intent_row.metrics, dict)
+                    and entry_intent_row.metrics.get("score_gate_pass") is not None
+                ):
+                    signal_metrics["score_gate_pass"] = bool(entry_intent_row.metrics.get("score_gate_pass"))
                 payload = {
-                    "run_id": row.run_id,
-                    "timestamp": row.timestamp.isoformat(),
+                    "run_id": signal_run_id,
+                    "timestamp": signal_timestamp,
                     "stock": row.stock_secid,
                     "future": row.future_secid,
+                    "signal_fingerprint": signal_fingerprint,
                     "signal_action": action,
-                    "signal_direction": row.direction,
-                    "signal_score": row.score,
-                    "signal_reasons": row.reasons,
-                    "signal_metrics": row.metrics,
+                    "signal_direction": signal_direction,
+                    "signal_score": signal_score,
+                    "signal_reasons": signal_reasons,
+                    "signal_metrics": signal_metrics,
                     "position_open": is_open,
                     "position_state": "open" if is_open else "flat",
                     "position_enter_count": int(state.get("enter_count") or 0),
@@ -2295,6 +2638,9 @@ def create_app(settings: AppSettings) -> Dash:
                     ),
                     **usage_fields,
                 }
+                if pending_intent_promoted and entry_intent_row is not None:
+                    payload["signal_origin_run_id"] = entry_intent_row.run_id
+                    payload["signal_origin_timestamp"] = entry_intent_row.timestamp.isoformat()
                 actionable.append(_merge_signal_metrics(payload))
 
             missing_open_pairs = open_pairs.difference(rows_by_pair.keys())
@@ -2311,23 +2657,84 @@ def create_app(settings: AppSettings) -> Dash:
                     timestamp_value = last_execution_at.isoformat()
                 else:
                     timestamp_value = latest.as_of.isoformat()
+                action = "hold_open"
+                signal_direction = state.get("direction")
+                signal_score = 0.0
+                signal_reasons: list[str] = ["position_open_no_active_signal"]
+                signal_metrics: dict[str, object] = {}
+                signal_fingerprint = build_signal_fingerprint(
+                    run_id=latest.run_id,
+                    timestamp=timestamp_value,
+                    stock=stock,
+                    future=future,
+                    signal_action=action,
+                )
                 usage_fields = _signal_usage_fields(
                     run_id=latest.run_id,
                     timestamp=timestamp_value,
                     stock=stock,
                     future=future,
-                    signal_action="hold_open",
+                    signal_action=action,
+                    signal_fingerprint=signal_fingerprint,
                 )
+                entry_intent_row = latest_entry_intent_by_pair.get((stock, future))
+                pending_intent_promoted = False
+                if (
+                    entry_intent_row is not None
+                    and isinstance(getattr(entry_intent_row, "timestamp", None), datetime)
+                ):
+                    intent_run_id = str(entry_intent_row.run_id)
+                    intent_timestamp = entry_intent_row.timestamp.isoformat()
+                    intent_fingerprint = build_signal_fingerprint(
+                        run_id=intent_run_id,
+                        timestamp=intent_timestamp,
+                        stock=stock,
+                        future=future,
+                        signal_action="enter",
+                    )
+                    intent_usage = _signal_usage_fields(
+                        run_id=intent_run_id,
+                        timestamp=intent_timestamp,
+                        stock=stock,
+                        future=future,
+                        signal_action="enter",
+                        signal_fingerprint=intent_fingerprint,
+                    )
+                    if not bool(intent_usage.get("signal_used")):
+                        pending_intent_promoted = True
+                        action = "enter"
+                        signal_fingerprint = intent_fingerprint
+                        usage_fields = intent_usage
+                        signal_score = float(entry_intent_row.score or 0.0)
+                        signal_direction = entry_intent_row.direction or signal_direction
+                        signal_reasons = (
+                            list(entry_intent_row.reasons)
+                            if isinstance(entry_intent_row.reasons, list)
+                            else []
+                        )
+                        if "pending_entry_intent_active" not in signal_reasons:
+                            signal_reasons.append("pending_entry_intent_active")
+                        signal_metrics = _enrich_entry_plan_metrics(
+                            settings=settings,
+                            current_metrics=None,
+                            fallback_metrics=(
+                                entry_intent_row.metrics
+                                if isinstance(entry_intent_row.metrics, dict)
+                                else None
+                            ),
+                            force_rebuild=False,
+                        )
                 payload = {
                     "run_id": latest.run_id,
                     "timestamp": timestamp_value,
                     "stock": stock,
                     "future": future,
-                    "signal_action": "hold_open",
-                    "signal_direction": state.get("direction"),
-                    "signal_score": 0.0,
-                    "signal_reasons": ["position_open_no_active_signal"],
-                    "signal_metrics": {},
+                    "signal_fingerprint": signal_fingerprint,
+                    "signal_action": action,
+                    "signal_direction": signal_direction,
+                    "signal_score": signal_score,
+                    "signal_reasons": signal_reasons,
+                    "signal_metrics": signal_metrics,
                     "position_open": True,
                     "position_state": "open",
                     "position_enter_count": int(state.get("enter_count") or 0),
@@ -2348,7 +2755,22 @@ def create_app(settings: AppSettings) -> Dash:
                     ),
                     **usage_fields,
                 }
+                if pending_intent_promoted and entry_intent_row is not None:
+                    payload["signal_origin_run_id"] = entry_intent_row.run_id
+                    payload["signal_origin_timestamp"] = entry_intent_row.timestamp.isoformat()
                 actionable.append(_merge_signal_metrics(payload))
+
+            callback_ttl_hours = int(getattr(settings.telegram, "callback_ttl_hours", 72) or 72)
+            for row in actionable:
+                delivery = signal_delivery_state(
+                    row,
+                    callback_ttl_hours=callback_ttl_hours,
+                )
+                row["delivery_action"] = delivery.get("delivery_action")
+                row["delivery_allowed"] = bool(delivery.get("delivery_allowed"))
+                row["delivery_suppressed_reason"] = delivery.get("delivery_suppressed_reason")
+                row["entry_signal_expired"] = bool(delivery.get("entry_signal_expired"))
+                row["entry_range_eligible"] = bool(delivery.get("entry_range_eligible"))
 
             if require_score_gate:
                 actionable = [
@@ -2376,6 +2798,11 @@ def create_app(settings: AppSettings) -> Dash:
                 continue
             signal_id = _build_signal_id_from_row(row)
             lifecycle_state = _derive_lifecycle_state(row)
+            signal_action_effective = _derive_effective_signal_action(row)
+            delivery = signal_delivery_state(
+                {**row, "signal_action_effective": signal_action_effective},
+                callback_ttl_hours=int(getattr(settings.telegram, "callback_ttl_hours", 72) or 72),
+            )
             entity_ref = _build_pair_entity_ref(row.get("stock"), row.get("future"))
             gate_results = _build_gate_results_from_row(row, signal_id)
             execution_ref = {
@@ -2391,10 +2818,15 @@ def create_app(settings: AppSettings) -> Dash:
                     "signal_id": signal_id,
                     "entity_ref": entity_ref,
                     "lifecycle_state": lifecycle_state,
-                    "signal_action_effective": _derive_effective_signal_action(row),
+                    "signal_action_effective": signal_action_effective,
                     "gate_results": gate_results,
                     "decision_ref": {"decision_id": None},
                     "execution_ref": execution_ref,
+                    "delivery_action": delivery.get("delivery_action"),
+                    "delivery_allowed": bool(delivery.get("delivery_allowed")),
+                    "delivery_suppressed_reason": delivery.get("delivery_suppressed_reason"),
+                    "entry_signal_expired": bool(delivery.get("entry_signal_expired")),
+                    "entry_range_eligible": bool(delivery.get("entry_range_eligible")),
                 }
             )
             payload.append(enriched_row)
@@ -2432,17 +2864,40 @@ def create_app(settings: AppSettings) -> Dash:
             idempotency_key = f"idem-{uuid.uuid4().hex[:12]}"
 
         signal_row = None
-        if signal_id:
+        active_rows_cache: list[dict[str, object]] | None = None
+
+        def _load_active_rows_for_lookup() -> list[dict[str, object]]:
+            nonlocal active_rows_cache
+            if active_rows_cache is not None:
+                return active_rows_cache
             legacy = signals_active_api()
             rows, status_code = _extract_response_payload(legacy)
-            if status_code >= 400:
-                return legacy
-            if isinstance(rows, list):
-                for row in rows:
-                    if isinstance(row, dict) and _build_signal_id_from_row(row) == signal_id:
-                        signal_row = row
-                        break
+            if status_code >= 400 or not isinstance(rows, list):
+                active_rows_cache = []
+            else:
+                active_rows_cache = [row for row in rows if isinstance(row, dict)]
+            return active_rows_cache
 
+        if signal_id:
+            for row in _load_active_rows_for_lookup():
+                if _build_signal_id_from_row(row) == signal_id:
+                    signal_row = row
+                    break
+
+        stock = str(payload.get("stock") or (signal_row or {}).get("stock") or "").strip()
+        future = str(payload.get("future") or (signal_row or {}).get("future") or "").strip()
+        if signal_row is None and stock and future:
+            for row in _load_active_rows_for_lookup():
+                if str(row.get("stock") or "").strip() != stock:
+                    continue
+                if str(row.get("future") or "").strip() != future:
+                    continue
+                row_action = str(row.get("signal_action") or "").strip().lower()
+                if row_action == requested_action:
+                    signal_row = row
+                    break
+                if signal_row is None:
+                    signal_row = row
         stock = str(payload.get("stock") or (signal_row or {}).get("stock") or "").strip()
         future = str(payload.get("future") or (signal_row or {}).get("future") or "").strip()
         if not stock or not future:
@@ -2450,6 +2905,22 @@ def create_app(settings: AppSettings) -> Dash:
             return jsonify({"error": "not_found", "message": message}), 404
         direction = payload.get("direction") or (signal_row or {}).get("signal_direction")
         signal_id_resolved = signal_id or _stable_id("sig", stock, future, requested_action)
+
+        signal_run_id = str((signal_row or {}).get("run_id") or "").strip()
+        signal_timestamp = str((signal_row or {}).get("timestamp") or "").strip()
+        signal_action_for_fingerprint = str((signal_row or {}).get("signal_action") or "").strip().lower()
+        if not signal_action_for_fingerprint:
+            signal_action_for_fingerprint = requested_action
+        signal_fingerprint = str((signal_row or {}).get("signal_fingerprint") or "").strip() or None
+        if signal_run_id and signal_timestamp and signal_action_for_fingerprint:
+            if signal_fingerprint is None:
+                signal_fingerprint = build_signal_fingerprint(
+                    run_id=signal_run_id,
+                    timestamp=signal_timestamp,
+                    stock=stock,
+                    future=future,
+                    signal_action=signal_action_for_fingerprint,
+                )
 
         pretrade_payload = payload.get("pretrade")
         pretrade_status_hint = payload.get("pretrade_status")
@@ -2506,14 +2977,28 @@ def create_app(settings: AppSettings) -> Dash:
             "idempotency_key": idempotency_key,
             "requested_action": requested_action,
         }
+        if signal_fingerprint is not None:
+            note_payload["fingerprint"] = signal_fingerprint
+        if signal_run_id:
+            note_payload["signal_run_id"] = signal_run_id
+        if signal_timestamp:
+            note_payload["signal_timestamp"] = signal_timestamp
+        if signal_action_for_fingerprint:
+            note_payload["signal_action"] = signal_action_for_fingerprint
         if reason_code is not None:
             note_payload["reason_code"] = reason_code
         if fail_closed.status == "override":
             note_payload["fail_closed_override"] = True
             note_payload["fail_closed_reason"] = fail_closed.reason_code
         operator_note = payload.get("note") or payload.get("comment")
-        if operator_note is not None and str(operator_note).strip():
-            note_payload["note"] = str(operator_note).strip()
+        operator_note_value = str(operator_note).strip() if operator_note is not None else None
+        if operator_note_value:
+            note_payload["note"] = operator_note_value
+            ack_note = parse_ack_note(operator_note_value)
+            if isinstance(ack_note, dict):
+                ack_fingerprint = str(ack_note.get("fingerprint") or "").strip()
+                if ack_fingerprint and "fingerprint" not in note_payload:
+                    note_payload["fingerprint"] = ack_fingerprint
         note = json.dumps(note_payload, ensure_ascii=False, separators=(",", ":"))
 
         now = datetime.now(timezone.utc)

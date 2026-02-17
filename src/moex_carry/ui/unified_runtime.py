@@ -116,6 +116,7 @@ _SCORE_W_FLOOR = 0.35
 _SCORE_W_ALPHA = 0.65
 _SCORE_GATE_P_EXEC_THRESHOLD = 0.20
 _SCORE_GATE_P_EARN_THRESHOLD = 0.10
+_DEFAULT_ENTRY_PRICE_TOLERANCE_PCT = 0.0015
 
 
 def _safe_float(value: Any) -> float | None:
@@ -561,6 +562,79 @@ def _resolve_target_annual_rate(
     return float(ordered[-1].rate)
 
 
+def _resolve_entry_tolerance(settings: AppSettings) -> float:
+    alpha_cfg = settings.spread_carry_alpha
+    raw_value = getattr(alpha_cfg, "entry_price_tolerance_pct", _DEFAULT_ENTRY_PRICE_TOLERANCE_PCT)
+    parsed = _safe_float(raw_value)
+    if parsed is None:
+        parsed = _DEFAULT_ENTRY_PRICE_TOLERANCE_PCT
+    return min(max(float(parsed), 0.0001), 0.05)
+
+
+def _entry_plan_from_latest(
+    *,
+    spot_mid: float | None,
+    future_mid: float | None,
+    spread_mid: float | None,
+    spread_pct: float | None,
+    tolerance: float,
+) -> dict[str, float | None]:
+    spot = float(spot_mid) if spot_mid is not None else None
+    future = float(future_mid) if future_mid is not None else None
+    spread_value = float(spread_mid) if spread_mid is not None else None
+    spread_pct_value = float(spread_pct) if spread_pct is not None else None
+    if spread_value is None and spread_pct_value is not None and spot is not None:
+        spread_value = float(spread_pct_value * spot)
+    if spread_pct_value is None and spread_value is not None and spot is not None and spot != 0:
+        spread_pct_value = float(spread_value / spot)
+
+    spread_band = None
+    spread_pct_band = None
+    if spot is not None and spot > 0:
+        spread_band = float(spot * tolerance)
+        spread_pct_band = float(spread_band / spot)
+    elif spread_value is not None:
+        spread_band = float(max(abs(spread_value), 1.0) * tolerance)
+        spread_pct_band = float(tolerance)
+
+    entry_stock_min = float(spot * (1.0 - tolerance)) if spot is not None and spot > 0 else None
+    entry_stock_max = float(spot * (1.0 + tolerance)) if spot is not None and spot > 0 else None
+    entry_future_min = float(future * (1.0 - tolerance)) if future is not None and future > 0 else None
+    entry_future_max = float(future * (1.0 + tolerance)) if future is not None and future > 0 else None
+
+    entry_spread_min = (
+        float(spread_value - spread_band)
+        if spread_value is not None and spread_band is not None
+        else None
+    )
+    entry_spread_max = (
+        float(spread_value + spread_band)
+        if spread_value is not None and spread_band is not None
+        else None
+    )
+    entry_spread_pct_min = (
+        float(spread_pct_value - spread_pct_band)
+        if spread_pct_value is not None and spread_pct_band is not None
+        else None
+    )
+    entry_spread_pct_max = (
+        float(spread_pct_value + spread_pct_band)
+        if spread_pct_value is not None and spread_pct_band is not None
+        else None
+    )
+    return {
+        "entry_price_tolerance_pct": float(tolerance),
+        "entry_stock_min": entry_stock_min,
+        "entry_stock_max": entry_stock_max,
+        "entry_future_min_per_share": entry_future_min,
+        "entry_future_max_per_share": entry_future_max,
+        "entry_spread_min": entry_spread_min,
+        "entry_spread_max": entry_spread_max,
+        "entry_spread_pct_min": entry_spread_pct_min,
+        "entry_spread_pct_max": entry_spread_pct_max,
+    }
+
+
 def _build_pair_rows(
     *,
     pair: _UniversePair,
@@ -607,6 +681,19 @@ def _build_pair_rows(
         p_exec >= _SCORE_GATE_P_EXEC_THRESHOLD and p_earn >= _SCORE_GATE_P_EARN_THRESHOLD
     )
 
+    spot_mid = _safe_float(latest.get("spot_mid"))
+    future_mid = _safe_float(latest.get("future_mid"))
+    spread_mid = _safe_float(latest.get("spread_mid"))
+    spread_pct = _safe_float(latest.get("spread_pct"))
+    entry_tolerance = _resolve_entry_tolerance(settings)
+    entry_plan = _entry_plan_from_latest(
+        spot_mid=spot_mid,
+        future_mid=future_mid,
+        spread_mid=spread_mid,
+        spread_pct=spread_pct,
+        tolerance=entry_tolerance,
+    )
+
     entry_spread = _safe_float(latest.get("entry_spread_pct_exec"))
     tp_net = _safe_float(latest.get("tp_net"))
     sl_net = _safe_float(latest.get("sl_net"))
@@ -617,7 +704,10 @@ def _build_pair_rows(
         float(entry_spread - sl_net) if entry_spread is not None and sl_net is not None else None
     )
     signal_metrics = {
-        "spread_pct": _safe_float(latest.get("spread_pct")),
+        "spot_mid": spot_mid,
+        "future_mid": future_mid,
+        "spread_mid": spread_mid,
+        "spread_pct": spread_pct,
         "rtc_pct": _safe_float(latest.get("rtc_pct")),
         "floor_rate_annual": floor_rate_annual,
         "tp_net": tp_net,
@@ -647,13 +737,11 @@ def _build_pair_rows(
         "trades_closed": int(metrics.trades_closed),
         "avg_entry_wait_min_closed": _safe_float(metrics.avg_entry_wait_min_closed),
         "avg_exit_wait_min_closed": _safe_float(metrics.avg_exit_wait_min_closed),
-        "entry_spread_pct_min": entry_spread,
-        "entry_spread_pct_max": entry_spread,
+        **entry_plan,
         "tp_spread_pct_level": tp_spread_level,
         "sl_spread_pct_level": sl_spread_level,
         "forecast_exit_days": _safe_float(_value_from_row(frame, "trade_hold_days")),
         "forecast_exit_date": None,
-        "entry_price_tolerance_pct": None,
         "source": source,
     }
     decision = "ENTER_OK" if signal_action == "enter" else ("EXIT" if signal_action == "exit" else "HOLD")
@@ -670,10 +758,10 @@ def _build_pair_rows(
         "stock_name": pair.stock_name,
         "future": pair.future,
         "expiry": pair.expiry.isoformat(),
-        "spot": _safe_float(latest.get("spot_mid")),
-        "future_price": _safe_float(latest.get("future_mid")),
-        "spread_mid": _safe_float(latest.get("spread_mid")),
-        "spread_pct": _safe_float(latest.get("spread_pct")),
+        "spot": spot_mid,
+        "future_price": future_mid,
+        "spread_mid": spread_mid,
+        "spread_pct": spread_pct,
         "rtc_pct": _safe_float(latest.get("rtc_pct")),
         "floor_rate_annual": floor_rate_annual,
         "score_model": _SCORE_MODEL,
@@ -697,8 +785,7 @@ def _build_pair_rows(
         "zscore": _safe_float(latest.get("zscore")),
         "tp_net": tp_net,
         "sl_net": sl_net,
-        "entry_spread_pct_min": entry_spread,
-        "entry_spread_pct_max": entry_spread,
+        **entry_plan,
         "tp_spread_pct_level": tp_spread_level,
         "sl_spread_pct_level": sl_spread_level,
         "forecast_exit_days": _safe_float(_value_from_row(frame, "trade_hold_days")),
@@ -737,10 +824,12 @@ def _build_pair_rows(
         "score_gate_earn_threshold": _SCORE_GATE_P_EARN_THRESHOLD,
         "score_gate_pass": score_gate_pass,
         "total_score": signal_score,
-        "spread_pct": _safe_float(latest.get("spread_pct")),
+        "spot_mid": spot_mid,
+        "future_mid": future_mid,
+        "spread_mid": spread_mid,
+        "spread_pct": spread_pct,
         "floor_rate_annual": floor_rate_annual,
-        "entry_spread_pct_min": entry_spread,
-        "entry_spread_pct_max": entry_spread,
+        **entry_plan,
         "tp_spread_pct_level": tp_spread_level,
         "sl_spread_pct_level": sl_spread_level,
         "forecast_exit_days": _safe_float(_value_from_row(frame, "trade_hold_days")),
