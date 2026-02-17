@@ -51,6 +51,8 @@ The UI expects these endpoints (served by the Python backend in
 - `GET /api/top-pairs?limit=...&all=true|false`
   - Top ranked pairs with signal metadata.
   - Includes spread_pct, rtc_pct, floor_rate_annual, score_floor, total_score, decision.
+  - By default returns latest backend-produced snapshot (last-good output).
+  - `fresh=1` can be used to force an on-demand in-process snapshot read path.
 - `GET /api/signals/active`
   - Active signals derived from the latest run.
 - `GET /api/v2/signals/active`
@@ -58,9 +60,11 @@ The UI expects these endpoints (served by the Python backend in
 - `POST /api/v2/signals/{signal_id}/actions`
   - Unified action entrypoint for `ack|enter|exit|hold`.
 - `GET /api/signals/refresh-status`
-  - Scheduler status and last successful recompute timestamp.
+  - Scheduler status, last successful refresh timestamp, and incremental telemetry:
+    `incremental_enabled`, watermarks, recompute/reuse counters, skip reason.
 - `POST /api/signals/refresh`
-  - Triggers an on-demand signal recompute; UI reload uses this endpoint.
+  - Triggers on-demand forced refresh (`force=True`) for fallback/recovery.
+  - Regular UI reload does not call this endpoint.
 - `GET /api/signals/history?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=...`
   - Historical signal actions.
 - `GET /api/signals/executions?stock=...&future=...&limit=...`
@@ -69,6 +73,8 @@ The UI expects these endpoints (served by the Python backend in
   - Logs a manual execution action.
 - `GET /api/backtests?limit=...`
   - Backtest summary metrics.
+  - By default returns latest backend-produced snapshot (last-good output).
+  - `fresh=1` can be used to force an on-demand in-process snapshot read path.
 - `POST /api/backtest/run`
   - Runs Backtest v2 and returns full report (summary, equity, trades).
 - `GET /api/spread-series?stock=...&future=...&window_days=...&full_life=true|false`
@@ -94,6 +100,11 @@ The UI expects these endpoints (served by the Python backend in
 - React UI runs via `npm run dev` in `ui-web/` on the Vite dev server.
 - Vite is configured to proxy `/api` to the backend (`ui-web/vite.config.ts`).
 - This keeps frontend and backend deployable separately while supporting parallel development.
+
+## Refresh semantics
+- Backend scheduler is the source of truth for periodic recompute (default every 60 seconds).
+- Dash/React table reload should read latest persisted backend outputs by default.
+- Manual refresh endpoint is reserved for explicit operator-triggered forced recompute.
 
 ## UI layout (screen-fit)
 - Top pairs view uses a two-column layout on desktop:

@@ -16,7 +16,6 @@ from moex_carry.config import AppSettings
 from moex_carry.domain.models import KeyRate
 from moex_carry.domain.portfolio import PairSpec
 from moex_carry.minute_ingest.runner import IngestPair, PairIngestResult
-from moex_carry.perf import resolve_pair_workers
 from moex_carry.selection.universe import ASSET_CODE_ALIASES
 from moex_carry.signal_replay.incremental import ReplayMutation, run_true_incremental_replay
 from moex_carry.signal_replay import ReplayResult, load_pair_minute_series, run_minute_replay
@@ -896,7 +895,7 @@ def build_unified_market_snapshot(
         )
         return pair, fetch
 
-    workers = resolve_pair_workers(getattr(settings.ui, "unified_pair_workers", None))
+    workers = max(int(getattr(settings.ui, "unified_pair_workers", 4) or 0), 1)
     if workers <= 1:
         results = [_compute(pair) for pair in universe]
     else:

@@ -21,11 +21,39 @@ Policy:
 - Local context file `.worktree-context.local.json` is intentionally ignored by git.
 - Context lock expires automatically (`ContextTtlHours`, default `12`) and must be re-initialized for a new session.
 
+## Skill invocation gates (mandatory)
+- Start of any new development stream:
+  - Run `D:/New Project/.cursor/skills/parallel-worktree-flow/SKILL.md`.
+- UI stream (`ui-web`, API projection, dashboard behavior):
+  - Run `D:/New Project/.cursor/skills/trading-ui-dashboard/SKILL.md`.
+  - Run `D:/New Project/.cursor/skills/ui-decision-log/SKILL.md` when `decision_log`/`decision_view` projection changes.
+  - Run `D:/New Project/.cursor/skills/frontend-behavior-check/SKILL.md` on recheck and before push.
+- Strategy/risk stream:
+  - Run `intraday-futures-trading-advisor` + `moex-instruments-costs` + `risk-profile-gates`.
+  - Add `news-geopolitics-filter` for event risk and `spread-arbitrage` for spread pair logic.
+- Research/performance stream:
+  - Run `ml-backtest-hpo-lab`.
+  - Add `minute-candle-performance` for minute/high-load runtime changes.
+- Recheck and pre-push:
+  - Re-run the active stream verification skill(s) and then run required checks below.
+
+## Coverage mapping
+- Manual process acceptance scenarios:
+  - `dev-skill-start-gate` -> `TC-DEV-WF-001`
+  - `dev-skill-recheck-gate` -> `TC-DEV-WF-002`
+  - `dev-skill-prepush-gate` -> `TC-DEV-WF-003`
+- Detailed definitions:
+  - `docs/test-cases.md`
+  - `configs/acceptance_scenarios.yaml`
+
 ## Required checks (CI + local)
+- Treat this list as a blocker gate for pre-push and PR readiness.
 
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
 - `python scripts/sync_architecture_map.py --check`
+- `python scripts/validate_test_cases.py`
+- `python scripts/validate_skills.py`
 - `pytest`
 
 ### Frontend (UI)
@@ -33,6 +61,19 @@ Policy:
 - `npm ci`
 - `npm run lint`
 - `npm run build`
+
+## Automatic pre-push gate (recommended)
+- Enable repository hooks once per clone:
+  - `python scripts/install_git_hooks.py`
+- This installs `core.hooksPath=.githooks` and runs required backend/frontend checks on `git push`.
+- Any failed required check blocks push.
+- Direct push to `main` is blocked by default.
+- One-time override for emergency/admin pushes:
+  - Bash: `MOEX_CARRY_ALLOW_MAIN_PUSH=1 git push`
+  - PowerShell: `$env:MOEX_CARRY_ALLOW_MAIN_PUSH='1'; git push`
+- Windows lock workaround for `npm ci` (`EPERM` on `esbuild.exe`):
+  - Bash: `MOEX_CARRY_SKIP_NPM_CI=1 git push`
+  - PowerShell: `$env:MOEX_CARRY_SKIP_NPM_CI='1'; git push`
 
 ## Optional checks (manual / data-dependent)
 - Acceptance smoke: `python scripts/acceptance_check.py`

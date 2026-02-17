@@ -41,7 +41,6 @@ import type {
 } from './entities/decision/types'
 import './App.css'
 
-const AUTO_REFRESH_LABEL = '60 с'
 type WorkspaceTab = 'trade_console' | 'research_lab' | 'news_intelligence' | 'portfolio_control'
 type TradeConsoleTab = 'decisions' | 'top_pairs' | 'signals' | 'backtests'
 type ResearchTab = 'backtest_v2' | 'forward' | 'hpo'
@@ -543,7 +542,6 @@ function App() {
           {workspace === 'trade_console' && tradeTab === 'top_pairs' ? (
             <TopPairsTab
               market={market}
-              autoRefreshLabel={AUTO_REFRESH_LABEL}
               formatCellValue={formatCellValue}
               renderFieldLabel={renderFieldLabel}
               formatDate={formatDate}
@@ -553,7 +551,6 @@ function App() {
           {workspace === 'trade_console' && tradeTab === 'signals' ? (
             <SignalsTab
               market={market}
-              autoRefreshLabel={AUTO_REFRESH_LABEL}
               formatCellValue={formatCellValue}
               renderFieldLabel={renderFieldLabel}
               formatDate={formatDate}
@@ -563,7 +560,6 @@ function App() {
           {workspace === 'trade_console' && tradeTab === 'backtests' ? (
             <BacktestsTab
               market={market}
-              autoRefreshLabel={AUTO_REFRESH_LABEL}
               formatCellValue={formatCellValue}
               renderFieldLabel={renderFieldLabel}
               formatDate={formatDate}

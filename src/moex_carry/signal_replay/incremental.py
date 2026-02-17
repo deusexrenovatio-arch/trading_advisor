@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from datetime import datetime, timedelta, timezone
-import inspect
 import hashlib
 import json
 import os
@@ -260,12 +259,6 @@ def run_true_incremental_replay(
         initial_state = ReplayRuntimeState()
         base_prefix = pd.DataFrame()
 
-    if not force_full and not _supports_stateful_replay() and run_mode != "full":
-        run_mode = "full"
-        fallback_reason = "stateful_replay_unavailable"
-        initial_state = ReplayRuntimeState()
-        base_prefix = pd.DataFrame()
-
     tail_start_ts = initial_state.last_processed_exec_ts
     if tail_start_ts is None or run_mode == "full":
         tail = series.copy()
@@ -308,34 +301,22 @@ def run_true_incremental_replay(
             ),
         )
 
-    if _supports_stateful_replay():
-        initial_payload = initial_state.to_payload()
-        replay_tail_result = _apply_spread_carry_signals(
-            tail,
-            merged=None,
-            dividends=dividends,
-            key_rates=key_rates,
-            settings=settings,
-            future_spec=future_spec,
-            alpha_cfg=settings.spread_carry_alpha,
-            initial_state=initial_payload,
-            return_state=True,
-        )
-        if not isinstance(replay_tail_result, tuple):
-            raise RuntimeError("incremental_replay_state_unavailable")
-        replay_tail, final_state_payload = replay_tail_result
-        final_state = ReplayRuntimeState.from_payload(final_state_payload)
-    else:
-        replay_tail = _apply_spread_carry_signals(
-            tail,
-            merged=None,
-            dividends=dividends,
-            key_rates=key_rates,
-            settings=settings,
-            future_spec=future_spec,
-            alpha_cfg=settings.spread_carry_alpha,
-        )
-        final_state = _runtime_state_from_replay_tail(replay_tail)
+    initial_payload = initial_state.to_payload()
+    replay_tail_result = _apply_spread_carry_signals(
+        tail,
+        merged=None,
+        dividends=dividends,
+        key_rates=key_rates,
+        settings=settings,
+        future_spec=future_spec,
+        alpha_cfg=settings.spread_carry_alpha,
+        initial_state=initial_payload,
+        return_state=True,
+    )
+    if not isinstance(replay_tail_result, tuple):
+        raise RuntimeError("incremental_replay_state_unavailable")
+    replay_tail, final_state_payload = replay_tail_result
+    final_state = ReplayRuntimeState.from_payload(final_state_payload)
 
     if base_prefix.empty:
         merged_frame = replay_tail.reset_index(drop=True)
@@ -565,33 +546,6 @@ def _as_optional_text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
-
-
-def _supports_stateful_replay() -> bool:
-    try:
-        params = inspect.signature(_apply_spread_carry_signals).parameters
-    except (TypeError, ValueError):
-        return False
-    return "initial_state" in params and "return_state" in params
-
-
-def _runtime_state_from_replay_tail(replay_tail: pd.DataFrame) -> ReplayRuntimeState:
-    if replay_tail is None or replay_tail.empty:
-        return ReplayRuntimeState()
-    last_processed_exec_ts = _as_utc_naive_datetime(replay_tail["exec_ts"].iloc[-1]) if "exec_ts" in replay_tail.columns else None
-    current_cycle = 0
-    if "cycle_id" in replay_tail.columns:
-        cycle = pd.to_numeric(replay_tail["cycle_id"], errors="coerce")
-        if cycle.notna().any():
-            current_cycle = int(cycle.max())
-    return ReplayRuntimeState(
-        pending_entry=None,
-        pending_exit=None,
-        open_position=None,
-        current_cycle=current_cycle,
-        spread_history=[],
-        last_processed_exec_ts=last_processed_exec_ts,
-    )
 
 
 def _atomic_write_text(path: Path, text: str) -> None:

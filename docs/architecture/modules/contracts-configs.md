@@ -44,12 +44,23 @@ pipeline, UI, and decision logging rely on.
   - `ui`: API host/port plus optional signal refresh scheduler.
 
 UI refresh keys:
-- `signal_refresh_enabled`: turn on periodic `run_signal_cycle` execution.
-- `signal_refresh_interval_sec`: interval in seconds between refresh runs.
-- `signal_refresh_daily_time`: optional local time (`HH:MM` or `HH:MM:SS`) for daily refresh.
+- `signal_refresh_enabled`: enables backend scheduler for signal refresh.
+- `signal_refresh_interval_sec`: interval in seconds between scheduled refresh runs (default `60`).
+- `signal_refresh_daily_time`: optional local time (`HH:MM` or `HH:MM:SS`) for daily refresh; default is `null` (disabled).
 - `signal_refresh_timezone`: optional IANA timezone for daily scheduling (defaults to `environment.timezone`).
 - `signal_refresh_max_pairs`: optional max pairs override for refresh.
 - `signal_refresh_save_csv`: persist refreshed CSV outputs when true.
+- `incremental_replay_enabled`: enable true incremental replay path (default `true`).
+- `incremental_overlap_minutes`: overlap window for correction-safe replay (default `180`).
+- `incremental_checkpoint_dir`: checkpoint root for per-pair replay state on disk.
+- `incremental_checkpoint_interval_minutes`: periodic checkpoint cadence (default `60`).
+
+Refresh behavior:
+- Scheduled refresh (`signal_refresh_interval_sec`) runs non-force incremental path.
+- Manual `POST /api/signals/refresh` runs forced full path (`force=True`) as fallback/recovery action.
+- `GET /api/signals/refresh-status` exposes telemetry fields:
+  - `incremental_enabled`, `data_watermark_before`, `data_watermark_after`,
+  - `pairs_total`, `pairs_recomputed`, `pairs_reused`, `pairs_skipped`, `skip_reason`.
 
 ### SpreadCarryAlpha settings (new)
 Expected parameters include (non-exhaustive):

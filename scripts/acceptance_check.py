@@ -149,6 +149,10 @@ def run(args: argparse.Namespace) -> int:
             _print_skip(scenario_id, "skip-frontend flag")
             continue
 
+        if scenario.get("type") == "manual":
+            _print_skip(scenario_id, "manual_scenario")
+            continue
+
         if scenario.get("type") == "http_status":
             url = _build_url(frontend if scope == "frontend" else backend, scenario.get("url", "/"))
             expected_statuses = _to_status_set(

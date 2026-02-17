@@ -38,3 +38,4 @@
    - `docs/architecture/modules/backend-core.md`
    - `docs/architecture/modules/ui-web.md`
    - `docs/contracts/api-v2.yaml`
+6. For workflow/skill/process-doc updates (without module/API/entity changes), run only `python scripts/sync_architecture_map.py --check`; map data regeneration is not required.

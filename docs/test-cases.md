@@ -10,6 +10,9 @@
 - Data: signal history has at least one day with known stock/future/action.
 
 ## Acceptance Mapping (scenario -> test cases)
+- dev-skill-start-gate -> TC-DEV-WF-001
+- dev-skill-recheck-gate -> TC-DEV-WF-002
+- dev-skill-prepush-gate -> TC-DEV-WF-003
 - decision-view -> TC-DEC-API-001, TC-DEC-UI-001
 - decision-view-filters -> TC-DEC-API-005
 - decision-view-aggregation -> TC-DEC-API-002
@@ -835,6 +838,41 @@ Steps:
 1. Run targeted performance unit suite for minute-runtime components.
 Expected:
 - Runtime modules pass architecture/performance guards used by CI.
+
+## Process and Workflow Test Cases
+
+### TC-DEV-WF-001 Start phase invokes mandatory bootstrap skill
+Acceptance: dev-skill-start-gate
+Automation: manual
+Steps:
+1. Start a new development stream (new branch/worktree).
+2. Verify `parallel-worktree-flow` is invoked before implementation.
+3. Verify domain flow skill is selected (`trading-ui-dashboard`, `ml-backtest-hpo-lab`, or strategy flow).
+Expected:
+- Start of development always begins with bootstrap skill.
+- Domain work starts only after flow skill selection.
+
+### TC-DEV-WF-002 Recheck phase reruns flow verification skills
+Acceptance: dev-skill-recheck-gate
+Automation: manual
+Steps:
+1. Apply a fix in an active stream.
+2. Rerun flow verification skill (`frontend-behavior-check`, `ml-backtest-hpo-lab`, or strategy gates).
+3. Run required checks listed in `docs/DEV_WORKFLOW.md`.
+Expected:
+- Recheck includes both skill-level validation and required workflow checks.
+- Task is not closed if any required check fails.
+
+### TC-DEV-WF-003 Pre-push phase enforces blocker checks
+Acceptance: dev-skill-prepush-gate
+Automation: manual
+Steps:
+1. Before push, run all required checks from `docs/DEV_WORKFLOW.md`.
+2. Verify failures are treated as blockers.
+3. Push only after all checks pass.
+Expected:
+- Pre-push gate is deterministic and repeatable.
+- No push is performed with failed required checks.
 
 ## Regression Checklist (minimum)
 - /api/v2/signals/history returns JSON (no HTML).

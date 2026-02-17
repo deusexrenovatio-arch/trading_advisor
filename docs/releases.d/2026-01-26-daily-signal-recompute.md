@@ -1,3 +1,4 @@
+- Superseded by `docs/releases.d/2026-02-16-minute-default-incremental-refresh.md` for current defaults.
 - Added backend signal recompute scheduler with daily scheduling and on-demand refresh endpoint.
 - UI reload now triggers recompute and shows last successful recompute time.
 - Default scheduler set to run daily at 01:00 (local timezone).

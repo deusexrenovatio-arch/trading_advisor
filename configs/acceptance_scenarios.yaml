@@ -1,5 +1,35 @@
 version: 1
 scenarios:
+  - id: dev-skill-start-gate
+    type: manual
+    scope: process
+    test_cases: [TC-DEV-WF-001]
+    title: Development start skill gate
+    user_story: Engineer starts any new development stream with mandatory bootstrap skill sequence.
+    expectations:
+      - "parallel-worktree-flow is invoked first for new streams."
+      - "Domain skill flow is selected before coding starts."
+
+  - id: dev-skill-recheck-gate
+    type: manual
+    scope: process
+    test_cases: [TC-DEV-WF-002]
+    title: Development recheck skill gate
+    user_story: Engineer reruns flow-specific verification skills before closing the task.
+    expectations:
+      - "Active flow verification skill is rerun after fixes."
+      - "Required checks from docs/DEV_WORKFLOW.md are executed on recheck."
+
+  - id: dev-skill-prepush-gate
+    type: manual
+    scope: process
+    test_cases: [TC-DEV-WF-003]
+    title: Development pre-push skill gate
+    user_story: Engineer performs mandatory checks before pushing branch updates.
+    expectations:
+      - "Backend, frontend, and docs checks from docs/DEV_WORKFLOW.md pass."
+      - "Any failed check blocks push until fixed."
+
   - id: decision-view
     type: api_list
     scope: backend
