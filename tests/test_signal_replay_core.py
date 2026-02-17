@@ -5,7 +5,7 @@ import pandas as pd
 from moex_carry.config import AppSettings, CostsConfig, SpreadCarryAlphaConfig
 from moex_carry.domain.models import ContractSpec
 from moex_carry.domain.portfolio import PairSpec
-from moex_carry.pipeline import _apply_spread_carry_signals
+from moex_carry.signal_replay.minute_replay import _apply_spread_carry_signals
 from moex_carry.signal_replay.core import apply_day_cutoff, run_minute_replay
 
 

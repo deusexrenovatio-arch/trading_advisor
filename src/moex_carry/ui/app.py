@@ -498,6 +498,29 @@ def _merge_signal_metrics(record: dict[str, object]) -> dict[str, object]:
     return merged
 
 
+def _build_execution_quality(record: dict[str, object]) -> dict[str, object]:
+    metrics = _normalize_signal_metrics(record.get("signal_metrics"))
+
+    def _pick(*keys: str):
+        for key in keys:
+            if key in record and record.get(key) is not None:
+                return _sanitize_value(record.get(key))
+            if key in metrics and metrics.get(key) is not None:
+                return _sanitize_value(metrics.get(key))
+        return None
+
+    return {
+        "unfilled_entry_rate": _pick("unfilled_entry_rate"),
+        "unfilled_exit_rate": _pick("unfilled_exit_rate"),
+        "forced_exit_rate": _pick("forced_exit_rate"),
+        "entry_wait_minutes_mean": _pick("avg_entry_wait_min_closed"),
+        "exit_wait_minutes_mean": _pick("avg_exit_wait_min_closed"),
+        "trades_closed_sample": _pick("trades_closed"),
+        "entry_signals_sample": _pick("entry_signals"),
+        "exit_signals_sample": _pick("exit_signals"),
+    }
+
+
 def _normalize_datetime(value: datetime) -> datetime:
     if value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
@@ -1698,23 +1721,38 @@ def create_app(settings: AppSettings) -> Dash:
         if payload is None:
             return _bad_request("invalid_json")
         precompute = None
+        compute_fill_quality = None
         request_payload = payload
         if isinstance(payload, dict):
             if "request" in payload:
                 request_payload = payload.get("request")
                 precompute = _parse_bool(payload.get("precompute"))
+                compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
             elif "precompute" in payload:
                 precompute = _parse_bool(payload.get("precompute"))
                 request_payload = dict(payload)
                 request_payload.pop("precompute", None)
+                compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
+                request_payload.pop("compute_fill_quality", None)
+            elif "compute_fill_quality" in payload:
+                compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
+                request_payload = dict(payload)
+                request_payload.pop("compute_fill_quality", None)
         if not isinstance(request_payload, dict):
             return _bad_request("missing_request")
         try:
             backtest_request = BacktestRequest.model_validate(request_payload)
         except ValidationError as exc:
             return _bad_request("validation_error", details=exc.errors())
+        if compute_fill_quality is None:
+            compute_fill_quality = True
         try:
-            report = run_backtest_v2_cached(backtest_request, paths.data_dir, precompute=precompute)
+            report = run_backtest_v2_cached(
+                backtest_request,
+                paths.data_dir,
+                precompute=precompute,
+                compute_fill_quality=compute_fill_quality,
+            )
         except ValueError as exc:
             return _bad_request(str(exc))
         except Exception as exc:
@@ -1808,18 +1846,30 @@ def create_app(settings: AppSettings) -> Dash:
             return _bad_request("invalid_json")
         experiment_id = str(payload.get("experiment_id") or f"exp-{uuid.uuid4().hex[:12]}")
         precompute = _parse_bool(payload.get("precompute"))
+        compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
         if precompute is None:
             precompute = True
+        if compute_fill_quality is None:
+            compute_fill_quality = True
         request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else payload
         if not isinstance(request_payload, dict):
             return _bad_request("missing_request")
-        request_payload = {key: value for key, value in request_payload.items() if key != "precompute"}
+        request_payload = {
+            key: value
+            for key, value in request_payload.items()
+            if key not in {"precompute", "compute_fill_quality"}
+        }
         try:
             backtest_request = BacktestRequest.model_validate(request_payload)
         except ValidationError as exc:
             return _bad_request("validation_error", details=exc.errors())
         try:
-            report = run_backtest_v2_cached(backtest_request, paths.data_dir, precompute=precompute)
+            report = run_backtest_v2_cached(
+                backtest_request,
+                paths.data_dir,
+                precompute=precompute,
+                compute_fill_quality=compute_fill_quality,
+            )
         except ValueError as exc:
             return _bad_request(str(exc))
         except Exception as exc:
@@ -1899,15 +1949,31 @@ def create_app(settings: AppSettings) -> Dash:
         run_state = str(payload.get("status") or "").lower()
         result = payload.get("result")
         leaderboard = []
+        quality_review = None
         if isinstance(result, dict):
             raw = result.get("leaderboard")
             if isinstance(raw, list):
                 leaderboard = raw
+            quality_candidate = result.get("quality_review")
+            if isinstance(quality_candidate, dict):
+                quality_review = quality_candidate
         if not leaderboard and isinstance(payload.get("leaderboard"), list):
             leaderboard = payload.get("leaderboard")
 
-        if run_state == "completed" and leaderboard:
+        quality_checks: list[str] = []
+        if isinstance(quality_review, dict) and not bool(quality_review.get("skipped")):
+            pass_count = int(quality_review.get("quality_gate_pass_count") or 0)
+            if pass_count > 0:
+                quality_checks.append("quality_gate_pass")
+            else:
+                quality_checks.append("quality_gate_fail")
+
+        if run_state == "completed" and leaderboard and ("quality_gate_fail" not in quality_checks):
             promotion_gate = {"status": "pass", "checks": ["leaderboard_present", "completed"]}
+            if quality_checks:
+                promotion_gate["checks"].extend(quality_checks)
+        elif run_state == "completed" and "quality_gate_fail" in quality_checks:
+            promotion_gate = {"status": "fail", "checks": ["quality_gate_fail", "leaderboard_present"]}
         elif run_state == "completed":
             promotion_gate = {"status": "fail", "checks": ["leaderboard_missing"]}
         elif run_state == "failed":
@@ -1954,6 +2020,8 @@ def create_app(settings: AppSettings) -> Dash:
         if not all_pairs:
             df = df.head(max(limit, 0)) if limit else df
         records = [_merge_signal_metrics(record) for record in _df_to_records(df)]
+        for record in records:
+            record["execution_quality"] = _build_execution_quality(record)
         return jsonify(records)
 
     @server.route("/api/signals", methods=["GET"])
@@ -1982,6 +2050,8 @@ def create_app(settings: AppSettings) -> Dash:
         limit = int(request.args.get("limit", "500"))
         df = df.head(max(limit, 0)) if limit else df
         records = [_merge_signal_metrics(record) for record in _df_to_records(df)]
+        for record in records:
+            record["execution_quality"] = _build_execution_quality(record)
         return jsonify(records)
 
     @server.route("/api/signals/active", methods=["GET"])

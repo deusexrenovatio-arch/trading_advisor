@@ -87,6 +87,13 @@ Defaults:
 - Notable strategy fields include `H_max_days`, `TP_pct`, `SL_pct`,
   `spread_history_days` (default 90), plus entry gates:
   `z_entry_threshold`, `min_floor_score`, `min_alpha_score`.
+- Minute execution controls:
+  - `execution.mode` (`INTRADAY_MINUTE`, `DAILY_COMMON_MINUTE`, `DAILY_EOD`, `DAILY_NEXT_OPEN`)
+  - `execution.execution_model` (`MINUTE_REPLAY` | `DAILY_V2`)
+  - `execution.minute_fail_fast` (missing minute series => hard fail in minute objective flow)
+- Rebalance controls include:
+  - `rebalance.cadence`
+  - `rebalance.target_utilization`
 - `rates.use_trading_days=true` switches annualization to 252 trading days
   for ExcessAnn/Vol_ann/IR/Sharpe metrics.
 - Validation and AUTO resolution live in `config_resolver.py`.
@@ -103,6 +110,12 @@ Defaults:
     `r_d`, `b_d`, `ex_d`, `sharpe`).
   - `optimization.mode`: `max` or `min` (direction for objective + leaderboard sorting).
   - `cv.test_size`: proportion of available days used for val/test sizing (val=test).
+- Portfolio-first objective controls:
+  - `optimization.scope` (`PORTFOLIO` default, `PAIR_MEAN` debug/benchmark mode)
+  - `optimization.portfolio_metric` (`utility`, `excess_ann`, `cagr`)
+- Trial result surface includes:
+  - `evaluation_scope`
+  - `objective_breakdown` (base metric + penalties + gate result diagnostics)
 - Status payload (core fields):
   - `run_id`, `status` (running|completed|failed), `progress {completed,total}`,
     `created_at`, `started_at`, `finished_at`, optional `error`, `result`.

@@ -149,6 +149,62 @@ def test_unified_runtime_selects_front_pair_and_builds_snapshot(tmp_path):
     assert isinstance(snapshot.signals.iloc[0]["signal_metrics"], dict)
 
 
+def test_unified_runtime_parallel_workers_consistency(tmp_path):
+    _seed_unified_fixture(tmp_path)
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+    settings.ui.unified_pair_workers = 1
+    single = build_unified_market_snapshot(
+        settings,
+        tmp_path,
+        force=True,
+        ttl_sec=60,
+        as_of=date(2026, 2, 12),
+    )
+
+    settings.ui.unified_pair_workers = 4
+    parallel = build_unified_market_snapshot(
+        settings,
+        tmp_path,
+        force=True,
+        ttl_sec=60,
+        as_of=date(2026, 2, 12),
+    )
+
+    top_columns = [
+        "stock",
+        "future",
+        "signal_action",
+        "total_score",
+        "score_exec_probability",
+        "score_earn_probability",
+    ]
+    signal_columns = [
+        "stock",
+        "future",
+        "signal_action",
+        "total_score",
+        "score_exec_probability",
+        "score_earn_probability",
+    ]
+
+    pd.testing.assert_frame_equal(
+        single.top_pairs[top_columns].reset_index(drop=True),
+        parallel.top_pairs[top_columns].reset_index(drop=True),
+        check_dtype=False,
+        check_exact=False,
+        atol=1e-12,
+        rtol=1e-12,
+    )
+    pd.testing.assert_frame_equal(
+        single.signals[signal_columns].reset_index(drop=True),
+        parallel.signals[signal_columns].reset_index(drop=True),
+        check_dtype=False,
+        check_exact=False,
+        atol=1e-12,
+        rtol=1e-12,
+    )
+
+
 def test_unified_spread_series_and_api_endpoints(tmp_path):
     _seed_unified_fixture(tmp_path)
     settings = _settings(tmp_path, allow_legacy_fallback=False)
@@ -182,6 +238,9 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert "score_gate_pass" in top_pairs_data[0]
     assert isinstance(top_pairs_data[0]["signal_metrics"], dict)
     assert "score_exec_probability" in top_pairs_data[0]["signal_metrics"]
+    assert isinstance(top_pairs_data[0]["execution_quality"], dict)
+    assert "unfilled_entry_rate" in top_pairs_data[0]["execution_quality"]
+    assert "forced_exit_rate" in top_pairs_data[0]["execution_quality"]
 
     signals = client.get("/api/signals?limit=5")
     assert signals.status_code == 200

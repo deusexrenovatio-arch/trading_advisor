@@ -46,9 +46,22 @@ Single canonical execution model for spread strategy backtests in minute mode, b
   - `DAILY_COMMON_MINUTE`
   - `DAILY_EOD`
   - `DAILY_NEXT_OPEN`
+- `execution.execution_model`:
+  - `MINUTE_REPLAY` (canonical minute path)
+  - `DAILY_V2` (daily compatibility/debug path)
+- `execution.minute_fail_fast`:
+  - when `true`, missing minute series is terminal for minute evaluation.
 - API response includes optional:
   - `fill_quality_summary`
   - `execution_model`
+
+## Portfolio/HPO Coupling
+- Portfolio simulation is downstream-only consumer of replay facts:
+  - replay defines executable entry/exit events and statuses,
+  - rebalance logic selects allocations only among executable opportunities.
+- `HPO scope=PORTFOLIO` must evaluate folds on minute portfolio metrics, not pair-average proxies.
+- Single-pair parity invariant:
+  - with `max_pairs=1`, portfolio minute results should match pair minute replay metrics/trades.
 
 ## Invariants Checklist
 - Deterministic replay for same data/config.

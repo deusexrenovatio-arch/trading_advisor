@@ -187,7 +187,7 @@ class UiConfig(BaseModel):
     use_unified_signal_engine: bool = True
     unified_allow_legacy_fallback: bool = True
     unified_snapshot_ttl_sec: int = 120
-    unified_pair_workers: int = 4
+    unified_pair_workers: int | None = None
     unified_front_only: bool = True
     unified_front_roll_days: int = 7
     require_score_gate_by_default: bool = True

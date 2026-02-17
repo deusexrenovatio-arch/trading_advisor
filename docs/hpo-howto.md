@@ -88,7 +88,17 @@ folds = build_walk_forward_folds(
 ```
 
 ## 3) Configure objective and run HPO
-Objective is (default):
+
+Default production mode is portfolio-first:
+- `scope=PORTFOLIO`
+- `portfolio_metric=utility`
+- fold evaluation uses minute portfolio path (`compute_minute_portfolio_window_metrics`)
+  with minute replay execution semantics.
+
+Pair-mean mode is kept only for diagnostics/benchmarks (`scope=PAIR_MEAN`).
+
+### 3.1 Pair-mean objective (debug mode)
+Objective in pair-mean mode:
 
 ```
 J = ExcessAnn
@@ -105,6 +115,23 @@ You can switch the metric and mode:
   `r_d`, `b_d`, `ex_d`, `sharpe`.
 - `mode`: `max` or `min`.
 
+### 3.2 Portfolio utility objective (default)
+
+```
+Utility = PortfolioExcessAnn
+          - lambda_dd * max(0, PortfolioMaxDD - dd_soft_limit)
+          - lambda_idle * PortfolioIdleRatio
+          - lambda_forced * PortfolioForcedExitRate
+          - lambda_unfilled * PortfolioUnfilledEntryRate
+          - lambda_turnover * PortfolioTurnover
+```
+
+Hard constraints invalidate objective when violated:
+- `PortfolioMaxDD > hard_max_dd`
+- `PortfolioIdleRatio > hard_max_idle_ratio`
+- `PortfolioForcedExitRate > hard_max_forced_exit_rate`
+- `PortfolioUnfilledEntryRate > hard_max_unfilled_entry_rate`
+
 ```python
 from moex_carry.hpo import ObjectiveConfig, run_hpo
 
@@ -117,12 +144,19 @@ search_space = {
 }
 
 objective = ObjectiveConfig(
-    metric="excess_ann",
+    scope="PORTFOLIO",
+    portfolio_metric="utility",
     mode="max",
-    lambda_dd=1.0,
-    dd_max=0.2,
-    lambda_to=0.5,
-    to_max=0.3,
+    lambda_dd=2.0,
+    dd_soft_limit=0.2,
+    lambda_idle=0.6,
+    lambda_forced=0.4,
+    lambda_unfilled=0.3,
+    lambda_turnover=0.1,
+    hard_max_dd=0.30,
+    hard_max_idle_ratio=0.75,
+    hard_max_forced_exit_rate=0.40,
+    hard_max_unfilled_entry_rate=0.50,
 )
 
 result = run_hpo(
@@ -147,6 +181,9 @@ print(best.objective, best.params)
 - `result.leaderboard()` returns trials sorted by objective.
 - `result.best_config` is the top parameter dict.
 - Each trial contains per-fold objectives and metrics.
+- Portfolio-scope trials include:
+  - `evaluation_scope` (`PORTFOLIO`),
+  - `objective_breakdown` (base metric, penalties, hard-gate outcome).
 
 ## Notes
 - `CONTINUOUS` runs a single backtest per fold and slices metrics by val/test windows.

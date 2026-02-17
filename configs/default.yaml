@@ -150,7 +150,7 @@ ui:
   use_unified_signal_engine: true
   unified_allow_legacy_fallback: true
   unified_snapshot_ttl_sec: 120
-  unified_pair_workers: 4
+  unified_pair_workers: null
   unified_front_only: true
   unified_front_roll_days: 7
   require_score_gate_by_default: true

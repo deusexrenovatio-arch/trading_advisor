@@ -27,6 +27,23 @@
 5. Push feature branch with `--force-with-lease` only for owned feature branches.
 6. Sync integration branch with no-ff merges for early conflict detection.
 
+## Mandatory guardrail (session context lock)
+Use the worktree guard script in every coding session:
+
+1. Initialize expected context once per stream:
+```powershell
+./scripts/worktree_guard.ps1 -Action Init -WorktreePath "D:\wt-<stream>" -Branch "<branch>" -ContextTtlHours 12
+```
+2. Check context before any development command:
+```powershell
+./scripts/worktree_guard.ps1 -Action Check
+```
+3. If check fails:
+- stop all code changes/tests in the wrong worktree,
+- switch to the expected worktree/branch,
+- run `Check` again before proceeding,
+- if lock expired, run `Init` again for the current session.
+
 ## Merge order policy
 1. `refactor/app-core`
 2. `chat/signals-backtest-lab`

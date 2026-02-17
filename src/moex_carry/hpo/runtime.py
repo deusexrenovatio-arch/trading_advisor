@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import threading
 import uuid
@@ -8,12 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from moex_carry.backtest_v2.runtime import build_universe_from_request
+from moex_carry.backtest_v2.runtime import build_universe_from_request, run_backtest_v2_cached
 from moex_carry.contracts.strategy_test import HpoRequest
 from moex_carry.data.history_store import HistoryDataStore
 from moex_carry.hpo.folds import build_walk_forward_folds
-from moex_carry.hpo.objective import ObjectiveConfig
-from moex_carry.hpo.runner import _default_backtest_runner, _evaluate_trial
+from moex_carry.hpo.objective import ObjectiveConfig, invalid_objective
+from moex_carry.hpo.runner import _apply_params, _default_backtest_runner, _evaluate_trial
 from moex_carry.hpo.search_space import parse_search_space, sample_random, sample_tpe
 from moex_carry.hpo.types import AggregationMode, EvaluationMode, HpoResult, TrialResult
 
@@ -98,6 +99,8 @@ def _serialize_trial(trial: TrialResult) -> dict[str, Any]:
         "objective": trial.objective,
         "fold_objectives": list(trial.fold_objectives),
         "fold_results": [_serialize_fold_result(item) for item in trial.fold_results],
+        "evaluation_scope": trial.evaluation_scope,
+        "objective_breakdown": trial.objective_breakdown,
     }
 
 
@@ -108,6 +111,202 @@ def _serialize_result(result: HpoResult) -> dict[str, Any]:
         "mode": result.mode,
         "trials": trials,
         "leaderboard": leaderboard,
+    }
+
+
+def _safe_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return numeric
+
+
+def _compute_quality_penalty(
+    *,
+    unfilled_entry_rate: float | None,
+    forced_exit_rate: float | None,
+    entry_wait_min_closed: float | None,
+    exit_wait_min_closed: float | None,
+    optimization: Any,
+) -> float:
+    penalty = 0.0
+    if unfilled_entry_rate is not None:
+        penalty += float(optimization.quality_lambda_unfilled) * max(0.0, unfilled_entry_rate)
+    if forced_exit_rate is not None:
+        penalty += float(optimization.quality_lambda_forced) * max(0.0, forced_exit_rate)
+    wait_limit = max(
+        1.0,
+        float(optimization.quality_max_entry_wait_min_closed),
+        float(optimization.quality_max_exit_wait_min_closed),
+    )
+    wait_values = [
+        value
+        for value in (entry_wait_min_closed, exit_wait_min_closed)
+        if value is not None
+    ]
+    if wait_values:
+        wait_mean = sum(wait_values) / len(wait_values)
+        penalty += float(optimization.quality_lambda_wait) * max(0.0, wait_mean / wait_limit)
+    return float(penalty)
+
+
+def _evaluate_trial_quality_review(
+    *,
+    request: HpoRequest,
+    trial: TrialResult,
+    rank: int,
+    data_dir: Path,
+    precompute: bool | None,
+    mode: str,
+) -> dict[str, Any]:
+    candidate_request = _apply_params(request.base, trial.params)
+    report = run_backtest_v2_cached(
+        candidate_request,
+        data_dir,
+        precompute=precompute,
+        compute_fill_quality=True,
+    )
+    summary = report.fill_quality_summary or {}
+    unfilled_entry_rate = _safe_float(summary.get("unfilled_entry_rate_mean"))
+    forced_exit_rate = _safe_float(summary.get("forced_exit_rate_mean"))
+    entry_wait_min_closed = _safe_float(summary.get("avg_entry_wait_min_closed_mean"))
+    exit_wait_min_closed = _safe_float(summary.get("avg_exit_wait_min_closed_mean"))
+    trades_closed_total = int(_safe_float(summary.get("trades_closed_total")) or 0)
+
+    gate_reasons: list[str] = []
+    optimization = request.optimization
+    if trades_closed_total < int(optimization.quality_min_trades_closed_total):
+        gate_reasons.append("quality_gate_trades_closed_total")
+    if (
+        unfilled_entry_rate is not None
+        and unfilled_entry_rate > float(optimization.quality_max_unfilled_entry_rate)
+    ):
+        gate_reasons.append("quality_gate_unfilled_entry_rate")
+    if (
+        forced_exit_rate is not None
+        and forced_exit_rate > float(optimization.quality_max_forced_exit_rate)
+    ):
+        gate_reasons.append("quality_gate_forced_exit_rate")
+    if (
+        entry_wait_min_closed is not None
+        and entry_wait_min_closed > float(optimization.quality_max_entry_wait_min_closed)
+    ):
+        gate_reasons.append("quality_gate_entry_wait")
+    if (
+        exit_wait_min_closed is not None
+        and exit_wait_min_closed > float(optimization.quality_max_exit_wait_min_closed)
+    ):
+        gate_reasons.append("quality_gate_exit_wait")
+
+    quality_gate_pass = len(gate_reasons) == 0
+    quality_penalty = _compute_quality_penalty(
+        unfilled_entry_rate=unfilled_entry_rate,
+        forced_exit_rate=forced_exit_rate,
+        entry_wait_min_closed=entry_wait_min_closed,
+        exit_wait_min_closed=exit_wait_min_closed,
+        optimization=optimization,
+    )
+    objective_quality = (
+        float(trial.objective - quality_penalty)
+        if mode == "max"
+        else float(trial.objective + quality_penalty)
+    )
+    if not quality_gate_pass:
+        objective_quality = invalid_objective(mode)
+
+    return {
+        "rank_base": int(rank),
+        "params": dict(trial.params),
+        "objective_base": float(trial.objective),
+        "quality_gate_pass": bool(quality_gate_pass),
+        "quality_gate_reasons": gate_reasons,
+        "quality_penalty": float(quality_penalty),
+        "objective_quality": float(objective_quality),
+        "quality_metrics": {
+            "unfilled_entry_rate_mean": unfilled_entry_rate,
+            "forced_exit_rate_mean": forced_exit_rate,
+            "avg_entry_wait_min_closed_mean": entry_wait_min_closed,
+            "avg_exit_wait_min_closed_mean": exit_wait_min_closed,
+            "trades_closed_total": trades_closed_total,
+            "pairs_ok": int(_safe_float(summary.get("pairs_ok")) or 0),
+            "pairs_total": int(_safe_float(summary.get("pairs_total")) or 0),
+        },
+    }
+
+
+def _build_quality_review(
+    *,
+    request: HpoRequest,
+    result: HpoResult,
+    data_dir: Path,
+    precompute: bool | None,
+) -> dict[str, Any] | None:
+    if not bool(request.optimization.quality_review_enabled):
+        return None
+    execution_mode = str(request.base.execution.mode or "INTRADAY_MINUTE").upper()
+    if execution_mode != "INTRADAY_MINUTE":
+        return {
+            "enabled": True,
+            "skipped": True,
+            "reason": "execution_mode_not_intraday_minute",
+            "execution_mode": execution_mode,
+            "candidates": [],
+        }
+
+    leaderboard = result.leaderboard()
+    top_n = max(int(request.optimization.quality_top_n or 0), 0)
+    selected = leaderboard[:top_n] if top_n > 0 else []
+    if not selected:
+        return {
+            "enabled": True,
+            "skipped": False,
+            "reason": "no_candidates",
+            "top_n_requested": top_n,
+            "candidates": [],
+        }
+
+    rows: list[dict[str, Any]] = []
+    for rank, trial in enumerate(selected, start=1):
+        rows.append(
+            _evaluate_trial_quality_review(
+                request=request,
+                trial=trial,
+                rank=rank,
+                data_dir=data_dir,
+                precompute=precompute,
+                mode=result.mode,
+            )
+        )
+    rows = sorted(
+        rows,
+        key=lambda row: float(row["objective_quality"]),
+        reverse=result.mode == "max",
+    )
+    pass_count = sum(1 for row in rows if bool(row.get("quality_gate_pass")))
+    return {
+        "enabled": True,
+        "skipped": False,
+        "top_n_requested": top_n,
+        "top_n_evaluated": len(rows),
+        "quality_gate_pass_count": int(pass_count),
+        "quality_gate_pass_rate": float(pass_count / len(rows)) if rows else 0.0,
+        "defaults": {
+            "quality_min_trades_closed_total": int(request.optimization.quality_min_trades_closed_total),
+            "quality_max_unfilled_entry_rate": float(request.optimization.quality_max_unfilled_entry_rate),
+            "quality_max_forced_exit_rate": float(request.optimization.quality_max_forced_exit_rate),
+            "quality_max_entry_wait_min_closed": float(request.optimization.quality_max_entry_wait_min_closed),
+            "quality_max_exit_wait_min_closed": float(request.optimization.quality_max_exit_wait_min_closed),
+            "quality_lambda_unfilled": float(request.optimization.quality_lambda_unfilled),
+            "quality_lambda_forced": float(request.optimization.quality_lambda_forced),
+            "quality_lambda_wait": float(request.optimization.quality_lambda_wait),
+        },
+        "best_quality_candidate": rows[0] if rows else None,
+        "candidates": rows,
     }
 
 
@@ -274,6 +473,10 @@ def _run_hpo_async(
     precompute: bool | None,
 ) -> None:
     status_path = _status_path(run_dir)
+    status_seed = _read_json(status_path) or {}
+    created_at = status_seed.get("created_at")
+    started_at = status_seed.get("started_at")
+    completed = 0
     try:
         rng = random.Random(request.optimization.random_seed)
         space = parse_search_space(request.search_space)
@@ -300,25 +503,35 @@ def _run_hpo_async(
                 backtest_runner=_default_backtest_runner,
             )
             trials.append(trial)
+            completed = idx + 1
             _write_json(
                 status_path,
                 {
                     "run_id": run_dir.name,
                     "status": "running",
-                    "created_at": _read_json(status_path).get("created_at") if _read_json(status_path) else None,
-                    "started_at": _read_json(status_path).get("started_at") if _read_json(status_path) else None,
+                    "created_at": created_at,
+                    "started_at": started_at,
                     "finished_at": None,
-                    "progress": {"completed": idx + 1, "total": max_trials},
+                    "progress": {"completed": completed, "total": max_trials},
                     "message": "HPO running",
                 },
             )
         result = HpoResult(trials=trials, mode=mode)
-        _write_json(_result_path(run_dir), _serialize_result(result))
+        quality_review = _build_quality_review(
+            request=request,
+            result=result,
+            data_dir=data_dir,
+            precompute=precompute,
+        )
+        result_payload = _serialize_result(result)
+        if quality_review is not None:
+            result_payload["quality_review"] = quality_review
+        _write_json(_result_path(run_dir), result_payload)
         status_payload = {
             "run_id": run_dir.name,
             "status": "completed",
-            "created_at": _read_json(status_path).get("created_at") if _read_json(status_path) else None,
-            "started_at": _read_json(status_path).get("started_at") if _read_json(status_path) else None,
+            "created_at": created_at,
+            "started_at": started_at,
             "finished_at": _iso_now(),
             "progress": {"completed": max_trials, "total": max_trials},
             "message": "HPO completed",
@@ -329,10 +542,10 @@ def _run_hpo_async(
         status_payload = {
             "run_id": run_dir.name,
             "status": "failed",
-            "created_at": _read_json(status_path).get("created_at") if _read_json(status_path) else None,
-            "started_at": _read_json(status_path).get("started_at") if _read_json(status_path) else None,
+            "created_at": created_at,
+            "started_at": started_at,
             "finished_at": _iso_now(),
-            "progress": {"completed": 0, "total": max_trials},
+            "progress": {"completed": completed, "total": max_trials},
             "message": "HPO failed",
             "error": str(exc),
         }

@@ -35,6 +35,8 @@ class BacktestExecutionConfig(BaseModel):
     mode: Literal["INTRADAY_MINUTE", "DAILY_COMMON_MINUTE", "DAILY_EOD", "DAILY_NEXT_OPEN"] = (
         "INTRADAY_MINUTE"
     )
+    execution_model: Literal["MINUTE_REPLAY", "DAILY_V2"] = "MINUTE_REPLAY"
+    minute_fail_fast: bool = True
     price_source: str = "common_minute_close"
     common_minute_anchor: str = "last"
     price_mode: str = "BIDASK"
@@ -43,6 +45,7 @@ class BacktestExecutionConfig(BaseModel):
     slip_fut_bps: float = 0.0
     slip_fut_ticks: float | None = None
     tick_size_fut: float | None = None
+    pair_workers: int | None = None
 
 
 class BacktestRatesConfig(BaseModel):
@@ -81,13 +84,13 @@ class BacktestLiquidityConfig(BaseModel):
 class BacktestStrategyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    signal_exec_lag_days: int = 1
-    execution_lag_minutes: int = 20
-    execution_max_wait_minutes: int = 1440
-    entry_price_tolerance_pct: float = 0.0015
-    entry_stock_tolerance_pct: float | None = None
-    entry_future_tolerance_pct: float | None = None
-    entry_spread_tolerance_pct: float | None = None
+    signal_exec_lag_days: int = 0
+    execution_lag_minutes: int = 30
+    execution_max_wait_minutes: int = 360
+    entry_price_tolerance_pct: float = 0.02
+    entry_stock_tolerance_pct: float | None = 0.02
+    entry_future_tolerance_pct: float | None = 0.025
+    entry_spread_tolerance_pct: float | None = 0.03
     signal_cutoff_before_day_end_minutes: int = 0
     force_exit_policy: str = "next_anchor"
     force_exit_penalty_bps: float = 0.0
@@ -151,6 +154,7 @@ class BacktestRebalanceConfig(BaseModel):
     cadence: str = "weekly"
     threshold_pct: float = 0.02
     cooldown_days: int = 3
+    target_utilization: float = 1.0
 
 
 class BacktestRequest(BaseModel):
@@ -192,6 +196,16 @@ class HpoOptimizationConfig(BaseModel):
     max_trials: int = 50
     random_seed: int | None = None
     timeout_sec: int | None = None
+    quality_review_enabled: bool = True
+    quality_top_n: int = 10
+    quality_min_trades_closed_total: int = 5
+    quality_max_unfilled_entry_rate: float = 0.5
+    quality_max_forced_exit_rate: float = 0.4
+    quality_max_entry_wait_min_closed: float = 240.0
+    quality_max_exit_wait_min_closed: float = 240.0
+    quality_lambda_unfilled: float = 0.3
+    quality_lambda_forced: float = 0.4
+    quality_lambda_wait: float = 0.1
 
 
 class HpoRequest(BaseModel):

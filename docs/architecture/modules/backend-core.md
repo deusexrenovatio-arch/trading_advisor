@@ -89,11 +89,18 @@ but the API endpoints remain the primary backend interface for the React app.
 
 ### `backtest_v2/`
 - Responsibilities: multi-pair backtest engine isolated from legacy backtest.
-- Key files: `engine.py` (run_backtest_v2 + precompute), `batch.py` (feature/alpha matrices + batch scoring),
-  `runtime.py` (history-backed runner + precompute cache).
+- Key files:
+  - `engine.py` (run_backtest_v2 + precompute),
+  - `batch.py` (feature/alpha matrices + batch scoring),
+  - `runtime.py` (history-backed runner + precompute cache),
+  - `minute_portfolio_engine.py` (minute replay tapes + portfolio-level execution simulation).
 - Outputs: `BacktestReport` with equity curve, trades, and summary metrics.
 - Notes: uses SnapshotBuilder + PortfolioRebalanceController; optional fast alpha cache when precomputed data is supplied.
 - Annualization: metrics respect `rates.use_trading_days` (252 vs 365) for ExcessAnn, Vol_ann, IR, Sharpe.
+- Minute portfolio path:
+  - exit-first event priority,
+  - entry only on `entry_filled` events from minute replay,
+  - explicit idle/unfilled/forced portfolio metrics.
 - Stack policy: `batch.py` is the canonical vectorized hot path and should remain `numpy`-first.
 
 ### `hpo/`
@@ -104,6 +111,11 @@ but the API endpoints remain the primary backend interface for the React app.
 - Persistence: `data/hpo/runs/<run_id>/status.json` and `result.json` for async runs.
 - Objective: supports `optimization.metric` + `optimization.mode` (max/min) and applies
   penalty constraints for MaxDD/AvgTurnover when configured.
+- Portfolio objective path:
+  - `scope=PORTFOLIO` uses minute portfolio evaluation (`compute_minute_portfolio_window_metrics`)
+    for both val/test windows.
+  - Trial payload includes `evaluation_scope` and `objective_breakdown`
+    for auditability of penalties and gate outcomes.
 
 ### `forward/`
 - Responsibilities: forward paper execution loop with state persistence.

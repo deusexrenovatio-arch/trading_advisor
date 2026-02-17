@@ -1,5 +1,37 @@
 # Release Notes
 
+## 2026-02-17 - Minute portfolio HPO parity + execution quality projection
+
+Summary
+- Unified portfolio HPO evaluation with minute replay execution semantics.
+- Added explicit execution model controls to backtest contracts.
+- Exposed execution quality block in `/api/signals`, matching top-pairs projection semantics.
+
+Changed
+- Backtest execution contract:
+  - `execution.execution_model` (`MINUTE_REPLAY` | `DAILY_V2`)
+  - `execution.minute_fail_fast`
+- Rebalance contract:
+  - `rebalance.target_utilization`
+- Rebalance config mapping:
+  - `rebalance.cadence=daily` now resolves to `soft_rebalance_frequency=DAILY`.
+- HPO runner:
+  - `scope=PORTFOLIO` now evaluates folds through minute portfolio path
+    (`compute_minute_portfolio_window_metrics`) instead of pair-mean slicing.
+  - Trial payload now includes:
+    - `evaluation_scope`
+    - `objective_breakdown`
+- Minute period metrics:
+  - deterministic-safe aggregate defaults for missing values (no NaN-only comparisons in parity checks).
+- UI/API:
+  - `/api/signals` now returns `execution_quality` block, aligned with `/api/top-pairs`.
+
+Verification
+- `pytest -q tests/test_ui_api.py tests/backtest_v2/test_minute_portfolio_engine.py tests/hpo/test_minute_period_pnl.py tests/hpo/test_portfolio_objective.py`
+- `pytest -q tests/perf/test_minute_runtime.py tests/perf/test_minute_portfolio_runtime.py tests/perf/test_hpo_portfolio_runtime.py`
+- `pytest -q tests/test_config_resolver.py tests/hpo/test_runner.py tests/hpo/test_runtime_quality.py tests/test_backtest_forward_api.py`
+- `pytest -q tests/test_ui_unified_runtime.py tests/test_ui_api.py`
+
 ## 2026-02-17 - Skill governance gates in docs and acceptance coverage
 
 Summary

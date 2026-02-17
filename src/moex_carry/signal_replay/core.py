@@ -8,11 +8,11 @@ from typing import Any, Iterator, Mapping
 
 import pandas as pd
 
-import moex_carry.pipeline as pipeline_mod
 from moex_carry.config import AppSettings, CostsConfig, SpreadCarryAlphaConfig
 from moex_carry.domain.models import ContractSpec, DividendEvent, KeyRate
 from moex_carry.domain.portfolio import PairSpec
-from moex_carry.pipeline import (
+import moex_carry.signal_replay.minute_replay as minute_replay_mod
+from moex_carry.signal_replay.minute_replay import (
     _apply_spread_carry_signals,
     _avg_recent_trade_return_annual,
     _avg_recent_trade_return_annual_operational,
@@ -285,8 +285,8 @@ def _patched_split_tolerance(alpha: SpreadCarryAlphaConfig) -> Iterator[None]:
     future_value = max(float(future_tol if future_tol is not None else fallback), 0.0)
     spread_value = max(float(spread_tol if spread_tol is not None else fallback), 0.0)
     with _REPLAY_PATCH_LOCK:
-        original = pipeline_mod._execution_band_ok
-        pipeline_mod._execution_band_ok = _build_split_band_fn(
+        original = minute_replay_mod._execution_band_ok
+        minute_replay_mod._execution_band_ok = _build_split_band_fn(
             stock_tolerance=stock_value,
             future_tolerance=future_value,
             spread_tolerance=spread_value,
@@ -294,7 +294,7 @@ def _patched_split_tolerance(alpha: SpreadCarryAlphaConfig) -> Iterator[None]:
         try:
             yield
         finally:
-            pipeline_mod._execution_band_ok = original
+            minute_replay_mod._execution_band_ok = original
 
 
 def _collect_metrics(replay: pd.DataFrame) -> ReplayMetrics:

@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+import threading
 from typing import Any
 
 import pandas as pd
 
 PRELOAD_SCHEMA_VERSION = 1
+_PRELOAD_PAYLOAD_CACHE_MAX = 128
+_SERIES_FRAME_CACHE_MAX = 128
+_PRELOAD_CANDIDATES_CACHE_MAX = 128
+
+_PRELOAD_PAYLOAD_CACHE_LOCK = threading.Lock()
+_PRELOAD_PAYLOAD_CACHE: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
+
+_SERIES_FRAME_CACHE_LOCK = threading.Lock()
+_SERIES_FRAME_CACHE: "OrderedDict[str, pd.DataFrame]" = OrderedDict()
+
+_PRELOAD_CANDIDATES_CACHE_LOCK = threading.Lock()
+_PRELOAD_CANDIDATES_CACHE: "OrderedDict[str, list[str]]" = OrderedDict()
 
 
 @dataclass
@@ -15,6 +29,104 @@ class MinuteSeriesPayload:
     series_base: pd.DataFrame
     dividends: list[Any]
     source: str
+
+
+def _normalize_path(path: Path) -> str:
+    return str(path.resolve()).replace("\\", "/")
+
+
+def _safe_mtime(path: Path) -> int:
+    try:
+        return int(path.stat().st_mtime_ns)
+    except OSError:
+        return 0
+
+
+def _cache_get(cache: OrderedDict[str, Any], lock: threading.Lock, key: str) -> Any | None:
+    with lock:
+        value = cache.get(key)
+        if value is None:
+            return None
+        cache.move_to_end(key)
+        return value
+
+
+def _cache_set(
+    cache: OrderedDict[str, Any],
+    lock: threading.Lock,
+    key: str,
+    value: Any,
+    max_size: int,
+) -> Any:
+    with lock:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > max_size:
+            cache.popitem(last=False)
+    return value
+
+
+def _candidate_paths(cache_dir: Path, pattern: str) -> list[Path]:
+    dir_key = _normalize_path(cache_dir)
+    mtime = _safe_mtime(cache_dir)
+    key = f"{dir_key}|{pattern}|{mtime}"
+    cached = _cache_get(_PRELOAD_CANDIDATES_CACHE, _PRELOAD_CANDIDATES_CACHE_LOCK, key)
+    if cached is not None:
+        return [Path(path) for path in cached]
+    paths = sorted(cache_dir.glob(pattern), key=lambda path: path.stat().st_mtime, reverse=True)
+    serialized = [_normalize_path(path) for path in paths]
+    _cache_set(
+        _PRELOAD_CANDIDATES_CACHE,
+        _PRELOAD_CANDIDATES_CACHE_LOCK,
+        key,
+        serialized,
+        _PRELOAD_CANDIDATES_CACHE_MAX,
+    )
+    return [Path(path) for path in serialized]
+
+
+def _read_preload_payload(path: Path) -> dict[str, Any] | None:
+    path_key = _normalize_path(path)
+    mtime = _safe_mtime(path)
+    key = f"{path_key}|{mtime}"
+    cached = _cache_get(_PRELOAD_PAYLOAD_CACHE, _PRELOAD_PAYLOAD_CACHE_LOCK, key)
+    if cached is not None:
+        return cached
+    try:
+        payload = pd.read_pickle(path)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return _cache_set(
+        _PRELOAD_PAYLOAD_CACHE,
+        _PRELOAD_PAYLOAD_CACHE_LOCK,
+        key,
+        payload,
+        _PRELOAD_PAYLOAD_CACHE_MAX,
+    )
+
+
+def _read_intraday_series(path: Path) -> pd.DataFrame | None:
+    path_key = _normalize_path(path)
+    mtime = _safe_mtime(path)
+    key = f"{path_key}|{mtime}"
+    cached = _cache_get(_SERIES_FRAME_CACHE, _SERIES_FRAME_CACHE_LOCK, key)
+    if cached is not None:
+        return cached
+    try:
+        frame = pd.read_csv(path)
+    except Exception:
+        return None
+    if frame.empty:
+        return None
+    return _cache_set(
+        _SERIES_FRAME_CACHE,
+        _SERIES_FRAME_CACHE_LOCK,
+        key,
+        frame,
+        _SERIES_FRAME_CACHE_MAX,
+    )
 
 
 def load_pair_minute_series(
@@ -68,13 +180,10 @@ def _load_from_preload_cache(
     if not cache_dir.exists():
         return None
     pattern = f"{stock}_{future}_*.pkl"
-    candidates = sorted(cache_dir.glob(pattern), key=lambda path: path.stat().st_mtime, reverse=True)
+    candidates = _candidate_paths(cache_dir, pattern)
     for path in candidates:
-        try:
-            payload = pd.read_pickle(path)
-        except Exception:
-            continue
-        if not isinstance(payload, dict):
+        payload = _read_preload_payload(path)
+        if payload is None:
             continue
         if int(payload.get("schema_version", -1)) != PRELOAD_SCHEMA_VERSION:
             continue
@@ -106,11 +215,8 @@ def _load_from_intraday_series_csv(
     path = Path(data_dir) / "output" / "intraday_minute_series" / f"intraday_minute_series_{stock}_{future}.csv"
     if not path.exists():
         return None
-    try:
-        frame = pd.read_csv(path)
-    except Exception:
-        return None
-    if frame.empty:
+    frame = _read_intraday_series(path)
+    if frame is None:
         return None
     filtered = _filter_range(frame, start_date, end_date)
     if filtered.empty:

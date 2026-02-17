@@ -33,6 +33,11 @@ def test_api_endpoints_return_rows(tmp_path):
                 "signal_action": "enter",
                 "signal_direction": "cash_and_carry",
                 "signal_score": 0.1,
+                "unfilled_entry_rate": 0.1,
+                "forced_exit_rate": 0.05,
+                "avg_entry_wait_min_closed": 12.0,
+                "avg_exit_wait_min_closed": 8.0,
+                "trades_closed": 4,
             }
         ],
     )
@@ -46,13 +51,18 @@ def test_api_endpoints_return_rows(tmp_path):
                 "signal_action": "enter",
                 "signal_direction": "cash_and_carry",
                 "signal_score": 0.1,
-                "spread_pct": 0.01,
-                "floor_rate_annual": 0.12,
-                "signal_metrics": {
-                    "entry_spread_pct_min": 0.009,
-                    "tp_spread_pct_level": 0.02,
-                },
-            }
+                    "spread_pct": 0.01,
+                    "floor_rate_annual": 0.12,
+                    "unfilled_entry_rate": 0.2,
+                    "forced_exit_rate": 0.1,
+                    "avg_entry_wait_min_closed": 15.0,
+                    "avg_exit_wait_min_closed": 11.0,
+                    "trades_closed": 3,
+                    "signal_metrics": {
+                        "entry_spread_pct_min": 0.009,
+                        "tp_spread_pct_level": 0.02,
+                    },
+                }
         ],
     )
     _write_csv(
@@ -79,6 +89,7 @@ def test_api_endpoints_return_rows(tmp_path):
     assert len(top_pairs_data) == 1
     assert top_pairs_data[0]["stock"] == "AAA"
     assert "signal_metrics" in top_pairs_data[0]
+    assert "execution_quality" in top_pairs_data[0]
     assert "score_model" in top_pairs_data[0]
     assert "score_exec_probability" in top_pairs_data[0]
     assert "score_exec_probability" in top_pairs_data[0]["signal_metrics"]
@@ -91,6 +102,7 @@ def test_api_endpoints_return_rows(tmp_path):
     assert signals_data[0]["signal_action"] == "enter"
     assert signals_data[0]["entry_spread_pct_min"] == 0.009
     assert signals_data[0]["sl_spread_pct_level"] is None
+    assert "execution_quality" in signals_data[0]
     for key in SIGNAL_METRIC_CONTRACT_KEYS:
         assert key in signals_data[0]
         assert key in signals_data[0]["signal_metrics"]
