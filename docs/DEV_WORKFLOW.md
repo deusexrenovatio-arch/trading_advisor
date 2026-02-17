@@ -55,6 +55,9 @@
 - One-time override for emergency/admin pushes:
   - Bash: `MOEX_CARRY_ALLOW_MAIN_PUSH=1 git push`
   - PowerShell: `$env:MOEX_CARRY_ALLOW_MAIN_PUSH='1'; git push`
+- Windows lock workaround for `npm ci` (`EPERM` on `esbuild.exe`):
+  - Bash: `MOEX_CARRY_SKIP_NPM_CI=1 git push`
+  - PowerShell: `$env:MOEX_CARRY_SKIP_NPM_CI='1'; git push`
 
 ## Optional checks (manual / data-dependent)
 - Acceptance smoke: `python scripts/acceptance_check.py`

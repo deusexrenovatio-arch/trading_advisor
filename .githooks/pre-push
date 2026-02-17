@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 BLOCK_MAIN_PUSH="${MOEX_CARRY_BLOCK_MAIN_PUSH:-1}"
 ALLOW_MAIN_PUSH="${MOEX_CARRY_ALLOW_MAIN_PUSH:-0}"
+SKIP_NPM_CI="${MOEX_CARRY_SKIP_NPM_CI:-0}"
 PUSHES_TO_MAIN=0
 
 if [[ "$BLOCK_MAIN_PUSH" == "1" ]]; then
@@ -44,7 +45,11 @@ echo "[pre-push] backend test suite"
 pytest
 
 echo "[pre-push] frontend install/lint/build"
-npm --prefix ui-web ci
+if [[ "$SKIP_NPM_CI" == "1" ]]; then
+  echo "[pre-push] skipping npm ci (MOEX_CARRY_SKIP_NPM_CI=1)"
+else
+  npm --prefix ui-web ci
+fi
 npm --prefix ui-web run lint
 npm --prefix ui-web run build
 

@@ -27,6 +27,8 @@ Changed
 - Added local branch safety in pre-push:
   - direct push to `main` is blocked by default,
   - explicit override via `MOEX_CARRY_ALLOW_MAIN_PUSH=1`.
+- Added pre-push frontend install fallback switch:
+  - `MOEX_CARRY_SKIP_NPM_CI=1` skips only `npm ci` while keeping `lint/build` checks.
 - CI now has fail-fast governance gate before backend/frontend jobs:
   - `.github/workflows/ci.yml` (`governance` job)
 - Added process workflow test cases:

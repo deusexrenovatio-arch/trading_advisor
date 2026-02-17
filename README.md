@@ -80,6 +80,13 @@ PowerShell variant:
 $env:MOEX_CARRY_ALLOW_MAIN_PUSH='1'; git push
 ```
 
+If `npm ci` fails on Windows with `EPERM` lock errors for `esbuild.exe`,
+use this temporary pre-push workaround:
+
+```
+$env:MOEX_CARRY_SKIP_NPM_CI='1'; git push
+```
+
 ## Telegram Worker (MVP)
 
 The project includes a Telegram worker that sends actionable signals from
