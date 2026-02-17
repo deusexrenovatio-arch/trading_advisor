@@ -1,6 +1,8 @@
+import json
 from datetime import datetime
 
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
+from moex_carry.signals_ack import build_ack_note, build_signal_fingerprint
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_open_executions,
@@ -439,6 +441,190 @@ def test_signals_active_includes_open_positions(tmp_path):
     assert enter_row["signal_action"] == "enter"
     _assert_signal_metric_contract(enter_row)
     assert enter_row["entry_spread_pct_min"] is None
+
+
+def test_signals_active_keeps_enter_when_position_is_open(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    ts = datetime(2025, 1, 5, 12, 0, 0)
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-open-enter",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.3,
+                    "signal_reasons": ["test-enter-open"],
+                    "signal_metrics": {"score_gate_pass": True},
+                }
+            ],
+        )
+        store_signal_execution(
+            session,
+            datetime(2025, 1, 5, 12, 1, 0),
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "enter",
+                "price": 101.0,
+                "quantity": 1,
+                "side": "stock",
+                "status": "filled",
+                "note": None,
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    response = client.get("/api/signals/active")
+    assert response.status_code == 200
+    rows = response.get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["position_open"] is True
+    assert row["signal_action"] == "enter"
+
+
+def test_signals_active_marks_signal_used_after_v2_enter_action(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    ts = datetime(2025, 1, 6, 12, 0, 0)
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-used-v2-enter",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.4,
+                    "signal_reasons": ["test-used"],
+                    "signal_metrics": {"score_gate_pass": True},
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    active_before = client.get("/api/v2/signals/active")
+    assert active_before.status_code == 200
+    rows_before = active_before.get_json()
+    assert isinstance(rows_before, list)
+    assert len(rows_before) == 1
+    signal_id = rows_before[0]["signal_id"]
+
+    action_response = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "enter",
+            "source": "ui",
+            "actor_id": "web-user",
+            "idempotency_key": "idem-used-enter-1",
+        },
+    )
+    assert action_response.status_code == 200
+
+    active_after = client.get("/api/signals/active")
+    assert active_after.status_code == 200
+    rows_after = active_after.get_json()
+    assert isinstance(rows_after, list)
+    assert len(rows_after) == 1
+    row = rows_after[0]
+    assert row["signal_action"] == "enter"
+    assert row["signal_used"] is True
+    assert row["signal_used_by"] == "web-user"
+    assert isinstance(row["signal_used_at"], str)
+
+
+def test_signals_active_marks_signal_used_from_nested_ack_note(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    ts = datetime(2025, 1, 7, 12, 0, 0)
+    timestamp_iso = ts.isoformat()
+    fingerprint = build_signal_fingerprint(
+        run_id="run-used-ack",
+        timestamp=timestamp_iso,
+        stock="AAA",
+        future="AAH6",
+        signal_action="enter",
+    )
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-used-ack",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.4,
+                    "signal_reasons": ["test-ack"],
+                    "signal_metrics": {"score_gate_pass": True},
+                }
+            ],
+        )
+        ack_note = build_ack_note(
+            fingerprint=fingerprint,
+            signal_run_id="run-used-ack",
+            signal_timestamp=timestamp_iso,
+            signal_action="enter",
+            telegram_user_id=111,
+            telegram_username="alice",
+            telegram_chat_id=111,
+        )
+        store_signal_execution(
+            session,
+            datetime(2025, 1, 7, 12, 1, 0),
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "ack",
+                "price": None,
+                "quantity": None,
+                "side": None,
+                "status": "acknowledged",
+                "note": json.dumps(
+                    {
+                        "kind": "signal_action_v1_adapter",
+                        "source": "telegram",
+                        "actor_id": "tg",
+                        "idempotency_key": "idem-ack-1",
+                        "requested_action": "ack",
+                        "note": ack_note,
+                    }
+                ),
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    response = client.get("/api/signals/active")
+    assert response.status_code == 200
+    rows = response.get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["signal_used"] is True
+    assert row["signal_used_by"] == "alice"
 
 
 def test_signals_active_marks_open_position_hold_rows(tmp_path):

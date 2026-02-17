@@ -659,14 +659,42 @@ def _extract_response_payload(result) -> tuple[object | None, int]:
     return payload, status_code
 
 
-def _extract_idempotency_key(note: object) -> str | None:
-    if not isinstance(note, str) or not note.strip():
+def _parse_json_object(value: object) -> dict[str, object] | None:
+    if not isinstance(value, str) or not value.strip():
         return None
     try:
-        payload = json.loads(note)
+        payload = json.loads(value)
     except json.JSONDecodeError:
         return None
     if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _parse_signal_action_note(note: object) -> dict[str, object] | None:
+    payload = _parse_json_object(note)
+    if not isinstance(payload, dict):
+        return None
+    kind = str(payload.get("kind") or "").strip()
+    if kind not in {"signal_action_v1_adapter", "signal_action_v2"}:
+        return None
+    return payload
+
+
+def _parse_ack_note_from_execution_note(note: object) -> dict[str, object] | None:
+    direct = parse_ack_note(note)
+    if direct is not None:
+        return direct
+    payload = _parse_signal_action_note(note)
+    if payload is None:
+        return None
+    nested_note = payload.get("note")
+    return parse_ack_note(nested_note)
+
+
+def _extract_idempotency_key(note: object) -> str | None:
+    payload = _parse_signal_action_note(note)
+    if payload is None:
         return None
     raw = payload.get("idempotency_key")
     if raw is None:
@@ -705,6 +733,16 @@ def _signal_used_by_from_ack(note_payload: dict[str, object]) -> str | None:
     user_id = note_payload.get("telegram_user_id")
     if isinstance(user_id, int):
         return str(user_id)
+    return None
+
+
+def _signal_used_by_from_action(note_payload: dict[str, object]) -> str | None:
+    actor = note_payload.get("actor_id")
+    if isinstance(actor, str) and actor.strip():
+        return actor.strip()
+    source = note_payload.get("source")
+    if isinstance(source, str) and source.strip():
+        return source.strip()
     return None
 
 
@@ -2066,9 +2104,29 @@ def create_app(settings: AppSettings) -> Dash:
                 return jsonify([])
             rows = load_active_signals(session, latest.run_id)
             executions = load_open_executions(session)
-            ack_by_fingerprint: dict[str, dict[str, object]] = {}
+            usage_by_fingerprint: dict[str, dict[str, object]] = {}
             pair_trade_timestamps: dict[tuple[str, str], list[datetime]] = {}
             position_state: dict[tuple[str, str], dict[str, object]] = {}
+
+            def _register_usage(
+                fingerprint: str,
+                *,
+                used_at: datetime,
+                used_by: str | None,
+            ) -> None:
+                existing = usage_by_fingerprint.get(fingerprint)
+                existing_ts_raw = existing.get("timestamp") if isinstance(existing, dict) else None
+                existing_ts = (
+                    _normalize_datetime(existing_ts_raw)
+                    if isinstance(existing_ts_raw, datetime)
+                    else None
+                )
+                if existing_ts is None or used_at >= existing_ts:
+                    usage_by_fingerprint[fingerprint] = {
+                        "timestamp": used_at,
+                        "used_by": used_by,
+                    }
+
             for exec_row in sorted(executions, key=lambda item: item.timestamp):
                 if not isinstance(exec_row.timestamp, datetime):
                     continue
@@ -2090,24 +2148,34 @@ def create_app(settings: AppSettings) -> Dash:
                 )
                 action = _normalize_execution_action(exec_row.action)
                 if action == "ack":
-                    ack_note = parse_ack_note(exec_row.note)
+                    ack_note = _parse_ack_note_from_execution_note(exec_row.note)
                     if isinstance(ack_note, dict):
                         fingerprint_raw = ack_note.get("fingerprint")
                         if isinstance(fingerprint_raw, str) and fingerprint_raw.strip():
-                            fingerprint = fingerprint_raw.strip()
-                            existing = ack_by_fingerprint.get(fingerprint)
-                            existing_ts_raw = existing.get("timestamp") if isinstance(existing, dict) else None
-                            existing_ts = (
-                                _normalize_datetime(existing_ts_raw)
-                                if isinstance(existing_ts_raw, datetime)
-                                else None
+                            _register_usage(
+                                fingerprint_raw.strip(),
+                                used_at=exec_ts,
+                                used_by=_signal_used_by_from_ack(ack_note),
                             )
-                            if existing_ts is None or exec_ts >= existing_ts:
-                                ack_by_fingerprint[fingerprint] = {
-                                    "timestamp": exec_ts,
-                                    "used_by": _signal_used_by_from_ack(ack_note),
-                                }
                     continue
+
+                action_note = _parse_signal_action_note(exec_row.note)
+                if isinstance(action_note, dict):
+                    fingerprint_raw = action_note.get("fingerprint")
+                    requested_action = str(action_note.get("requested_action") or "").strip().lower()
+                    source = str(action_note.get("source") or "").strip().lower()
+                    if (
+                        isinstance(fingerprint_raw, str)
+                        and fingerprint_raw.strip()
+                        and requested_action == "enter"
+                        and source in {"ui", "telegram", "v1_adapter"}
+                    ):
+                        _register_usage(
+                            fingerprint_raw.strip(),
+                            used_at=exec_ts,
+                            used_by=_signal_used_by_from_action(action_note),
+                        )
+
                 if action not in {"enter", "exit"}:
                     continue
                 pair_trade_timestamps.setdefault(key, []).append(exec_ts)
@@ -2185,25 +2253,25 @@ def create_app(settings: AppSettings) -> Dash:
                     future=future,
                     signal_action=signal_action,
                 )
-                ack_entry = ack_by_fingerprint.get(fingerprint)
-                if not isinstance(ack_entry, dict):
+                usage_entry = usage_by_fingerprint.get(fingerprint)
+                if not isinstance(usage_entry, dict):
                     return {
                         "signal_used": False,
                         "signal_used_at": None,
                         "signal_used_by": None,
                         "signal_details_pending": False,
                     }
-                ack_ts_raw = ack_entry.get("timestamp")
-                ack_ts = _normalize_datetime(ack_ts_raw) if isinstance(ack_ts_raw, datetime) else None
-                has_trade_after_ack = False
-                if ack_ts is not None:
+                usage_ts_raw = usage_entry.get("timestamp")
+                usage_ts = _normalize_datetime(usage_ts_raw) if isinstance(usage_ts_raw, datetime) else None
+                has_trade_after_usage = False
+                if usage_ts is not None:
                     trades = pair_trade_timestamps.get((stock, future), [])
-                    has_trade_after_ack = any(trade_ts > ack_ts for trade_ts in trades)
+                    has_trade_after_usage = any(trade_ts > usage_ts for trade_ts in trades)
                 return {
                     "signal_used": True,
-                    "signal_used_at": ack_ts.isoformat() if ack_ts is not None else None,
-                    "signal_used_by": ack_entry.get("used_by"),
-                    "signal_details_pending": not has_trade_after_ack,
+                    "signal_used_at": usage_ts.isoformat() if usage_ts is not None else None,
+                    "signal_used_by": usage_entry.get("used_by"),
+                    "signal_details_pending": not has_trade_after_usage,
                 }
 
             for state in position_state.values():
@@ -2248,11 +2316,14 @@ def create_app(settings: AppSettings) -> Dash:
                     if isinstance(open_legs_raw, dict)
                     else {"stock": 0, "future": 0, "other": 0}
                 )
-                if row.action == "enter" and not is_open:
+                row_action = str(row.action or "").strip().lower()
+                if row_action == "enter":
                     action = "enter"
-                elif row.action == "exit" and is_open:
+                elif row_action == "exit" and is_open:
                     action = "exit"
-                elif is_open:
+                elif row_action in {"hold", "hold_open"} and is_open:
+                    action = "hold_open"
+                elif row_action not in {"enter", "exit"} and is_open:
                     action = "hold_open"
                 else:
                     continue
@@ -2432,17 +2503,40 @@ def create_app(settings: AppSettings) -> Dash:
             idempotency_key = f"idem-{uuid.uuid4().hex[:12]}"
 
         signal_row = None
-        if signal_id:
+        active_rows_cache: list[dict[str, object]] | None = None
+
+        def _load_active_rows_for_lookup() -> list[dict[str, object]]:
+            nonlocal active_rows_cache
+            if active_rows_cache is not None:
+                return active_rows_cache
             legacy = signals_active_api()
             rows, status_code = _extract_response_payload(legacy)
-            if status_code >= 400:
-                return legacy
-            if isinstance(rows, list):
-                for row in rows:
-                    if isinstance(row, dict) and _build_signal_id_from_row(row) == signal_id:
-                        signal_row = row
-                        break
+            if status_code >= 400 or not isinstance(rows, list):
+                active_rows_cache = []
+            else:
+                active_rows_cache = [row for row in rows if isinstance(row, dict)]
+            return active_rows_cache
 
+        if signal_id:
+            for row in _load_active_rows_for_lookup():
+                if _build_signal_id_from_row(row) == signal_id:
+                    signal_row = row
+                    break
+
+        stock = str(payload.get("stock") or (signal_row or {}).get("stock") or "").strip()
+        future = str(payload.get("future") or (signal_row or {}).get("future") or "").strip()
+        if signal_row is None and stock and future:
+            for row in _load_active_rows_for_lookup():
+                if str(row.get("stock") or "").strip() != stock:
+                    continue
+                if str(row.get("future") or "").strip() != future:
+                    continue
+                row_action = str(row.get("signal_action") or "").strip().lower()
+                if row_action == requested_action:
+                    signal_row = row
+                    break
+                if signal_row is None:
+                    signal_row = row
         stock = str(payload.get("stock") or (signal_row or {}).get("stock") or "").strip()
         future = str(payload.get("future") or (signal_row or {}).get("future") or "").strip()
         if not stock or not future:
@@ -2450,6 +2544,21 @@ def create_app(settings: AppSettings) -> Dash:
             return jsonify({"error": "not_found", "message": message}), 404
         direction = payload.get("direction") or (signal_row or {}).get("signal_direction")
         signal_id_resolved = signal_id or _stable_id("sig", stock, future, requested_action)
+
+        signal_run_id = str((signal_row or {}).get("run_id") or "").strip()
+        signal_timestamp = str((signal_row or {}).get("timestamp") or "").strip()
+        signal_action_for_fingerprint = str((signal_row or {}).get("signal_action") or "").strip().lower()
+        if not signal_action_for_fingerprint:
+            signal_action_for_fingerprint = requested_action
+        signal_fingerprint: str | None = None
+        if signal_run_id and signal_timestamp and signal_action_for_fingerprint:
+            signal_fingerprint = build_signal_fingerprint(
+                run_id=signal_run_id,
+                timestamp=signal_timestamp,
+                stock=stock,
+                future=future,
+                signal_action=signal_action_for_fingerprint,
+            )
 
         pretrade_payload = payload.get("pretrade")
         pretrade_status_hint = payload.get("pretrade_status")
@@ -2506,14 +2615,28 @@ def create_app(settings: AppSettings) -> Dash:
             "idempotency_key": idempotency_key,
             "requested_action": requested_action,
         }
+        if signal_fingerprint is not None:
+            note_payload["fingerprint"] = signal_fingerprint
+        if signal_run_id:
+            note_payload["signal_run_id"] = signal_run_id
+        if signal_timestamp:
+            note_payload["signal_timestamp"] = signal_timestamp
+        if signal_action_for_fingerprint:
+            note_payload["signal_action"] = signal_action_for_fingerprint
         if reason_code is not None:
             note_payload["reason_code"] = reason_code
         if fail_closed.status == "override":
             note_payload["fail_closed_override"] = True
             note_payload["fail_closed_reason"] = fail_closed.reason_code
         operator_note = payload.get("note") or payload.get("comment")
-        if operator_note is not None and str(operator_note).strip():
-            note_payload["note"] = str(operator_note).strip()
+        operator_note_value = str(operator_note).strip() if operator_note is not None else None
+        if operator_note_value:
+            note_payload["note"] = operator_note_value
+            ack_note = parse_ack_note(operator_note_value)
+            if isinstance(ack_note, dict):
+                ack_fingerprint = str(ack_note.get("fingerprint") or "").strip()
+                if ack_fingerprint and "fingerprint" not in note_payload:
+                    note_payload["fingerprint"] = ack_fingerprint
         note = json.dumps(note_payload, ensure_ascii=False, separators=(",", ":"))
 
         now = datetime.now(timezone.utc)

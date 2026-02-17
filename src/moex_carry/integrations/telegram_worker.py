@@ -64,6 +64,41 @@ def _parse_hhmm(value: object, *, fallback: tuple[int, int] = (9, 0)) -> tuple[i
     return fallback
 
 
+def _to_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_numeric(row: dict[str, object], *keys: str) -> float | None:
+    for key in keys:
+        if key not in row:
+            continue
+        value = _to_float(row.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _bounded_value_ok(*, current: float | None, lower: object, upper: object) -> bool:
+    lower_value = _to_float(lower)
+    upper_value = _to_float(upper)
+    if lower_value is None and upper_value is None:
+        return True
+    if current is None:
+        return False
+    if lower_value is not None and upper_value is not None and lower_value > upper_value:
+        lower_value, upper_value = upper_value, lower_value
+    if lower_value is not None and current < lower_value:
+        return False
+    if upper_value is not None and current > upper_value:
+        return False
+    return True
+
+
 class TelegramWorker:
     def __init__(
         self,
@@ -329,6 +364,49 @@ class TelegramWorker:
             return True
         ttl_hours = max(int(self.cfg.callback_ttl_hours), 1)
         return datetime.now(timezone.utc) > (created_at + timedelta(hours=ttl_hours))
+
+    def _is_entry_signal_expired(self, row: dict[str, object]) -> bool:
+        signal_ts = _parse_iso(row.get("timestamp"))
+        if signal_ts is None:
+            return True
+        ttl_hours = max(int(self.cfg.callback_ttl_hours), 1)
+        return datetime.now(timezone.utc) > (signal_ts + timedelta(hours=ttl_hours))
+
+    def _entry_range_eligible(self, row: dict[str, object]) -> bool:
+        action = str(row.get("signal_action") or "").strip().lower()
+        if action != "enter":
+            return True
+
+        stock_now = _first_numeric(row, "spot_mid", "stock_mid", "stock_price", "stock_last_price")
+        future_now = _first_numeric(row, "future_mid", "future_price", "future_last_price")
+        spread_now = _first_numeric(row, "spread_mid", "spread")
+        spread_pct_now = _first_numeric(row, "spread_pct")
+
+        if not _bounded_value_ok(
+            current=stock_now,
+            lower=row.get("entry_stock_min"),
+            upper=row.get("entry_stock_max"),
+        ):
+            return False
+        if not _bounded_value_ok(
+            current=future_now,
+            lower=row.get("entry_future_min_per_share"),
+            upper=row.get("entry_future_max_per_share"),
+        ):
+            return False
+        if not _bounded_value_ok(
+            current=spread_now,
+            lower=row.get("entry_spread_min"),
+            upper=row.get("entry_spread_max"),
+        ):
+            return False
+        if not _bounded_value_ok(
+            current=spread_pct_now,
+            lower=row.get("entry_spread_pct_min"),
+            upper=row.get("entry_spread_pct_max"),
+        ):
+            return False
+        return True
 
     def _handle_callback(self, query: dict[str, object]) -> None:
         callback_query_id = str(query.get("id") or "")
@@ -673,6 +751,12 @@ class TelegramWorker:
         for row in rows:
             action = str(row.get("signal_action") or "").strip().lower()
             if action not in _SIGNAL_ACTIONS:
+                continue
+            if action == "enter" and bool(row.get("signal_used")):
+                continue
+            if action == "enter" and self._is_entry_signal_expired(row):
+                continue
+            if action == "enter" and not self._entry_range_eligible(row):
                 continue
             run_id = str(row.get("run_id") or "").strip()
             timestamp = str(row.get("timestamp") or "").strip()
