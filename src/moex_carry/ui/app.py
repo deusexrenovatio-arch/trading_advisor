@@ -2050,6 +2050,8 @@ def create_app(settings: AppSettings) -> Dash:
         limit = int(request.args.get("limit", "500"))
         df = df.head(max(limit, 0)) if limit else df
         records = [_merge_signal_metrics(record) for record in _df_to_records(df)]
+        for record in records:
+            record["execution_quality"] = _build_execution_quality(record)
         return jsonify(records)
 
     @server.route("/api/signals/active", methods=["GET"])
