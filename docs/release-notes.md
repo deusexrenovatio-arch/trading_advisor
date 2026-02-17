@@ -121,6 +121,45 @@ Verification
 - `pytest -q tests/hpo/test_runtime_quality.py tests/hpo/test_runner.py tests/hpo/test_objective.py`
 - `pytest -q tests/test_api_v2.py tests/test_backtest_forward_api.py tests/test_backtest_defaults.py`
 
+## 2026-02-17 - Pending-entry lifecycle + Telegram delivery unification
+
+Summary
+- Unified active-signal delivery rules between backend API and Telegram worker.
+- Added pending-entry intent promotion for both open and flat position states.
+- Switched `signals --history-days` unified mode to incremental data enrichment instead of full legacy fetch on every run.
+
+Changed
+- Active signal lifecycle:
+  - `GET /api/signals/active` can promote latest unused `enter` intent over `hold` rows within configurable TTL.
+  - Promotion works for `hold_open` (position is open) and `hold_flat` (no open legs) states.
+  - Promotion stops only after explicit operator usage (`ack`/action), not just because position is open.
+- Delivery contract:
+  - `GET /api/v2/signals/active` now includes:
+    - `delivery_action`
+    - `delivery_allowed`
+    - `delivery_suppressed_reason`
+    - `entry_signal_expired`
+    - `entry_range_eligible`
+  - Delivery computation moved to shared module `src/moex_carry/signals_delivery.py`.
+- Telegram worker:
+  - Prefers `/api/v2/signals/active` with fallback to `/api/signals/active`.
+  - Uses same shared delivery rules as backend API.
+  - Added per-pair cooldown for new `enter` fingerprints (`telegram.enter_resend_cooldown_minutes`).
+  - Sends one out-of-range update when already-sent `enter` leaves original entry corridor.
+- Unified runtime entry plan:
+  - Unified snapshot rows include entry bounds for both legs and spread (`entry_*` fields) computed from latest market snapshot.
+- Backfill/runtime:
+  - `moex_carry.cli signals --history-days N` in unified mode now uses incremental minute ingest + unified snapshot replay.
+  - Reference data (`shares/futures/key_rates`) is refreshed only when missing/stale, not on every backfill loop.
+
+Config additions
+- `ui.signal_entry_intent_ttl_hours` (default `72`)
+- `telegram.enter_resend_cooldown_minutes` (default `60`)
+
+Verification
+- `pytest -q tests/test_signal_api.py tests/test_telegram_worker.py tests/test_signal_cycle.py`
+- `python -m moex_carry.cli signals --config configs/default.yaml --history-days 7 --max-pairs 0`
+
 ## 2026-02-16 - Minute default refresh + true incremental replay
 
 Summary

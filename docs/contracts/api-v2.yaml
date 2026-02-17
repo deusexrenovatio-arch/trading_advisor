@@ -232,6 +232,8 @@ components:
         - entity_ref
         - lifecycle_state
         - gate_results
+        - delivery_action
+        - delivery_allowed
       properties:
         signal_id:
           type: string
@@ -251,6 +253,30 @@ components:
             - rejected
         signal_action_effective:
           type: string
+        signal_origin_run_id:
+          type: string
+          nullable: true
+        signal_origin_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        delivery_action:
+          type: string
+          enum: [enter, exit, hold_open]
+        delivery_allowed:
+          type: boolean
+        delivery_suppressed_reason:
+          type: string
+          nullable: true
+          enum:
+            - signal_used
+            - entry_expired
+            - entry_out_of_range
+            - unsupported_action
+        entry_signal_expired:
+          type: boolean
+        entry_range_eligible:
+          type: boolean
         gate_results:
           type: array
           items:

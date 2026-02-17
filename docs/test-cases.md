@@ -687,6 +687,70 @@ Expected:
 - No ACK execution call is sent to backend.
 - Callback token is removed from worker state and user receives rejection notice.
 
+### TC-TG-WRK-005 Worker deduplicates stable enter fingerprint
+Acceptance: signals-active
+Automation: tests/test_telegram_worker.py::test_worker_uses_signal_fingerprint_from_api_for_enter_dedup
+Request:
+- Return two active batches with different `run_id` but same `signal_fingerprint` for `enter`.
+Expected:
+- Worker sends only one message.
+- Pending callback state stores single fingerprint.
+
+### TC-TG-WRK-006 Worker notifies once when sent enter goes out of range
+Acceptance: signals-active
+Automation: tests/test_telegram_worker.py::test_worker_notifies_once_when_sent_enter_goes_out_of_range
+Request:
+- First batch: in-range `enter`.
+- Next batches: same fingerprint with current prices outside original corridor.
+Expected:
+- Worker sends initial signal message plus exactly one out-of-range update.
+- No duplicate out-of-range spam for repeated out-of-range batches.
+
+### TC-TG-WRK-007 Pair-level cooldown blocks rapid new enter fingerprints
+Acceptance: signals-active
+Automation: tests/test_telegram_worker.py::test_worker_throttles_new_enter_fingerprints_per_pair
+Request:
+- Two consecutive `enter` signals for same pair with different fingerprints inside cooldown window.
+Expected:
+- Worker sends only the first one.
+
+### TC-TG-WRK-008 Worker prefers v2 active endpoint
+Acceptance: signals-active
+Automation: tests/test_telegram_worker.py::test_worker_prefers_v2_active_endpoint
+Request:
+- Start worker and run one broadcast cycle.
+Expected:
+- First backend call goes to `/api/v2/signals/active` with fallback to v1 only on failure.
+
+### TC-SIG-ACT-API-004 v2 active row exposes delivery contract fields
+Acceptance: signals-active
+Automation: tests/test_signal_api.py::test_signals_active_v2_exposes_delivery_fields
+Request:
+- GET `/api/v2/signals/active` for row with `enter` action.
+Expected:
+- Row includes `delivery_action`, `delivery_allowed`, `delivery_suppressed_reason`, `entry_signal_expired`, `entry_range_eligible`.
+
+### TC-SIG-ACT-API-005 Pending enter promotion for open/flat hold states
+Acceptance: signals-active
+Automation:
+- tests/test_signal_api.py::test_signals_active_promotes_hold_open_to_pending_enter
+- tests/test_signal_api.py::test_signals_active_promotes_flat_hold_to_pending_enter
+Request:
+- Latest run has `hold`, recent history has unused `enter` intent for same pair.
+Expected:
+- Active row is promoted to actionable `enter`.
+- Origin references (`signal_origin_run_id`, `signal_origin_timestamp`) point to promoted intent.
+
+### TC-SIG-ACT-API-006 Pending enter promotion stops after explicit use
+Acceptance: signals-active
+Automation:
+- tests/test_signal_api.py::test_signals_active_pending_enter_stops_after_explicit_use
+- tests/test_signal_api.py::test_signals_active_flat_pending_enter_stops_after_explicit_use
+Request:
+- Same as pending promotion case, plus explicit usage action for the promoted fingerprint.
+Expected:
+- Row is not promoted to `enter` anymore and remains `hold_open`/non-actionable equivalent.
+
 ### TC-PRETRADE-API-001 Pre-trade check endpoint
 Acceptance: pretrade-check
 Automation: tests/test_ui_api.py

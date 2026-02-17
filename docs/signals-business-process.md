@@ -49,7 +49,8 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 | 4. Entry Decision | Compare app output with terminal quotes | Read backend lifecycle (`ready|blocked|hold_open|exit_ready`) and gate reasons | Effective status in main `Signal` column |
 | 4a. Telegram ACK | Press `Use signal` in Telegram | Worker posts `action=ack` to `/api/signals/execute` (v1 adapter to v2 action flow) | `signal_executions` row with `action=ack`, `status=acknowledged`, note metadata |
 | 5. Entry Execution | Submit both legs manually | Allow `Execute` only when entry is not pre-trade blocked | `signal_executions` rows with action `enter` |
-| 6. Active Monitoring | Re-open details for open pair | Keep open pair visible in `Signals` and show risk/forecast/model checks/new updates | New `signal_history` rows per cycle + `signal_executions` open state |
+| 6. Active Monitoring | Re-open details for open/flat pair with pending intent | Keep pair visible and, when last `enter` intent was not explicitly used, promote pending intent back to actionable `enter` within TTL | New `signal_history` rows + pending intent projection in `/api/v2/signals/active` |
+| 6a. Delivery State | Review delivery flags in UI/API/Telegram | Use shared delivery fields (`delivery_allowed`, `entry_signal_expired`, `entry_range_eligible`) to explain why signal is sent/suppressed | `/api/v2/signals/active` delivery fields + Telegram worker state |
 | 7. Exit Trigger | React to `exit` signal and reason | Surface reason (`tp`, `sl`, `time`, `expiry`) and supporting metrics | Exit reason in `signal_reasons` / `signal_metrics` |
 | 8. Exit Execution | Close both legs manually | Persist exit action and update actionable view | `signal_executions` rows with action `exit` |
 | 9. Audit | Review full lifecycle for pair | Provide history of signals + executions for replay | `signal_history` + `signal_executions` |
@@ -104,6 +105,20 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
   - Message includes bot status, backend status, and active signals count.
   - If backend is unavailable, message is still sent with `Backend: ERROR`.
 
+### US-SIG-08 Keep entry actionable until explicit usage
+- As an operator, I want to keep receiving `enter` opportunity while it is still valid, even if strategy row moved to `hold`.
+- Acceptance:
+  - Last unused `enter` intent is promoted over `hold` for the same pair while intent TTL is active.
+  - Promotion works for both open and flat pair states.
+  - Promotion stops only after explicit operator usage action is recorded.
+
+### US-SIG-09 Notify when sent entry leaves planned corridor
+- As an operator, I want a single Telegram update if already-sent entry becomes non-executable due to price drift.
+- Acceptance:
+  - Worker tracks baseline entry corridor for sent `enter`.
+  - On first out-of-range transition worker sends one update with current vs baseline bounds.
+  - Repeated out-of-range cycles for same fingerprint do not spam chat.
+
 ## Alternative and Exception Flows
 
 ### AF-01 Pre-trade endpoint unavailable (e.g., 404)
@@ -139,6 +154,12 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
   - Worker catches backend error while reading `/api/signals/active`.
   - Health-check message is still delivered with degraded status (`Backend: ERROR`).
 
+### AF-07 Sent entry moved outside original corridor
+- Behavior:
+  - Worker keeps first sent baseline bounds for `enter` fingerprint.
+  - If current prices leave baseline corridor, worker sends one update and marks fingerprint as out-of-range notified.
+  - New `enter` fingerprint for same pair still respects pair-level cooldown.
+
 ## Traceability Matrix
 | Requirement | UI | API | Persistence | Evidence |
 |---|---|---|---|---|
@@ -148,6 +169,8 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 | Fail-closed execution control | `Execute signal` response messaging | `POST /api/v2/signals/{signal_id}/actions` | `signal_executions.note` (override metadata) | `status=blocked` with reason code or audited override |
 | Telegram ACK traceability | Telegram inline button + `Signals` flags | `POST /api/signals/execute` (`action=ack`), `GET /api/v2/signals/active` | `signal_executions.note` + derived flags | `signal_used*`, `signal_details_pending` |
 | Telegram daily health-check | Telegram bot chat | Telegram Bot API `sendMessage` + backend `GET /api/v2/signals/active` | worker state (`daily_healthcheck_last_sent_date_by_chat`) | One morning message per chat with backend/data status |
+| Pending entry lifecycle projection | Signals table + Telegram worker | `GET /api/v2/signals/active` | `signal_history` + explicit action notes | `signal_origin_*`, `pending_entry_intent_active`, delivery fields |
+| Entry drift notification without spam | Telegram bot chat | Telegram Bot API `sendMessage` + backend `GET /api/v2/signals/active` | worker state (`enter_tracking_by_fingerprint`, `enter_last_sent_at_by_pair`) | One out-of-range update per fingerprint |
 | Exit reason transparency | Signal details (`Context`, `Risk`, `Forecast`) | `/api/signals/active`, `/api/signals/history` | `signal_history.metrics/reasons` | Reason codes (`tp/sl/time/expiry`) |
 | Leg imbalance remediation | Signal monitoring + ops controls | `POST /api/v2/policies/auto-unwind/run` | `signal_executions` | Auto-generated `exit` with `LEG_IMBALANCE_TIMEOUT` |
 | Lifecycle auditability | History + details | `/api/v2/decisions/{decision_id}/actions`, `/api/signals/executions` | `signal_history` + `signal_executions` + decision actions | Pair replay from first entry to final exit |
