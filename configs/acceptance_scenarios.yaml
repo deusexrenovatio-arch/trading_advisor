@@ -163,7 +163,7 @@ scenarios:
       [signal_id, run_id, timestamp, stock, future, signal_action, signal_score, lifecycle_state, signal_used, signal_used_at, signal_used_by, signal_details_pending]
     allowed_field_values:
       signal_action: [enter, exit, hold_open]
-    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001, TC-SIG-ACK-UI-001, TC-TG-UI-002, TC-TG-UI-003, TC-TG-WRK-002, TC-TG-WRK-003]
+    test_cases: [TC-SIG-ACT-API-001, TC-SIG-ACT-API-002, TC-SIG-ACT-API-004, TC-SIG-ACT-API-005, TC-SIG-ACT-API-006, TC-SIG-CONTRACT-API-001, TC-SIG-ACT-UI-001, TC-SIG-PLAN-UI-001, TC-SIG-UI-WORKFLOW-001, TC-SIG-ACK-UI-001, TC-TG-UI-002, TC-TG-UI-003, TC-TG-WRK-002, TC-TG-WRK-003, TC-TG-WRK-005, TC-TG-WRK-006, TC-TG-WRK-007, TC-TG-WRK-008]
     title: Active signals
     user_story: User receives only actionable signals.
     expectations:
