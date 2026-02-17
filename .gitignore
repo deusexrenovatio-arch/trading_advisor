@@ -10,3 +10,4 @@ __pycache__/
 .env
 *.log
 scripts/*.local.ps1
+.worktree-context.local.json

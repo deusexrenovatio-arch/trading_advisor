@@ -1,5 +1,76 @@
 # Release Notes
 
+## 2026-02-16 - Two-stage HPO quality review + canonical minute defaults
+
+Summary
+- Added two-stage HPO: fast objective search first, then minute execution quality review on top-N candidates.
+- Fixed canonical minute strategy defaults in `BacktestRequest` to match production baseline.
+- Kept optimization speed by computing heavy fill-quality only for shortlisted candidates.
+
+Changed
+- HPO optimization contract now includes quality-review controls:
+  - `quality_review_enabled`
+  - `quality_top_n`
+  - `quality_min_trades_closed_total`
+  - `quality_max_unfilled_entry_rate`
+  - `quality_max_forced_exit_rate`
+  - `quality_max_entry_wait_min_closed`
+  - `quality_max_exit_wait_min_closed`
+  - `quality_lambda_unfilled`
+  - `quality_lambda_forced`
+  - `quality_lambda_wait`
+- HPO runtime now writes `result.quality_review` with:
+  - gate pass/fail by candidate,
+  - quality penalty,
+  - quality-adjusted objective,
+  - minute execution metrics for reviewed candidates.
+- v2 HPO status gate now considers quality result:
+  - `promotion_gate=fail` when quality gate fails for all reviewed candidates.
+- Canonical minute defaults in `BacktestStrategyConfig`:
+  - `signal_exec_lag_days=0`
+  - `execution_lag_minutes=30`
+  - `execution_max_wait_minutes=360`
+  - `entry_price_tolerance_pct=0.02`
+  - `entry_stock_tolerance_pct=0.02`
+  - `entry_future_tolerance_pct=0.025`
+  - `entry_spread_tolerance_pct=0.03`
+
+Verification
+- `pytest -q tests/hpo/test_runtime_quality.py tests/hpo/test_runner.py tests/hpo/test_objective.py`
+- `pytest -q tests/test_api_v2.py tests/test_backtest_forward_api.py tests/test_backtest_defaults.py`
+
+## 2026-02-16 - Minute default refresh + true incremental replay
+
+Summary
+- Switched backend signal refresh default cadence to 60 seconds.
+- Implemented true incremental replay with per-pair disk checkpoints and overlap-safe replay.
+- Made UI/API default reads serve latest backend-produced last-good outputs.
+
+Changed
+- Config defaults:
+  - `ui.signal_refresh_interval_sec=60`
+  - `ui.signal_refresh_daily_time=null`
+  - `ui.incremental_replay_enabled=true`
+  - `ui.incremental_overlap_minutes=180`
+  - `ui.incremental_checkpoint_dir=./data/state/incremental_replay`
+  - `ui.incremental_checkpoint_interval_minutes=60`
+- New modules:
+  - `src/moex_carry/minute_ingest/` for incremental minute upsert + watermark/cursor state.
+  - `src/moex_carry/signal_replay/incremental.py` for true incremental replay engine.
+- Replay state-machine now supports resumable execution state in `pipeline._apply_spread_carry_signals(...)`.
+- Scheduler semantics:
+  - scheduled refresh path uses non-force incremental route,
+  - manual `POST /api/signals/refresh` keeps forced full fallback path.
+- `GET /api/signals/refresh-status` enriched with incremental telemetry:
+  - `incremental_enabled`, data watermarks, pairs recompute/reuse/skip counters, skip reason.
+- UI/API default data serving:
+  - `/api/top-pairs`, `/api/signals`, `/api/backtests` return latest backend outputs by default,
+  - optional `fresh=1` enables on-demand in-process read path.
+
+Verification
+- `pytest -q tests/test_signal_replay_incremental.py tests/test_signal_replay_core.py tests/test_signal_replay_golden_parity.py tests/test_execution_replay.py tests/test_ui_unified_runtime.py tests/test_ui_api.py`
+- `pytest -q tests/test_config_loading.py tests/test_signal_api.py tests/test_signal_cycle.py tests/test_ui_data_parsing.py`
+
 ## 2026-02-13 - Interactive architecture dependency map (D3)
 
 Summary

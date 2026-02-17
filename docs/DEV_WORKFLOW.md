@@ -5,6 +5,22 @@
 - Keep contract changes visible and reviewed.
 - Make checks repeatable locally and in CI.
 
+## Mandatory worktree preflight
+- Before any code change, lock expected worktree + branch for the current session:
+  - `./scripts/worktree_guard.ps1 -Action Init -WorktreePath "D:\\wt-<name>" -Branch "<branch>" -ContextTtlHours 12`
+- Before every development task, verify context:
+  - `./scripts/worktree_guard.ps1 -Action Check`
+- Inspect current vs expected context:
+  - `./scripts/worktree_guard.ps1 -Action Show`
+- Reset context when switching streams:
+  - `./scripts/worktree_guard.ps1 -Action Clear`
+
+Policy:
+- If `Check` fails, stop development actions immediately.
+- Fix by switching to the correct worktree/branch or re-running `Init` with explicit user-approved values.
+- Local context file `.worktree-context.local.json` is intentionally ignored by git.
+- Context lock expires automatically (`ContextTtlHours`, default `12`) and must be re-initialized for a new session.
+
 ## Required checks (CI + local)
 
 ### Backend (Python)

@@ -34,3 +34,12 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
 - Safety and fallback: If a skill can't be applied cleanly (missing files, unclear instructions), state the issue, pick the next-best approach, and continue.
 </INSTRUCTIONS>
 
+## Worktree Safety Protocol (mandatory)
+- Before any code edits or long-running commands, run:
+  - `./scripts/worktree_guard.ps1 -Action Check`
+- If guard context is not initialized, stop and ask the user which worktree/branch must be used, then initialize:
+  - `./scripts/worktree_guard.ps1 -Action Init -WorktreePath "<path>" -Branch "<branch>" -ContextTtlHours 12`
+- If `Check` reports mismatch, stop immediately and switch to the expected worktree/branch before continuing.
+- If `Check` reports expired context, re-run `Init` before any development actions.
+- Use `./scripts/worktree_guard.ps1 -Action Show` when reporting current session context.
+
