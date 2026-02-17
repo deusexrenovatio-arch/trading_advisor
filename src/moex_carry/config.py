@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -276,9 +276,66 @@ class NewsFilterConfig(BaseModel):
 
 
 class NewsIngestConfig(BaseModel):
+    class CommodityProfile(BaseModel):
+        ticker: str
+        name: str
+        gdelt_query: str
+        rss_urls: list[str] = []
+        price_source: str = "yfinance"
+        price_symbol: str = ""
+        price_interval: str = "1d"
+
+    @staticmethod
+    def _default_profiles() -> list["NewsIngestConfig.CommodityProfile"]:
+        return [
+            NewsIngestConfig.CommodityProfile(
+                ticker="BRN",
+                name="Brent Crude Oil",
+                gdelt_query='("brent crude" OR "brent oil" OR "ice brent")',
+                rss_urls=[
+                    "https://news.google.com/rss/search?q=Brent+crude+oil+futures",
+                ],
+                price_source="yfinance",
+                price_symbol="BZ=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="GOLD",
+                name="Gold",
+                gdelt_query='("gold futures" OR "gold price" OR bullion)',
+                rss_urls=[
+                    "https://news.google.com/rss/search?q=gold+futures",
+                ],
+                price_source="yfinance",
+                price_symbol="GC=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="NG_US",
+                name="US Natural Gas",
+                gdelt_query='("natural gas" OR "henry hub" OR "nymex gas")',
+                rss_urls=[
+                    "https://news.google.com/rss/search?q=henry+hub+natural+gas+futures",
+                ],
+                price_source="yfinance",
+                price_symbol="NG=F",
+                price_interval="1d",
+            ),
+        ]
+
     enabled: bool = False
     rss_urls: list[str] = []
     max_items_per_run: int = 100
+    gdelt_enabled: bool = True
+    gdelt_max_records_per_call: int = 250
+    gdelt_min_request_interval_sec: float = 5.2
+    gdelt_request_timeout_sec: int = 40
+    backfill_start_date: str = "2018-01-01"
+    backfill_chunk_days: int = 7
+    backfill_max_windows_per_commodity: int = 0
+    qc_min_news_per_ticker: int = 500
+    qc_min_price_points_per_ticker: int = 500
+    commodity_profiles: list[CommodityProfile] = Field(default_factory=_default_profiles)
 
 
 class NewsModelsConfig(BaseModel):
@@ -288,9 +345,30 @@ class NewsModelsConfig(BaseModel):
     nli_model_name: str = "facebook/bart-large-mnli"
     multilingual_nli_model_name: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
     model_version: str = "v1"
+    inference_batch_size: int = 16
+    inference_text_max_chars: int = 2000
+    inference_thread_cap: int = 0
     calibration_mode: str = "none"
+    calibration_min_train_samples: int = 30
     epsilon_default: float = 0.0005
-    horizons: list[str] = ["1h", "4h", "1d", "5d"]
+    horizons: list[str] = ["5m", "1h", "4h", "1d", "5d"]
+    promotion_min_accuracy: float = 0.70
+    promotion_min_coverage: float = 0.20
+    promotion_max_brier: float = 0.25
+    promotion_min_sample_count: int = 30
+    promotion_min_ticker_stability: float = 0.55
+    decision_weight_signal_threshold: float = 0.12
+    decision_weight_min_impact: float = 0.6
+    decision_weight_reduce_factor: float = 0.5
+    decision_weight_boost_factor: float = 1.1
+
+
+class NewsEventsConfig(BaseModel):
+    enabled: bool = True
+    cluster_version: str = "det-v1"
+    cluster_window_hours: int = 48
+    similarity_threshold: float = 0.35
+    resolve_after_hours: int = 72
 
 
 class AppSettings(BaseSettings):
@@ -316,6 +394,7 @@ class AppSettings(BaseSettings):
     news_filter: NewsFilterConfig = NewsFilterConfig()
     news_ingest: NewsIngestConfig = NewsIngestConfig()
     news_models: NewsModelsConfig = NewsModelsConfig()
+    news_events: NewsEventsConfig = NewsEventsConfig()
 
 
 def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -405,3 +484,4 @@ def resolve_paths(settings: AppSettings) -> RuntimePaths:
         data_dir = _repo_root() / data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
     return RuntimePaths(data_dir=data_dir)
+

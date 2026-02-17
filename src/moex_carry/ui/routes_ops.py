@@ -78,6 +78,21 @@ def register_ops_routes(
             if isinstance(endpoint_stats.get("v2_auto_unwind_run"), dict)
             else {}
         )
+        news_feed_stats = (
+            endpoint_stats.get("v2_news_feed")
+            if isinstance(endpoint_stats.get("v2_news_feed"), dict)
+            else {}
+        )
+        news_backtest_stats = (
+            endpoint_stats.get("v2_news_backtest")
+            if isinstance(endpoint_stats.get("v2_news_backtest"), dict)
+            else {}
+        )
+        news_compare_stats = (
+            endpoint_stats.get("v2_news_compare")
+            if isinstance(endpoint_stats.get("v2_news_compare"), dict)
+            else {}
+        )
 
         pretrade_failures_15m = observability.count_recent("pretrade_failure", window_sec=900)
         pretrade_degraded_15m = observability.count_recent("pretrade_degraded", window_sec=900)
@@ -87,6 +102,27 @@ def register_ops_routes(
         )
         auto_unwind_triggered_15m = observability.count_recent("auto_unwind_triggered", window_sec=900)
         auto_unwind_errors_15m = observability.count_recent("auto_unwind_error", window_sec=900)
+        news_gate_block_15m = observability.count_recent("news_gate_block", window_sec=900)
+        news_gate_reduce_15m = observability.count_recent("news_gate_reduce", window_sec=900)
+        news_signal_links_15m = observability.count_recent("news_signal_links", window_sec=900)
+        news_feed_events_15m = observability.count_recent("news_feed_events", window_sec=900)
+        news_feed_high_15m = observability.count_recent("news_feed_high_severity_events", window_sec=900)
+        news_compare_runs_15m = observability.count_recent("news_compare_runs", window_sec=900)
+        news_compare_win_finbert_15m = observability.count_recent("news_compare_win_finbert", window_sec=900)
+        news_compare_win_nli_15m = observability.count_recent("news_compare_win_nli", window_sec=900)
+        compare_win_total_15m = news_compare_win_finbert_15m + news_compare_win_nli_15m
+        compare_win_rate = {
+            "finbert": (
+                float(news_compare_win_finbert_15m) / float(compare_win_total_15m)
+                if compare_win_total_15m > 0
+                else 0.0
+            ),
+            "nli": (
+                float(news_compare_win_nli_15m) / float(compare_win_total_15m)
+                if compare_win_total_15m > 0
+                else 0.0
+            ),
+        }
 
         alerts: list[dict[str, object]] = []
         pretrade_p95 = float(((pretrade_stats.get("latency_ms") or {}).get("p95") or 0.0))
@@ -136,6 +172,15 @@ def register_ops_routes(
                     "value": auto_unwind_errors_15m,
                 }
             )
+        if news_gate_block_15m >= 10:
+            alerts.append(
+                {
+                    "code": "NEWS_GATE_BLOCK_SPIKE",
+                    "severity": "warning",
+                    "message": "News gate block actions spiked in the last 15m.",
+                    "value": news_gate_block_15m,
+                }
+            )
 
         result = jsonify(
             {
@@ -146,11 +191,15 @@ def register_ops_routes(
                     "execution_rejections_15m": 5,
                     "pretrade_failures_15m": 10,
                     "auto_unwind_errors_15m": 1,
+                    "news_gate_blocks_15m": 10,
                 },
                 "api": {
                     "v2_signals_actions": actions_stats,
                     "v2_pretrade_check": pretrade_stats,
                     "v2_auto_unwind_run": auto_unwind_stats,
+                    "v2_news_feed": news_feed_stats,
+                    "v2_news_backtest": news_backtest_stats,
+                    "v2_news_compare": news_compare_stats,
                 },
                 "events_15m": {
                     "pretrade_failures": pretrade_failures_15m,
@@ -159,6 +208,14 @@ def register_ops_routes(
                     "execution_rejections_fail_closed": execution_rejections_15m,
                     "auto_unwind_triggered": auto_unwind_triggered_15m,
                     "auto_unwind_errors": auto_unwind_errors_15m,
+                    "news_gate_blocks": news_gate_block_15m,
+                    "news_gate_reduces": news_gate_reduce_15m,
+                    "news_signal_links": news_signal_links_15m,
+                    "news_feed_events": news_feed_events_15m,
+                    "news_feed_high_severity_events": news_feed_high_15m,
+                    "news_compare_runs": news_compare_runs_15m,
+                    "news_compare_wins_finbert": news_compare_win_finbert_15m,
+                    "news_compare_wins_nli": news_compare_win_nli_15m,
                 },
                 "signal_refresh_runtime": {
                     "status": refresh_state.get("status"),
@@ -171,6 +228,7 @@ def register_ops_routes(
                     "skip_reason": refresh_state.get("skip_reason"),
                     "fallback_full_replay_count": int(refresh_state.get("fallback_full_replay_count") or 0),
                 },
+                "news_compare_win_rate": compare_win_rate,
                 "alerts": alerts,
             }
         )

@@ -413,6 +413,10 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "event_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "model_scores": {
           "type": "array",
           "items": {
@@ -432,10 +436,41 @@
             "additionalProperties": false
           }
         },
+        "model_scores_by_layer": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
         "model_selected": { "type": "string" },
+        "llm_status": {
+          "type": "string",
+          "enum": ["pending", "done", "deferred", "skipped", "failed"]
+        },
         "gate_action": {
           "type": "string",
           "enum": ["allow", "reduce", "block"]
+        },
+        "decision_weight": {
+          "type": ["object", "null"],
+          "properties": {
+            "applied": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "target_strategy": { "type": "string" },
+            "factor": { "type": "number" },
+            "model_direction": {
+              "type": "string",
+              "enum": ["up", "down", "neutral"]
+            },
+            "model_net_score": { "type": "number" },
+            "avg_impact": { "type": "number" },
+            "sample_size": { "type": "integer" }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

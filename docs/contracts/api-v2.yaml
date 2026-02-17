@@ -357,6 +357,203 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NewsEventV2'
+  /events:
+    get:
+      summary: List clustered events from event-layer storage.
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Event rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventListItemV2'
+  /events/fragmentation:
+    get:
+      summary: Event-layer fragmentation metrics for deterministic clustering quality.
+      parameters:
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Fragmentation report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventFragmentationV2'
+  /events/{event_id}:
+    get:
+      summary: Detailed event payload with items, labels, scores, links.
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetailV2'
+        '404':
+          description: Event not found.
+  /events/{event_id}/reaction:
+    get:
+      summary: Market reaction rows for event.
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: instrument_id
+          schema:
+            type: string
+        - in: query
+          name: window_id
+          schema:
+            type: string
+        - in: query
+          name: sampling_freq
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Event market reaction rows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventReactionResponseV2'
+  /signals/top:
+    get:
+      summary: Top-K ranked news events for signal review.
+      parameters:
+        - in: query
+          name: commodity
+          schema:
+            type: string
+        - in: query
+          name: k
+          schema:
+            type: integer
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Top ranked events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SignalTopEventV2'
+  /annotations:
+    post:
+      summary: Create or upsert annotation override.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Annotation upsert status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationUpsertResponseV2'
+  /models/versions:
+    get:
+      summary: Model and prompt versions currently observed in runtime store.
+      responses:
+        '200':
+          description: Version matrix.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsVersionsV2'
+  /validation/summary:
+    get:
+      summary: Validation counters and status aggregates.
+      responses:
+        '200':
+          description: Validation summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationSummaryV2'
+  /validation/event-study:
+    get:
+      summary: Event-study style CAR summary grouped by label direction.
+      parameters:
+        - in: query
+          name: commodity
+          schema:
+            type: string
+        - in: query
+          name: window_id
+          schema:
+            type: string
+        - in: query
+          name: sampling_freq
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Event-study summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationEventStudyV2'
   /research/news/models/compare:
     get:
       summary: Compare FinBERT and NLI OOS quality on common protocol.
@@ -377,6 +574,42 @@ paths:
             type: string
         - in: query
           name: epsilon
+          schema:
+            type: number
+        - in: query
+          name: folds
+          schema:
+            type: integer
+        - in: query
+          name: embargo_minutes
+          schema:
+            type: integer
+        - in: query
+          name: walk_forward
+          schema:
+            type: boolean
+        - in: query
+          name: calibration_mode
+          schema:
+            type: string
+        - in: query
+          name: promotion_min_accuracy
+          schema:
+            type: number
+        - in: query
+          name: promotion_min_coverage
+          schema:
+            type: number
+        - in: query
+          name: promotion_max_brier
+          schema:
+            type: number
+        - in: query
+          name: promotion_min_sample_count
+          schema:
+            type: integer
+        - in: query
+          name: promotion_min_ticker_stability
           schema:
             type: number
       responses:
@@ -412,6 +645,22 @@ paths:
           name: epsilon
           schema:
             type: number
+        - in: query
+          name: folds
+          schema:
+            type: integer
+        - in: query
+          name: embargo_minutes
+          schema:
+            type: integer
+        - in: query
+          name: walk_forward
+          schema:
+            type: boolean
+        - in: query
+          name: calibration_mode
+          schema:
+            type: string
       responses:
         '200':
           description: Backtest report.
@@ -548,6 +797,10 @@ components:
           enum: [allow, reduce, block]
           nullable: true
         matched_news_event_ids:
+          type: array
+          items:
+            type: string
+        event_ids_used:
           type: array
           items:
             type: string
@@ -1457,6 +1710,142 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NewsSignalRefV2'
+    EventListItemV2:
+      type: object
+      additionalProperties: true
+      properties:
+        event_id:
+          type: string
+        event_status:
+          type: string
+        event_first_published_at_utc:
+          type: string
+          format: date-time
+        event_first_ingested_at_utc:
+          type: string
+          format: date-time
+        event_last_published_at_utc:
+          type: string
+          format: date-time
+          nullable: true
+        canonical_summary:
+          type: string
+          nullable: true
+        canonical_mechanism:
+          type: string
+          nullable: true
+        cluster_version:
+          type: string
+        news_count:
+          type: integer
+        primary_news_id:
+          type: string
+          nullable: true
+    EventFragmentationV2:
+      type: object
+      additionalProperties: true
+      properties:
+        events_total:
+          type: integer
+        event_links_total:
+          type: integer
+        singleton_events:
+          type: integer
+        multi_news_events:
+          type: integer
+        avg_news_per_event:
+          type: number
+        fragmentation_ratio:
+          type: number
+        role_counts:
+          type: object
+          additionalProperties:
+            type: integer
+    EventDetailV2:
+      type: object
+      additionalProperties: true
+    EventReactionResponseV2:
+      type: object
+      additionalProperties: true
+      properties:
+        event_id:
+          type: string
+        instrument_id:
+          type: string
+          nullable: true
+        window_id:
+          type: string
+          nullable: true
+        sampling_freq:
+          type: string
+          nullable: true
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    SignalTopEventV2:
+      type: object
+      additionalProperties: true
+      properties:
+        news_event_id:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        headline:
+          type: string
+        summary:
+          type: string
+        severity:
+          type: string
+        impact_score:
+          type: number
+        direction:
+          type: string
+          nullable: true
+        confidence:
+          type: number
+          nullable: true
+    AnnotationUpsertResponseV2:
+      type: object
+      additionalProperties: true
+      properties:
+        status:
+          type: string
+        stored:
+          type: integer
+        latest:
+          type: object
+          nullable: true
+          additionalProperties: true
+    ModelsVersionsV2:
+      type: object
+      additionalProperties: false
+      properties:
+        local_models:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              model_id:
+                type: string
+              versions:
+                type: array
+                items:
+                  type: string
+        llm_models:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    ValidationSummaryV2:
+      type: object
+      additionalProperties: true
+    ValidationEventStudyV2:
+      type: object
+      additionalProperties: true
     NewsBacktestV2:
       type: object
       additionalProperties: true
@@ -1470,8 +1859,20 @@ components:
           additionalProperties: true
         sample_count:
           type: integer
+        total_samples:
+          type: integer
+        dropped_by_embargo:
+          type: integer
         epsilon:
           type: number
+        protocol:
+          type: object
+          additionalProperties: true
+        fold_reports:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
         metrics:
           type: object
           additionalProperties: true
@@ -1489,6 +1890,9 @@ components:
           additionalProperties: true
         epsilon:
           type: number
+        protocol:
+          type: object
+          additionalProperties: true
         reports:
           type: array
           items:
@@ -1692,3 +2096,4 @@ components:
           type: number
         participation_rate:
           type: number
+

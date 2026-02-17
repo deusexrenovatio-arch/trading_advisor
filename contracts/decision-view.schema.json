@@ -62,9 +62,28 @@
         },
         "headline_count": { "type": "integer" },
         "model_selected": { "type": "string" },
+        "decision_weight_factor": { "type": "number" },
+        "decision_weight_reason": { "type": "string" },
         "news_event_ids": {
           "type": "array",
           "items": { "type": "string" }
+        },
+        "event_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "llm_status": {
+          "type": "string"
+        },
+        "model_scores_by_layer": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
         }
       },
       "additionalProperties": false

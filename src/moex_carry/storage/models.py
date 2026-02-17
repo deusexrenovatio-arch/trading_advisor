@@ -241,6 +241,8 @@ class NewsImpactScoreModel(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     news_id: Mapped[str] = mapped_column(String, index=True)
+    target_level: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    target_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     model_id: Mapped[str] = mapped_column(String, index=True)
     model_version: Mapped[str] = mapped_column(String)
     direction: Mapped[str] = mapped_column(String, index=True)
@@ -257,6 +259,7 @@ class NewsSignalLinkModel(Base):
 
     link_id: Mapped[str] = mapped_column(String, primary_key=True)
     news_id: Mapped[str] = mapped_column(String, index=True)
+    event_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     signal_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     decision_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     link_type: Mapped[str] = mapped_column(String, index=True)
@@ -276,4 +279,136 @@ class NewsBacktestReportModel(Base):
     horizon: Mapped[str] = mapped_column(String, index=True)
     model_id: Mapped[str] = mapped_column(String, index=True)
     metrics_json: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsEventModel(Base):
+    __tablename__ = "news_events"
+
+    event_id: Mapped[str] = mapped_column(String, primary_key=True)
+    event_first_published_at_utc: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    event_first_ingested_at_utc: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    event_last_published_at_utc: Mapped[DateTime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    event_status: Mapped[str] = mapped_column(String, index=True)
+    canonical_summary: Mapped[str | None] = mapped_column(String, nullable=True)
+    canonical_mechanism: Mapped[str | None] = mapped_column(String, nullable=True)
+    cluster_version: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsEventItemModel(Base):
+    __tablename__ = "news_event_items"
+
+    event_id: Mapped[str] = mapped_column(String, primary_key=True)
+    news_id: Mapped[str] = mapped_column(String, primary_key=True)
+    link_role: Mapped[str] = mapped_column(String, index=True)
+    similarity_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    added_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsLabelModel(Base):
+    __tablename__ = "news_labels"
+    __table_args__ = (
+        UniqueConstraint(
+            "target_level",
+            "target_id",
+            "label_source",
+            "label_version",
+            "model_version",
+            "prompt_version",
+            name="uq_news_label_target_source_version",
+        ),
+    )
+
+    label_id: Mapped[str] = mapped_column(String, primary_key=True)
+    target_level: Mapped[str] = mapped_column(String, index=True)
+    target_id: Mapped[str] = mapped_column(String, index=True)
+    commodity_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    market_scope: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    instrument_candidates_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    relevance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    news_type_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    direction: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    magnitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lag_bucket: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    uncertainty_type: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    geo_scope: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    evidence_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    label_source: Mapped[str] = mapped_column(String, index=True)
+    label_version: Mapped[str] = mapped_column(String, index=True)
+    model_version: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    prompt_version: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsLlmRunModel(Base):
+    __tablename__ = "news_llm_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "target_level",
+            "target_id",
+            "provider",
+            "model_id",
+            "prompt_version",
+            "input_hash",
+            name="uq_news_llm_run_input",
+        ),
+    )
+
+    run_id: Mapped[str] = mapped_column(String, primary_key=True)
+    target_level: Mapped[str] = mapped_column(String, index=True)
+    target_id: Mapped[str] = mapped_column(String, index=True)
+    provider: Mapped[str] = mapped_column(String, index=True)
+    model_id: Mapped[str] = mapped_column(String, index=True)
+    prompt_version: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    input_hash: Mapped[str] = mapped_column(String, index=True)
+    status: Mapped[str] = mapped_column(String, index=True)
+    token_in: Mapped[int] = mapped_column(Integer, default=0)
+    token_out: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class EventMarketReactionModel(Base):
+    __tablename__ = "event_market_reactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "instrument_id",
+            "window_id",
+            "sampling_freq",
+            name="uq_event_market_reaction",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String, index=True)
+    instrument_id: Mapped[str] = mapped_column(String, index=True)
+    window_id: Mapped[str] = mapped_column(String, index=True)
+    sampling_freq: Mapped[str] = mapped_column(String, index=True)
+    return_raw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    return_abnormal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    car: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rv: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vol_change: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume_change: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quality_flags_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    computed_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsAnnotationModel(Base):
+    __tablename__ = "news_annotations"
+
+    annotation_id: Mapped[str] = mapped_column(String, primary_key=True)
+    target_level: Mapped[str] = mapped_column(String, index=True)
+    target_id: Mapped[str] = mapped_column(String, index=True)
+    payload_json: Mapped[object] = mapped_column(JSON)
+    author_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    version: Mapped[str] = mapped_column(String, index=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)

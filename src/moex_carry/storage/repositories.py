@@ -215,6 +215,48 @@ def load_open_executions(session: Session):
     return rows
 
 
+def upsert_quotes(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    for row in rows:
+        secid = _str_or_none(row.get("secid"))
+        timestamp = _parse_datetime_value(row.get("timestamp"))
+        if secid is None or timestamp is None:
+            continue
+        existing = (
+            session.execute(
+                select(db.QuoteModel).where(
+                    db.QuoteModel.secid == secid,
+                    db.QuoteModel.timestamp == timestamp,
+                )
+            )
+            .scalars()
+            .first()
+        )
+        bid = float(row.get("bid")) if row.get("bid") is not None else None
+        ask = float(row.get("ask")) if row.get("ask") is not None else None
+        last = float(row.get("last")) if row.get("last") is not None else None
+        volume = float(row.get("volume")) if row.get("volume") is not None else None
+        if existing is None:
+            session.add(
+                db.QuoteModel(
+                    secid=secid,
+                    timestamp=timestamp,
+                    bid=bid,
+                    ask=ask,
+                    last=last,
+                    volume=volume,
+                )
+            )
+        else:
+            existing.bid = bid
+            existing.ask = ask
+            existing.last = last
+            existing.volume = volume
+        stored += 1
+    session.commit()
+    return stored
+
+
 def load_signal_executions(
     session: Session, stock: str | None = None, future: str | None = None, limit: int | None = None
 ):
@@ -363,6 +405,19 @@ def load_news_items(
     query = query.order_by(db.NewsItemModel.published_at.desc(), db.NewsItemModel.news_id.desc())
     if limit > 0:
         query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [_news_item_to_dict(row) for row in rows]
+
+
+def load_news_items_by_ids(session: Session, news_ids: Iterable[str]) -> list[dict[str, object]]:
+    normalized = [str(item).strip() for item in news_ids if str(item).strip()]
+    if not normalized:
+        return []
+    query = (
+        select(db.NewsItemModel)
+        .where(db.NewsItemModel.news_id.in_(normalized))
+        .order_by(db.NewsItemModel.published_at.desc(), db.NewsItemModel.news_id.desc())
+    )
     rows = session.execute(query).scalars().all()
     return [_news_item_to_dict(row) for row in rows]
 
@@ -523,7 +578,9 @@ def upsert_news_impact_scores(session: Session, rows: Iterable[dict[str, object]
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
-        news_id = _str_or_none(row.get("news_id"))
+        target_level = _str_or_none(row.get("target_level"))
+        target_id = _str_or_none(row.get("target_id"))
+        news_id = _str_or_none(row.get("news_id")) or (target_id if target_level and target_id else None)
         model_id = _str_or_none(row.get("model_id"))
         model_version = _str_or_none(row.get("model_version")) or "unknown"
         direction = _str_or_none(row.get("direction")) or "neutral"
@@ -538,18 +595,33 @@ def upsert_news_impact_scores(session: Session, rows: Iterable[dict[str, object]
         existing = (
             session.execute(
                 select(db.NewsImpactScoreModel).where(
-                    db.NewsImpactScoreModel.news_id == news_id,
                     db.NewsImpactScoreModel.model_id == model_id,
                     db.NewsImpactScoreModel.model_version == model_version,
+                    db.NewsImpactScoreModel.target_level == target_level,
+                    db.NewsImpactScoreModel.target_id == target_id,
                 )
             )
             .scalars()
             .first()
         )
         if existing is None:
+            existing = (
+                session.execute(
+                    select(db.NewsImpactScoreModel).where(
+                        db.NewsImpactScoreModel.news_id == news_id,
+                        db.NewsImpactScoreModel.model_id == model_id,
+                        db.NewsImpactScoreModel.model_version == model_version,
+                    )
+                )
+                .scalars()
+                .first()
+            )
+        if existing is None:
             session.add(
                 db.NewsImpactScoreModel(
                     news_id=news_id,
+                    target_level=target_level,
+                    target_id=target_id,
                     model_id=model_id,
                     model_version=model_version,
                     direction=direction,
@@ -562,6 +634,9 @@ def upsert_news_impact_scores(session: Session, rows: Iterable[dict[str, object]
                 )
             )
         else:
+            existing.news_id = news_id
+            existing.target_level = target_level
+            existing.target_id = target_id
             existing.direction = direction
             existing.prob_up = prob_up
             existing.prob_down = prob_down
@@ -579,6 +654,8 @@ def load_news_impact_scores(
     *,
     news_ids: Iterable[str] | None = None,
     model_id: str | None = None,
+    target_level: str | None = None,
+    target_ids: Iterable[str] | None = None,
     limit: int = 2000,
 ) -> list[dict[str, object]]:
     query = select(db.NewsImpactScoreModel)
@@ -588,6 +665,12 @@ def load_news_impact_scores(
             query = query.where(db.NewsImpactScoreModel.news_id.in_(normalized))
     if model_id:
         query = query.where(db.NewsImpactScoreModel.model_id == model_id)
+    if target_level:
+        query = query.where(db.NewsImpactScoreModel.target_level == target_level)
+    if target_ids:
+        normalized_target = [str(item).strip() for item in target_ids if str(item).strip()]
+        if normalized_target:
+            query = query.where(db.NewsImpactScoreModel.target_id.in_(normalized_target))
     query = query.order_by(
         db.NewsImpactScoreModel.inference_ts.desc(),
         db.NewsImpactScoreModel.news_id.desc(),
@@ -598,6 +681,8 @@ def load_news_impact_scores(
     return [
         {
             "news_id": row.news_id,
+            "target_level": row.target_level,
+            "target_id": row.target_id,
             "model_id": row.model_id,
             "model_version": row.model_version,
             "direction": row.direction,
@@ -655,6 +740,7 @@ def upsert_news_signal_links(session: Session, rows: Iterable[dict[str, object]]
             continue
         signal_id = _str_or_none(row.get("signal_id"))
         decision_id = _str_or_none(row.get("decision_id"))
+        event_id = _str_or_none(row.get("event_id"))
         window_start = _parse_datetime_value(row.get("window_start")) or now
         window_end = _parse_datetime_value(row.get("window_end")) or now
         gate_action = _str_or_none(row.get("gate_action")) or "allow"
@@ -670,6 +756,7 @@ def upsert_news_signal_links(session: Session, rows: Iterable[dict[str, object]]
             db.NewsSignalLinkModel(
                 link_id=link_id,
                 news_id=news_id,
+                event_id=event_id,
                 signal_id=signal_id,
                 decision_id=decision_id,
                 link_type=link_type,
@@ -690,6 +777,7 @@ def load_news_signal_links(
     *,
     signal_ids: Iterable[str] | None = None,
     news_ids: Iterable[str] | None = None,
+    event_ids: Iterable[str] | None = None,
     decision_id: str | None = None,
     limit: int = 2000,
 ) -> list[dict[str, object]]:
@@ -702,6 +790,10 @@ def load_news_signal_links(
         normalized = [str(item).strip() for item in news_ids if str(item).strip()]
         if normalized:
             query = query.where(db.NewsSignalLinkModel.news_id.in_(normalized))
+    if event_ids:
+        normalized = [str(item).strip() for item in event_ids if str(item).strip()]
+        if normalized:
+            query = query.where(db.NewsSignalLinkModel.event_id.in_(normalized))
     if decision_id:
         query = query.where(db.NewsSignalLinkModel.decision_id == decision_id)
     query = query.order_by(db.NewsSignalLinkModel.created_at.desc(), db.NewsSignalLinkModel.link_id.desc())
@@ -712,6 +804,7 @@ def load_news_signal_links(
         {
             "link_id": row.link_id,
             "news_id": row.news_id,
+            "event_id": row.event_id,
             "signal_id": row.signal_id,
             "decision_id": row.decision_id,
             "link_type": row.link_type,
@@ -784,6 +877,491 @@ def load_news_backtest_reports(
     ]
 
 
+def upsert_news_events(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        event_id = _str_or_none(row.get("event_id"))
+        first_published = _parse_datetime_value(
+            row.get("event_first_published_at_utc") or row.get("event_first_published_at")
+        )
+        if event_id is None or first_published is None:
+            continue
+        session.merge(
+            db.NewsEventModel(
+                event_id=event_id,
+                event_first_published_at_utc=first_published,
+                event_first_ingested_at_utc=_parse_datetime_value(
+                    row.get("event_first_ingested_at_utc") or row.get("event_first_ingested_at")
+                )
+                or first_published,
+                event_last_published_at_utc=_parse_datetime_value(
+                    row.get("event_last_published_at_utc") or row.get("event_last_published_at")
+                ),
+                event_status=_str_or_none(row.get("event_status")) or "active",
+                canonical_summary=_str_or_none(row.get("canonical_summary")),
+                canonical_mechanism=_str_or_none(row.get("canonical_mechanism")),
+                cluster_version=_str_or_none(row.get("cluster_version")) or "v1",
+                created_at=_parse_datetime_value(row.get("created_at")) or now,
+                updated_at=_parse_datetime_value(row.get("updated_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_events(
+    session: Session,
+    *,
+    event_ids: Iterable[str] | None = None,
+    event_status: str | None = None,
+    published_from: str | None = None,
+    published_to: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, object]]:
+    query = select(db.NewsEventModel)
+    if event_ids:
+        normalized = [str(item).strip() for item in event_ids if str(item).strip()]
+        if normalized:
+            query = query.where(db.NewsEventModel.event_id.in_(normalized))
+    if event_status:
+        query = query.where(db.NewsEventModel.event_status == event_status)
+    from_dt = _parse_datetime_value(published_from)
+    to_dt = _parse_datetime_value(published_to)
+    if from_dt is not None:
+        query = query.where(db.NewsEventModel.event_first_published_at_utc >= from_dt)
+    if to_dt is not None:
+        query = query.where(db.NewsEventModel.event_first_published_at_utc <= to_dt)
+    query = query.order_by(
+        db.NewsEventModel.event_first_published_at_utc.desc(),
+        db.NewsEventModel.event_id.desc(),
+    )
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "event_id": row.event_id,
+            "event_first_published_at_utc": _to_iso_z(row.event_first_published_at_utc),
+            "event_first_ingested_at_utc": _to_iso_z(row.event_first_ingested_at_utc),
+            "event_last_published_at_utc": _to_iso_z(row.event_last_published_at_utc),
+            "event_status": row.event_status,
+            "canonical_summary": row.canonical_summary,
+            "canonical_mechanism": row.canonical_mechanism,
+            "cluster_version": row.cluster_version,
+            "created_at": _to_iso_z(row.created_at),
+            "updated_at": _to_iso_z(row.updated_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_news_event_items(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        event_id = _str_or_none(row.get("event_id"))
+        news_id = _str_or_none(row.get("news_id"))
+        if event_id is None or news_id is None:
+            continue
+        session.merge(
+            db.NewsEventItemModel(
+                event_id=event_id,
+                news_id=news_id,
+                link_role=_str_or_none(row.get("link_role")) or "primary",
+                similarity_score=_float_or_none(row.get("similarity_score")),
+                added_at=_parse_datetime_value(row.get("added_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_event_items(
+    session: Session,
+    *,
+    event_ids: Iterable[str] | None = None,
+    news_ids: Iterable[str] | None = None,
+    limit: int = 5000,
+) -> list[dict[str, object]]:
+    query = select(db.NewsEventItemModel)
+    if event_ids:
+        normalized = [str(item).strip() for item in event_ids if str(item).strip()]
+        if normalized:
+            query = query.where(db.NewsEventItemModel.event_id.in_(normalized))
+    if news_ids:
+        normalized = [str(item).strip() for item in news_ids if str(item).strip()]
+        if normalized:
+            query = query.where(db.NewsEventItemModel.news_id.in_(normalized))
+    query = query.order_by(db.NewsEventItemModel.added_at.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "event_id": row.event_id,
+            "news_id": row.news_id,
+            "link_role": row.link_role,
+            "similarity_score": row.similarity_score,
+            "added_at": _to_iso_z(row.added_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_news_labels(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        target_level = _str_or_none(row.get("target_level"))
+        target_id = _str_or_none(row.get("target_id"))
+        if target_level is None or target_id is None:
+            continue
+        label_source = _str_or_none(row.get("label_source")) or "rules"
+        label_version = _str_or_none(row.get("label_version")) or "v1"
+        model_version = _str_or_none(row.get("model_version"))
+        prompt_version = _str_or_none(row.get("prompt_version"))
+        label_id = _str_or_none(row.get("label_id")) or _build_news_label_id(
+            target_level=target_level,
+            target_id=target_id,
+            label_source=label_source,
+            label_version=label_version,
+            model_version=model_version,
+            prompt_version=prompt_version,
+        )
+        session.merge(
+            db.NewsLabelModel(
+                label_id=label_id,
+                target_level=target_level,
+                target_id=target_id,
+                commodity_json=row.get("commodity_json"),
+                market_scope=_str_or_none(row.get("market_scope")),
+                instrument_candidates_json=row.get("instrument_candidates_json"),
+                relevance=_float_or_none(row.get("relevance")),
+                news_type_json=row.get("news_type_json"),
+                direction=_str_or_none(row.get("direction")),
+                magnitude=_float_or_none(row.get("magnitude")),
+                lag_bucket=_str_or_none(row.get("lag_bucket")),
+                confidence=_float_or_none(row.get("confidence")),
+                uncertainty_type=_str_or_none(row.get("uncertainty_type")),
+                geo_scope=_str_or_none(row.get("geo_scope")),
+                evidence_json=row.get("evidence_json"),
+                label_source=label_source,
+                label_version=label_version,
+                model_version=model_version,
+                prompt_version=prompt_version,
+                created_at=_parse_datetime_value(row.get("created_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_labels(
+    session: Session,
+    *,
+    target_level: str | None = None,
+    target_ids: Iterable[str] | None = None,
+    label_source: str | None = None,
+    limit: int = 5000,
+) -> list[dict[str, object]]:
+    query = select(db.NewsLabelModel)
+    if target_level:
+        query = query.where(db.NewsLabelModel.target_level == target_level)
+    if target_ids:
+        normalized = [str(item).strip() for item in target_ids if str(item).strip()]
+        if normalized:
+            query = query.where(db.NewsLabelModel.target_id.in_(normalized))
+    if label_source:
+        query = query.where(db.NewsLabelModel.label_source == label_source)
+    query = query.order_by(db.NewsLabelModel.created_at.desc(), db.NewsLabelModel.label_id.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "label_id": row.label_id,
+            "target_level": row.target_level,
+            "target_id": row.target_id,
+            "commodity_json": row.commodity_json,
+            "market_scope": row.market_scope,
+            "instrument_candidates_json": row.instrument_candidates_json,
+            "relevance": row.relevance,
+            "news_type_json": row.news_type_json,
+            "direction": row.direction,
+            "magnitude": row.magnitude,
+            "lag_bucket": row.lag_bucket,
+            "confidence": row.confidence,
+            "uncertainty_type": row.uncertainty_type,
+            "geo_scope": row.geo_scope,
+            "evidence_json": row.evidence_json,
+            "label_source": row.label_source,
+            "label_version": row.label_version,
+            "model_version": row.model_version,
+            "prompt_version": row.prompt_version,
+            "created_at": _to_iso_z(row.created_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_news_llm_runs(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        target_level = _str_or_none(row.get("target_level"))
+        target_id = _str_or_none(row.get("target_id"))
+        model_id = _str_or_none(row.get("model_id"))
+        if target_level is None or target_id is None or model_id is None:
+            continue
+        provider = _str_or_none(row.get("provider")) or "openai"
+        prompt_version = _str_or_none(row.get("prompt_version"))
+        input_hash = _str_or_none(row.get("input_hash")) or _build_news_llm_input_hash(
+            target_level=target_level,
+            target_id=target_id,
+            model_id=model_id,
+            prompt_version=prompt_version,
+        )
+        run_id = _str_or_none(row.get("run_id")) or _build_news_llm_run_id(
+            target_level=target_level,
+            target_id=target_id,
+            provider=provider,
+            model_id=model_id,
+            prompt_version=prompt_version,
+            input_hash=input_hash,
+        )
+        session.merge(
+            db.NewsLlmRunModel(
+                run_id=run_id,
+                target_level=target_level,
+                target_id=target_id,
+                provider=provider,
+                model_id=model_id,
+                prompt_version=prompt_version,
+                input_hash=input_hash,
+                status=_str_or_none(row.get("status")) or "queued",
+                token_in=int(row.get("token_in") or 0),
+                token_out=int(row.get("token_out") or 0),
+                latency_ms=_int_or_none(row.get("latency_ms")),
+                error_code=_str_or_none(row.get("error_code")),
+                created_at=_parse_datetime_value(row.get("created_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_llm_runs(
+    session: Session,
+    *,
+    target_level: str | None = None,
+    target_id: str | None = None,
+    status: str | None = None,
+    limit: int = 1000,
+) -> list[dict[str, object]]:
+    query = select(db.NewsLlmRunModel)
+    if target_level:
+        query = query.where(db.NewsLlmRunModel.target_level == target_level)
+    if target_id:
+        query = query.where(db.NewsLlmRunModel.target_id == target_id)
+    if status:
+        query = query.where(db.NewsLlmRunModel.status == status)
+    query = query.order_by(db.NewsLlmRunModel.created_at.desc(), db.NewsLlmRunModel.run_id.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "run_id": row.run_id,
+            "target_level": row.target_level,
+            "target_id": row.target_id,
+            "provider": row.provider,
+            "model_id": row.model_id,
+            "prompt_version": row.prompt_version,
+            "input_hash": row.input_hash,
+            "status": row.status,
+            "token_in": row.token_in,
+            "token_out": row.token_out,
+            "latency_ms": row.latency_ms,
+            "error_code": row.error_code,
+            "created_at": _to_iso_z(row.created_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_event_market_reactions(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        event_id = _str_or_none(row.get("event_id"))
+        instrument_id = _str_or_none(row.get("instrument_id"))
+        window_id = _str_or_none(row.get("window_id"))
+        sampling_freq = _str_or_none(row.get("sampling_freq")) or "5m"
+        if event_id is None or instrument_id is None or window_id is None:
+            continue
+        existing = (
+            session.execute(
+                select(db.EventMarketReactionModel).where(
+                    db.EventMarketReactionModel.event_id == event_id,
+                    db.EventMarketReactionModel.instrument_id == instrument_id,
+                    db.EventMarketReactionModel.window_id == window_id,
+                    db.EventMarketReactionModel.sampling_freq == sampling_freq,
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if existing is None:
+            session.add(
+                db.EventMarketReactionModel(
+                    event_id=event_id,
+                    instrument_id=instrument_id,
+                    window_id=window_id,
+                    sampling_freq=sampling_freq,
+                    return_raw=_float_or_none(row.get("return_raw")),
+                    return_abnormal=_float_or_none(row.get("return_abnormal")),
+                    car=_float_or_none(row.get("car")),
+                    rv=_float_or_none(row.get("rv")),
+                    vol_change=_float_or_none(row.get("vol_change")),
+                    volume_change=_float_or_none(row.get("volume_change")),
+                    quality_flags_json=row.get("quality_flags_json"),
+                    computed_at=_parse_datetime_value(row.get("computed_at")) or now,
+                )
+            )
+        else:
+            existing.return_raw = _float_or_none(row.get("return_raw"))
+            existing.return_abnormal = _float_or_none(row.get("return_abnormal"))
+            existing.car = _float_or_none(row.get("car"))
+            existing.rv = _float_or_none(row.get("rv"))
+            existing.vol_change = _float_or_none(row.get("vol_change"))
+            existing.volume_change = _float_or_none(row.get("volume_change"))
+            existing.quality_flags_json = row.get("quality_flags_json")
+            existing.computed_at = _parse_datetime_value(row.get("computed_at")) or now
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_event_market_reactions(
+    session: Session,
+    *,
+    event_ids: Iterable[str] | None = None,
+    instrument_id: str | None = None,
+    window_id: str | None = None,
+    sampling_freq: str | None = None,
+    limit: int = 5000,
+) -> list[dict[str, object]]:
+    query = select(db.EventMarketReactionModel)
+    if event_ids:
+        normalized = [str(item).strip() for item in event_ids if str(item).strip()]
+        if normalized:
+            query = query.where(db.EventMarketReactionModel.event_id.in_(normalized))
+    if instrument_id:
+        query = query.where(db.EventMarketReactionModel.instrument_id == instrument_id)
+    if window_id:
+        query = query.where(db.EventMarketReactionModel.window_id == window_id)
+    if sampling_freq:
+        query = query.where(db.EventMarketReactionModel.sampling_freq == sampling_freq)
+    query = query.order_by(db.EventMarketReactionModel.computed_at.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "event_id": row.event_id,
+            "instrument_id": row.instrument_id,
+            "window_id": row.window_id,
+            "sampling_freq": row.sampling_freq,
+            "return_raw": row.return_raw,
+            "return_abnormal": row.return_abnormal,
+            "car": row.car,
+            "rv": row.rv,
+            "vol_change": row.vol_change,
+            "volume_change": row.volume_change,
+            "quality_flags_json": row.quality_flags_json,
+            "computed_at": _to_iso_z(row.computed_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_news_annotations(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        target_level = _str_or_none(row.get("target_level"))
+        target_id = _str_or_none(row.get("target_id"))
+        if target_level is None or target_id is None:
+            continue
+        payload_json = row.get("payload_json")
+        if not isinstance(payload_json, (dict, list)):
+            payload_json = {}
+        version = _str_or_none(row.get("version")) or "v1"
+        author_id = _str_or_none(row.get("author_id"))
+        reason = _str_or_none(row.get("reason"))
+        annotation_id = _str_or_none(row.get("annotation_id")) or _build_news_annotation_id(
+            target_level=target_level,
+            target_id=target_id,
+            version=version,
+            author_id=author_id,
+            payload=payload_json,
+        )
+        session.merge(
+            db.NewsAnnotationModel(
+                annotation_id=annotation_id,
+                target_level=target_level,
+                target_id=target_id,
+                payload_json=payload_json,
+                author_id=author_id,
+                reason=reason,
+                version=version,
+                created_at=_parse_datetime_value(row.get("created_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_annotations(
+    session: Session,
+    *,
+    target_level: str | None = None,
+    target_id: str | None = None,
+    author_id: str | None = None,
+    limit: int = 1000,
+) -> list[dict[str, object]]:
+    query = select(db.NewsAnnotationModel)
+    if target_level:
+        query = query.where(db.NewsAnnotationModel.target_level == target_level)
+    if target_id:
+        query = query.where(db.NewsAnnotationModel.target_id == target_id)
+    if author_id:
+        query = query.where(db.NewsAnnotationModel.author_id == author_id)
+    query = query.order_by(db.NewsAnnotationModel.created_at.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "annotation_id": row.annotation_id,
+            "target_level": row.target_level,
+            "target_id": row.target_id,
+            "payload_json": row.payload_json,
+            "author_id": row.author_id,
+            "reason": row.reason,
+            "version": row.version,
+            "created_at": _to_iso_z(row.created_at),
+        }
+        for row in rows
+    ]
+
+
 def _str_or_none(value: object) -> str | None:
     if value is None:
         return None
@@ -808,6 +1386,30 @@ def _parse_datetime_value(value: object) -> datetime | None:
     if parsed.tzinfo is not None:
         return parsed.astimezone(timezone.utc).replace(tzinfo=None)
     return parsed
+
+
+def _to_iso_z(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat() + "Z"
+
+
+def _float_or_none(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_or_none(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _build_news_hash(
@@ -846,6 +1448,92 @@ def _build_news_signal_link_id(
     )
     digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
     return f"lnk-{digest}"
+
+
+def _build_news_label_id(
+    *,
+    target_level: str,
+    target_id: str,
+    label_source: str,
+    label_version: str,
+    model_version: str | None,
+    prompt_version: str | None,
+) -> str:
+    raw = "|".join(
+        [
+            target_level.strip(),
+            target_id.strip(),
+            label_source.strip(),
+            label_version.strip(),
+            (model_version or "").strip(),
+            (prompt_version or "").strip(),
+        ]
+    )
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
+    return f"lbl-{digest}"
+
+
+def _build_news_llm_input_hash(
+    *,
+    target_level: str,
+    target_id: str,
+    model_id: str,
+    prompt_version: str | None,
+) -> str:
+    raw = "|".join(
+        [
+            target_level.strip(),
+            target_id.strip(),
+            model_id.strip(),
+            (prompt_version or "").strip(),
+        ]
+    )
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+def _build_news_llm_run_id(
+    *,
+    target_level: str,
+    target_id: str,
+    provider: str,
+    model_id: str,
+    prompt_version: str | None,
+    input_hash: str,
+) -> str:
+    raw = "|".join(
+        [
+            target_level.strip(),
+            target_id.strip(),
+            provider.strip(),
+            model_id.strip(),
+            (prompt_version or "").strip(),
+            input_hash.strip(),
+        ]
+    )
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
+    return f"llm-{digest}"
+
+
+def _build_news_annotation_id(
+    *,
+    target_level: str,
+    target_id: str,
+    version: str,
+    author_id: str | None,
+    payload: object,
+) -> str:
+    payload_text = str(payload)
+    raw = "|".join(
+        [
+            target_level.strip(),
+            target_id.strip(),
+            version.strip(),
+            (author_id or "").strip(),
+            payload_text,
+        ]
+    )
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
+    return f"ann-{digest}"
 
 
 def _news_item_to_dict(row: db.NewsItemModel) -> dict[str, object]:

@@ -1,9 +1,8 @@
 import argparse
 import json
-from datetime import date, datetime, timezone
+from datetime import date, timedelta
 from pathlib import Path
 
-import pandas as pd
 import yaml
 
 from moex_carry.config import load_settings, resolve_paths
@@ -39,20 +38,6 @@ def _parse_precompute(value: str | None) -> bool | None:
     if lowered in {"false", "0", "no", "n"}:
         return False
     raise ValueError(f"Unsupported precompute flag: {value}")
-
-
-def _build_shock_pack_name(
-    min_abs_z: float,
-    *,
-    causal_only: bool,
-    candidate_sources: tuple[str, ...] | None,
-) -> str:
-    z_tag = str(min_abs_z).replace(".", "p")
-    if not causal_only and not candidate_sources:
-        return f"shock_label_pack_zge{z_tag}.jsonl"
-    mode = "causal" if causal_only else "direction"
-    source_tag = "any" if not candidate_sources else "-".join(candidate_sources)
-    return f"shock_label_pack_{mode}_{source_tag}_zge{z_tag}.jsonl"
 
 
 def main() -> None:
@@ -130,137 +115,83 @@ def main() -> None:
     history_parser.add_argument("--retries", type=int, default=3)
     history_parser.add_argument("--retry-backoff-sec", type=float, default=2.0)
 
-    news_ingest_parser = subparsers.add_parser(
-        "news_ingest",
-        help="Ingest commodity news from GDELT/NewsAPI and score impact",
-    )
-    _add_common_args(news_ingest_parser)
-    news_ingest_parser.add_argument(
-        "--news-config",
-        type=str,
-        default="configs/news-livecheck-ng.yaml",
-        help="Path to news ingestion YAML config.",
-    )
-    news_ingest_parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["live", "backfill"],
-        default="live",
-        help="Ingestion mode.",
-    )
-
-    news_compare_parser = subparsers.add_parser(
-        "news_mode_compare",
-        help="Compare current broad-first vs proposed root-event news matching",
-    )
-    _add_common_args(news_compare_parser)
-    news_compare_parser.add_argument("--input-csv", type=str, required=True)
-    news_compare_parser.add_argument("--output-dir", type=str, default=None)
-    news_compare_parser.add_argument("--max-delay-min", type=float, default=60.0)
-    news_compare_parser.add_argument("--broad-min-relevance", type=float, default=1.0)
-    news_compare_parser.add_argument("--v2-min-relevance", type=float, default=0.4)
-
-    shock_episode_parser = subparsers.add_parser(
-        "shock_episode_analysis",
-        help="Analyze primary and aftershock capture for current/proposed news matching modes",
-    )
-    _add_common_args(shock_episode_parser)
-    shock_episode_parser.add_argument("--input-csv", type=str, required=True)
-    shock_episode_parser.add_argument("--output-dir", type=str, default=None)
-    shock_episode_parser.add_argument("--start-ts", type=str, default=None)
-    shock_episode_parser.add_argument("--end-ts", type=str, default=None)
-    shock_episode_parser.add_argument("--max-delay-min", type=float, default=60.0)
-    shock_episode_parser.add_argument("--broad-min-relevance", type=float, default=1.0)
-    shock_episode_parser.add_argument("--v2-min-relevance", type=float, default=0.4)
-    shock_episode_parser.add_argument("--primary-z", type=float, default=2.5)
-    shock_episode_parser.add_argument("--aftershock-z", type=float, default=2.0)
-    shock_episode_parser.add_argument("--episode-window-min", type=int, default=360)
-    shock_episode_parser.add_argument("--max-gap-min", type=int, default=120)
-    shock_episode_parser.add_argument("--same-direction-aftershock-only", action="store_true")
-
-    shock_pack_parser = subparsers.add_parser(
-        "shock_label_pack",
-        help="Build high-impact shock label pack for Chat Pro annotation",
-    )
-    _add_common_args(shock_pack_parser)
-    shock_pack_parser.add_argument("--input-csv", type=str, required=True)
-    shock_pack_parser.add_argument("--output-dir", type=str, default=None)
-    shock_pack_parser.add_argument("--start-ts", type=str, default=None)
-    shock_pack_parser.add_argument("--end-ts", type=str, default=None)
-    shock_pack_parser.add_argument("--min-abs-z", type=float, default=2.5)
-    shock_pack_parser.add_argument("--max-tasks-total", type=int, default=1200)
-    shock_pack_parser.add_argument("--max-tasks-per-day-symbol", type=int, default=20)
-    shock_pack_parser.add_argument("--max-delay-min", type=float, default=60.0)
-    shock_pack_parser.add_argument(
-        "--candidate-source",
-        action="append",
-        choices=["v2_clean", "broad", "none"],
-        default=None,
-        help="Primary candidate source filter; repeat for multiple values.",
-    )
-    shock_pack_parser.add_argument(
-        "--causal-only",
+    news_sync_parser = subparsers.add_parser("news_sync", help="Run news ingestion/linking/inference worker")
+    _add_common_args(news_sync_parser)
+    news_sync_parser.add_argument("--once", action="store_true", help="Run one sync iteration and exit")
+    news_sync_parser.add_argument("--interval-sec", type=int, default=300)
+    news_sync_parser.add_argument("--limit", type=int, default=None)
+    news_sync_parser.add_argument(
+        "--skip-inference",
         action="store_true",
-        help="Build causal-only task pack (direction optional).",
+        help="Disable model inference in worker mode and run ingest/link only.",
     )
 
-    shock_ingest_parser = subparsers.add_parser(
-        "shock_labels_ingest",
-        help="Ingest Chat Pro label JSONL and build silver shock dataset",
+    news_backfill_parser = subparsers.add_parser(
+        "news_backfill",
+        help="Backfill historical commodity news and aligned price series for backtesting.",
     )
-    _add_common_args(shock_ingest_parser)
-    shock_ingest_parser.add_argument("--tasks-jsonl", type=str, required=True)
-    shock_ingest_parser.add_argument("--labels-jsonl", type=str, required=True)
-    shock_ingest_parser.add_argument("--output-dir", type=str, default=None)
-    shock_ingest_parser.add_argument("--min-confidence", type=float, default=0.60)
-
-    shock_ready_parser = subparsers.add_parser(
-        "news_shock_readiness",
-        help="Run launch-readiness checks for shock-news workflow",
-    )
-    _add_common_args(shock_ready_parser)
-    shock_ready_parser.add_argument("--input-csv", type=str, required=True)
-    shock_ready_parser.add_argument("--output-dir", type=str, default=None)
-    shock_ready_parser.add_argument("--start-ts", type=str, default=None)
-    shock_ready_parser.add_argument("--end-ts", type=str, default=None)
-    shock_ready_parser.add_argument("--max-delay-min", type=float, default=60.0)
-    shock_ready_parser.add_argument("--primary-z", type=float, default=2.5)
-    shock_ready_parser.add_argument("--aftershock-z", type=float, default=2.0)
-    shock_ready_parser.add_argument("--episode-window-min", type=int, default=10080)
-    shock_ready_parser.add_argument("--max-gap-min", type=int, default=2880)
-
-    shock_cycle_parser = subparsers.add_parser(
-        "shock_label_cycle",
-        help="Run automated shock labeling cycle (direction pack + causal pack + optional ingest/readiness).",
-    )
-    _add_common_args(shock_cycle_parser)
-    shock_cycle_parser.add_argument("--input-csv", type=str, required=True)
-    shock_cycle_parser.add_argument("--output-dir", type=str, default=None)
-    shock_cycle_parser.add_argument("--start-ts", type=str, default=None)
-    shock_cycle_parser.add_argument("--end-ts", type=str, default=None)
-    shock_cycle_parser.add_argument("--min-abs-z", type=float, default=2.5)
-    shock_cycle_parser.add_argument("--max-delay-min", type=float, default=60.0)
-    shock_cycle_parser.add_argument("--max-tasks-per-day-symbol", type=int, default=20)
-    shock_cycle_parser.add_argument("--direction-max-tasks", type=int, default=300)
-    shock_cycle_parser.add_argument("--causal-max-tasks", type=int, default=900)
-    shock_cycle_parser.add_argument("--direction-candidate-sources", type=str, default="v2_clean")
-    shock_cycle_parser.add_argument("--causal-candidate-sources", type=str, default="broad,none")
-    shock_cycle_parser.add_argument("--direction-labels-jsonl", type=str, default=None)
-    shock_cycle_parser.add_argument("--causal-labels-jsonl", type=str, default=None)
-    shock_cycle_parser.add_argument("--ingest-min-confidence", type=float, default=0.60)
-    shock_cycle_parser.add_argument("--no-telegram-feed", action="store_true")
-    shock_cycle_parser.add_argument(
-        "--telegram-feed-path",
+    _add_common_args(news_backfill_parser)
+    news_backfill_parser.add_argument("--from-date", type=str, default=None)
+    news_backfill_parser.add_argument("--to-date", type=str, default=None)
+    news_backfill_parser.add_argument(
+        "--commodities",
         type=str,
-        default="data/output/shock_alerts/live_shocks.csv",
+        default=None,
+        help="Comma-separated list (e.g. BRN,GOLD,NG_US). Default: all configured profiles.",
     )
-    shock_cycle_parser.add_argument("--telegram-feed-min-abs-z", type=float, default=2.0)
-    shock_cycle_parser.add_argument("--telegram-feed-max-rows", type=int, default=5000)
-    shock_cycle_parser.add_argument("--run-readiness", action="store_true")
-    shock_cycle_parser.add_argument("--primary-z", type=float, default=2.5)
-    shock_cycle_parser.add_argument("--aftershock-z", type=float, default=2.0)
-    shock_cycle_parser.add_argument("--episode-window-min", type=int, default=10080)
-    shock_cycle_parser.add_argument("--max-gap-min", type=int, default=2880)
+    news_backfill_parser.add_argument("--without-prices", action="store_true")
+    news_backfill_parser.add_argument("--run-inference", action="store_true")
+    news_backfill_parser.add_argument("--chunk-days", type=int, default=None)
+    news_backfill_parser.add_argument("--max-windows-per-commodity", type=int, default=None)
+
+    news_qc_parser = subparsers.add_parser(
+        "news_qc",
+        help="Build quality/readiness report for news backtest datasets.",
+    )
+    _add_common_args(news_qc_parser)
+    news_qc_parser.add_argument("--from-date", type=str, default=None)
+    news_qc_parser.add_argument("--to-date", type=str, default=None)
+    news_qc_parser.add_argument(
+        "--commodities",
+        type=str,
+        default=None,
+        help="Comma-separated list (e.g. BRN,GOLD,NG_US). Default: all configured profiles.",
+    )
+
+    news_benchmark_parser = subparsers.add_parser(
+        "news_benchmark",
+        help="Benchmark news model inference matrix and suggest host-optimized safe profile.",
+    )
+    _add_common_args(news_benchmark_parser)
+    news_benchmark_parser.add_argument("--sample-size", type=int, default=60)
+    news_benchmark_parser.add_argument("--lookback-days", type=int, default=365 * 3)
+    news_benchmark_parser.add_argument("--ticker", type=str, default=None)
+    news_benchmark_parser.add_argument(
+        "--batch-sizes",
+        type=str,
+        default="1,2,4,8",
+        help="Comma-separated positive ints.",
+    )
+    news_benchmark_parser.add_argument(
+        "--thread-caps",
+        type=str,
+        default="2,4,6",
+        help="Comma-separated positive ints.",
+    )
+    news_benchmark_parser.add_argument(
+        "--text-caps",
+        type=str,
+        default="1200,1500,2000",
+        help="Comma-separated positive ints.",
+    )
+    news_benchmark_parser.add_argument("--warmup-runs", type=int, default=1)
+    news_benchmark_parser.add_argument("--repeat-runs", type=int, default=2)
+    news_benchmark_parser.add_argument(
+        "--write-profile",
+        type=str,
+        default=None,
+        help="Optional path to write recommended YAML overrides.",
+    )
 
     args = parser.parse_args()
     configure_logging(args.log_level)
@@ -294,6 +225,121 @@ def main() -> None:
             )
         else:
             run_signal_cycle(settings, max_pairs=args.max_pairs, save_csv=not args.no_csv)
+    elif args.command == "news_sync":
+        from moex_carry.news import run_news_sync_worker
+
+        run_news_sync_worker(
+            settings,
+            once=args.once,
+            interval_sec=args.interval_sec,
+            recent_limit=args.limit,
+            run_inference=not args.skip_inference,
+        )
+    elif args.command == "news_backfill":
+        from moex_carry.news import run_news_backfill
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        from_date = date.fromisoformat(args.from_date) if args.from_date else date.fromisoformat(
+            settings.news_ingest.backfill_start_date
+        )
+        to_date = date.fromisoformat(args.to_date) if args.to_date else date.today()
+        commodities = (
+            [item.strip() for item in str(args.commodities).split(",") if item.strip()]
+            if args.commodities
+            else None
+        )
+        with session_factory() as session:
+            report = run_news_backfill(
+                session,
+                settings,
+                period_from=from_date,
+                period_to=to_date,
+                commodities=commodities,
+                include_prices=not args.without_prices,
+                run_inference=args.run_inference,
+                chunk_days_override=args.chunk_days,
+                max_windows_per_commodity=args.max_windows_per_commodity,
+            )
+        print(
+            json.dumps(
+                {
+                    "period_from": report.period_from,
+                    "period_to": report.period_to,
+                    "commodities": report.commodities,
+                    "ingested_count": report.ingested_count,
+                    "entity_link_count": report.entity_link_count,
+                    "tag_link_count": report.tag_link_count,
+                    "score_count": report.score_count,
+                    "event_link_count": report.event_link_count,
+                    "event_created_count": report.event_created_count,
+                    "event_updated_count": report.event_updated_count,
+                    "event_refuted_count": report.event_refuted_count,
+                    "event_resolved_count": report.event_resolved_count,
+                    "quote_count": report.quote_count,
+                    "windows_processed": report.windows_processed,
+                    "qc_report": report.qc_report,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+    elif args.command == "news_qc":
+        from moex_carry.news import run_news_qc
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        from_date = date.fromisoformat(args.from_date) if args.from_date else (date.today() - timedelta(days=365 * 5))
+        to_date = date.fromisoformat(args.to_date) if args.to_date else date.today()
+        commodities = (
+            [item.strip() for item in str(args.commodities).split(",") if item.strip()]
+            if args.commodities
+            else None
+        )
+        with session_factory() as session:
+            report = run_news_qc(
+                session,
+                settings,
+                period_from=from_date,
+                period_to=to_date,
+                commodities=commodities,
+            )
+        print(json.dumps(report, ensure_ascii=False, default=str))
+    elif args.command == "news_benchmark":
+        from moex_carry.news import parse_positive_int_list, run_news_inference_benchmark
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        batch_sizes = parse_positive_int_list(args.batch_sizes, default=[1, 2, 4, 8])
+        thread_caps = parse_positive_int_list(args.thread_caps, default=[2, 4, 6])
+        text_caps = parse_positive_int_list(args.text_caps, default=[1200, 1500, 2000])
+        with session_factory() as session:
+            report = run_news_inference_benchmark(
+                session,
+                settings,
+                sample_size=args.sample_size,
+                lookback_days=args.lookback_days,
+                ticker=args.ticker,
+                batch_sizes=batch_sizes,
+                thread_caps=thread_caps,
+                text_caps=text_caps,
+                warmup_runs=args.warmup_runs,
+                repeat_runs=args.repeat_runs,
+            )
+        if args.write_profile:
+            output_path = Path(args.write_profile)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                yaml.safe_dump(report.get("recommended_profile") or {}, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        print(json.dumps(report, ensure_ascii=False, default=str))
     elif args.command == "ui":
         from moex_carry.ui.app import run_ui
 
@@ -352,261 +398,6 @@ def main() -> None:
             retries=args.retries,
             retry_backoff_sec=args.retry_backoff_sec,
         )
-    elif args.command == "news_ingest":
-        from moex_carry.news_live_runtime import NewsIngestConfig, run_news_ingest_cycle
-
-        cfg = NewsIngestConfig.from_yaml(Path(args.news_config))
-        result = run_news_ingest_cycle(config=cfg, mode=args.mode)
-        print(json.dumps(result, ensure_ascii=False))
-    elif args.command == "news_mode_compare":
-        from moex_carry.news_mode_compare import CompareConfig, run_compare
-
-        input_csv = Path(args.input_csv)
-        if not input_csv.exists():
-            raise FileNotFoundError(f"Input file not found: {input_csv}")
-        if args.output_dir:
-            output_dir = Path(args.output_dir)
-        else:
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("data/output") / f"news_mode_compare_{stamp}"
-
-        config = CompareConfig(
-            max_delay_minutes=args.max_delay_min,
-            broad_min_relevance=args.broad_min_relevance,
-            v2_min_relevance=args.v2_min_relevance,
-        )
-        result = run_compare(input_csv=input_csv, output_dir=output_dir, config=config)
-        payload = {key: str(value) for key, value in result.items()}
-        print(json.dumps(payload, ensure_ascii=False))
-    elif args.command == "shock_episode_analysis":
-        from moex_carry.news_mode_compare import CompareConfig, compare_modes
-        from moex_carry.shock_episodes import ShockEpisodeConfig, run_shock_episode_analysis
-
-        input_csv = Path(args.input_csv)
-        if not input_csv.exists():
-            raise FileNotFoundError(f"Input file not found: {input_csv}")
-        if args.output_dir:
-            output_dir = Path(args.output_dir)
-        else:
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("data/output") / f"shock_episode_analysis_{stamp}"
-
-        input_df = pd.read_csv(input_csv)
-        input_df["shock_ts_dt"] = pd.to_datetime(input_df["shock_ts"], utc=True, errors="coerce")
-        if args.start_ts:
-            start_ts = pd.to_datetime(args.start_ts, utc=True, errors="coerce")
-            if pd.isna(start_ts):
-                raise ValueError(f"Invalid --start-ts: {args.start_ts}")
-            input_df = input_df[input_df["shock_ts_dt"] >= start_ts]
-        if args.end_ts:
-            end_ts = pd.to_datetime(args.end_ts, utc=True, errors="coerce")
-            if pd.isna(end_ts):
-                raise ValueError(f"Invalid --end-ts: {args.end_ts}")
-            input_df = input_df[input_df["shock_ts_dt"] <= end_ts]
-        if input_df.empty:
-            raise ValueError("No rows available after date filtering.")
-
-        compare_cfg = CompareConfig(
-            max_delay_minutes=args.max_delay_min,
-            broad_min_relevance=args.broad_min_relevance,
-            v2_min_relevance=args.v2_min_relevance,
-        )
-        detail_df, _, _ = compare_modes(input_df.drop(columns=["shock_ts_dt"]), compare_cfg)
-
-        episode_cfg = ShockEpisodeConfig(
-            primary_z_threshold=args.primary_z,
-            aftershock_z_threshold=args.aftershock_z,
-            episode_window_minutes=args.episode_window_min,
-            max_gap_minutes=args.max_gap_min,
-            same_direction_aftershock_required=args.same_direction_aftershock_only,
-        )
-        result = run_shock_episode_analysis(
-            detail_df=detail_df,
-            output_dir=output_dir,
-            config=episode_cfg,
-            min_delay_minutes=0.0,
-            max_delay_minutes=args.max_delay_min,
-        )
-        payload = {key: str(value) for key, value in result.items()}
-        print(json.dumps(payload, ensure_ascii=False))
-    elif args.command == "shock_label_pack":
-        from moex_carry.news_shock_pipeline import (
-            LabelPackConfig,
-            ShockCurationConfig,
-            build_shock_label_pack,
-            curate_shock_dataset,
-            write_label_pack_jsonl,
-        )
-
-        input_csv = Path(args.input_csv)
-        if not input_csv.exists():
-            raise FileNotFoundError(f"Input file not found: {input_csv}")
-        if args.output_dir:
-            output_dir = Path(args.output_dir)
-        else:
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("data/output") / f"shock_label_pack_{stamp}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        df = pd.read_csv(input_csv)
-        df["shock_ts_dt"] = pd.to_datetime(df["shock_ts"], utc=True, errors="coerce")
-        if args.start_ts:
-            start_ts = pd.to_datetime(args.start_ts, utc=True, errors="coerce")
-            if pd.isna(start_ts):
-                raise ValueError(f"Invalid --start-ts: {args.start_ts}")
-            df = df[df["shock_ts_dt"] >= start_ts]
-        if args.end_ts:
-            end_ts = pd.to_datetime(args.end_ts, utc=True, errors="coerce")
-            if pd.isna(end_ts):
-                raise ValueError(f"Invalid --end-ts: {args.end_ts}")
-            df = df[df["shock_ts_dt"] <= end_ts]
-        if df.empty:
-            raise ValueError("No rows available after date filtering.")
-        df = df.drop(columns=["shock_ts_dt"])
-
-        curated, issues, curation_summary = curate_shock_dataset(df, ShockCurationConfig.defaults())
-        candidate_sources = tuple(args.candidate_source) if args.candidate_source else None
-        tasks, pack_summary = build_shock_label_pack(
-            curated,
-            LabelPackConfig(
-                min_abs_z=args.min_abs_z,
-                max_tasks_total=args.max_tasks_total,
-                max_tasks_per_day_symbol=args.max_tasks_per_day_symbol,
-                max_delay_minutes=args.max_delay_min,
-                candidate_sources=candidate_sources,
-                causal_only=args.causal_only,
-            ),
-        )
-        jsonl_path = output_dir / _build_shock_pack_name(
-            args.min_abs_z,
-            causal_only=args.causal_only,
-            candidate_sources=candidate_sources,
-        )
-        write_label_pack_jsonl(tasks, jsonl_path)
-        pack_summary_path = output_dir / "shock_label_pack_summary.csv"
-        issues_path = output_dir / "shock_label_pack_curation_issues.csv"
-        curation_summary_path = output_dir / "shock_label_pack_curation_summary.csv"
-        pack_summary.to_csv(pack_summary_path, index=False)
-        issues.to_csv(issues_path, index=False)
-        curation_summary.to_csv(curation_summary_path, index=False)
-        payload = {
-            "tasks": str(jsonl_path),
-            "summary": str(pack_summary_path),
-            "issues": str(issues_path),
-            "curation_summary": str(curation_summary_path),
-            "tasks_count": len(tasks),
-        }
-        print(json.dumps(payload, ensure_ascii=False))
-    elif args.command == "shock_labels_ingest":
-        from moex_carry.news_shock_pipeline import ingest_chat_labels
-
-        tasks_jsonl = Path(args.tasks_jsonl)
-        labels_jsonl = Path(args.labels_jsonl)
-        if not tasks_jsonl.exists():
-            raise FileNotFoundError(f"Tasks JSONL not found: {tasks_jsonl}")
-        if not labels_jsonl.exists():
-            raise FileNotFoundError(f"Labels JSONL not found: {labels_jsonl}")
-        if args.output_dir:
-            output_dir = Path(args.output_dir)
-        else:
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("data/output") / f"shock_silver_ingest_{stamp}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        merged, summary = ingest_chat_labels(
-            tasks_jsonl=tasks_jsonl,
-            labels_jsonl=labels_jsonl,
-            min_confidence=args.min_confidence,
-        )
-        merged_path = output_dir / "shock_silver_labels.csv"
-        summary_path = output_dir / "shock_silver_labels_summary.csv"
-        merged.to_csv(merged_path, index=False)
-        summary.to_csv(summary_path, index=False)
-        payload = {
-            "labels": str(merged_path),
-            "summary": str(summary_path),
-            "rows_total": int(len(merged)),
-            "high_conf_count": int((merged.get("is_high_conf", 0) == 1).sum()) if not merged.empty else 0,
-        }
-        print(json.dumps(payload, ensure_ascii=False))
-    elif args.command == "news_shock_readiness":
-        from moex_carry.news_shock_readiness import ReadinessConfig, run_readiness_assessment
-
-        input_csv = Path(args.input_csv)
-        if not input_csv.exists():
-            raise FileNotFoundError(f"Input file not found: {input_csv}")
-        if args.output_dir:
-            output_dir = Path(args.output_dir)
-        else:
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("data/output") / f"news_shock_readiness_{stamp}"
-
-        result = run_readiness_assessment(
-            input_csv=input_csv,
-            output_dir=output_dir,
-            config=ReadinessConfig(
-                max_delay_minutes=args.max_delay_min,
-                primary_z_threshold=args.primary_z,
-                aftershock_z_threshold=args.aftershock_z,
-                episode_window_minutes=args.episode_window_min,
-                max_gap_minutes=args.max_gap_min,
-            ),
-            start_ts=args.start_ts,
-            end_ts=args.end_ts,
-        )
-        payload = {key: str(value) for key, value in result.items()}
-        print(json.dumps(payload, ensure_ascii=False))
-    elif args.command == "shock_label_cycle":
-        from moex_carry.news_shock_automation import ShockLabelCycleConfig, run_shock_label_cycle
-        from moex_carry.news_shock_readiness import ReadinessConfig
-
-        def _parse_sources(raw: str) -> tuple[str, ...] | None:
-            text = (raw or "").strip().lower()
-            if not text or text == "any":
-                return None
-            values = tuple(part.strip() for part in text.split(",") if part.strip())
-            return values or None
-
-        input_csv = Path(args.input_csv)
-        if not input_csv.exists():
-            raise FileNotFoundError(f"Input file not found: {input_csv}")
-        if args.output_dir:
-            output_dir = Path(args.output_dir)
-        else:
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("data/output") / f"shock_label_cycle_{stamp}"
-
-        result = run_shock_label_cycle(
-            input_csv=input_csv,
-            output_dir=output_dir,
-            config=ShockLabelCycleConfig(
-                min_abs_z=args.min_abs_z,
-                max_tasks_per_day_symbol=args.max_tasks_per_day_symbol,
-                max_delay_minutes=args.max_delay_min,
-                direction_max_tasks_total=args.direction_max_tasks,
-                causal_max_tasks_total=args.causal_max_tasks,
-                direction_candidate_sources=_parse_sources(args.direction_candidate_sources),
-                causal_candidate_sources=_parse_sources(args.causal_candidate_sources),
-                ingest_min_confidence=args.ingest_min_confidence,
-                export_telegram_feed=not bool(args.no_telegram_feed),
-                telegram_feed_path=Path(args.telegram_feed_path),
-                telegram_feed_min_abs_z=args.telegram_feed_min_abs_z,
-                telegram_feed_max_rows=args.telegram_feed_max_rows,
-                run_readiness=args.run_readiness,
-                readiness_config=ReadinessConfig(
-                    max_delay_minutes=args.max_delay_min,
-                    primary_z_threshold=args.primary_z,
-                    aftershock_z_threshold=args.aftershock_z,
-                    episode_window_minutes=args.episode_window_min,
-                    max_gap_minutes=args.max_gap_min,
-                ),
-            ),
-            start_ts=args.start_ts,
-            end_ts=args.end_ts,
-            direction_labels_jsonl=Path(args.direction_labels_jsonl) if args.direction_labels_jsonl else None,
-            causal_labels_jsonl=Path(args.causal_labels_jsonl) if args.causal_labels_jsonl else None,
-        )
-        print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":
