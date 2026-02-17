@@ -99,6 +99,8 @@ def _serialize_trial(trial: TrialResult) -> dict[str, Any]:
         "objective": trial.objective,
         "fold_objectives": list(trial.fold_objectives),
         "fold_results": [_serialize_fold_result(item) for item in trial.fold_results],
+        "evaluation_scope": trial.evaluation_scope,
+        "objective_breakdown": trial.objective_breakdown,
     }
 
 

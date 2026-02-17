@@ -8,6 +8,7 @@ from typing import Any, Callable, Mapping
 
 from moex_carry.backtest_v2.runtime import run_backtest_v2_cached
 from moex_carry.contracts.strategy_test import BacktestRequest
+from moex_carry.hpo.minute_portfolio_pnl import compute_minute_portfolio_window_metrics
 from moex_carry.hpo.objective import aggregate_objectives, compute_objective, compute_window_metrics, invalid_objective
 from moex_carry.hpo.search_space import parse_search_space, sample_random, sample_tpe
 from moex_carry.hpo.types import (
@@ -86,6 +87,7 @@ def _evaluate_trial(
     backtest_runner: BacktestRunner,
 ) -> TrialResult:
     request = _apply_params(base_request, params)
+    evaluation_scope = _objective_scope(objective)
     fold_results: list[FoldResult] = []
     fold_objectives: list[float] = []
     for fold in folds:
@@ -101,7 +103,18 @@ def _evaluate_trial(
         fold_results.append(result)
         fold_objectives.append(result.val_objective)
     aggregated = aggregate_objectives(fold_objectives, aggregation, objective_mode=objective.mode)
-    return TrialResult(params=dict(params), objective=aggregated, fold_objectives=fold_objectives, fold_results=fold_results)
+    objective_breakdown = _build_objective_breakdown(
+        fold_results=fold_results,
+        objective=objective,
+    )
+    return TrialResult(
+        params=dict(params),
+        objective=aggregated,
+        fold_objectives=fold_objectives,
+        fold_results=fold_results,
+        evaluation_scope=evaluation_scope,
+        objective_breakdown=objective_breakdown,
+    )
 
 
 def _evaluate_fold(
@@ -115,22 +128,29 @@ def _evaluate_fold(
     backtest_runner: BacktestRunner,
 ) -> FoldResult:
     try:
-        if evaluation_mode == "WARMUP_THEN_FLAT":
-            val_metrics, test_metrics = _evaluate_warmup_then_flat(
+        if _is_portfolio_scope(objective):
+            val_metrics, test_metrics = _evaluate_portfolio_minute(
                 request=request,
                 fold=fold,
                 data_dir=data_dir,
-                precompute=precompute,
-                backtest_runner=backtest_runner,
             )
         else:
-            val_metrics, test_metrics = _evaluate_continuous(
-                request=request,
-                fold=fold,
-                data_dir=data_dir,
-                precompute=precompute,
-                backtest_runner=backtest_runner,
-            )
+            if evaluation_mode == "WARMUP_THEN_FLAT":
+                val_metrics, test_metrics = _evaluate_warmup_then_flat(
+                    request=request,
+                    fold=fold,
+                    data_dir=data_dir,
+                    precompute=precompute,
+                    backtest_runner=backtest_runner,
+                )
+            else:
+                val_metrics, test_metrics = _evaluate_continuous(
+                    request=request,
+                    fold=fold,
+                    data_dir=data_dir,
+                    precompute=precompute,
+                    backtest_runner=backtest_runner,
+                )
         val_objective = compute_objective(val_metrics, objective)
     except Exception:
         val_metrics = {}
@@ -142,6 +162,31 @@ def _evaluate_fold(
         test_metrics=test_metrics,
         val_objective=val_objective,
     )
+
+
+def _evaluate_portfolio_minute(
+    *,
+    request: BacktestRequest,
+    fold: WalkForwardFold,
+    data_dir: Path,
+) -> tuple[dict[str, float], dict[str, float]]:
+    val_metrics = compute_minute_portfolio_window_metrics(
+        request=request,
+        data_dir=data_dir,
+        start_date=fold.train_start,
+        end_date=fold.test_end,
+        metric_start=fold.val_start,
+        metric_end=fold.val_end,
+    )
+    test_metrics = compute_minute_portfolio_window_metrics(
+        request=request,
+        data_dir=data_dir,
+        start_date=fold.train_start,
+        end_date=fold.test_end,
+        metric_start=fold.test_start,
+        metric_end=fold.test_end,
+    )
+    return val_metrics, test_metrics
 
 
 def _evaluate_continuous(
@@ -238,3 +283,151 @@ def _set_nested(target: dict[str, Any], path: list[str], value: Any) -> None:
     if key not in target or not isinstance(target[key], dict):
         target[key] = {}
     _set_nested(target[key], path[1:], value)
+
+
+def _objective_scope(objective: ObjectiveConfig) -> str:
+    return str(objective.scope or "PORTFOLIO").upper()
+
+
+def _is_portfolio_scope(objective: ObjectiveConfig) -> bool:
+    return _objective_scope(objective) == "PORTFOLIO"
+
+
+def _build_objective_breakdown(
+    *,
+    fold_results: list[FoldResult],
+    objective: ObjectiveConfig,
+) -> dict[str, float] | None:
+    val_metrics = [result.val_metrics for result in fold_results if isinstance(result.val_metrics, dict)]
+    if not val_metrics:
+        return None
+
+    scope = _objective_scope(objective)
+    if scope != "PORTFOLIO":
+        metric_values = [_metric_value(metrics, objective.metric) for metrics in val_metrics]
+        metric_mean = _finite_mean(metric_values)
+        if metric_mean is None:
+            return None
+        return {
+            "metric_mean": float(metric_mean),
+        }
+
+    base_excess_ann = _finite_mean(
+        [
+            _first_finite(metrics.get("PortfolioExcessAnn"), metrics.get("ExcessAnn"))
+            for metrics in val_metrics
+        ]
+    )
+    if base_excess_ann is None:
+        return None
+    base_cagr = _finite_mean(
+        [
+            _first_finite(metrics.get("PortfolioCAGR"), metrics.get("CAGR"))
+            for metrics in val_metrics
+        ]
+    )
+    max_dd = _finite_mean(
+        [abs(float(value)) for value in (_first_finite(metrics.get("PortfolioMaxDD"), metrics.get("MaxDD")) for metrics in val_metrics) if value is not None]
+    ) or 0.0
+    idle_ratio = _finite_mean([_first_finite(metrics.get("PortfolioIdleRatio")) for metrics in val_metrics]) or 0.0
+    forced_exit_rate = _finite_mean(
+        [_first_finite(metrics.get("PortfolioForcedExitRate")) for metrics in val_metrics]
+    ) or 0.0
+    unfilled_entry_rate = _finite_mean(
+        [_first_finite(metrics.get("PortfolioUnfilledEntryRate")) for metrics in val_metrics]
+    ) or 0.0
+    turnover = _finite_mean(
+        [
+            _first_finite(metrics.get("PortfolioTurnover"), metrics.get("AvgTurnover"))
+            for metrics in val_metrics
+        ]
+    ) or 0.0
+
+    dd_soft_limit = abs(float(objective.dd_soft_limit))
+    penalty_dd = float(objective.lambda_dd) * max(0.0, float(max_dd) - dd_soft_limit)
+    penalty_idle = float(objective.lambda_idle) * float(idle_ratio)
+    penalty_forced = float(objective.lambda_forced) * float(forced_exit_rate)
+    penalty_unfilled = float(objective.lambda_unfilled) * float(unfilled_entry_rate)
+    penalty_turnover = float(objective.lambda_turnover) * float(turnover)
+    total_penalty = penalty_dd + penalty_idle + penalty_forced + penalty_unfilled + penalty_turnover
+
+    portfolio_metric = str(objective.portfolio_metric or "utility").lower()
+    base_metric = float(base_cagr) if portfolio_metric == "cagr" and base_cagr is not None else float(base_excess_ann)
+    utility = float(base_excess_ann) - total_penalty
+
+    hard_max_dd = _as_float_or_none(objective.hard_max_dd)
+    hard_max_idle = _as_float_or_none(objective.hard_max_idle_ratio)
+    hard_max_forced = _as_float_or_none(objective.hard_max_forced_exit_rate)
+    hard_max_unfilled = _as_float_or_none(objective.hard_max_unfilled_entry_rate)
+    hard_gate_pass = True
+    if hard_max_dd is not None and float(max_dd) > hard_max_dd:
+        hard_gate_pass = False
+    if hard_max_idle is not None and float(idle_ratio) > hard_max_idle:
+        hard_gate_pass = False
+    if hard_max_forced is not None and float(forced_exit_rate) > hard_max_forced:
+        hard_gate_pass = False
+    if hard_max_unfilled is not None and float(unfilled_entry_rate) > hard_max_unfilled:
+        hard_gate_pass = False
+
+    return {
+        "base_excess_ann": float(base_excess_ann),
+        "base_cagr": float(base_cagr or 0.0),
+        "base_metric": float(base_metric),
+        "portfolio_metric": 1.0 if portfolio_metric == "cagr" else 0.0,
+        "max_dd": float(max_dd),
+        "idle_ratio": float(idle_ratio),
+        "forced_exit_rate": float(forced_exit_rate),
+        "unfilled_entry_rate": float(unfilled_entry_rate),
+        "turnover": float(turnover),
+        "penalty_dd": float(penalty_dd),
+        "penalty_idle": float(penalty_idle),
+        "penalty_forced": float(penalty_forced),
+        "penalty_unfilled": float(penalty_unfilled),
+        "penalty_turnover": float(penalty_turnover),
+        "penalty_total": float(total_penalty),
+        "utility": float(utility),
+        "hard_gate_pass": 1.0 if hard_gate_pass else 0.0,
+    }
+
+
+def _metric_value(metrics: Mapping[str, Any], metric_name: str | None) -> float | None:
+    key = str(metric_name or "excess_ann").lower()
+    if key in {"excessann", "excess_ann", "excess"}:
+        return _first_finite(metrics.get("ExcessAnn"))
+    if key in {"cagr"}:
+        return _first_finite(metrics.get("CAGR"))
+    if key in {"ir"}:
+        return _first_finite(metrics.get("IR"))
+    if key in {"maxdd", "max_dd"}:
+        value = _first_finite(metrics.get("MaxDD"))
+        return abs(float(value)) if value is not None else None
+    return _first_finite(metrics.get("ExcessAnn"))
+
+
+def _first_finite(*values: Any) -> float | None:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric):
+            return numeric
+    return None
+
+
+def _finite_mean(values: list[float | None]) -> float | None:
+    cleaned = [float(value) for value in values if value is not None and math.isfinite(float(value))]
+    if not cleaned:
+        return None
+    return float(sum(cleaned) / len(cleaned))
+
+
+def _as_float_or_none(value: float | None) -> float | None:
+    if value is None:
+        return None
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        return None
+    return numeric
