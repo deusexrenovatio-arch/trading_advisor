@@ -192,6 +192,7 @@ class UiConfig(BaseModel):
     unified_front_roll_days: int = 7
     require_score_gate_by_default: bool = True
     require_score_gate_top_pairs_by_default: bool = False
+    signal_entry_intent_ttl_hours: int = 72
 
 
 class TelegramConfig(BaseModel):
@@ -202,6 +203,7 @@ class TelegramConfig(BaseModel):
     poll_timeout_sec: int = 25
     signal_fetch_interval_sec: int = 30
     hold_open_daily_limit: int = 1
+    enter_resend_cooldown_minutes: int = 60
     callback_ttl_hours: int = 72
     daily_healthcheck_enabled: bool = True
     daily_healthcheck_time_local: str = "09:00"

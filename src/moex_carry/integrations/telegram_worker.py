@@ -13,11 +13,21 @@ import requests
 
 from moex_carry.config import AppSettings
 from moex_carry.signals_ack import build_ack_note, build_signal_fingerprint
+from moex_carry.signals_delivery import (
+    DELIVERY_ACTIONS,
+    entry_plan_from_row as _entry_plan_from_row,
+    entry_plan_has_bounds as _entry_plan_has_bounds,
+    entry_range_eligible_for_plan as _entry_range_eligible_for_plan,
+    first_numeric as _first_numeric,
+    parse_iso_utc as _parse_iso,
+    signal_delivery_state,
+    to_float as _to_float,
+)
 
 
 logger = logging.getLogger(__name__)
 
-_SIGNAL_ACTIONS = {"enter", "exit", "hold_open"}
+_SIGNAL_ACTIONS = set(DELIVERY_ACTIONS)
 _SENT_FINGERPRINT_TTL_HOURS = 168
 
 
@@ -32,19 +42,6 @@ def _safe_int(value: object) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
-
-
-def _parse_iso(value: object) -> datetime | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    normalized = value.replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 def _parse_hhmm(value: object, *, fallback: tuple[int, int] = (9, 0)) -> tuple[int, int]:
@@ -62,41 +59,6 @@ def _parse_hhmm(value: object, *, fallback: tuple[int, int] = (9, 0)) -> tuple[i
         fallback[1],
     )
     return fallback
-
-
-def _to_float(value: object) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _first_numeric(row: dict[str, object], *keys: str) -> float | None:
-    for key in keys:
-        if key not in row:
-            continue
-        value = _to_float(row.get(key))
-        if value is not None:
-            return value
-    return None
-
-
-def _bounded_value_ok(*, current: float | None, lower: object, upper: object) -> bool:
-    lower_value = _to_float(lower)
-    upper_value = _to_float(upper)
-    if lower_value is None and upper_value is None:
-        return True
-    if current is None:
-        return False
-    if lower_value is not None and upper_value is not None and lower_value > upper_value:
-        lower_value, upper_value = upper_value, lower_value
-    if lower_value is not None and current < lower_value:
-        return False
-    if upper_value is not None and current > upper_value:
-        return False
-    return True
 
 
 class TelegramWorker:
@@ -147,6 +109,8 @@ class TelegramWorker:
             "registered_chats": {},
             "sent_fingerprints": {},
             "hold_open_last_sent_date_by_pair": {},
+            "enter_last_sent_at_by_pair": {},
+            "enter_tracking_by_fingerprint": {},
             "daily_healthcheck_last_sent_date_by_chat": {},
             "pending_callbacks": {},
         }
@@ -178,6 +142,19 @@ class TelegramWorker:
             for key, value in (payload.get("hold_open_last_sent_date_by_pair") or {}).items()
             if isinstance(key, str) and isinstance(value, str)
         }
+        state["enter_last_sent_at_by_pair"] = {
+            str(key): str(value)
+            for key, value in (payload.get("enter_last_sent_at_by_pair") or {}).items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+        raw_tracking = payload.get("enter_tracking_by_fingerprint") or {}
+        if isinstance(raw_tracking, dict):
+            normalized_tracking: dict[str, dict[str, object]] = {}
+            for key, value in raw_tracking.items():
+                if not isinstance(key, str) or not isinstance(value, dict):
+                    continue
+                normalized_tracking[key] = dict(value)
+            state["enter_tracking_by_fingerprint"] = normalized_tracking
         state["daily_healthcheck_last_sent_date_by_chat"] = {
             str(key): str(value)
             for key, value in (payload.get("daily_healthcheck_last_sent_date_by_chat") or {}).items()
@@ -365,48 +342,61 @@ class TelegramWorker:
         ttl_hours = max(int(self.cfg.callback_ttl_hours), 1)
         return datetime.now(timezone.utc) > (created_at + timedelta(hours=ttl_hours))
 
-    def _is_entry_signal_expired(self, row: dict[str, object]) -> bool:
-        signal_ts = _parse_iso(row.get("timestamp"))
-        if signal_ts is None:
-            return True
-        ttl_hours = max(int(self.cfg.callback_ttl_hours), 1)
-        return datetime.now(timezone.utc) > (signal_ts + timedelta(hours=ttl_hours))
-
-    def _entry_range_eligible(self, row: dict[str, object]) -> bool:
-        action = str(row.get("signal_action") or "").strip().lower()
-        if action != "enter":
-            return True
-
+    def _format_out_of_range_update(
+        self,
+        *,
+        row: dict[str, object],
+        baseline_plan: dict[str, float | None],
+    ) -> str:
+        stock = str(row.get("stock") or "").strip() or "N/A"
+        future = str(row.get("future") or "").strip() or "N/A"
         stock_now = _first_numeric(row, "spot_mid", "stock_mid", "stock_price", "stock_last_price")
         future_now = _first_numeric(row, "future_mid", "future_price", "future_last_price")
         spread_now = _first_numeric(row, "spread_mid", "spread")
         spread_pct_now = _first_numeric(row, "spread_pct")
 
-        if not _bounded_value_ok(
-            current=stock_now,
-            lower=row.get("entry_stock_min"),
-            upper=row.get("entry_stock_max"),
-        ):
-            return False
-        if not _bounded_value_ok(
-            current=future_now,
-            lower=row.get("entry_future_min_per_share"),
-            upper=row.get("entry_future_max_per_share"),
-        ):
-            return False
-        if not _bounded_value_ok(
-            current=spread_now,
-            lower=row.get("entry_spread_min"),
-            upper=row.get("entry_spread_max"),
-        ):
-            return False
-        if not _bounded_value_ok(
-            current=spread_pct_now,
-            lower=row.get("entry_spread_pct_min"),
-            upper=row.get("entry_spread_pct_max"),
-        ):
-            return False
-        return True
+        def _fmt(value: float | None, digits: int = 4) -> str:
+            return "n/a" if value is None else f"{value:.{digits}f}"
+
+        def _fmt_pct(value: float | None, digits: int = 2) -> str:
+            return "n/a" if value is None else f"{value * 100:.{digits}f}%"
+
+        lines = [
+            "⚠️ Обновление по сигналу ENTER",
+            f"📈 Пара: {stock}/{future}",
+            "Цена вышла за диапазон первоначального плана входа.",
+            f"• Текущий {stock}: {_fmt(stock_now)}",
+            (
+                "• План {0}: {1} .. {2}".format(
+                    stock,
+                    _fmt(baseline_plan.get("entry_stock_min")),
+                    _fmt(baseline_plan.get("entry_stock_max")),
+                )
+            ),
+            f"• Текущий {future}: {_fmt(future_now)}",
+            (
+                "• План {0}: {1} .. {2}".format(
+                    future,
+                    _fmt(baseline_plan.get("entry_future_min_per_share")),
+                    _fmt(baseline_plan.get("entry_future_max_per_share")),
+                )
+            ),
+            f"• Текущий spread: {_fmt(spread_now)}",
+            (
+                "• План spread: {0} .. {1}".format(
+                    _fmt(baseline_plan.get("entry_spread_min")),
+                    _fmt(baseline_plan.get("entry_spread_max")),
+                )
+            ),
+            f"• Текущий spread (%): {_fmt_pct(spread_pct_now)}",
+            (
+                "• План spread (%): {0} .. {1}".format(
+                    _fmt_pct(baseline_plan.get("entry_spread_pct_min")),
+                    _fmt_pct(baseline_plan.get("entry_spread_pct_max")),
+                )
+            ),
+        ]
+        return "\n".join(lines)
 
     def _handle_callback(self, query: dict[str, object]) -> None:
         callback_query_id = str(query.get("id") or "")
@@ -513,16 +503,45 @@ class TelegramWorker:
                     sent.pop(key, None)
                     changed = True
 
+        enter_last_sent = self._state.get("enter_last_sent_at_by_pair")
+        if isinstance(enter_last_sent, dict):
+            for key in list(enter_last_sent.keys()):
+                ts = _parse_iso(enter_last_sent.get(key))
+                if ts is None or now > (ts + timedelta(hours=_SENT_FINGERPRINT_TTL_HOURS)):
+                    enter_last_sent.pop(key, None)
+                    changed = True
+
+        tracking = self._state.get("enter_tracking_by_fingerprint")
+        if isinstance(tracking, dict):
+            valid_fingerprints = set(sent.keys()) if isinstance(sent, dict) else set()
+            for key in list(tracking.keys()):
+                if key not in valid_fingerprints:
+                    tracking.pop(key, None)
+                    changed = True
+
         if changed:
             self._save_state()
 
     def _fetch_active_signals(self) -> list[dict[str, object]]:
-        response = self._backend_session.get(f"{self._backend_base_url}/api/signals/active", timeout=20)
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, list):
-            return []
-        return [item for item in payload if isinstance(item, dict)]
+        endpoints = (
+            f"{self._backend_base_url}/api/v2/signals/active",
+            f"{self._backend_base_url}/api/signals/active",
+        )
+        last_error: Exception | None = None
+        for url in endpoints:
+            try:
+                response = self._backend_session.get(url, timeout=20)
+                response.raise_for_status()
+            except Exception as exc:
+                last_error = exc
+                continue
+            payload = response.json()
+            if not isinstance(payload, list):
+                return []
+            return [item for item in payload if isinstance(item, dict)]
+        if last_error is not None:
+            raise last_error
+        return []
 
     def _format_daily_healthcheck_message(
         self,
@@ -739,24 +758,38 @@ class TelegramWorker:
         if not isinstance(hold_open_map, dict):
             hold_open_map = {}
             self._state["hold_open_last_sent_date_by_pair"] = hold_open_map
+        enter_last_sent_map = self._state.get("enter_last_sent_at_by_pair")
+        if not isinstance(enter_last_sent_map, dict):
+            enter_last_sent_map = {}
+            self._state["enter_last_sent_at_by_pair"] = enter_last_sent_map
+        enter_tracking_map = self._state.get("enter_tracking_by_fingerprint")
+        if not isinstance(enter_tracking_map, dict):
+            enter_tracking_map = {}
+            self._state["enter_tracking_by_fingerprint"] = enter_tracking_map
         callbacks = self._state.get("pending_callbacks")
         if not isinstance(callbacks, dict):
             callbacks = {}
             self._state["pending_callbacks"] = callbacks
 
         now_iso = _iso_now()
+        now_dt = datetime.now(timezone.utc)
         today = datetime.now(timezone.utc).date().isoformat()
         changed = False
 
         for row in rows:
-            action = str(row.get("signal_action") or "").strip().lower()
+            delivery = signal_delivery_state(
+                row,
+                callback_ttl_hours=int(self.cfg.callback_ttl_hours),
+                now_utc=now_dt,
+            )
+            action = str(delivery.get("delivery_action") or "").strip().lower()
             if action not in _SIGNAL_ACTIONS:
                 continue
-            if action == "enter" and bool(row.get("signal_used")):
+            pair_key = f"{str(row.get('stock') or '').strip()}|{str(row.get('future') or '').strip()}"
+            fingerprint_raw = str(row.get("signal_fingerprint") or "").strip()
+            if action == "enter" and bool(delivery.get("signal_used")):
                 continue
-            if action == "enter" and self._is_entry_signal_expired(row):
-                continue
-            if action == "enter" and not self._entry_range_eligible(row):
+            if action == "enter" and bool(delivery.get("entry_signal_expired")):
                 continue
             run_id = str(row.get("run_id") or "").strip()
             timestamp = str(row.get("timestamp") or "").strip()
@@ -765,16 +798,68 @@ class TelegramWorker:
             direction = row.get("signal_direction")
             if not run_id or not timestamp or not stock or not future:
                 continue
-            fingerprint = build_signal_fingerprint(
-                run_id=run_id,
-                timestamp=timestamp,
-                stock=stock,
-                future=future,
-                signal_action=action,
+            fingerprint = (
+                fingerprint_raw
+                if fingerprint_raw
+                else build_signal_fingerprint(
+                    run_id=run_id,
+                    timestamp=timestamp,
+                    stock=stock,
+                    future=future,
+                    signal_action=action,
+                )
             )
-            if fingerprint in sent_map:
+
+            if action == "enter":
+                if fingerprint in sent_map:
+                    tracking_entry = enter_tracking_map.get(fingerprint)
+                    if isinstance(tracking_entry, dict):
+                        baseline_raw = tracking_entry.get("baseline_plan")
+                        baseline_plan = (
+                            {
+                                key: _to_float(value)
+                                for key, value in baseline_raw.items()
+                                if isinstance(key, str)
+                            }
+                            if isinstance(baseline_raw, dict)
+                            else {}
+                        )
+                        out_of_range_notified = str(tracking_entry.get("out_of_range_notified_at") or "").strip()
+                        if (
+                            _entry_plan_has_bounds(baseline_plan)
+                            and not out_of_range_notified
+                            and not _entry_range_eligible_for_plan(row, baseline_plan)
+                        ):
+                            update_text = self._format_out_of_range_update(
+                                row=row,
+                                baseline_plan=baseline_plan,
+                            )
+                            delivered_update = False
+                            for chat_id in target_chats:
+                                try:
+                                    self._send_text(chat_id, update_text)
+                                except Exception:
+                                    logger.exception(
+                                        "Failed to send out-of-range update to chat_id=%s",
+                                        chat_id,
+                                    )
+                                    continue
+                                delivered_update = True
+                            if delivered_update:
+                                tracking_entry["out_of_range_notified_at"] = now_iso
+                                changed = True
+                    continue
+
+                cooldown_minutes = max(int(self.cfg.enter_resend_cooldown_minutes or 0), 0)
+                if cooldown_minutes > 0:
+                    last_sent = _parse_iso(enter_last_sent_map.get(pair_key))
+                    if last_sent is not None and now_dt < (last_sent + timedelta(minutes=cooldown_minutes)):
+                        continue
+                if not bool(delivery.get("entry_range_eligible")):
+                    continue
+            elif fingerprint in sent_map:
                 continue
-            pair_key = f"{stock}|{future}"
+
             if action == "hold_open" and int(self.cfg.hold_open_daily_limit or 0) >= 1:
                 last_sent_date = str(hold_open_map.get(pair_key) or "")
                 if last_sent_date == today:
@@ -808,6 +893,14 @@ class TelegramWorker:
                 sent_map[fingerprint] = now_iso
                 if action == "hold_open":
                     hold_open_map[pair_key] = today
+                if action == "enter":
+                    enter_last_sent_map[pair_key] = now_iso
+                    enter_tracking_map[fingerprint] = {
+                        "pair_key": pair_key,
+                        "created_at": now_iso,
+                        "out_of_range_notified_at": None,
+                        "baseline_plan": _entry_plan_from_row(row),
+                    }
                 changed = True
 
         if changed:

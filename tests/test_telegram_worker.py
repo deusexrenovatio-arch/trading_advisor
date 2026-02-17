@@ -78,6 +78,7 @@ def _build_settings(
     bot_token: str | None = "test-token",
     allowed_user_ids: list[int] | None = None,
     callback_ttl_hours: int = 72,
+    enter_resend_cooldown_minutes: int = 60,
     daily_healthcheck_enabled: bool = True,
     daily_healthcheck_time_local: str = "00:00",
 ) -> AppSettings:
@@ -92,6 +93,7 @@ def _build_settings(
             poll_timeout_sec=0,
             signal_fetch_interval_sec=1,
             hold_open_daily_limit=1,
+            enter_resend_cooldown_minutes=enter_resend_cooldown_minutes,
             callback_ttl_hours=callback_ttl_hours,
             daily_healthcheck_enabled=daily_healthcheck_enabled,
             daily_healthcheck_time_local=daily_healthcheck_time_local,
@@ -329,6 +331,217 @@ def test_worker_respects_entry_ranges_for_both_legs(tmp_path):
 
     assert len(telegram_session.sent_messages) == 1
     assert "BBB/BBH6" in str(telegram_session.sent_messages[0]["text"])
+
+
+def test_worker_uses_signal_fingerprint_from_api_for_enter_dedup(tmp_path):
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        enter_resend_cooldown_minutes=0,
+    )
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    later_iso = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+    rows_cycle_1 = [
+        {
+            "run_id": "run-1",
+            "timestamp": now_iso,
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.2,
+            "signal_fingerprint": "fp-enter-stable-1",
+            "spot_mid": 100.0,
+            "future_mid": 101.0,
+            "entry_stock_min": 99.0,
+            "entry_stock_max": 101.0,
+        }
+    ]
+    rows_cycle_2 = [
+        {
+            "run_id": "run-2",
+            "timestamp": later_iso,
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.21,
+            "signal_fingerprint": "fp-enter-stable-1",
+            "spot_mid": 100.2,
+            "future_mid": 101.1,
+            "entry_stock_min": 99.0,
+            "entry_stock_max": 101.0,
+        }
+    ]
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[rows_cycle_1, rows_cycle_2])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker._broadcast_signals()
+    worker._broadcast_signals()
+
+    assert len(telegram_session.sent_messages) == 1
+    callbacks = worker._state["pending_callbacks"]
+    assert isinstance(callbacks, dict)
+    callback_values = list(callbacks.values())
+    assert len(callback_values) == 1
+    assert callback_values[0]["fingerprint"] == "fp-enter-stable-1"
+
+
+def test_worker_notifies_once_when_sent_enter_goes_out_of_range(tmp_path):
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        enter_resend_cooldown_minutes=0,
+    )
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    rows_in_range = [
+        {
+            "run_id": "run-1",
+            "timestamp": now_iso,
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.2,
+            "signal_fingerprint": "fp-enter-range-1",
+            "spot_mid": 100.0,
+            "future_mid": 101.0,
+            "spread_mid": 1.0,
+            "spread_pct": 0.01,
+            "entry_stock_min": 99.0,
+            "entry_stock_max": 101.0,
+            "entry_future_min_per_share": 100.0,
+            "entry_future_max_per_share": 102.0,
+            "entry_spread_min": 0.5,
+            "entry_spread_max": 1.5,
+            "entry_spread_pct_min": 0.005,
+            "entry_spread_pct_max": 0.015,
+        }
+    ]
+    rows_out_of_range = [
+        {
+            "run_id": "run-2",
+            "timestamp": now_iso,
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.25,
+            "signal_fingerprint": "fp-enter-range-1",
+            "spot_mid": 105.0,
+            "future_mid": 101.0,
+            "spread_mid": 4.0,
+            "spread_pct": 0.04,
+            "entry_stock_min": 104.0,
+            "entry_stock_max": 106.0,
+        }
+    ]
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(
+        active_batches=[rows_in_range, rows_out_of_range, rows_out_of_range]
+    )
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker._broadcast_signals()
+    worker._broadcast_signals()
+    worker._broadcast_signals()
+
+    assert len(telegram_session.sent_messages) == 2
+    first_text = str(telegram_session.sent_messages[0]["text"])
+    second_text = str(telegram_session.sent_messages[1]["text"])
+    assert "Новый сигнал" in first_text
+    assert "вышла за диапазон" in second_text
+
+
+def test_worker_throttles_new_enter_fingerprints_per_pair(tmp_path):
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        enter_resend_cooldown_minutes=120,
+    )
+    now = datetime.now(timezone.utc)
+    rows_cycle_1 = [
+        {
+            "run_id": "run-1",
+            "timestamp": now.isoformat().replace("+00:00", "Z"),
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.2,
+            "signal_fingerprint": "fp-enter-cooldown-1",
+            "spot_mid": 100.0,
+            "entry_stock_min": 99.0,
+            "entry_stock_max": 101.0,
+        }
+    ]
+    rows_cycle_2 = [
+        {
+            "run_id": "run-2",
+            "timestamp": (now + timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.3,
+            "signal_fingerprint": "fp-enter-cooldown-2",
+            "spot_mid": 100.1,
+            "entry_stock_min": 99.0,
+            "entry_stock_max": 101.5,
+        }
+    ]
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[rows_cycle_1, rows_cycle_2])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker._broadcast_signals()
+    worker._broadcast_signals()
+
+    assert len(telegram_session.sent_messages) == 1
+
+
+def test_worker_prefers_v2_active_endpoint(tmp_path):
+    settings = _build_settings(tmp_path, allowed_user_ids=[111], callback_ttl_hours=24)
+    rows = [
+        {
+            "run_id": "run-v2-endpoint",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "exit",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.2,
+        }
+    ]
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[rows])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker._broadcast_signals()
+
+    assert backend_session.get_calls
+    assert backend_session.get_calls[0].endswith("/api/v2/signals/active")
 
 
 def test_worker_callback_ack_happy_path(tmp_path):
