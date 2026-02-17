@@ -570,7 +570,7 @@ def build_rebalance_config(resolved_config: Mapping[str, Any]) -> RebalanceConfi
     universe_cfg = resolved_config.get("universe", {}) if isinstance(resolved_config, Mapping) else {}
 
     cadence = str(rebalance_cfg.get("cadence") or "weekly").upper()
-    if cadence.startswith("DAY"):
+    if cadence.startswith("DAI") or cadence.startswith("DAY"):
         soft_freq = "DAILY"
     elif cadence.startswith("WEEK"):
         soft_freq = "WEEKLY"
@@ -616,7 +616,11 @@ def build_rebalance_config(resolved_config: Mapping[str, Any]) -> RebalanceConfi
         h_max_days=int(strategy_cfg.get("H_max_days") or 20),
         exit_on_floor_fail=True,
         allocation_method="EQUAL",
-        target_utilization=1.0,
+        target_utilization=(
+            float(rebalance_cfg.get("target_utilization"))
+            if rebalance_cfg.get("target_utilization") is not None
+            else 1.0
+        ),
         max_weight_per_pair=None,
         alpha_overlay_weight=1.0,
         capital_base_mode=str(strategy_cfg.get("capital_base_mode") or "FULL_CASH"),

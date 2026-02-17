@@ -157,6 +157,9 @@ def _validate_request(request: BacktestRequest) -> None:
         raise ValueError(
             "execution.mode must be INTRADAY_MINUTE, DAILY_COMMON_MINUTE, DAILY_EOD, or DAILY_NEXT_OPEN"
         )
+    execution_model = str(execution.execution_model or "MINUTE_REPLAY").upper()
+    if execution_model not in {"MINUTE_REPLAY", "DAILY_V2"}:
+        raise ValueError("execution.execution_model must be MINUTE_REPLAY or DAILY_V2")
     price_source = str(execution.price_source or "common_minute_close").strip().lower()
     if price_source not in {"common_minute_close", "daily_close"}:
         raise ValueError("execution.price_source must be common_minute_close or daily_close")
@@ -186,6 +189,7 @@ def _validate_request(request: BacktestRequest) -> None:
     _require_range(strategy.SL_pct, "strategy.SL_pct", min_value=0.0, max_value=1.0)
     _require_range(allocation.min_trade_weight, "allocation.min_trade_weight", min_value=0.0, max_value=1.0)
     _require_range(rebalance.threshold_pct, "rebalance.threshold_pct", min_value=0.0, max_value=1.0)
+    _require_range(rebalance.target_utilization, "rebalance.target_utilization", min_value=0.0, max_value=1.0)
     _require_range(allocation.max_turnover_pct, "allocation.max_turnover_pct", min_value=0.0, max_value=1.0)
 
     _require_positive(portfolio.margin_proxy, "portfolio.margin_proxy", allow_zero=False)

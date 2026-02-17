@@ -35,6 +35,8 @@ class BacktestExecutionConfig(BaseModel):
     mode: Literal["INTRADAY_MINUTE", "DAILY_COMMON_MINUTE", "DAILY_EOD", "DAILY_NEXT_OPEN"] = (
         "INTRADAY_MINUTE"
     )
+    execution_model: Literal["MINUTE_REPLAY", "DAILY_V2"] = "MINUTE_REPLAY"
+    minute_fail_fast: bool = True
     price_source: str = "common_minute_close"
     common_minute_anchor: str = "last"
     price_mode: str = "BIDASK"
@@ -152,6 +154,7 @@ class BacktestRebalanceConfig(BaseModel):
     cadence: str = "weekly"
     threshold_pct: float = 0.02
     cooldown_days: int = 3
+    target_utilization: float = 1.0
 
 
 class BacktestRequest(BaseModel):
