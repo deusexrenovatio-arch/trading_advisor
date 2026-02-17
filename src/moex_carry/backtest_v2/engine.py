@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -34,6 +35,7 @@ from moex_carry.portfolio.rebalance_controller import (
     PortfolioRebalanceController,
     pair_key,
 )
+from moex_carry.perf import resolve_pair_workers
 from moex_carry.signal_replay import (
     build_replay_settings_from_resolved,
     load_pair_minute_series,
@@ -283,6 +285,7 @@ def run_backtest_v2(
     fill_time: str | None = None,
     precomputed: BacktestPrecomputed | None = None,
     initial_equity: float | None = None,
+    compute_fill_quality: bool = True,
     fill_quality_summary_override: dict[str, Any] | None = None,
 ) -> BacktestReport:
     resolved, warnings = _resolve_config(request)
@@ -315,7 +318,7 @@ def run_backtest_v2(
     key_rates = precomputed.key_rates if precomputed is not None else data_store.get_key_rates()
     rate_cache = _build_rate_cache(trading_days, key_rates)
     fill_quality_summary = None
-    if execution_mode == EXECUTION_MODE_INTRADAY_MINUTE:
+    if compute_fill_quality and execution_mode == EXECUTION_MODE_INTRADAY_MINUTE:
         if fill_quality_summary_override is not None:
             fill_quality_summary = dict(fill_quality_summary_override)
         else:
@@ -1281,11 +1284,13 @@ def _build_execution_model(
 ) -> dict[str, Any]:
     execution = resolved_config.get("execution", {}) if isinstance(resolved_config, Mapping) else {}
     strategy = resolved_config.get("strategy", {}) if isinstance(resolved_config, Mapping) else {}
+    pair_workers = resolve_pair_workers(execution.get("pair_workers"))
     return {
         "mode": execution_mode,
         "fill_time": fill_time,
         "price_source": str(execution.get("price_source") or "common_minute_close"),
         "common_minute_anchor": str(execution.get("common_minute_anchor") or "last"),
+        "pair_workers": int(pair_workers),
         "signal_exec_lag_days": int(strategy.get("signal_exec_lag_days") or 0),
         "execution_lag_minutes": int(strategy.get("execution_lag_minutes") or 0),
         "execution_max_wait_minutes": int(strategy.get("execution_max_wait_minutes") or 0),
@@ -1323,8 +1328,10 @@ def _compute_intraday_fill_quality_summary(
         return None
     data_dir = Path(str(data_dir_value))
     settings = build_replay_settings_from_resolved(resolved_config)
-    pair_rows: list[dict[str, Any]] = []
-    for pair in universe:
+    execution_cfg = resolved_config.get("execution", {}) if isinstance(resolved_config, Mapping) else {}
+    workers = resolve_pair_workers(execution_cfg.get("pair_workers"))
+
+    def _compute_pair_row(pair: PairSpec) -> dict[str, Any]:
         loaded = load_pair_minute_series(
             data_dir=data_dir,
             stock=pair.stock_secid,
@@ -1333,14 +1340,11 @@ def _compute_intraday_fill_quality_summary(
             end_date=end_date,
         )
         if loaded is None:
-            pair_rows.append(
-                {
-                    "stock": pair.stock_secid,
-                    "future": pair.future_secid,
-                    "error": "minute_series_not_found",
-                }
-            )
-            continue
+            return {
+                "stock": pair.stock_secid,
+                "future": pair.future_secid,
+                "error": "minute_series_not_found",
+            }
         try:
             replay_result = run_minute_replay(
                 series_base=loaded.series_base,
@@ -1358,15 +1362,19 @@ def _compute_intraday_fill_quality_summary(
                     "cutoff_minutes": replay_result.cutoff_minutes,
                 }
             )
-            pair_rows.append(row)
+            return row
         except Exception as exc:
-            pair_rows.append(
-                {
-                    "stock": pair.stock_secid,
-                    "future": pair.future_secid,
-                    "error": f"minute_replay_failed:{exc.__class__.__name__}",
-                }
-            )
+            return {
+                "stock": pair.stock_secid,
+                "future": pair.future_secid,
+                "error": f"minute_replay_failed:{exc.__class__.__name__}",
+            }
+
+    if workers <= 1:
+        pair_rows = [_compute_pair_row(pair) for pair in universe]
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            pair_rows = list(pool.map(_compute_pair_row, universe))
 
     if not pair_rows:
         warnings.append("intraday_minute_data_unavailable: no_pairs")
@@ -1384,6 +1392,7 @@ def _compute_intraday_fill_quality_summary(
     if pairs_ok == 0:
         warnings.append("intraday_minute_data_unavailable: no_valid_pairs")
         return {
+            "pair_workers": int(workers),
             "pairs_total": pairs_total,
             "pairs_ok": 0,
             "pairs_failed": pairs_failed,
@@ -1402,6 +1411,7 @@ def _compute_intraday_fill_quality_summary(
     )
 
     summary = {
+        "pair_workers": int(workers),
         "pairs_total": pairs_total,
         "pairs_ok": pairs_ok,
         "pairs_failed": pairs_failed,

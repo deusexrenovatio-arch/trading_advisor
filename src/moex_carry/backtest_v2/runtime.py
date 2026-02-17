@@ -238,6 +238,7 @@ def run_backtest_v2_cached(
     data_dir: Path,
     *,
     precompute: bool | None = None,
+    compute_fill_quality: bool = True,
 ) -> BacktestReport:
     universe = build_universe_from_request(request, data_dir)
     data_store = HistoryDataStore(
@@ -253,7 +254,7 @@ def run_backtest_v2_cached(
 
     mode = str(request.execution.mode or "INTRADAY_MINUTE").upper()
     fill_quality_summary_override = None
-    if mode == "INTRADAY_MINUTE":
+    if compute_fill_quality and mode == "INTRADAY_MINUTE":
         with _FILL_QUALITY_LOCK:
             cached_fill = _FILL_QUALITY_CACHE.get(cache_key)
             if cached_fill is not None:
@@ -264,9 +265,10 @@ def run_backtest_v2_cached(
         universe=universe,
         data_store=data_store,
         precomputed=precomputed,
+        compute_fill_quality=compute_fill_quality,
         fill_quality_summary_override=fill_quality_summary_override,
     )
-    if mode == "INTRADAY_MINUTE" and report.fill_quality_summary:
+    if compute_fill_quality and mode == "INTRADAY_MINUTE" and report.fill_quality_summary:
         with _FILL_QUALITY_LOCK:
             _FILL_QUALITY_CACHE[cache_key] = dict(report.fill_quality_summary)
             _FILL_QUALITY_CACHE.move_to_end(cache_key)

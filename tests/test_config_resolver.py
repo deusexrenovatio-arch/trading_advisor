@@ -116,3 +116,9 @@ def test_resolver_adds_anchor_warning_in_intraday_mode():
     )
     resolved = resolve_backtest_request(request)
     assert any("common_minute_anchor is ignored" in warning for warning in resolved.warnings)
+
+
+def test_resolver_validates_pair_workers_positive_when_set():
+    request = BacktestRequest(execution=BacktestExecutionConfig(pair_workers=0))
+    with pytest.raises(ValueError, match="execution.pair_workers"):
+        resolve_backtest_request(request)

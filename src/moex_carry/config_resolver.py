@@ -163,6 +163,12 @@ def _validate_request(request: BacktestRequest) -> None:
     anchor = str(execution.common_minute_anchor or "last").strip().lower()
     if anchor not in {"first", "last"}:
         raise ValueError("execution.common_minute_anchor must be first or last")
+    _require_positive(
+        execution.pair_workers,
+        "execution.pair_workers",
+        allow_zero=False,
+        allow_none=True,
+    )
 
     w_floor = float(strategy.w_floor)
     w_alpha = float(strategy.w_alpha)

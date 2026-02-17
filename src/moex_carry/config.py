@@ -171,11 +171,15 @@ class UiConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8050
     signal_refresh_enabled: bool = False
-    signal_refresh_interval_sec: int = 300
+    signal_refresh_interval_sec: int = 60
     signal_refresh_daily_time: Optional[str] = None
     signal_refresh_timezone: Optional[str] = None
     signal_refresh_max_pairs: Optional[int] = None
     signal_refresh_save_csv: bool = True
+    incremental_replay_enabled: bool = True
+    incremental_overlap_minutes: int = 180
+    incremental_checkpoint_dir: str = "./data/state/incremental_replay"
+    incremental_checkpoint_interval_minutes: int = 60
     pretrade_fail_open_on_transport_error: bool = True
     ff_db_projection_source: bool = False
     ff_fail_closed_execution: bool = False
@@ -183,7 +187,7 @@ class UiConfig(BaseModel):
     use_unified_signal_engine: bool = True
     unified_allow_legacy_fallback: bool = True
     unified_snapshot_ttl_sec: int = 120
-    unified_pair_workers: int = 4
+    unified_pair_workers: int | None = None
     unified_front_only: bool = True
     unified_front_roll_days: int = 7
     require_score_gate_by_default: bool = True
