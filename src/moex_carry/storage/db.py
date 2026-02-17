@@ -192,6 +192,43 @@ def _normalize_signal_execution_action_values(engine) -> None:
         )
 
 
+def _ensure_news_signal_links_columns(engine) -> None:
+    inspector = inspect(engine)
+    if "news_signal_links" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("news_signal_links")}
+    statements: list[str] = []
+    if "event_id" not in columns:
+        statements.append("ALTER TABLE news_signal_links ADD COLUMN event_id VARCHAR")
+    statements.append(
+        "CREATE INDEX IF NOT EXISTS ix_news_signal_links_event_id ON news_signal_links (event_id)"
+    )
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
+def _ensure_news_impact_scores_columns(engine) -> None:
+    inspector = inspect(engine)
+    if "news_impact_scores" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("news_impact_scores")}
+    statements: list[str] = []
+    if "target_level" not in columns:
+        statements.append("ALTER TABLE news_impact_scores ADD COLUMN target_level VARCHAR")
+    if "target_id" not in columns:
+        statements.append("ALTER TABLE news_impact_scores ADD COLUMN target_id VARCHAR")
+    statements.append(
+        "CREATE INDEX IF NOT EXISTS ix_news_impact_scores_target_level ON news_impact_scores (target_level)"
+    )
+    statements.append(
+        "CREATE INDEX IF NOT EXISTS ix_news_impact_scores_target_id ON news_impact_scores (target_id)"
+    )
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
 def init_db(engine) -> None:
     Base.metadata.create_all(engine)
     _ensure_signal_executions_columns(engine)
@@ -199,6 +236,8 @@ def init_db(engine) -> None:
     _deduplicate_signal_execution_idempotency(engine)
     _ensure_signal_execution_idempotency_index(engine)
     _normalize_signal_execution_action_values(engine)
+    _ensure_news_signal_links_columns(engine)
+    _ensure_news_impact_scores_columns(engine)
 
 
 def _ensure_sqlite_parent_dir(url: str) -> None:

@@ -42,13 +42,35 @@ from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.pretrade.delay_gate import run_delay_gate
 from moex_carry.signals_ack import build_signal_fingerprint, parse_ack_note
 from moex_carry.signals_delivery import parse_iso_utc, signal_delivery_state
+from moex_carry.news import (
+    build_signal_news_links,
+    compare_news_models,
+    compute_event_fragmentation_report,
+    run_news_backtest,
+    run_news_gate,
+)
+from moex_carry.news.taxonomy import impact_to_severity
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_signal_execution_by_idempotency,
+    load_event_market_reactions,
     load_decision_view_projection,
     upsert_decision_view_projection,
     load_active_signals,
+    load_news_annotations,
     load_latest_signal_run,
+    load_news_backtest_reports,
+    load_news_entity_links,
+    load_news_event_items,
+    load_news_events,
+    load_news_impact_scores,
+    load_news_items_by_ids,
+    load_news_item_tags,
+    load_news_items,
+    load_news_labels,
+    load_news_llm_runs,
+    load_news_signal_links,
+    load_primary_news_scores,
     load_open_executions,
     load_signal_executions,
     release_runtime_lease,
@@ -58,6 +80,9 @@ from moex_carry.storage.repositories import (
     store_signal_execution,
     store_signal_run,
     try_acquire_runtime_lease,
+    upsert_news_annotations,
+    upsert_news_backtest_report,
+    upsert_news_signal_links,
 )
 from moex_carry.ui.data import (
     load_backtest_summary,
@@ -1896,6 +1921,440 @@ def _parse_date_bound(raw: str, bound: str) -> datetime | None:
     return _normalize_datetime(parsed)
 
 
+def _parse_iso_datetime(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return _normalize_datetime(value)
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return _normalize_datetime(parsed)
+
+
+def _isoformat_utc(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat() + "Z"
+
+
+def _load_news_bundle(
+    session,
+    *,
+    from_ts: datetime | None,
+    to_ts: datetime | None,
+    limit: int,
+    preferred_models: list[str],
+) -> dict[str, object]:
+    item_rows = load_news_items(
+        session,
+        limit=limit,
+        published_from=_isoformat_utc(from_ts),
+        published_to=_isoformat_utc(to_ts),
+    )
+    news_ids = [str(item.get("news_id") or "").strip() for item in item_rows if item.get("news_id")]
+    entity_links = load_news_entity_links(session, news_ids=news_ids, limit=max(limit * 10, 1000))
+    tag_rows = load_news_item_tags(session, news_ids=news_ids, limit=max(limit * 10, 1000))
+    score_rows = load_news_impact_scores(session, news_ids=news_ids, limit=max(limit * 10, 1000))
+    primary_scores = load_primary_news_scores(
+        session,
+        news_ids=news_ids,
+        preferred_models=preferred_models,
+    )
+    signal_links = load_news_signal_links(session, news_ids=news_ids, limit=max(limit * 10, 1000))
+
+    entity_by_news: dict[str, list[dict[str, object]]] = {}
+    tickers_by_news: dict[str, set[str]] = {}
+    for row in entity_links:
+        news_id = str(row.get("news_id") or "").strip()
+        if not news_id:
+            continue
+        entity_by_news.setdefault(news_id, []).append(row)
+        ticker_value = str(row.get("ticker") or row.get("entity_id") or "").strip().upper()
+        if ticker_value:
+            tickers_by_news.setdefault(news_id, set()).add(ticker_value)
+
+    tags_by_news: dict[str, list[str]] = {}
+    for row in tag_rows:
+        news_id = str(row.get("news_id") or "").strip()
+        tag_code = str(row.get("tag_code") or "").strip()
+        if not news_id or not tag_code:
+            continue
+        tags_by_news.setdefault(news_id, []).append(tag_code)
+
+    model_scores_by_news: dict[str, list[dict[str, object]]] = {}
+    for row in score_rows:
+        news_id = str(row.get("news_id") or "").strip()
+        if not news_id:
+            continue
+        model_scores_by_news.setdefault(news_id, []).append(row)
+
+    signal_links_by_news: dict[str, list[dict[str, object]]] = {}
+    for row in signal_links:
+        news_id = str(row.get("news_id") or "").strip()
+        if not news_id:
+            continue
+        signal_links_by_news.setdefault(news_id, []).append(row)
+
+    return {
+        "items": item_rows,
+        "entity_by_news": entity_by_news,
+        "tickers_by_news": tickers_by_news,
+        "tags_by_news": tags_by_news,
+        "model_scores_by_news": model_scores_by_news,
+        "primary_scores": primary_scores,
+        "signal_links_by_news": signal_links_by_news,
+    }
+
+
+def _build_news_feed_events(
+    *,
+    bundle: dict[str, object],
+    severity_filter: str | None,
+    ticker_filter: str | None,
+    entity_filter: str | None,
+    from_ts: datetime | None,
+    to_ts: datetime | None,
+) -> list[dict[str, object]]:
+    items = bundle.get("items")
+    if not isinstance(items, list):
+        return []
+
+    entity_by_news = bundle.get("entity_by_news") if isinstance(bundle.get("entity_by_news"), dict) else {}
+    tickers_by_news = bundle.get("tickers_by_news") if isinstance(bundle.get("tickers_by_news"), dict) else {}
+    tags_by_news = bundle.get("tags_by_news") if isinstance(bundle.get("tags_by_news"), dict) else {}
+    model_scores_by_news = (
+        bundle.get("model_scores_by_news") if isinstance(bundle.get("model_scores_by_news"), dict) else {}
+    )
+    primary_scores = bundle.get("primary_scores") if isinstance(bundle.get("primary_scores"), dict) else {}
+    signal_links_by_news = (
+        bundle.get("signal_links_by_news") if isinstance(bundle.get("signal_links_by_news"), dict) else {}
+    )
+
+    events: list[dict[str, object]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        news_id = str(item.get("news_id") or "").strip()
+        if not news_id:
+            continue
+        published_at_raw = str(item.get("published_at") or "").strip()
+        published_at = _parse_iso_datetime(published_at_raw)
+        if published_at is None:
+            continue
+        if from_ts is not None and published_at < from_ts:
+            continue
+        if to_ts is not None and published_at > to_ts:
+            continue
+
+        primary_score = primary_scores.get(news_id) if isinstance(primary_scores, dict) else None
+        impact_score = float(primary_score.get("impact_score") or 0.0) if isinstance(primary_score, dict) else 0.0
+        severity = impact_to_severity(impact_score)
+        if severity_filter and severity != severity_filter:
+            continue
+
+        row_tickers_raw = tickers_by_news.get(news_id, set())
+        row_tickers = (
+            row_tickers_raw
+            if isinstance(row_tickers_raw, set)
+            else {str(value).strip().upper() for value in row_tickers_raw if str(value).strip()}
+        )
+        if ticker_filter and ticker_filter not in row_tickers:
+            continue
+
+        entity_rows = entity_by_news.get(news_id, [])
+        if entity_filter:
+            matched_entity = any(
+                str(entity.get("entity_id") or "").strip() == entity_filter
+                for entity in entity_rows
+                if isinstance(entity, dict)
+            )
+            if not matched_entity:
+                continue
+
+        title = str(item.get("title") or "").strip() or "news"
+        summary = str(item.get("content") or "").strip()
+        if summary:
+            summary = summary[:300]
+        else:
+            direction = str((primary_score or {}).get("direction") or "neutral")
+            summary = f"model:{direction}"
+        event_id = _stable_id("news", news_id, published_at_raw, severity, title, summary, length=20)
+        signal_links = signal_links_by_news.get(news_id, [])
+        signal_refs = [
+            {
+                "signal_id": link.get("signal_id"),
+                "decision_id": link.get("decision_id"),
+                "link_type": link.get("link_type"),
+                "gate_action": link.get("gate_action"),
+            }
+            for link in signal_links
+            if isinstance(link, dict)
+        ]
+        decision_id = next(
+            (
+                str(link.get("decision_id") or "").strip()
+                for link in signal_links
+                if isinstance(link, dict) and str(link.get("decision_id") or "").strip()
+            ),
+            None,
+        )
+
+        events.append(
+            {
+                "news_event_id": event_id,
+                "news_id": news_id,
+                "published_at": published_at_raw,
+                "ingested_at": item.get("ingested_at"),
+                "source": item.get("source"),
+                "language": item.get("language"),
+                "url": item.get("url"),
+                "severity": severity,
+                "headline": title,
+                "summary": summary,
+                "headline_count": 1,
+                "decision_ref": {"decision_id": decision_id},
+                "entity_links": [
+                    {
+                        "entity_type": entity.get("entity_type"),
+                        "entity_id": entity.get("entity_id"),
+                        "ticker": entity.get("ticker"),
+                    }
+                    for entity in entity_rows
+                    if isinstance(entity, dict)
+                ],
+                "tags": tags_by_news.get(news_id, []),
+                "model_scores": model_scores_by_news.get(news_id, []),
+                "signal_refs": signal_refs,
+            }
+        )
+    events.sort(key=lambda row: str(row.get("published_at") or ""), reverse=True)
+    return events
+
+
+def _select_primary_model_score(
+    model_scores: list[dict[str, object]],
+    preferred_models: list[str],
+) -> dict[str, object] | None:
+    for model_name in preferred_models:
+        selected = next(
+            (
+                score
+                for score in model_scores
+                if isinstance(score, dict) and str(score.get("model_id") or "").strip() == model_name
+            ),
+            None,
+        )
+        if selected is not None:
+            return selected
+    return next((score for score in model_scores if isinstance(score, dict)), None)
+
+
+def _build_news_feed_events_from_event_layer(
+    session,
+    *,
+    severity_filter: str | None,
+    ticker_filter: str | None,
+    entity_filter: str | None,
+    from_ts: datetime | None,
+    to_ts: datetime | None,
+    limit: int,
+    preferred_models: list[str],
+) -> list[dict[str, object]]:
+    event_rows = load_news_events(
+        session,
+        event_status=None,
+        published_from=_isoformat_utc(from_ts),
+        published_to=_isoformat_utc(to_ts),
+        limit=max(limit, 200),
+    )
+    if not event_rows:
+        return []
+
+    event_ids = [str(row.get("event_id") or "").strip() for row in event_rows if row.get("event_id")]
+    if not event_ids:
+        return []
+    event_item_rows = load_news_event_items(
+        session,
+        event_ids=event_ids,
+        limit=max(len(event_ids) * 30, 1000),
+    )
+    event_to_news_ids: dict[str, list[str]] = {}
+    for row in event_item_rows:
+        if not isinstance(row, dict):
+            continue
+        event_id = str(row.get("event_id") or "").strip()
+        news_id = str(row.get("news_id") or "").strip()
+        if not event_id or not news_id:
+            continue
+        event_to_news_ids.setdefault(event_id, []).append(news_id)
+
+    news_ids = sorted(
+        {
+            news_id
+            for values in event_to_news_ids.values()
+            for news_id in values
+            if isinstance(news_id, str) and news_id
+        }
+    )
+    news_by_id: dict[str, dict[str, object]] = {}
+    for row in load_news_items_by_ids(session, news_ids):
+        if not isinstance(row, dict):
+            continue
+        news_id = str(row.get("news_id") or "").strip()
+        if news_id:
+            news_by_id[news_id] = row
+
+    entity_links = load_news_entity_links(session, news_ids=news_ids, limit=max(len(news_ids) * 10, 1000))
+    tags = load_news_item_tags(session, news_ids=news_ids, limit=max(len(news_ids) * 10, 1000))
+    signal_links = load_news_signal_links(session, event_ids=event_ids, limit=max(len(event_ids) * 10, 1000))
+    score_rows = load_news_impact_scores(
+        session,
+        target_level="event",
+        target_ids=event_ids,
+        limit=max(len(event_ids) * 10, 1000),
+    )
+    labels = load_news_labels(session, target_level="event", target_ids=event_ids, limit=max(len(event_ids) * 5, 500))
+
+    entities_by_news: dict[str, list[dict[str, object]]] = {}
+    for row in entity_links:
+        news_id = str(row.get("news_id") or "").strip()
+        if not news_id:
+            continue
+        entities_by_news.setdefault(news_id, []).append(row)
+
+    tags_by_news: dict[str, list[str]] = {}
+    for row in tags:
+        news_id = str(row.get("news_id") or "").strip()
+        tag_code = str(row.get("tag_code") or "").strip()
+        if not news_id or not tag_code:
+            continue
+        tags_by_news.setdefault(news_id, []).append(tag_code)
+
+    scores_by_event: dict[str, list[dict[str, object]]] = {}
+    for row in score_rows:
+        event_id = str(row.get("target_id") or "").strip()
+        if not event_id:
+            continue
+        scores_by_event.setdefault(event_id, []).append(row)
+
+    signal_refs_by_event: dict[str, list[dict[str, object]]] = {}
+    for row in signal_links:
+        event_id = str(row.get("event_id") or "").strip()
+        if not event_id:
+            continue
+        signal_refs_by_event.setdefault(event_id, []).append(
+            {
+                "signal_id": row.get("signal_id"),
+                "decision_id": row.get("decision_id"),
+                "link_type": row.get("link_type"),
+                "gate_action": row.get("gate_action"),
+            }
+        )
+
+    label_direction_by_event: dict[str, str] = {}
+    for row in labels:
+        event_id = str(row.get("target_id") or "").strip()
+        direction = str(row.get("direction") or "").strip().lower()
+        if not event_id or direction not in {"positive", "negative", "neutral", "uncertain"}:
+            continue
+        label_direction_by_event.setdefault(event_id, direction)
+
+    events: list[dict[str, object]] = []
+    for event_row in event_rows:
+        event_id = str(event_row.get("event_id") or "").strip()
+        if not event_id:
+            continue
+        linked_news_ids = event_to_news_ids.get(event_id, [])
+        first_news = next((news_by_id.get(news_id) for news_id in linked_news_ids if news_by_id.get(news_id)), None)
+        event_entities: list[dict[str, object]] = []
+        seen_entity_keys: set[str] = set()
+        event_tags: set[str] = set()
+        event_tickers: set[str] = set()
+        for news_id in linked_news_ids:
+            for entity in entities_by_news.get(news_id, []):
+                if not isinstance(entity, dict):
+                    continue
+                entity_type = str(entity.get("entity_type") or "").strip()
+                entity_id_value = str(entity.get("entity_id") or "").strip()
+                ticker = str(entity.get("ticker") or entity_id_value).strip().upper()
+                if ticker:
+                    event_tickers.add(ticker)
+                entity_key = f"{entity_type}|{entity_id_value}|{ticker}"
+                if entity_key in seen_entity_keys:
+                    continue
+                seen_entity_keys.add(entity_key)
+                event_entities.append(
+                    {
+                        "entity_type": entity_type or "instrument",
+                        "entity_id": entity_id_value or ticker,
+                        "ticker": ticker or None,
+                    }
+                )
+            for tag_code in tags_by_news.get(news_id, []):
+                if tag_code:
+                    event_tags.add(str(tag_code))
+
+        if ticker_filter and ticker_filter not in event_tickers:
+            continue
+        if entity_filter:
+            if not any(str(entity.get("entity_id") or "").strip() == entity_filter for entity in event_entities):
+                continue
+
+        model_scores = scores_by_event.get(event_id, [])
+        primary_score = _select_primary_model_score(model_scores, preferred_models)
+        impact_score = float(primary_score.get("impact_score") or 0.0) if isinstance(primary_score, dict) else 0.0
+        severity = impact_to_severity(impact_score)
+        if severity_filter and severity != severity_filter:
+            continue
+
+        decision_id = next(
+            (
+                str(link.get("decision_id") or "").strip()
+                for link in signal_refs_by_event.get(event_id, [])
+                if isinstance(link, dict) and str(link.get("decision_id") or "").strip()
+            ),
+            None,
+        )
+        headline = str(event_row.get("canonical_summary") or "").strip()
+        if not headline:
+            headline = str((first_news or {}).get("title") or event_id).strip() or event_id
+        summary = str(event_row.get("canonical_mechanism") or "").strip()
+        if not summary:
+            raw_summary = str((first_news or {}).get("content") or "").strip()
+            summary = raw_summary[:300] if raw_summary else f"event:{event_id}"
+
+        result_row = {
+            "news_event_id": event_id,
+            "news_id": str(linked_news_ids[0]) if linked_news_ids else event_id,
+            "published_at": event_row.get("event_first_published_at_utc"),
+            "ingested_at": event_row.get("event_first_ingested_at_utc"),
+            "source": (first_news or {}).get("source") or "event_cluster",
+            "language": (first_news or {}).get("language"),
+            "url": (first_news or {}).get("url"),
+            "severity": severity,
+            "headline": headline,
+            "summary": summary,
+            "headline_count": len(linked_news_ids),
+            "decision_ref": {"decision_id": decision_id},
+            "entity_links": event_entities,
+            "tags": sorted(event_tags),
+            "model_scores": model_scores,
+            "signal_refs": signal_refs_by_event.get(event_id, []),
+            "event_status": event_row.get("event_status"),
+            "cluster_version": event_row.get("cluster_version"),
+            "label_direction": label_direction_by_event.get(event_id),
+        }
+        events.append(result_row)
+
+    events.sort(key=lambda row: str(row.get("published_at") or ""), reverse=True)
+    if limit > 0:
+        return events[:limit]
+    return events
 def _future_scale_from_raw(path, secid: str) -> float:
     if not path.exists():
         return 1.0
@@ -2053,6 +2512,40 @@ def create_app(settings: AppSettings) -> Dash:
             observability.mark_event("auto_unwind_blocked", count=blocked_count)
         if error_count > 0:
             observability.mark_event("auto_unwind_error", count=error_count)
+
+    def _mark_news_feed_events(events: list[dict[str, object]]) -> None:
+        if not events:
+            return
+        observability.mark_event("news_feed_events", count=len(events))
+        high_count = sum(
+            1
+            for item in events
+            if str(item.get("severity") or "").strip().lower() in {"high", "critical"}
+        )
+        if high_count > 0:
+            observability.mark_event("news_feed_high_severity_events", count=high_count)
+
+    def _mark_news_compare_events(model_id: str | None) -> None:
+        observability.mark_event("news_compare_runs")
+        winner = str(model_id or "").strip().lower()
+        if winner in {"finbert", "nli"}:
+            observability.mark_event(f"news_compare_win_{winner}")
+
+    def _mark_signal_news_bridge_events(rows: list[dict[str, object]], link_count: int) -> None:
+        if link_count > 0:
+            observability.mark_event("news_signal_links", count=link_count)
+        if not rows:
+            return
+        block_count = sum(
+            1 for item in rows if str(item.get("news_gate_action") or "").strip().lower() == "block"
+        )
+        reduce_count = sum(
+            1 for item in rows if str(item.get("news_gate_action") or "").strip().lower() == "reduce"
+        )
+        if block_count > 0:
+            observability.mark_event("news_gate_block", count=block_count)
+        if reduce_count > 0:
+            observability.mark_event("news_gate_reduce", count=reduce_count)
 
     refresh_enabled = bool(settings.ui.signal_refresh_enabled)
     refresh_interval = int(settings.ui.signal_refresh_interval_sec or 0)
@@ -2704,6 +3197,7 @@ def create_app(settings: AppSettings) -> Dash:
 
     @server.route("/api/v2/news/feed", methods=["GET"])
     def news_feed_v2_api():
+        started_at = datetime.now(timezone.utc)
         severity_filter = str(request.args.get("severity") or "").strip().lower()
         ticker_filter = str(request.args.get("ticker") or "").strip().upper()
         entity_filter = str(request.args.get("entity_id") or "").strip()
@@ -2712,76 +3206,581 @@ def create_app(settings: AppSettings) -> Dash:
         from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
         to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
         if from_raw and from_ts is None:
-            return jsonify({"error": "invalid_from"}), 400
+            return _observe_request(
+                "v2_news_feed",
+                started_at,
+                (jsonify({"error": "invalid_from"}), 400),
+            )
         if to_raw and to_ts is None:
-            return jsonify({"error": "invalid_to"}), 400
-
-        log_path = paths.data_dir / "decisions" / "decision_log.jsonl"
-        view_path = paths.data_dir / "decisions" / "decision_view.jsonl"
-        log_records = load_jsonl(log_path)
-        view_records = load_jsonl(view_path)
-        view_by_decision = {
-            str(item.get("decision_id") or ""): item for item in view_records if isinstance(item, dict)
-        }
-
-        events: list[dict[str, object]] = []
-        for record in log_records:
-            if not isinstance(record, dict):
-                continue
-            decision_id = str(record.get("decision_id") or "").strip()
-            created_at_raw = str(record.get("created_at") or "").strip()
-            if not decision_id or not created_at_raw:
-                continue
-            try:
-                created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
-            except ValueError:
-                continue
-            created_at_cmp = _normalize_datetime(created_at)
-            if from_ts and created_at_cmp < from_ts:
-                continue
-            if to_ts and created_at_cmp > to_ts:
-                continue
-
-            news_context = record.get("news_context")
-            if not isinstance(news_context, dict):
-                continue
-            severity = str(news_context.get("severity") or "low").strip().lower()
-            if severity_filter and severity != severity_filter:
-                continue
-
-            view_row = view_by_decision.get(decision_id, {})
-            primary = str(view_row.get("primary_instrument") or "").strip()
-            entity_ref = {
-                "entity_type": "instrument",
-                "entity_id": primary,
-                "ticker": primary or None,
-            }
-            if ticker_filter and ticker_filter not in {primary.upper(), str(entity_ref.get("ticker") or "").upper()}:
-                continue
-            if entity_filter and entity_filter != str(entity_ref.get("entity_id") or ""):
-                continue
-
-            summary = str(news_context.get("summary") or "news_signal").strip() or "news_signal"
-            headline = str(news_context.get("headline") or summary).strip() or summary
-            event_id = _stable_id("news", decision_id, created_at_raw, severity, headline, summary, length=20)
-            events.append(
-                {
-                    "news_event_id": event_id,
-                    "published_at": created_at_raw,
-                    "severity": severity,
-                    "headline": headline,
-                    "summary": summary,
-                    "headline_count": int(news_context.get("headline_count") or 0),
-                    "decision_ref": {"decision_id": decision_id},
-                    "entity_links": [entity_ref],
-                }
+            return _observe_request(
+                "v2_news_feed",
+                started_at,
+                (jsonify({"error": "invalid_to"}), 400),
             )
 
-        events.sort(key=lambda item: str(item.get("published_at") or ""), reverse=True)
         limit = _parse_int(request.args.get("limit"), 200)
+        preferred_models = [settings.news_models.primary_model] + list(settings.news_models.enabled_models)
+        with session_factory() as session:
+            events = _build_news_feed_events_from_event_layer(
+                session,
+                severity_filter=severity_filter or None,
+                ticker_filter=ticker_filter or None,
+                entity_filter=entity_filter or None,
+                from_ts=from_ts,
+                to_ts=to_ts,
+                limit=limit,
+                preferred_models=preferred_models,
+            )
+            if not events:
+                bundle = _load_news_bundle(
+                    session,
+                    from_ts=from_ts,
+                    to_ts=to_ts,
+                    limit=max(limit, 200),
+                    preferred_models=preferred_models,
+                )
+                events = _build_news_feed_events(
+                    bundle=bundle,
+                    severity_filter=severity_filter or None,
+                    ticker_filter=ticker_filter or None,
+                    entity_filter=entity_filter or None,
+                    from_ts=from_ts,
+                    to_ts=to_ts,
+                )
+
+        if not events:
+            # Backward compatibility fallback while storage is warming up.
+            log_path = paths.data_dir / "decisions" / "decision_log.jsonl"
+            view_path = paths.data_dir / "decisions" / "decision_view.jsonl"
+            log_records = load_jsonl(log_path)
+            view_records = load_jsonl(view_path)
+            view_by_decision = {
+                str(item.get("decision_id") or ""): item for item in view_records if isinstance(item, dict)
+            }
+            for record in log_records:
+                if not isinstance(record, dict):
+                    continue
+                decision_id = str(record.get("decision_id") or "").strip()
+                created_at_raw = str(record.get("created_at") or "").strip()
+                if not decision_id or not created_at_raw:
+                    continue
+                created_at_cmp = _parse_iso_datetime(created_at_raw)
+                if created_at_cmp is None:
+                    continue
+                if from_ts and created_at_cmp < from_ts:
+                    continue
+                if to_ts and created_at_cmp > to_ts:
+                    continue
+
+                news_context = record.get("news_context")
+                if not isinstance(news_context, dict):
+                    continue
+                severity = str(news_context.get("severity") or "low").strip().lower()
+                if severity_filter and severity != severity_filter:
+                    continue
+
+                view_row = view_by_decision.get(decision_id, {})
+                primary = str(view_row.get("primary_instrument") or "").strip()
+                if ticker_filter and ticker_filter != primary.upper():
+                    continue
+                if entity_filter and entity_filter != primary:
+                    continue
+
+                summary = str(news_context.get("summary") or "news_signal").strip() or "news_signal"
+                headline = str(news_context.get("headline") or summary).strip() or summary
+                event_id = _stable_id(
+                    "news",
+                    decision_id,
+                    created_at_raw,
+                    severity,
+                    headline,
+                    summary,
+                    length=20,
+                )
+                events.append(
+                    {
+                        "news_event_id": event_id,
+                        "news_id": event_id,
+                        "published_at": created_at_raw,
+                        "ingested_at": created_at_raw,
+                        "source": "decision_log",
+                        "language": None,
+                        "url": None,
+                        "severity": severity,
+                        "headline": headline,
+                        "summary": summary,
+                        "headline_count": int(news_context.get("headline_count") or 0),
+                        "decision_ref": {"decision_id": decision_id},
+                        "entity_links": [
+                            {
+                                "entity_type": "instrument",
+                                "entity_id": primary,
+                                "ticker": primary or None,
+                            }
+                        ],
+                        "tags": [],
+                        "model_scores": [],
+                        "signal_refs": [],
+                    }
+                )
+
+        events.sort(key=lambda item: str(item.get("published_at") or ""), reverse=True)
         if limit > 0:
             events = events[:limit]
-        return jsonify(events)
+        _mark_news_feed_events(events)
+        return _observe_request("v2_news_feed", started_at, jsonify(events))
+
+    @server.route("/api/v2/events", methods=["GET"])
+    def events_v2_api():
+        started_at = datetime.now(timezone.utc)
+        event_status = str(request.args.get("status") or "").strip().lower() or None
+        from_raw = request.args.get("from")
+        to_raw = request.args.get("to")
+        from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
+        to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
+        if from_raw and from_ts is None:
+            return _observe_request("v2_events", started_at, _bad_request("invalid_from"))
+        if to_raw and to_ts is None:
+            return _observe_request("v2_events", started_at, _bad_request("invalid_to"))
+        limit = max(_parse_int(request.args.get("limit"), 200), 0)
+
+        with session_factory() as session:
+            events = load_news_events(
+                session,
+                event_status=event_status,
+                published_from=_isoformat_utc(from_ts),
+                published_to=_isoformat_utc(to_ts),
+                limit=limit,
+            )
+            event_ids = [str(item.get("event_id") or "").strip() for item in events if item.get("event_id")]
+            event_items = load_news_event_items(
+                session,
+                event_ids=event_ids,
+                limit=max(len(event_ids) * 30, 1000),
+            )
+
+        item_count_by_event: dict[str, int] = {}
+        first_news_by_event: dict[str, str] = {}
+        for row in event_items:
+            event_id = str(row.get("event_id") or "").strip()
+            news_id = str(row.get("news_id") or "").strip()
+            if not event_id:
+                continue
+            item_count_by_event[event_id] = int(item_count_by_event.get(event_id, 0)) + 1
+            if news_id and event_id not in first_news_by_event:
+                first_news_by_event[event_id] = news_id
+
+        payload: list[dict[str, object]] = []
+        for row in events:
+            event_id = str(row.get("event_id") or "").strip()
+            if not event_id:
+                continue
+            payload.append(
+                {
+                    "event_id": event_id,
+                    "event_status": row.get("event_status"),
+                    "event_first_published_at_utc": row.get("event_first_published_at_utc"),
+                    "event_first_ingested_at_utc": row.get("event_first_ingested_at_utc"),
+                    "event_last_published_at_utc": row.get("event_last_published_at_utc"),
+                    "canonical_summary": row.get("canonical_summary"),
+                    "canonical_mechanism": row.get("canonical_mechanism"),
+                    "cluster_version": row.get("cluster_version"),
+                    "news_count": int(item_count_by_event.get(event_id, 0)),
+                    "primary_news_id": first_news_by_event.get(event_id),
+                }
+            )
+        return _observe_request("v2_events", started_at, jsonify(payload))
+
+    @server.route("/api/v2/events/fragmentation", methods=["GET"])
+    def events_fragmentation_v2_api():
+        started_at = datetime.now(timezone.utc)
+        from_raw = request.args.get("from")
+        to_raw = request.args.get("to")
+        from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
+        to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
+        if from_raw and from_ts is None:
+            return _observe_request("v2_events_fragmentation", started_at, _bad_request("invalid_from"))
+        if to_raw and to_ts is None:
+            return _observe_request("v2_events_fragmentation", started_at, _bad_request("invalid_to"))
+        with session_factory() as session:
+            payload = compute_event_fragmentation_report(
+                session,
+                published_from=from_ts,
+                published_to=to_ts,
+            )
+        return _observe_request("v2_events_fragmentation", started_at, jsonify(payload))
+
+    @server.route("/api/v2/events/<event_id>", methods=["GET"])
+    def event_details_v2_api(event_id: str):
+        started_at = datetime.now(timezone.utc)
+        event_key = str(event_id or "").strip()
+        if not event_key:
+            return _observe_request("v2_event_details", started_at, _bad_request("event_id is required"))
+
+        with session_factory() as session:
+            event_rows = load_news_events(session, event_ids=[event_key], limit=1)
+            if not event_rows:
+                return _observe_request(
+                    "v2_event_details",
+                    started_at,
+                    (jsonify({"error": "not_found", "event_id": event_key}), 404),
+                )
+            event_items = load_news_event_items(session, event_ids=[event_key], limit=500)
+            news_ids = [str(row.get("news_id") or "").strip() for row in event_items if row.get("news_id")]
+            news_rows = load_news_items_by_ids(session, news_ids)
+            labels = load_news_labels(session, target_level="event", target_ids=[event_key], limit=200)
+            model_scores = load_news_impact_scores(
+                session,
+                target_level="event",
+                target_ids=[event_key],
+                limit=200,
+            )
+            signal_refs = load_news_signal_links(session, event_ids=[event_key], limit=500)
+            reactions_preview = load_event_market_reactions(session, event_ids=[event_key], limit=200)
+
+        payload = dict(event_rows[0])
+        payload["news_items"] = news_rows
+        payload["event_items"] = event_items
+        payload["labels"] = labels
+        payload["model_scores"] = model_scores
+        payload["signal_refs"] = signal_refs
+        payload["reactions_preview"] = reactions_preview
+        return _observe_request("v2_event_details", started_at, jsonify(payload))
+
+    @server.route("/api/v2/events/<event_id>/reaction", methods=["GET"])
+    def event_reaction_v2_api(event_id: str):
+        started_at = datetime.now(timezone.utc)
+        event_key = str(event_id or "").strip()
+        if not event_key:
+            return _observe_request("v2_event_reaction", started_at, _bad_request("event_id is required"))
+        instrument_id = str(request.args.get("instrument_id") or "").strip() or None
+        window_id = str(request.args.get("window_id") or request.args.get("window") or "").strip() or None
+        sampling_freq = str(request.args.get("sampling_freq") or "").strip() or None
+        limit = max(_parse_int(request.args.get("limit"), 500), 0)
+
+        with session_factory() as session:
+            rows = load_event_market_reactions(
+                session,
+                event_ids=[event_key],
+                instrument_id=instrument_id,
+                window_id=window_id,
+                sampling_freq=sampling_freq,
+                limit=limit,
+            )
+        return _observe_request(
+            "v2_event_reaction",
+            started_at,
+            jsonify(
+                {
+                    "event_id": event_key,
+                    "instrument_id": instrument_id,
+                    "window_id": window_id,
+                    "sampling_freq": sampling_freq,
+                    "rows": rows,
+                }
+            ),
+        )
+
+    @server.route("/api/v2/signals/top", methods=["GET"])
+    def signals_top_v2_api():
+        started_at = datetime.now(timezone.utc)
+        commodity = str(request.args.get("commodity") or "").strip().upper() or None
+        k = max(_parse_int(request.args.get("k"), 20), 1)
+        from_raw = request.args.get("from")
+        to_raw = request.args.get("to")
+        from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
+        to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
+        if from_raw and from_ts is None:
+            return _observe_request("v2_signals_top", started_at, _bad_request("invalid_from"))
+        if to_raw and to_ts is None:
+            return _observe_request("v2_signals_top", started_at, _bad_request("invalid_to"))
+
+        preferred_models = [settings.news_models.primary_model] + list(settings.news_models.enabled_models)
+        with session_factory() as session:
+            feed_rows = _build_news_feed_events_from_event_layer(
+                session,
+                severity_filter=None,
+                ticker_filter=commodity,
+                entity_filter=None,
+                from_ts=from_ts,
+                to_ts=to_ts,
+                limit=max(k * 20, 200),
+                preferred_models=preferred_models,
+            )
+            if not feed_rows:
+                bundle = _load_news_bundle(
+                    session,
+                    from_ts=from_ts,
+                    to_ts=to_ts,
+                    limit=max(k * 20, 200),
+                    preferred_models=preferred_models,
+                )
+                feed_rows = _build_news_feed_events(
+                    bundle=bundle,
+                    severity_filter=None,
+                    ticker_filter=commodity,
+                    entity_filter=None,
+                    from_ts=from_ts,
+                    to_ts=to_ts,
+                )
+
+        ranked: list[dict[str, object]] = []
+        for row in feed_rows:
+            model_scores = row.get("model_scores")
+            score = _select_primary_model_score(
+                model_scores if isinstance(model_scores, list) else [],
+                preferred_models,
+            )
+            impact_score = float(score.get("impact_score") or 0.0) if isinstance(score, dict) else 0.0
+            ranked.append(
+                {
+                    "news_event_id": row.get("news_event_id"),
+                    "published_at": row.get("published_at"),
+                    "headline": row.get("headline"),
+                    "summary": row.get("summary"),
+                    "severity": row.get("severity"),
+                    "entity_links": row.get("entity_links"),
+                    "tags": row.get("tags"),
+                    "impact_score": impact_score,
+                    "direction": (score or {}).get("direction") if isinstance(score, dict) else None,
+                    "confidence": max(
+                        float((score or {}).get("prob_up") or 0.0),
+                        float((score or {}).get("prob_down") or 0.0),
+                        float((score or {}).get("prob_neutral") or 0.0),
+                    )
+                    if isinstance(score, dict)
+                    else None,
+                }
+            )
+        ranked.sort(key=lambda item: abs(float(item.get("impact_score") or 0.0)), reverse=True)
+        return _observe_request("v2_signals_top", started_at, jsonify(ranked[:k]))
+
+    @server.route("/api/v2/annotations", methods=["POST"])
+    def annotations_v2_api():
+        started_at = datetime.now(timezone.utc)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return _observe_request("v2_annotations", started_at, _bad_request("payload must be object"))
+        target_level = str(payload.get("target_level") or "").strip().lower()
+        target_id = str(payload.get("target_id") or "").strip()
+        if not target_level or not target_id:
+            return _observe_request(
+                "v2_annotations",
+                started_at,
+                _bad_request("target_level and target_id are required"),
+            )
+        row = {
+            "annotation_id": payload.get("annotation_id"),
+            "target_level": target_level,
+            "target_id": target_id,
+            "payload_json": payload.get("payload_json")
+            if isinstance(payload.get("payload_json"), (dict, list))
+            else payload.get("payload"),
+            "author_id": payload.get("author_id"),
+            "reason": payload.get("reason"),
+            "version": payload.get("version") or "v1",
+            "created_at": payload.get("created_at"),
+        }
+        with session_factory() as session:
+            stored = upsert_news_annotations(session, [row])
+            latest = load_news_annotations(
+                session,
+                target_level=target_level,
+                target_id=target_id,
+                limit=1,
+            )
+        return _observe_request(
+            "v2_annotations",
+            started_at,
+            jsonify(
+                {
+                    "status": "ok",
+                    "stored": stored,
+                    "latest": latest[0] if latest else None,
+                }
+            ),
+        )
+
+    @server.route("/api/v2/models/versions", methods=["GET"])
+    def models_versions_v2_api():
+        started_at = datetime.now(timezone.utc)
+        with session_factory() as session:
+            score_rows = load_news_impact_scores(session, limit=5000)
+            llm_runs = load_news_llm_runs(session, limit=5000)
+        local_models: dict[str, set[str]] = {}
+        for row in score_rows:
+            model_id = str(row.get("model_id") or "").strip()
+            model_version = str(row.get("model_version") or "").strip() or "unknown"
+            if not model_id:
+                continue
+            local_models.setdefault(model_id, set()).add(model_version)
+        llm_models: dict[str, dict[str, object]] = {}
+        for row in llm_runs:
+            provider = str(row.get("provider") or "").strip() or "unknown"
+            model_id = str(row.get("model_id") or "").strip() or "unknown"
+            key = f"{provider}:{model_id}"
+            entry = llm_models.setdefault(
+                key,
+                {
+                    "provider": provider,
+                    "model_id": model_id,
+                    "prompt_versions": set(),
+                    "statuses": {},
+                    "runs": 0,
+                },
+            )
+            prompt_version = str(row.get("prompt_version") or "").strip()
+            if prompt_version:
+                entry["prompt_versions"].add(prompt_version)
+            status = str(row.get("status") or "").strip() or "unknown"
+            statuses = entry.get("statuses")
+            if isinstance(statuses, dict):
+                statuses[status] = int(statuses.get(status, 0)) + 1
+            entry["runs"] = int(entry.get("runs", 0)) + 1
+
+        llm_payload: list[dict[str, object]] = []
+        for item in llm_models.values():
+            prompt_versions = item.get("prompt_versions")
+            llm_payload.append(
+                {
+                    "provider": item.get("provider"),
+                    "model_id": item.get("model_id"),
+                    "prompt_versions": sorted(prompt_versions) if isinstance(prompt_versions, set) else [],
+                    "statuses": item.get("statuses"),
+                    "runs": item.get("runs"),
+                }
+            )
+        local_payload = [
+            {"model_id": model_id, "versions": sorted(versions)}
+            for model_id, versions in sorted(local_models.items())
+        ]
+        return _observe_request(
+            "v2_models_versions",
+            started_at,
+            jsonify({"local_models": local_payload, "llm_models": llm_payload}),
+        )
+
+    @server.route("/api/v2/validation/summary", methods=["GET"])
+    def validation_summary_v2_api():
+        started_at = datetime.now(timezone.utc)
+        with session_factory() as session:
+            event_rows = load_news_events(session, limit=0)
+            event_ids = [str(row.get("event_id") or "").strip() for row in event_rows if row.get("event_id")]
+            event_item_rows = load_news_event_items(session, event_ids=event_ids, limit=0) if event_ids else []
+            label_rows = load_news_labels(session, limit=0)
+            score_rows = load_news_impact_scores(session, limit=0)
+            reaction_rows = load_event_market_reactions(session, limit=0)
+            llm_rows = load_news_llm_runs(session, limit=0)
+            annotation_rows = load_news_annotations(session, limit=0)
+            fragmentation_report = compute_event_fragmentation_report(session)
+
+        event_status_counts: dict[str, int] = {}
+        for row in event_rows:
+            key = str(row.get("event_status") or "unknown").strip() or "unknown"
+            event_status_counts[key] = int(event_status_counts.get(key, 0)) + 1
+
+        label_source_counts: dict[str, int] = {}
+        for row in label_rows:
+            key = str(row.get("label_source") or "unknown").strip() or "unknown"
+            label_source_counts[key] = int(label_source_counts.get(key, 0)) + 1
+
+        model_counts: dict[str, int] = {}
+        for row in score_rows:
+            key = str(row.get("model_id") or "unknown").strip() or "unknown"
+            model_counts[key] = int(model_counts.get(key, 0)) + 1
+
+        llm_status_counts: dict[str, int] = {}
+        for row in llm_rows:
+            key = str(row.get("status") or "unknown").strip() or "unknown"
+            llm_status_counts[key] = int(llm_status_counts.get(key, 0)) + 1
+
+        payload = {
+            "events_total": len(event_rows),
+            "event_items_total": len(event_item_rows),
+            "event_status_counts": event_status_counts,
+            "labels_total": len(label_rows),
+            "label_source_counts": label_source_counts,
+            "impact_scores_total": len(score_rows),
+            "impact_model_counts": model_counts,
+            "llm_runs_total": len(llm_rows),
+            "llm_status_counts": llm_status_counts,
+            "reactions_total": len(reaction_rows),
+            "annotations_total": len(annotation_rows),
+            "fragmentation": fragmentation_report,
+        }
+        return _observe_request("v2_validation_summary", started_at, jsonify(payload))
+
+    @server.route("/api/v2/validation/event-study", methods=["GET"])
+    def validation_event_study_v2_api():
+        started_at = datetime.now(timezone.utc)
+        commodity = str(request.args.get("commodity") or "").strip().upper()
+        window_id = str(request.args.get("window_id") or request.args.get("window") or "").strip() or None
+        sampling_freq = str(request.args.get("sampling_freq") or "").strip() or None
+        limit = max(_parse_int(request.args.get("limit"), 10000), 0)
+        with session_factory() as session:
+            reactions = load_event_market_reactions(
+                session,
+                window_id=window_id,
+                sampling_freq=sampling_freq,
+                limit=limit,
+            )
+            if commodity:
+                reactions = [
+                    row
+                    for row in reactions
+                    if commodity in str(row.get("instrument_id") or "").strip().upper()
+                ]
+            event_ids = [str(row.get("event_id") or "").strip() for row in reactions if row.get("event_id")]
+            label_rows = load_news_labels(
+                session,
+                target_level="event",
+                target_ids=event_ids,
+                limit=max(len(event_ids) * 2, 1000),
+            )
+
+        direction_by_event: dict[str, str] = {}
+        for row in label_rows:
+            event_id = str(row.get("target_id") or "").strip()
+            direction = str(row.get("direction") or "").strip().lower()
+            if not event_id or not direction:
+                continue
+            if direction in {"positive", "negative", "neutral", "uncertain"}:
+                direction_by_event.setdefault(event_id, direction)
+
+        values_by_direction: dict[str, list[float]] = {
+            "positive": [],
+            "negative": [],
+            "neutral": [],
+            "uncertain": [],
+            "unlabeled": [],
+        }
+        for row in reactions:
+            event_id = str(row.get("event_id") or "").strip()
+            direction = direction_by_event.get(event_id, "unlabeled")
+            car_value = row.get("car")
+            if car_value is None:
+                continue
+            try:
+                values_by_direction.setdefault(direction, []).append(float(car_value))
+            except (TypeError, ValueError):
+                continue
+
+        summary = {}
+        for direction, values in values_by_direction.items():
+            avg_car = float(sum(values) / len(values)) if values else None
+            summary[direction] = {
+                "count": len(values),
+                "avg_car": avg_car,
+            }
+
+        payload = {
+            "commodity": commodity or None,
+            "window_id": window_id,
+            "sampling_freq": sampling_freq,
+            "sample_count": len(reactions),
+            "car_summary_by_direction": summary,
+        }
+        return _observe_request("v2_validation_event_study", started_at, jsonify(payload))
 
     @server.route("/api/decisions/<decision_id>/action", methods=["GET", "POST"])
     def decision_action_api(decision_id: str):
@@ -2966,6 +3965,173 @@ def create_app(settings: AppSettings) -> Dash:
             return jsonify({"error": "server_error", "message": str(exc)}), 500
         return jsonify(status)
 
+    @server.route("/api/v2/research/news/backtest", methods=["GET"])
+    def news_backtest_v2_api():
+        started_at = datetime.now(timezone.utc)
+        model_id = str(request.args.get("model_id") or settings.news_models.primary_model).strip()
+        horizon = str(request.args.get("horizon") or "1d").strip().lower()
+        epsilon = max(_parse_float(request.args.get("epsilon"), settings.news_models.epsilon_default), 0.0)
+        folds = max(_parse_int(request.args.get("folds"), 5), 1)
+        embargo_minutes = max(_parse_int(request.args.get("embargo_minutes"), 0), 0)
+        walk_forward_raw = _parse_bool(request.args.get("walk_forward"))
+        walk_forward = True if walk_forward_raw is None else bool(walk_forward_raw)
+        calibration_mode = str(request.args.get("calibration_mode") or settings.news_models.calibration_mode).strip().lower()
+        from_raw = request.args.get("from")
+        to_raw = request.args.get("to")
+        from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
+        to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if from_ts is None:
+            from_ts = now - timedelta(days=90)
+        if to_ts is None:
+            to_ts = now
+        if from_ts > to_ts:
+            return _observe_request(
+                "v2_news_backtest",
+                started_at,
+                _bad_request("from must be <= to"),
+            )
+
+        with session_factory() as session:
+            report = run_news_backtest(
+                session,
+                model_id=model_id,
+                horizon=horizon,
+                period_from=from_ts,
+                period_to=to_ts,
+                epsilon=epsilon,
+                folds=folds,
+                embargo_minutes=embargo_minutes,
+                walk_forward=walk_forward,
+                calibration_mode=calibration_mode,
+                calibration_min_train_samples=settings.news_models.calibration_min_train_samples,
+            )
+            run_id = _stable_id(
+                "news-bt",
+                model_id,
+                horizon,
+                from_ts.isoformat(),
+                to_ts.isoformat(),
+                datetime.now(timezone.utc).isoformat(),
+                length=20,
+            )
+            upsert_news_backtest_report(
+                session,
+                {
+                    "run_id": run_id,
+                    "period_from": from_ts.isoformat() + "Z",
+                    "period_to": to_ts.isoformat() + "Z",
+                    "horizon": horizon,
+                    "model_id": model_id,
+                    "metrics_json": report,
+                },
+            )
+        payload = dict(report)
+        payload["run_id"] = run_id
+        return _observe_request("v2_news_backtest", started_at, jsonify(payload))
+
+    @server.route("/api/v2/research/news/models/compare", methods=["GET"])
+    def news_models_compare_v2_api():
+        started_at = datetime.now(timezone.utc)
+        horizon = str(request.args.get("horizon") or "1d").strip().lower()
+        epsilon = max(_parse_float(request.args.get("epsilon"), settings.news_models.epsilon_default), 0.0)
+        folds = max(_parse_int(request.args.get("folds"), 5), 1)
+        embargo_minutes = max(_parse_int(request.args.get("embargo_minutes"), 0), 0)
+        walk_forward_raw = _parse_bool(request.args.get("walk_forward"))
+        walk_forward = True if walk_forward_raw is None else bool(walk_forward_raw)
+        calibration_mode = str(request.args.get("calibration_mode") or settings.news_models.calibration_mode).strip().lower()
+        promotion_min_accuracy = _parse_float(
+            request.args.get("promotion_min_accuracy"), settings.news_models.promotion_min_accuracy
+        )
+        promotion_min_coverage = _parse_float(
+            request.args.get("promotion_min_coverage"), settings.news_models.promotion_min_coverage
+        )
+        promotion_max_brier = _parse_float(
+            request.args.get("promotion_max_brier"), settings.news_models.promotion_max_brier
+        )
+        promotion_min_sample_count = max(
+            _parse_int(request.args.get("promotion_min_sample_count"), settings.news_models.promotion_min_sample_count),
+            0,
+        )
+        promotion_min_ticker_stability = _parse_float(
+            request.args.get("promotion_min_ticker_stability"), settings.news_models.promotion_min_ticker_stability
+        )
+        from_raw = request.args.get("from")
+        to_raw = request.args.get("to")
+        models_raw = str(request.args.get("models") or "").strip()
+        if models_raw:
+            model_ids = [item.strip() for item in models_raw.split(",") if item.strip()]
+        else:
+            model_ids = [item for item in settings.news_models.enabled_models if item in {"finbert", "nli"}]
+        if not model_ids:
+            model_ids = ["finbert", "nli"]
+        from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
+        to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if from_ts is None:
+            from_ts = now - timedelta(days=90)
+        if to_ts is None:
+            to_ts = now
+        if from_ts > to_ts:
+            return _observe_request(
+                "v2_news_compare",
+                started_at,
+                _bad_request("from must be <= to"),
+            )
+
+        with session_factory() as session:
+            comparison = compare_news_models(
+                session,
+                model_ids=model_ids,
+                horizon=horizon,
+                period_from=from_ts,
+                period_to=to_ts,
+                epsilon=epsilon,
+                folds=folds,
+                embargo_minutes=embargo_minutes,
+                walk_forward=walk_forward,
+                calibration_mode=calibration_mode,
+                calibration_min_train_samples=settings.news_models.calibration_min_train_samples,
+                promotion_min_accuracy=promotion_min_accuracy,
+                promotion_min_coverage=promotion_min_coverage,
+                promotion_max_brier=promotion_max_brier,
+                promotion_min_sample_count=promotion_min_sample_count,
+                promotion_min_ticker_stability=promotion_min_ticker_stability,
+            )
+            reports = comparison.get("reports")
+            if isinstance(reports, list):
+                for report in reports:
+                    if not isinstance(report, dict):
+                        continue
+                    report_model_id = str(report.get("model_id") or "").strip()
+                    if not report_model_id:
+                        continue
+                    run_id = _stable_id(
+                        "news-bt",
+                        report_model_id,
+                        horizon,
+                        from_ts.isoformat(),
+                        to_ts.isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
+                        length=20,
+                    )
+                    upsert_news_backtest_report(
+                        session,
+                        {
+                            "run_id": run_id,
+                            "period_from": from_ts.isoformat() + "Z",
+                            "period_to": to_ts.isoformat() + "Z",
+                            "horizon": horizon,
+                            "model_id": report_model_id,
+                            "metrics_json": report,
+                        },
+                    )
+            recent_reports = load_news_backtest_reports(session, horizon=horizon, limit=10)
+        payload = dict(comparison)
+        payload["recent_reports"] = recent_reports
+        winner = payload.get("winner") if isinstance(payload.get("winner"), dict) else {}
+        _mark_news_compare_events(str(winner.get("model_id") or ""))
+        return _observe_request("v2_news_compare", started_at, jsonify(payload))
     @server.route("/api/v2/top-pairs", methods=["GET"])
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
@@ -3606,14 +4772,59 @@ def create_app(settings: AppSettings) -> Dash:
 
     @server.route("/api/v2/signals/active", methods=["GET"])
     def signals_active_v2_api():
+        started_at = datetime.now(timezone.utc)
         legacy = signals_active_api()
         rows, status_code = _extract_response_payload(legacy)
         if status_code >= 400:
-            return legacy
+            return _observe_request("v2_signals_active", started_at, legacy)
         if not isinstance(rows, list):
-            return jsonify([])
+            return _observe_request("v2_signals_active", started_at, jsonify([]))
 
+        events_by_ticker: dict[str, list[dict[str, object]]] = {}
+        preferred_models = [settings.news_models.primary_model] + list(settings.news_models.enabled_models)
+        if settings.ui.ff_news_bridge_enabled:
+            lookback_start = datetime.now(timezone.utc) - timedelta(
+                minutes=max(settings.news_filter.lookback_minutes, 1)
+            )
+            with session_factory() as session:
+                feed_rows = _build_news_feed_events_from_event_layer(
+                    session,
+                    severity_filter=None,
+                    ticker_filter=None,
+                    entity_filter=None,
+                    from_ts=_normalize_datetime(lookback_start),
+                    to_ts=None,
+                    limit=1000,
+                    preferred_models=preferred_models,
+                )
+                if not feed_rows:
+                    bundle = _load_news_bundle(
+                        session,
+                        from_ts=_normalize_datetime(lookback_start),
+                        to_ts=None,
+                        limit=1000,
+                        preferred_models=preferred_models,
+                    )
+                    feed_rows = _build_news_feed_events(
+                        bundle=bundle,
+                        severity_filter=None,
+                        ticker_filter=None,
+                        entity_filter=None,
+                        from_ts=_normalize_datetime(lookback_start),
+                        to_ts=None,
+                    )
+            for event in feed_rows:
+                if not isinstance(event, dict):
+                    continue
+                for entity in event.get("entity_links", []):
+                    if not isinstance(entity, dict):
+                        continue
+                    ticker = str(entity.get("ticker") or entity.get("entity_id") or "").strip().upper()
+                    if not ticker:
+                        continue
+                    events_by_ticker.setdefault(ticker, []).append(event)
         payload: list[dict[str, object]] = []
+        bridge_links_to_store: list[dict[str, object]] = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -3633,6 +4844,73 @@ def create_app(settings: AppSettings) -> Dash:
                 "open_leg_total": int(row.get("position_open_leg_total") or 0),
                 "net_orders": int(row.get("position_net_orders") or 0),
             }
+
+            matched_events: list[dict[str, object]] = []
+            if settings.ui.ff_news_bridge_enabled:
+                candidate_tickers = {
+                    str(row.get("stock") or "").strip().upper(),
+                    str(row.get("future") or "").strip().upper(),
+                }
+                seen_news_ids: set[str] = set()
+                for ticker in candidate_tickers:
+                    if not ticker:
+                        continue
+                    for event in events_by_ticker.get(ticker, []):
+                        if not isinstance(event, dict):
+                            continue
+                        news_id = str(event.get("news_id") or "").strip()
+                        if not news_id or news_id in seen_news_ids:
+                            continue
+                        seen_news_ids.add(news_id)
+                        matched_events.append(event)
+                matched_events.sort(key=lambda item: str(item.get("published_at") or ""), reverse=True)
+
+            gate_rows = [
+                {
+                    "news_id": event.get("news_id"),
+                    "title": event.get("headline"),
+                    "content": event.get("summary"),
+                    "published_at": event.get("published_at"),
+                    "source": event.get("source"),
+                }
+                for event in matched_events
+            ]
+            score_by_news: dict[str, dict[str, object]] = {}
+            for event in matched_events:
+                news_id = str(event.get("news_id") or "").strip()
+                if not news_id:
+                    continue
+                model_scores = event.get("model_scores")
+                selected_score: dict[str, object] | None = None
+                if isinstance(model_scores, list):
+                    selected_score = _select_primary_model_score(model_scores, preferred_models)
+                if selected_score is not None:
+                    score_by_news[news_id] = selected_score
+            gate_result = run_news_gate(
+                gate_rows,
+                score_by_news=score_by_news,
+                lookback_minutes=settings.news_filter.lookback_minutes,
+                block_severity_threshold=settings.news_filter.block_severity_threshold,
+                reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
+            )
+            matched_event_ids = [
+                str(event.get("news_event_id") or "").strip()
+                for event in matched_events
+                if str(event.get("news_event_id") or "").strip()
+            ]
+            latest_published_at = str(matched_events[0].get("published_at") or "") if matched_events else None
+            if settings.ui.ff_news_bridge_enabled and matched_events:
+                bridge_links_to_store.extend(
+                    build_signal_news_links(
+                        signal_id=signal_id,
+                        decision_id=None,
+                        matched_news_ids=[str(event.get("news_id") or "") for event in matched_events],
+                        gate_action=gate_result.action,
+                        link_type="used_in_decision",
+                        lookback_minutes=settings.news_filter.lookback_minutes,
+                        source="runtime",
+                    )
+                )
             enriched_row = dict(row)
             enriched_row.update(
                 {
@@ -3640,6 +4918,14 @@ def create_app(settings: AppSettings) -> Dash:
                     "entity_ref": entity_ref,
                     "lifecycle_state": lifecycle_state,
                     "signal_action_effective": signal_action_effective,
+                    "news_ref": {
+                        "total_events": len(matched_events),
+                        "latest_published_at": latest_published_at,
+                    },
+                    "news_gate_action": gate_result.action if matched_events else "allow",
+                    "matched_news_event_ids": matched_event_ids,
+                    "event_ids_used": matched_event_ids,
+                    "news_severity": gate_result.highest_severity if matched_events else "low",
                     "gate_results": gate_results,
                     "decision_ref": {"decision_id": None},
                     "execution_ref": execution_ref,
@@ -3651,7 +4937,24 @@ def create_app(settings: AppSettings) -> Dash:
                 }
             )
             payload.append(enriched_row)
-        return jsonify(payload)
+        created_links_count = 0
+        if bridge_links_to_store:
+            dedup_links: dict[str, dict[str, object]] = {}
+            for row in bridge_links_to_store:
+                key = "|".join(
+                    [
+                        str(row.get("news_id") or ""),
+                        str(row.get("signal_id") or ""),
+                        str(row.get("link_type") or ""),
+                        str(row.get("window_start") or ""),
+                    ]
+                )
+                dedup_links[key] = row
+            created_links_count = len(dedup_links)
+            with session_factory() as session:
+                upsert_news_signal_links(session, dedup_links.values())
+        _mark_signal_news_bridge_events(payload, created_links_count)
+        return _observe_request("v2_signals_active", started_at, jsonify(payload))
 
     def _collect_signal_actionability_rows() -> tuple[list[dict[str, object]], int]:
         legacy = signals_active_v2_api()
