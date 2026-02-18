@@ -197,3 +197,20 @@ print(best.objective, best.params)
   in the status/result payload.
 - `rates.use_trading_days=true` switches annualization to 252 trading days
   (affects ExcessAnn, Vol_ann, IR, Sharpe).
+
+## Spread tolerance profile (ready-to-run)
+Use `configs/hpo_spread_tolerance_portfolio.yaml` to tune spread entry bands in
+minute replay with portfolio utility penalties.
+
+This profile searches:
+- `strategy.entry_spread_tolerance_pct`
+- `strategy.entry_stock_tolerance_pct`
+- `strategy.entry_future_tolerance_pct`
+- `strategy.execution_max_wait_minutes`
+- `strategy.signal_cutoff_before_day_end_minutes`
+
+Portfolio utility already penalizes low reuse / high idle behavior:
+- `PortfolioIdleRatio`
+- `PortfolioUnfilledEntryRate`
+- `PortfolioTurnover`
+- `PortfolioForcedExitRate`

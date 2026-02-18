@@ -1,0 +1,75 @@
+base:
+  test:
+    start_date: "2025-02-01"
+    end_date: "2026-02-18"
+  universe:
+    max_pairs: 55
+  execution:
+    mode: "INTRADAY_MINUTE"
+    execution_model: "MINUTE_REPLAY"
+    minute_fail_fast: true
+  strategy:
+    execution_lag_minutes: 30
+    execution_max_wait_minutes: 360
+    entry_price_tolerance_pct: 0.02
+    entry_stock_tolerance_pct: 0.02
+    entry_future_tolerance_pct: 0.025
+    entry_spread_tolerance_pct: 0.03
+    signal_cutoff_before_day_end_minutes: 0
+  rates:
+    use_trading_days: false
+  portfolio:
+    account_equity: 1000000
+  allocation:
+    max_turnover_pct: 0.3
+  rebalance:
+    cadence: "weekly"
+    target_utilization: 0.9
+
+search_space:
+  strategy.entry_spread_tolerance_pct:
+    type: "float"
+    min: 0.003
+    max: 0.08
+    step: 0.003
+  strategy.entry_stock_tolerance_pct:
+    type: "float"
+    min: 0.005
+    max: 0.04
+    step: 0.005
+  strategy.entry_future_tolerance_pct:
+    type: "float"
+    min: 0.005
+    max: 0.05
+    step: 0.005
+  strategy.execution_max_wait_minutes:
+    type: "int"
+    min: 60
+    max: 420
+    step: 30
+  strategy.signal_cutoff_before_day_end_minutes:
+    type: "int"
+    min: 0
+    max: 45
+    step: 5
+
+cv:
+  folds: 4
+  embargo_days: 5
+  purged: true
+
+optimization:
+  metric: "excess_ann"
+  mode: "max"
+  max_trials: 24
+  random_seed: 42
+  quality_review_enabled: true
+  quality_top_n: 8
+  quality_min_trades_closed_total: 20
+  quality_max_unfilled_entry_rate: 0.45
+  quality_max_forced_exit_rate: 0.35
+  quality_max_entry_wait_min_closed: 180.0
+  quality_max_exit_wait_min_closed: 240.0
+  quality_lambda_unfilled: 0.35
+  quality_lambda_forced: 0.45
+  quality_lambda_wait: 0.15
