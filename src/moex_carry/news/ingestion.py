@@ -1,15 +1,20 @@
 ﻿from __future__ import annotations
 
 import hashlib
+import importlib
 import re
+import time
 from datetime import datetime, timezone
 from typing import Iterable
 
+import requests
+
+
+_LAST_GDELT_REQUEST_AT: float | None = None
 
 def _safe_import(name: str):
     try:
-        module = __import__(name, fromlist=["*"])
-        return module
+        return importlib.import_module(name)
     except Exception:
         return None
 
@@ -18,8 +23,9 @@ def normalize_article_text(raw_text: str | None) -> str:
     text = str(raw_text or "")
     if not text:
         return ""
+    looks_like_html = "<" in text and ">" in text
     trafilatura = _safe_import("trafilatura")
-    if trafilatura is not None:
+    if trafilatura is not None and looks_like_html:
         try:
             extracted = trafilatura.extract(text, include_comments=False, include_tables=False)
             if isinstance(extracted, str) and extracted.strip():
@@ -131,4 +137,104 @@ def fetch_rss_news(urls: Iterable[str], *, max_items: int = 200) -> list[dict[st
             normalized = normalize_news_record(payload, source=str(url))
             if normalized is not None:
                 collected.append(normalized)
+    return collected
+
+
+def _format_gdelt_datetime(value: datetime) -> str:
+    normalized = value
+    if normalized.tzinfo is None:
+        normalized = normalized.replace(tzinfo=timezone.utc)
+    else:
+        normalized = normalized.astimezone(timezone.utc)
+    return normalized.strftime("%Y%m%d%H%M%S")
+
+
+def _respect_gdelt_rate_limit(min_interval_sec: float) -> None:
+    global _LAST_GDELT_REQUEST_AT
+    now = time.monotonic()
+    if _LAST_GDELT_REQUEST_AT is None:
+        _LAST_GDELT_REQUEST_AT = now
+        return
+    delay = float(min_interval_sec) - (now - _LAST_GDELT_REQUEST_AT)
+    if delay > 0.0:
+        time.sleep(delay)
+    _LAST_GDELT_REQUEST_AT = time.monotonic()
+
+
+def fetch_gdelt_news(
+    *,
+    query: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    max_items: int = 250,
+    min_request_interval_sec: float = 5.2,
+    timeout_sec: int = 40,
+    retries: int = 2,
+    retry_backoff_sec: float = 2.0,
+) -> list[dict[str, object]]:
+    query_value = str(query or "").strip()
+    if not query_value:
+        return []
+    effective_max = min(max(int(max_items), 1), 250)
+    _respect_gdelt_rate_limit(max(float(min_request_interval_sec), 0.0))
+
+    params = {
+        "query": query_value,
+        "mode": "ArtList",
+        "maxrecords": str(effective_max),
+        "format": "json",
+        "sort": "DateDesc",
+        "startdatetime": _format_gdelt_datetime(start_dt),
+        "enddatetime": _format_gdelt_datetime(end_dt),
+    }
+    response = None
+    attempts = max(int(retries), 0) + 1
+    for attempt in range(attempts):
+        try:
+            response = requests.get(
+                "https://api.gdeltproject.org/api/v2/doc/doc",
+                params=params,
+                timeout=max(int(timeout_sec), 5),
+            )
+        except requests.RequestException:
+            response = None
+        if response is not None and response.status_code == 200:
+            break
+        if attempt < attempts - 1:
+            if response is not None and response.status_code == 429:
+                time.sleep(max(float(min_request_interval_sec), 5.0))
+            else:
+                time.sleep(max(float(retry_backoff_sec), 0.0) * (attempt + 1))
+
+    if response is None or response.status_code != 200:
+        return []
+
+    try:
+        payload = response.json()
+    except ValueError:
+        return []
+
+    articles = payload.get("articles") if isinstance(payload, dict) else None
+    if not isinstance(articles, list):
+        return []
+
+    collected: list[dict[str, object]] = []
+    for article in articles:
+        if not isinstance(article, dict):
+            continue
+        normalized = normalize_news_record(
+            {
+                "title": article.get("title"),
+                "summary": article.get("title"),
+                "description": article.get("description"),
+                "published": article.get("seendate"),
+                "link": article.get("url"),
+                "language": article.get("language"),
+                "source": article.get("domain"),
+            },
+            source="gdelt",
+        )
+        if normalized is None:
+            continue
+        collected.append(normalized)
     return collected

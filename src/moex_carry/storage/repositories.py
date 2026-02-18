@@ -592,18 +592,20 @@ def upsert_news_impact_scores(session: Session, rows: Iterable[dict[str, object]
         impact_score = float(row.get("impact_score") or 0.0)
         calibrated = bool(row.get("calibrated"))
         inference_ts = _parse_datetime_value(row.get("inference_ts")) or now
-        existing = (
-            session.execute(
-                select(db.NewsImpactScoreModel).where(
-                    db.NewsImpactScoreModel.model_id == model_id,
-                    db.NewsImpactScoreModel.model_version == model_version,
-                    db.NewsImpactScoreModel.target_level == target_level,
-                    db.NewsImpactScoreModel.target_id == target_id,
+        existing = None
+        if target_level is not None and target_id is not None:
+            existing = (
+                session.execute(
+                    select(db.NewsImpactScoreModel).where(
+                        db.NewsImpactScoreModel.model_id == model_id,
+                        db.NewsImpactScoreModel.model_version == model_version,
+                        db.NewsImpactScoreModel.target_level == target_level,
+                        db.NewsImpactScoreModel.target_id == target_id,
+                    )
                 )
+                .scalars()
+                .first()
             )
-            .scalars()
-            .first()
-        )
         if existing is None:
             existing = (
                 session.execute(
@@ -1362,6 +1364,357 @@ def load_news_annotations(
     ]
 
 
+def upsert_news_event_updates(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        event_id = _str_or_none(row.get("event_id"))
+        ts_update = _parse_datetime_value(row.get("ts_update"))
+        if event_id is None or ts_update is None:
+            continue
+        source_hash = _str_or_none(row.get("source_hash"))
+        source_url = _str_or_none(row.get("source_url"))
+        update_id = _str_or_none(row.get("update_id")) or _build_news_event_update_id(
+            event_id=event_id,
+            ts_update=ts_update,
+            source_hash=source_hash,
+            source_url=source_url,
+        )
+        session.merge(
+            db.NewsEventUpdateModel(
+                update_id=update_id,
+                event_id=event_id,
+                ts_update=ts_update,
+                phase=_str_or_none(row.get("phase")),
+                severity=_float_or_none(row.get("severity")),
+                facts_json=row.get("facts_json"),
+                factor_delta_json=row.get("factor_delta_json"),
+                source_url=source_url,
+                source_hash=source_hash,
+                created_at=_parse_datetime_value(row.get("created_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_event_updates(
+    session: Session,
+    *,
+    event_id: str | None = None,
+    event_ids: Iterable[str] | None = None,
+    phase: str | None = None,
+    limit: int = 5000,
+) -> list[dict[str, object]]:
+    query = select(db.NewsEventUpdateModel)
+    if event_id:
+        query = query.where(db.NewsEventUpdateModel.event_id == str(event_id).strip())
+    if event_ids:
+        normalized = [str(item).strip() for item in event_ids if str(item).strip()]
+        if normalized:
+            query = query.where(db.NewsEventUpdateModel.event_id.in_(normalized))
+    if phase:
+        query = query.where(db.NewsEventUpdateModel.phase == str(phase).strip())
+    query = query.order_by(db.NewsEventUpdateModel.ts_update.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "update_id": row.update_id,
+            "event_id": row.event_id,
+            "ts_update": _to_iso_z(row.ts_update),
+            "phase": row.phase,
+            "severity": row.severity,
+            "facts_json": row.facts_json,
+            "factor_delta_json": row.factor_delta_json,
+            "source_url": row.source_url,
+            "source_hash": row.source_hash,
+            "created_at": _to_iso_z(row.created_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_news_event_links(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        src_event_id = _str_or_none(row.get("src_event_id"))
+        dst_event_id = _str_or_none(row.get("dst_event_id"))
+        link_type = _str_or_none(row.get("link_type"))
+        if src_event_id is None or dst_event_id is None or link_type is None:
+            continue
+        link_id = _str_or_none(row.get("link_id")) or _build_news_event_link_id(
+            src_event_id=src_event_id,
+            dst_event_id=dst_event_id,
+            link_type=link_type,
+        )
+        session.merge(
+            db.NewsEventLinkModel(
+                link_id=link_id,
+                src_event_id=src_event_id,
+                dst_event_id=dst_event_id,
+                link_type=link_type,
+                confidence=_float_or_none(row.get("confidence")),
+                evidence_json=row.get("evidence_json"),
+                created_at=_parse_datetime_value(row.get("created_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_event_links(
+    session: Session,
+    *,
+    src_event_id: str | None = None,
+    dst_event_id: str | None = None,
+    link_type: str | None = None,
+    limit: int = 5000,
+) -> list[dict[str, object]]:
+    query = select(db.NewsEventLinkModel)
+    if src_event_id:
+        query = query.where(db.NewsEventLinkModel.src_event_id == str(src_event_id).strip())
+    if dst_event_id:
+        query = query.where(db.NewsEventLinkModel.dst_event_id == str(dst_event_id).strip())
+    if link_type:
+        query = query.where(db.NewsEventLinkModel.link_type == str(link_type).strip())
+    query = query.order_by(db.NewsEventLinkModel.created_at.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "link_id": row.link_id,
+            "src_event_id": row.src_event_id,
+            "dst_event_id": row.dst_event_id,
+            "link_type": row.link_type,
+            "confidence": row.confidence,
+            "evidence_json": row.evidence_json,
+            "created_at": _to_iso_z(row.created_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_news_gold_labels(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        target_type = _str_or_none(row.get("target_type"))
+        target_id = _str_or_none(row.get("target_id"))
+        source = _str_or_none(row.get("source"))
+        if target_type is None or target_id is None or source is None:
+            continue
+        label_schema_version = _str_or_none(row.get("label_schema_version")) or "v1"
+        label_id = _str_or_none(row.get("label_id")) or _build_news_gold_label_id(
+            target_type=target_type,
+            target_id=target_id,
+            source=source,
+            label_schema_version=label_schema_version,
+        )
+        session.merge(
+            db.NewsGoldLabelModel(
+                label_id=label_id,
+                target_type=target_type,
+                target_id=target_id,
+                event_family=_str_or_none(row.get("event_family")),
+                factors_json=row.get("factors_json"),
+                phase=_str_or_none(row.get("phase")),
+                direction_label=_str_or_none(row.get("direction_label")),
+                quality=_str_or_none(row.get("quality")) or "gold",
+                source=source,
+                label_schema_version=label_schema_version,
+                confidence=_float_or_none(row.get("confidence")),
+                meta_json=row.get("meta_json"),
+                created_at=_parse_datetime_value(row.get("created_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_gold_labels(
+    session: Session,
+    *,
+    target_type: str | None = None,
+    target_ids: Iterable[str] | None = None,
+    source: str | None = None,
+    quality: str | None = None,
+    limit: int = 5000,
+) -> list[dict[str, object]]:
+    query = select(db.NewsGoldLabelModel)
+    if target_type:
+        query = query.where(db.NewsGoldLabelModel.target_type == str(target_type).strip())
+    if target_ids:
+        normalized = [str(item).strip() for item in target_ids if str(item).strip()]
+        if normalized:
+            query = query.where(db.NewsGoldLabelModel.target_id.in_(normalized))
+    if source:
+        query = query.where(db.NewsGoldLabelModel.source == str(source).strip())
+    if quality:
+        query = query.where(db.NewsGoldLabelModel.quality == str(quality).strip())
+    query = query.order_by(db.NewsGoldLabelModel.created_at.desc(), db.NewsGoldLabelModel.label_id.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "label_id": row.label_id,
+            "target_type": row.target_type,
+            "target_id": row.target_id,
+            "event_family": row.event_family,
+            "factors_json": row.factors_json,
+            "phase": row.phase,
+            "direction_label": row.direction_label,
+            "quality": row.quality,
+            "source": row.source,
+            "label_schema_version": row.label_schema_version,
+            "confidence": row.confidence,
+            "meta_json": row.meta_json,
+            "created_at": _to_iso_z(row.created_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_news_unmatched_gold(session: Session, rows: Iterable[dict[str, object]]) -> int:
+    stored = 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for row in rows:
+        source = _str_or_none(row.get("source"))
+        gold_id = _str_or_none(row.get("gold_id"))
+        if source is None or gold_id is None:
+            continue
+        unmatched_id = _str_or_none(row.get("unmatched_id")) or _build_news_unmatched_gold_id(
+            source=source,
+            gold_id=gold_id,
+        )
+        session.merge(
+            db.NewsUnmatchedGoldModel(
+                unmatched_id=unmatched_id,
+                source=source,
+                gold_id=gold_id,
+                published_at_utc=_parse_datetime_value(row.get("published_at_utc")),
+                commodity_json=row.get("commodity_json"),
+                event_family=_str_or_none(row.get("event_family")),
+                confidence=_float_or_none(row.get("confidence")),
+                match_score=_float_or_none(row.get("match_score")),
+                reason=_str_or_none(row.get("reason")),
+                payload_json=row.get("payload_json"),
+                created_at=_parse_datetime_value(row.get("created_at")) or now,
+            )
+        )
+        stored += 1
+    session.commit()
+    return stored
+
+
+def load_news_unmatched_gold(
+    session: Session,
+    *,
+    source: str | None = None,
+    event_family: str | None = None,
+    published_from: str | None = None,
+    published_to: str | None = None,
+    limit: int = 5000,
+) -> list[dict[str, object]]:
+    query = select(db.NewsUnmatchedGoldModel)
+    if source:
+        query = query.where(db.NewsUnmatchedGoldModel.source == str(source).strip())
+    if event_family:
+        query = query.where(db.NewsUnmatchedGoldModel.event_family == str(event_family).strip())
+    from_ts = _parse_datetime_value(published_from)
+    to_ts = _parse_datetime_value(published_to)
+    if from_ts is not None:
+        query = query.where(db.NewsUnmatchedGoldModel.published_at_utc >= from_ts)
+    if to_ts is not None:
+        query = query.where(db.NewsUnmatchedGoldModel.published_at_utc <= to_ts)
+    query = query.order_by(db.NewsUnmatchedGoldModel.created_at.desc(), db.NewsUnmatchedGoldModel.unmatched_id.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "unmatched_id": row.unmatched_id,
+            "source": row.source,
+            "gold_id": row.gold_id,
+            "published_at_utc": _to_iso_z(row.published_at_utc),
+            "commodity_json": row.commodity_json,
+            "event_family": row.event_family,
+            "confidence": row.confidence,
+            "match_score": row.match_score,
+            "reason": row.reason,
+            "payload_json": row.payload_json,
+            "created_at": _to_iso_z(row.created_at),
+        }
+        for row in rows
+    ]
+
+
+def upsert_news_model_eval_record(session: Session, row: dict[str, object]) -> str | None:
+    run_id = _str_or_none(row.get("run_id"))
+    model_version = _str_or_none(row.get("model_version"))
+    if run_id is None or model_version is None:
+        return None
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.merge(
+        db.NewsModelEvalRecordModel(
+            run_id=run_id,
+            model_version=model_version,
+            dataset_version=_str_or_none(row.get("dataset_version")),
+            horizon=_str_or_none(row.get("horizon")),
+            supervised_metrics_json=row.get("supervised_metrics_json"),
+            market_metrics_json=row.get("market_metrics_json"),
+            pass_supervised=bool(row.get("pass_supervised")),
+            pass_market=bool(row.get("pass_market")),
+            promotion_state=_str_or_none(row.get("promotion_state")) or "hold",
+            gate_details_json=row.get("gate_details_json"),
+            created_at=_parse_datetime_value(row.get("created_at")) or now,
+        )
+    )
+    session.commit()
+    return run_id
+
+
+def load_news_model_eval_records(
+    session: Session,
+    *,
+    model_version: str | None = None,
+    horizon: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, object]]:
+    query = select(db.NewsModelEvalRecordModel)
+    if model_version:
+        query = query.where(db.NewsModelEvalRecordModel.model_version == str(model_version).strip())
+    if horizon:
+        query = query.where(db.NewsModelEvalRecordModel.horizon == str(horizon).strip())
+    query = query.order_by(db.NewsModelEvalRecordModel.created_at.desc(), db.NewsModelEvalRecordModel.run_id.desc())
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    return [
+        {
+            "run_id": row.run_id,
+            "model_version": row.model_version,
+            "dataset_version": row.dataset_version,
+            "horizon": row.horizon,
+            "supervised_metrics_json": row.supervised_metrics_json,
+            "market_metrics_json": row.market_metrics_json,
+            "pass_supervised": bool(row.pass_supervised),
+            "pass_market": bool(row.pass_market),
+            "promotion_state": row.promotion_state,
+            "gate_details_json": row.gate_details_json,
+            "created_at": _to_iso_z(row.created_at),
+        }
+        for row in rows
+    ]
+
+
 def _str_or_none(value: object) -> str | None:
     if value is None:
         return None
@@ -1450,6 +1803,36 @@ def _build_news_signal_link_id(
     return f"lnk-{digest}"
 
 
+def _build_news_event_update_id(
+    *,
+    event_id: str,
+    ts_update: datetime,
+    source_hash: str | None,
+    source_url: str | None,
+) -> str:
+    raw = "|".join(
+        [
+            event_id.strip(),
+            ts_update.isoformat(),
+            (source_hash or "").strip(),
+            (source_url or "").strip(),
+        ]
+    )
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
+    return f"upd-{digest}"
+
+
+def _build_news_event_link_id(
+    *,
+    src_event_id: str,
+    dst_event_id: str,
+    link_type: str,
+) -> str:
+    raw = "|".join([src_event_id.strip(), dst_event_id.strip(), link_type.strip()])
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
+    return f"xlk-{digest}"
+
+
 def _build_news_label_id(
     *,
     target_level: str,
@@ -1471,6 +1854,35 @@ def _build_news_label_id(
     )
     digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
     return f"lbl-{digest}"
+
+
+def _build_news_gold_label_id(
+    *,
+    target_type: str,
+    target_id: str,
+    source: str,
+    label_schema_version: str,
+) -> str:
+    raw = "|".join(
+        [
+            target_type.strip(),
+            target_id.strip(),
+            source.strip(),
+            label_schema_version.strip(),
+        ]
+    )
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
+    return f"gld-{digest}"
+
+
+def _build_news_unmatched_gold_id(
+    *,
+    source: str,
+    gold_id: str,
+) -> str:
+    raw = "|".join([source.strip(), gold_id.strip()])
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
+    return f"ung-{digest}"
 
 
 def _build_news_llm_input_hash(

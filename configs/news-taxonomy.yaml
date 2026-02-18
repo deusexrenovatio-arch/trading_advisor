@@ -1,0 +1,99 @@
+schema_version: "v0.1"
+updated_at_utc: "2026-02-18T00:00:00Z"
+
+factors:
+  - code: SUPPLY
+    description: Net effect on near-term commodity supply.
+  - code: DEMAND
+    description: Net effect on near-term commodity demand.
+  - code: INVENTORY
+    description: Inventory delta versus expected baseline.
+  - code: EXPORTS_LNG
+    description: LNG export capacity/flow changes.
+  - code: TRANSPORT_CAPACITY
+    description: Logistics throughput and route constraints.
+  - code: RISK_PREMIUM
+    description: Geopolitical or security risk premium.
+  - code: WEATHER_DEGREE_DAYS
+    description: HDD/CDD signal proxy for weather-driven demand.
+  - code: REAL_YIELDS
+    description: US real-yield pressure for precious metals.
+  - code: USD
+    description: USD impulse affecting commodity pricing.
+  - code: RISK_OFF
+    description: Risk-off positioning and safe-haven demand.
+
+event_families:
+  - code: NG_STORAGE_EIA
+    category: scheduled
+    commodities: [NG_US]
+    anchor_sources: [EIA_NG_STORAGE]
+    default_factors:
+      INVENTORY: neutral
+      SUPPLY: neutral
+      DEMAND: neutral
+  - code: OIL_INVENTORIES_EIA
+    category: scheduled
+    commodities: [BRN]
+    anchor_sources: [EIA_OIL_WPSR]
+    default_factors:
+      INVENTORY: neutral
+      SUPPLY: neutral
+      RISK_PREMIUM: neutral
+  - code: FOMC_DECISION_MINUTES_SPEECH
+    category: scheduled
+    commodities: [GOLD, BRN, NG_US]
+    anchor_sources: [FED_FOMC]
+    default_factors:
+      USD: neutral
+      REAL_YIELDS: neutral
+      RISK_OFF: neutral
+  - code: WEATHER_COLD_HEAT_DD
+    category: episodic
+    commodities: [NG_US]
+    anchor_sources: [NWS_API, CPC_DEGREE_DAYS]
+    default_factors:
+      WEATHER_DEGREE_DAYS: neutral
+      DEMAND: neutral
+  - code: HURRICANE_GOM_SHUTINS
+    category: episodic
+    commodities: [NG_US, BRN]
+    anchor_sources: [NHC, BSEE]
+    default_factors:
+      SUPPLY: down
+      RISK_PREMIUM: up
+  - code: SHIPPING_CHOKEPOINT_PANAMA
+    category: episodic
+    commodities: [NG_US]
+    anchor_sources: [PANAMA_ADVISORY]
+    default_factors:
+      TRANSPORT_CAPACITY: down
+      EXPORTS_LNG: down
+  - code: SHIPPING_CHOKEPOINT_SUEZ_REDIR
+    category: episodic
+    commodities: [BRN]
+    anchor_sources: [SUEZ_CIRCULAR]
+    default_factors:
+      TRANSPORT_CAPACITY: down
+      RISK_PREMIUM: up
+  - code: MARITIME_SECURITY_UKMTO
+    category: episodic
+    commodities: [BRN, GOLD]
+    anchor_sources: [UKMTO_INCIDENTS]
+    default_factors:
+      RISK_PREMIUM: up
+      TRANSPORT_CAPACITY: down
+  - code: INFRA_OUTAGE_PIPELINE_LNG
+    category: episodic
+    commodities: [NG_US]
+    anchor_sources: [OPERATOR_RELEASE]
+    default_factors:
+      SUPPLY: down
+      EXPORTS_LNG: up
+  - code: SANCTIONS_EXPORT_RESTRICTIONS
+    category: episodic
+    commodities: [BRN, GOLD]
+    anchor_sources: [OFFICIAL_RELEASE]
+    default_factors:
+      SUPPLY: down
+      RISK_PREMIUM: up

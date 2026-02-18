@@ -1,0 +1,55 @@
+database:
+  url: "sqlite:///./data/news_smoke_ng.db"
+  echo: false
+
+news_ingest:
+  enabled: true
+  rss_urls: []
+  max_items_per_run: 12
+  gdelt_enabled: true
+  gdelt_max_records_per_call: 40
+  gdelt_min_request_interval_sec: 6.0
+  gdelt_request_timeout_sec: 30
+  backfill_chunk_days: 7
+  backfill_max_windows_per_commodity: 2
+  qc_min_news_per_ticker: 20
+  qc_min_price_points_per_ticker: 20
+  commodity_profiles:
+    - ticker: "NG_US"
+      name: "US Natural Gas"
+      gdelt_query: "(\"natural gas\" OR \"henry hub\" OR \"nymex gas\")"
+      rss_urls:
+        - "https://news.google.com/rss/search?q=henry+hub+natural+gas+futures"
+      price_source: "yfinance"
+      price_symbol: "NG=F"
+      price_interval: "1d"
+
+news_models:
+  enabled_models: ["finbert", "nli"]
+  primary_model: "finbert"
+  inference_batch_size: 1
+  inference_text_max_chars: 700
+  inference_thread_cap: 1
+  calibration_mode: "none"
+  promotion_min_sample_count: 5
+  decision_weight_quality_horizon: "1h"
+  decision_weight_quality_max_age_hours: 72
+
+news_llm:
+  enabled: true
+  full_pass_enabled: true
+  model_id: "gpt-5-mini"
+  max_items_per_run: 3
+  max_input_chars: 1200
+  max_output_tokens: 120
+  request_timeout_sec: 30
+  max_retries: 1
+  retry_backoff_sec: 1.0
+  temperature: 0.0
+  top_impact_priority: true
+  min_impact_for_priority: 0.0
+
+ui:
+  ff_news_bridge_enabled: true
+  ff_news_model_advisory_enabled: true
+  ff_news_model_decision_weight_enabled: false

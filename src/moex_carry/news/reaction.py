@@ -558,15 +558,55 @@ def summarize_event_study(
     *,
     reactions: list[dict[str, object]],
     labels: list[dict[str, object]],
+    events: list[dict[str, object]] | None = None,
     exclude_overlap: bool = False,
 ) -> dict[str, object]:
+    events = events or []
     direction_by_event: dict[str, str] = {}
+    event_family_by_event: dict[str, str] = {}
+    event_kind_by_event: dict[str, str] = {}
+    for event in events:
+        event_id = str(event.get("event_id") or "").strip()
+        if not event_id:
+            continue
+        mechanism = str(event.get("canonical_mechanism") or "").strip().lower()
+        if "event_family=" in mechanism:
+            for chunk in mechanism.split("|"):
+                if "=" not in chunk:
+                    continue
+                key, value = chunk.split("=", 1)
+                if key.strip().lower() == "event_family":
+                    family = value.strip().upper()
+                    if family:
+                        event_family_by_event[event_id] = family
+                    break
+        if "scheduled_anchor" in mechanism:
+            event_kind_by_event[event_id] = "scheduled"
+        elif "episodic_anchor" in mechanism:
+            event_kind_by_event[event_id] = "episodic"
+        else:
+            event_kind_by_event[event_id] = "internal"
+
     for row in labels:
         event_id = str(row.get("target_id") or "").strip()
         direction = str(row.get("direction") or "").strip().lower()
         if not event_id or direction not in {"positive", "negative", "neutral", "uncertain"}:
             continue
         direction_by_event.setdefault(event_id, direction)
+        news_type_json = row.get("news_type_json")
+        if isinstance(news_type_json, list):
+            for item in news_type_json:
+                code = str(item or "").strip().upper()
+                if not code:
+                    continue
+                if "_" in code or code in {"NG_STORAGE_EIA", "OIL_INVENTORIES_EIA"}:
+                    event_family_by_event.setdefault(event_id, code)
+                    break
+        evidence = row.get("evidence_json")
+        if isinstance(evidence, dict):
+            code = str(evidence.get("event_family") or "").strip().upper()
+            if code:
+                event_family_by_event.setdefault(event_id, code)
 
     filtered: list[dict[str, object]] = []
     excluded_overlap_count = 0
@@ -632,11 +672,44 @@ def summarize_event_study(
         summary[direction]["p_value_fdr"] = value
         summary[direction]["significant_5pct"] = bool(value <= 0.05)
 
+    family_counts: dict[str, int] = {}
+    family_car_sum: dict[str, float] = {}
+    kind_counts: dict[str, int] = {}
+    kind_car_sum: dict[str, float] = {}
+    for row in filtered:
+        event_id = str(row.get("event_id") or "").strip()
+        family = event_family_by_event.get(event_id, "UNKNOWN")
+        kind = event_kind_by_event.get(event_id, "internal")
+        try:
+            car_value = float(row.get("car"))
+        except (TypeError, ValueError):
+            continue
+        family_counts[family] = int(family_counts.get(family, 0)) + 1
+        family_car_sum[family] = float(family_car_sum.get(family, 0.0)) + car_value
+        kind_counts[kind] = int(kind_counts.get(kind, 0)) + 1
+        kind_car_sum[kind] = float(kind_car_sum.get(kind, 0.0)) + car_value
+    family_summary = {
+        key: {
+            "count": int(family_counts[key]),
+            "avg_car": float(family_car_sum[key]) / float(family_counts[key]) if family_counts[key] else None,
+        }
+        for key in sorted(family_counts.keys())
+    }
+    kind_summary = {
+        key: {
+            "count": int(kind_counts[key]),
+            "avg_car": float(kind_car_sum[key]) / float(kind_counts[key]) if kind_counts[key] else None,
+        }
+        for key in sorted(kind_counts.keys())
+    }
+
     return {
         "sample_count_before_overlap_filter": len(reactions),
         "sample_count": len(filtered),
         "excluded_overlap_count": excluded_overlap_count,
         "exclude_overlap": bool(exclude_overlap),
         "car_summary_by_direction": summary,
+        "car_summary_by_event_family": family_summary,
+        "car_summary_by_event_kind": kind_summary,
         "fdr_method": "bh",
     }

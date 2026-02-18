@@ -309,6 +309,49 @@ class NewsEventItemModel(Base):
     added_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
 
 
+class NewsEventUpdateModel(Base):
+    __tablename__ = "news_event_updates"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "ts_update",
+            "source_hash",
+            name="uq_news_event_update",
+        ),
+    )
+
+    update_id: Mapped[str] = mapped_column(String, primary_key=True)
+    event_id: Mapped[str] = mapped_column(String, index=True)
+    ts_update: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    phase: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    severity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    facts_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    factor_delta_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_hash: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsEventLinkModel(Base):
+    __tablename__ = "news_event_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "src_event_id",
+            "dst_event_id",
+            "link_type",
+            name="uq_news_event_link",
+        ),
+    )
+
+    link_id: Mapped[str] = mapped_column(String, primary_key=True)
+    src_event_id: Mapped[str] = mapped_column(String, index=True)
+    dst_event_id: Mapped[str] = mapped_column(String, index=True)
+    link_type: Mapped[str] = mapped_column(String, index=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    evidence_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
 class NewsLabelModel(Base):
     __tablename__ = "news_labels"
     __table_args__ = (
@@ -411,4 +454,70 @@ class NewsAnnotationModel(Base):
     author_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     reason: Mapped[str | None] = mapped_column(String, nullable=True)
     version: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsGoldLabelModel(Base):
+    __tablename__ = "news_gold_labels"
+    __table_args__ = (
+        UniqueConstraint(
+            "target_type",
+            "target_id",
+            "source",
+            "label_schema_version",
+            name="uq_news_gold_label_target_source_schema",
+        ),
+    )
+
+    label_id: Mapped[str] = mapped_column(String, primary_key=True)
+    target_type: Mapped[str] = mapped_column(String, index=True)
+    target_id: Mapped[str] = mapped_column(String, index=True)
+    event_family: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    factors_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    phase: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    direction_label: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    quality: Mapped[str] = mapped_column(String, index=True)
+    source: Mapped[str] = mapped_column(String, index=True)
+    label_schema_version: Mapped[str] = mapped_column(String, index=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    meta_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsUnmatchedGoldModel(Base):
+    __tablename__ = "news_unmatched_gold"
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "gold_id",
+            name="uq_news_unmatched_gold_source_id",
+        ),
+    )
+
+    unmatched_id: Mapped[str] = mapped_column(String, primary_key=True)
+    source: Mapped[str] = mapped_column(String, index=True)
+    gold_id: Mapped[str] = mapped_column(String, index=True)
+    published_at_utc: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True, index=True)
+    commodity_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    event_family: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    match_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    payload_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class NewsModelEvalRecordModel(Base):
+    __tablename__ = "news_model_eval_records"
+
+    run_id: Mapped[str] = mapped_column(String, primary_key=True)
+    model_version: Mapped[str] = mapped_column(String, index=True)
+    dataset_version: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    horizon: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    supervised_metrics_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    market_metrics_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    pass_supervised: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    pass_market: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    promotion_state: Mapped[str] = mapped_column(String, index=True)
+    gate_details_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)

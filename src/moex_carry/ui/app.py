@@ -74,6 +74,7 @@ from moex_carry.storage.repositories import (
     load_news_llm_runs,
     load_news_model_eval_records,
     load_news_signal_links,
+    load_news_unmatched_gold,
     load_primary_news_scores,
     load_open_executions,
     load_signal_executions,
@@ -3690,6 +3691,7 @@ def create_app(settings: AppSettings) -> Dash:
             llm_rows = load_news_llm_runs(session, limit=0)
             annotation_rows = load_news_annotations(session, limit=0)
             eval_rows = load_news_model_eval_records(session, limit=5000)
+            unmatched_rows = load_news_unmatched_gold(session, limit=0)
             fragmentation_report = compute_event_fragmentation_report(session)
 
         event_status_counts: dict[str, int] = {}
@@ -3731,6 +3733,7 @@ def create_app(settings: AppSettings) -> Dash:
             "annotations_total": len(annotation_rows),
             "model_eval_records_total": len(eval_rows),
             "promotion_state_counts": promotion_state_counts,
+            "unmatched_gold_total": len(unmatched_rows),
             "fragmentation": fragmentation_report,
         }
         return _observe_request("v2_validation_summary", started_at, jsonify(payload))
@@ -3762,6 +3765,7 @@ def create_app(settings: AppSettings) -> Dash:
         limit = max(_parse_int(request.args.get("limit"), 10000), 0)
         rebuild_report: dict[str, object] | None = None
         audit_event_rows: list[dict[str, object]] = []
+        scoped_event_rows: list[dict[str, object]] = []
         with session_factory() as session:
             scoped_event_ids: set[str] | None = None
             if from_ts is not None or to_ts is not None:
@@ -3826,15 +3830,18 @@ def create_app(settings: AppSettings) -> Dash:
                 target_ids=event_ids,
                 limit=max(len(event_ids) * 2, 1000),
             )
-            if audit_leakage and event_ids:
-                audit_event_rows = load_news_events(
+            if event_ids:
+                scoped_event_rows = load_news_events(
                     session,
                     event_ids=event_ids,
                     limit=max(len(event_ids) * 2, 1000),
                 )
+            if audit_leakage and event_ids:
+                audit_event_rows = list(scoped_event_rows)
         summary_payload = summarize_event_study(
             reactions=reactions,
             labels=label_rows,
+            events=scoped_event_rows,
             exclude_overlap=exclude_overlap,
         )
         leakage_audit = (
@@ -3858,6 +3865,8 @@ def create_app(settings: AppSettings) -> Dash:
             "excluded_overlap_count": int(summary_payload.get("excluded_overlap_count") or 0),
             "exclude_overlap": bool(summary_payload.get("exclude_overlap")),
             "car_summary_by_direction": summary_payload.get("car_summary_by_direction") or {},
+            "car_summary_by_event_family": summary_payload.get("car_summary_by_event_family") or {},
+            "car_summary_by_event_kind": summary_payload.get("car_summary_by_event_kind") or {},
             "fdr_method": summary_payload.get("fdr_method"),
             "leakage_audit": leakage_audit,
             "rebuild_report": rebuild_report,

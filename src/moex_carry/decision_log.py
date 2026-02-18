@@ -115,6 +115,14 @@ def build_decision_view(decision_log: dict[str, Any]) -> dict[str, Any]:
         }
         if gate_action is None:
             news_summary.pop("gate_action", None)
+        decision_weight = news_context.get("decision_weight")
+        if isinstance(decision_weight, dict):
+            factor = decision_weight.get("factor")
+            if factor is not None:
+                news_summary["decision_weight_factor"] = factor
+            reason = decision_weight.get("reason")
+            if isinstance(reason, str) and reason.strip():
+                news_summary["decision_weight_reason"] = reason.strip()
     decision = decision_log.get("decision", {})
     risk_state = decision.get("risk_state", "green")
     reasons = decision.get("reasons", [])

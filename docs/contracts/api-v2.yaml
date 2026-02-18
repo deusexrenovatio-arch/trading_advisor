@@ -1890,6 +1890,9 @@ components:
     ValidationSummaryV2:
       type: object
       additionalProperties: true
+      properties:
+        unmatched_gold_total:
+          type: integer
     ValidationEventStudyV2:
       type: object
       additionalProperties: true
@@ -1926,6 +1929,12 @@ components:
           nullable: true
           additionalProperties: true
         car_summary_by_direction:
+          type: object
+          additionalProperties: true
+        car_summary_by_event_family:
+          type: object
+          additionalProperties: true
+        car_summary_by_event_kind:
           type: object
           additionalProperties: true
     NewsBacktestV2:
@@ -1979,6 +1988,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NewsBacktestV2'
+        baselines:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewsBacktestV2'
+        ablations:
+          type: object
+          additionalProperties: true
         winner:
           type: object
           additionalProperties: true
