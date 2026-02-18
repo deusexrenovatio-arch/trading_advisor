@@ -137,7 +137,7 @@ ui:
   signal_refresh_interval_sec: 60
   signal_refresh_daily_time: null
   signal_refresh_timezone: null
-  signal_refresh_max_pairs: null
+  signal_refresh_max_pairs: 1000
   signal_refresh_save_csv: true
   incremental_replay_enabled: true
   incremental_overlap_minutes: 180
