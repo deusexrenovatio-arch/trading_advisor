@@ -125,6 +125,7 @@ flowchart LR
 - `docs/architecture/modules/ui-web.md`
 - `docs/architecture/layers-v2.md`
 - `docs/architecture/entities-v2.md`
+- `docs/architecture/signal-actionability-entity-centric-v2.md`
 - `docs/architecture/architecture-map-v2.md`
 - `docs/architecture/architecture-map-d3.html`
 - `docs/contracts/api-v2.yaml`

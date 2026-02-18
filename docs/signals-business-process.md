@@ -6,6 +6,8 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 ## Scope
 - Included:
   - Signal review and filtering in `Signals`
+  - Entity types: `pair` and single `instrument` (stock/future)
+  - Multi-source evidence composition (`technical`, `fundamental`, `news`, `risk`, `liquidity`)
   - Pre-trade validation (`/api/pretrade/check`)
   - Manual execution logging (`/api/signals/execute`)
   - Position monitoring and exit handling
@@ -25,6 +27,36 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 - UI renders backend projections only and cannot derive business lifecycle transitions.
 - Risk owner approves gate policy changes and auto-unwind thresholds.
 - Operator is accountable for action confirmation (`ack`, `enter`, `exit`, `hold`) and comments.
+- Source owners (TA/FA/News) are accountable for evidence freshness and quality metadata.
+
+## Signal Composition Across Sources
+- Each source publishes normalized evidence item with stance: `support`, `oppose`, or `neutral`.
+- Composer aggregates evidence per entity and computes conflict summary (`support_weight`, `oppose_weight`, `veto`).
+- Policy engine maps evidence summary to actionability:
+  - `allow`: entry/exit can be actionable.
+  - `reduce`: actionable with risk-size reduction.
+  - `review`: visible but requires manual confirmation.
+  - `block`: delivery suppressed with explicit reason.
+- High-severity contradictory news can veto entry even when technical/fundamental sources support it.
+
+## Policy Precedence Matrix (Planned)
+Final policy decision is deterministic and resolved by ordered gates:
+
+| Priority | Gate | `block` effect | `review` effect | `reduce` effect |
+|---|---|---|---|---|
+| 1 | `risk_profile` | `blocked_entry` | `review_entry` | `actionable_enter` with reduced size |
+| 2 | `news_geopolitics` | `blocked_entry` | `review_entry` | `actionable_enter` with reduced size |
+| 3 | `liquidity` | `blocked_entry` | `review_entry` | `actionable_enter` with reduced size |
+| 4 | `execution_feasibility` | `enter_out_of_range` or `blocked_entry` | `review_entry` | `actionable_enter` with narrower limits |
+| 5 | `source_freshness` | `blocked_entry` | `review_entry` | `actionable_enter` with confidence penalty |
+| 6 | `portfolio_limits` | `blocked_entry` | `review_entry` | `actionable_enter` with capped exposure |
+| 7 | `venue_constraints` | `blocked_entry` | `review_entry` | `actionable_enter` with operational limits |
+
+Decision rule:
+- Any `block` at any gate -> final policy `block`.
+- Else any `review` -> final policy `review`.
+- Else any `reduce` -> final policy `reduce`.
+- Else final policy `allow`.
 
 ## SLA and Escalation
 - SLA-1: actionability projection refresh <= 60 seconds from latest signal cycle.
@@ -54,6 +86,32 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 | 7. Exit Trigger | React to `exit` signal and reason | Surface reason (`tp`, `sl`, `time`, `expiry`) and supporting metrics | Exit reason in `signal_reasons` / `signal_metrics` |
 | 8. Exit Execution | Close both legs manually | Persist exit action and update actionable view | `signal_executions` rows with action `exit` |
 | 9. Audit | Review full lifecycle for pair | Provide history of signals + executions for replay | `signal_history` + `signal_executions` |
+
+## Target Entity-Centric Lifecycle (Planned)
+This lifecycle is the target contract model for `/api/v2/signals/actionability` and Telegram worker unification.
+
+| State | Meaning for operator | UI behavior | Telegram behavior | Exit condition |
+|---|---|---|---|---|
+| `actionable_enter` | Entity can be used now with current bounds | Show entity with entry corridor | Send `enter` once per `intent_id`/fingerprint (cooldown-aware) | Explicit usage, expiry, out-of-range, policy downgrade |
+| `review_entry` | Sources/gates conflict, manual confirmation required | Show visible but non-auto-executable state with reasons | No normal enter push (optional review alert only) | Manual decision or policy becomes `allow/reduce/block` |
+| `enter_out_of_range` | Entry idea tracked, but market moved out of corridor | Keep row visible as non-actionable context | Send one out-of-range update for current fingerprint | Reprice to new bounds or expire |
+| `actionable_enter_repriced` | Recomputed bounds restored executable entry | Show updated plan revision | Send new enter update only for new fingerprint/revision | Explicit usage, expiry, out-of-range again |
+| `hold_open` | Operator explicitly entered and position is open | Show hold overlay (monitor-only) | Optional monitor updates only | Exit signal + manual exit |
+| `actionable_exit` | Open position can be closed by strategy | Show exit actionable | Send exit notification | Explicit exit execution |
+| `blocked_entry` | Deterministic gate/policy blocks entry | Keep entity visible with blocking reason | Enter delivery suppressed | Gate clears or new intent revision appears |
+| `inactive` | No active intent/action for now | Hide by default unless non-actionable filter enabled | No delivery | New independent setup appears |
+
+Lifecycle composition rule:
+- `position_state` (`flat/open`) is independent from `intent_state` and policy.
+- `hold_open` is an overlay from execution ledger, not a replacement for entry eligibility.
+- `actionability_state` is a derived UI label over axes: policy, intent, position, execution, delivery.
+
+### After `ENTER_OUT_OF_RANGE`
+- Entity does not disappear immediately from projection.
+- System recalculates executable entry bounds on each refresh cycle from latest market snapshot.
+- Worker sends exactly one out-of-range notification per fingerprint and does not spam on repeated out-of-range cycles.
+- If recalculated bounds become executable again, projection switches to `actionable_enter_repriced` with a new plan revision/fingerprint.
+- If intent TTL ends before repricing returns to executable state, intent becomes `expired` and delivery remains suppressed.
 
 ## User Stories and Acceptance
 
@@ -108,9 +166,9 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 ### US-SIG-08 Keep entry actionable until explicit usage
 - As an operator, I want to keep receiving `enter` opportunity while it is still valid, even if strategy row moved to `hold`.
 - Acceptance:
-  - Last unused `enter` intent is promoted over `hold` for the same pair while intent TTL is active.
-  - Promotion works for both open and flat pair states.
-  - Promotion stops only after explicit operator usage action is recorded.
+  - Entity remains visible as `actionable_enter` while current bounds are executable and intent is not consumed.
+  - Actionability is entity-centric (by `entity_ref` + `intent_id`), not hard-coupled to one historical `signal_id`.
+  - Suppression starts only after explicit operator usage (`ack`/`enter`) for that intent.
 
 ### US-SIG-09 Notify when sent entry leaves planned corridor
 - As an operator, I want a single Telegram update if already-sent entry becomes non-executable due to price drift.
@@ -118,6 +176,15 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
   - Worker tracks baseline entry corridor for sent `enter`.
   - On first out-of-range transition worker sends one update with current vs baseline bounds.
   - Repeated out-of-range cycles for same fingerprint do not spam chat.
+  - If repricing creates a new executable plan revision, worker may send one new `enter` update for that new fingerprint.
+
+### US-SIG-10 Resolve contradictory multi-source evidence deterministically
+- As an operator, I want contradictory TA/FA/news evidence to be resolved with explicit deterministic policy output.
+- Acceptance:
+  - Projection exposes `policy_outcome.status` in `allow|reduce|review|block`.
+  - Projection includes ordered gate trace with reasons and priorities.
+  - High-severity news veto can block entry even when TA/FA support it, with visible reason codes.
+  - `review` state remains visible and requires explicit operator confirmation before execution.
 
 ## Alternative and Exception Flows
 
@@ -158,7 +225,8 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 - Behavior:
   - Worker keeps first sent baseline bounds for `enter` fingerprint.
   - If current prices leave baseline corridor, worker sends one update and marks fingerprint as out-of-range notified.
-  - New `enter` fingerprint for same pair still respects pair-level cooldown.
+  - Entity remains in projection with state `enter_out_of_range` and is recalculated each cycle.
+  - New `enter` fingerprint for same entity still respects entity-level cooldown.
 
 ## Traceability Matrix
 | Requirement | UI | API | Persistence | Evidence |
@@ -171,6 +239,11 @@ Define an end-to-end operator process in `Signals` from entry decision to exit e
 | Telegram daily health-check | Telegram bot chat | Telegram Bot API `sendMessage` + backend `GET /api/v2/signals/active` | worker state (`daily_healthcheck_last_sent_date_by_chat`) | One morning message per chat with backend/data status |
 | Pending entry lifecycle projection | Signals table + Telegram worker | `GET /api/v2/signals/active` | `signal_history` + explicit action notes | `signal_origin_*`, `pending_entry_intent_active`, delivery fields |
 | Entry drift notification without spam | Telegram bot chat | Telegram Bot API `sendMessage` + backend `GET /api/v2/signals/active` | worker state (`enter_tracking_by_fingerprint`, `enter_last_sent_at_by_pair`) | One out-of-range update per fingerprint |
+| Pair-centric actionable projection | Signals table + Telegram worker | `GET /api/v2/pairs/actionability` | `signal_history` + `signal_executions` + delivery state | `actionable_enter`, `hold_open`, `actionable_exit`, `enter_out_of_range` |
+| Entity-centric actionable projection | Signals table + Telegram worker | `GET /api/v2/signals/actionability` | evidence composition + signal/action ledger | pair and instrument actionability with policy/veto transparency |
+| Policy precedence and conflict audit | Signal details + API consumer logs | `GET /api/v2/signals/actionability` | ordered gate evaluation trace | `policy_outcome.precedence_version`, `gate_trace`, deterministic `allow/reduce/review/block` |
+| Pair-level action API | Signals UI + Telegram callbacks | `POST /api/v2/pairs/{pair_id}/actions` | pair intent + action execution log | intent-aware ACK/ENTER/EXIT traceability |
+| Entity-level action API | Signals UI + Telegram callbacks | `POST /api/v2/entities/{entity_type}/{entity_id}/signals/actions` | canonical action ledger | idempotent ACK/ENTER/EXIT/HOLD for pair and instrument |
 | Exit reason transparency | Signal details (`Context`, `Risk`, `Forecast`) | `/api/signals/active`, `/api/signals/history` | `signal_history.metrics/reasons` | Reason codes (`tp/sl/time/expiry`) |
 | Leg imbalance remediation | Signal monitoring + ops controls | `POST /api/v2/policies/auto-unwind/run` | `signal_executions` | Auto-generated `exit` with `LEG_IMBALANCE_TIMEOUT` |
 | Lifecycle auditability | History + details | `/api/v2/decisions/{decision_id}/actions`, `/api/signals/executions` | `signal_history` + `signal_executions` + decision actions | Pair replay from first entry to final exit |

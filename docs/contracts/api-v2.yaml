@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Trading Advisor API v2
-  version: 2.0.0
+  version: 2.2.0
   description: Contract-first surface for signal/decision/research/news/portfolio workflows.
 servers:
   - url: /api/v2
@@ -18,6 +18,151 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/SignalActiveV2'
+  /signals/actionability:
+    get:
+      summary: List entity-centric actionability projection.
+      description: >
+        Planned generalized projection for actionable signals across entity types
+        (`pair`, `instrument`). This endpoint is the canonical source for UI and Telegram;
+        `/pairs/actionability` is a convenience filtered view.
+      x-implementation-status: implemented_phase1
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 500
+        - in: query
+          name: entity_type
+          schema:
+            type: string
+            enum: [pair, instrument]
+        - in: query
+          name: instrument_type
+          schema:
+            type: string
+            enum: [stock, future]
+        - in: query
+          name: include_non_actionable
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Entity actionability rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SignalActionabilityV2'
+  /pairs/actionability:
+    get:
+      summary: List pair-centric actionability projection.
+      description: >
+        Planned pair-first projection used by UI and Telegram to show currently usable pairs,
+        regardless of one-to-one binding to historical signal rows. Existing /signals/active
+        remains supported during migration.
+      x-parent-endpoint: /signals/actionability
+      x-implementation-status: implemented_phase1_adapter
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 500
+        - in: query
+          name: include_non_actionable
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: include_open_holds
+          schema:
+            type: boolean
+            default: true
+        - in: query
+          name: universe
+          schema:
+            type: string
+            enum: [top25, all]
+            default: all
+      responses:
+        '200':
+          description: Pair actionability rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PairActionabilityV2'
+  /entities/{entity_type}/{entity_id}/signals/actions:
+    post:
+      summary: Append entity-level operator action (ack/enter/exit/hold).
+      description: >
+        Planned canonical action endpoint for pair and instrument signals.
+        `/pairs/{pair_id}/actions` remains supported as compatibility adapter.
+      x-implementation-status: implemented_phase1_pair_support
+      parameters:
+        - in: path
+          name: entity_type
+          required: true
+          schema:
+            type: string
+            enum: [pair, instrument]
+        - in: path
+          name: entity_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntitySignalActionRequestV2'
+      responses:
+        '200':
+          description: Action accepted or idempotent duplicate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitySignalActionResponseV2'
+        '409':
+          description: Action blocked by fail-closed execution policy.
+  /pairs/{pair_id}/actions:
+    post:
+      summary: Append pair-level operator action (ack/enter/exit/hold).
+      description: >
+        Planned endpoint that decouples user actions from transient signal_id and binds them
+        to pair + intent_id. Backend may internally resolve to v2 signal action storage.
+      x-implementation-status: implemented_phase1_pair_adapter
+      parameters:
+        - in: path
+          name: pair_id
+          required: true
+          schema:
+            type: string
+          description: Pair key in format STOCK__FUTURE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PairActionRequestV2'
+      responses:
+        '200':
+          description: Action accepted or idempotent duplicate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PairActionResponseV2'
+        '409':
+          description: Action blocked by fail-closed execution policy.
   /signals/{signal_id}/actions:
     post:
       summary: Append signal action event (ack/enter/exit/hold).
@@ -281,6 +426,739 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GateResult'
+    SignalEvidenceItemV2:
+      type: object
+      required: [source_key, source_kind, stance]
+      properties:
+        source_key:
+          type: string
+          description: Stable source identifier (e.g. technical_rsi, fundamental_dcf, news_feed).
+        source_kind:
+          type: string
+          enum: [technical, fundamental, news, quant_model, liquidity, risk, manual, other]
+        stance:
+          type: string
+          enum: [support, oppose, neutral]
+        suggested_action:
+          type: string
+          nullable: true
+          enum: [enter, exit, hold, none]
+        direction:
+          type: string
+          nullable: true
+        weight:
+          type: number
+          nullable: true
+        confidence:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+        severity:
+          type: string
+          nullable: true
+          enum: [low, medium, high, critical]
+        freshness_sec:
+          type: integer
+          nullable: true
+          minimum: 0
+        observed_at:
+          type: string
+          format: date-time
+          nullable: true
+        reason_codes:
+          type: array
+          items:
+            type: string
+        payload:
+          type: object
+          additionalProperties: true
+    SignalEvidenceSummaryV2:
+      type: object
+      required:
+        - support_weight_total
+        - oppose_weight_total
+        - neutral_weight_total
+        - conflict_score
+        - veto_active
+      properties:
+        support_weight_total:
+          type: number
+        oppose_weight_total:
+          type: number
+        neutral_weight_total:
+          type: number
+        conflict_score:
+          type: number
+          description: Normalized [0..1] disagreement score among active sources.
+        veto_active:
+          type: boolean
+        veto_reasons:
+          type: array
+          items:
+            type: string
+    SignalGateResultV2:
+      type: object
+      required: [gate_id, status, priority]
+      properties:
+        gate_id:
+          type: string
+          enum:
+            - risk_profile
+            - news_geopolitics
+            - liquidity
+            - execution_feasibility
+            - portfolio_limits
+            - source_freshness
+            - venue_constraints
+        status:
+          type: string
+          enum: [pass, reduce, review, block, unavailable]
+        priority:
+          type: integer
+          minimum: 1
+          description: Lower value means higher precedence in the final policy decision.
+        reason_codes:
+          type: array
+          items:
+            type: string
+        details:
+          type: object
+          additionalProperties: true
+    SignalPolicyOutcomeV2:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [allow, reduce, review, block]
+        reasons:
+          type: array
+          items:
+            type: string
+        blocking_gate:
+          type: string
+          nullable: true
+        precedence_version:
+          type: string
+          nullable: true
+          description: Policy precedence matrix version used for this decision.
+        applied_gate_id:
+          type: string
+          nullable: true
+        applied_gate_priority:
+          type: integer
+          nullable: true
+        manual_review_required:
+          type: boolean
+          nullable: true
+        risk_scale_multiplier:
+          type: number
+          nullable: true
+          description: Optional position size multiplier when status=reduce.
+        gate_trace:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignalGateResultV2'
+    SignalIntentV2:
+      type: object
+      required: [status]
+      properties:
+        intent_id:
+          type: string
+          nullable: true
+        source_signal_id:
+          type: string
+          nullable: true
+        source_run_id:
+          type: string
+          nullable: true
+        source_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - out_of_range
+            - expired
+            - consumed
+            - superseded
+            - none
+        ttl_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        consumed_by_action:
+          type: string
+          nullable: true
+          enum: [ack, enter, exit, hold]
+        consumed_at:
+          type: string
+          format: date-time
+          nullable: true
+        consumed_by:
+          type: string
+          nullable: true
+    SignalEntryPlanV2:
+      type: object
+      properties:
+        plan_revision:
+          type: integer
+          minimum: 0
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
+        valid_until:
+          type: string
+          format: date-time
+          nullable: true
+        direction:
+          type: string
+          nullable: true
+        entry_price_min:
+          type: number
+          nullable: true
+        entry_price_max:
+          type: number
+          nullable: true
+        entry_spread_min:
+          type: number
+          nullable: true
+        entry_spread_max:
+          type: number
+          nullable: true
+        entry_spread_pct_min:
+          type: number
+          nullable: true
+        entry_spread_pct_max:
+          type: number
+          nullable: true
+        execution_window_sec:
+          type: integer
+          nullable: true
+    SignalEntryRangeNowV2:
+      type: object
+      required: [in_range]
+      properties:
+        price_now:
+          type: number
+          nullable: true
+        spread_now:
+          type: number
+          nullable: true
+        spread_pct_now:
+          type: number
+          nullable: true
+        in_range:
+          type: boolean
+        out_of_range_reasons:
+          type: array
+          items:
+            type: string
+    SignalDeliveryV2:
+      type: object
+      required: [delivery_action, delivery_allowed]
+      properties:
+        delivery_action:
+          type: string
+          enum: [enter, exit, hold_open, none]
+        delivery_allowed:
+          type: boolean
+        delivery_suppressed_reason:
+          type: string
+          nullable: true
+          enum:
+            - intent_consumed
+            - intent_expired
+            - out_of_range
+            - cooldown
+            - unsupported_action
+            - not_actionable
+        signal_fingerprint:
+          type: string
+          nullable: true
+        out_of_range_notified:
+          type: boolean
+        last_notified_at:
+          type: string
+          format: date-time
+          nullable: true
+    SignalActionabilityAxesV2:
+      type: object
+      required: [policy_state, intent_state, position_state, delivery_state]
+      properties:
+        policy_state:
+          type: string
+          enum: [allow, reduce, review, block]
+        intent_state:
+          type: string
+          enum: [none, active, out_of_range, consumed, expired, superseded]
+        position_state:
+          type: string
+          enum: [flat, open]
+        execution_state:
+          type: string
+          nullable: true
+          enum: [in_range, out_of_range, not_applicable]
+        delivery_state:
+          type: string
+          enum: [not_sent, sent, suppressed, out_of_range_notified, cooldown]
+        source_conflict_state:
+          type: string
+          nullable: true
+          enum: [none, low, medium, high, veto]
+    SignalActionabilityV2:
+      type: object
+      description: >
+        Entity-centric actionable projection. `actionability_state` is a derived UI label,
+        while deterministic decisions are represented by explicit axes, policy outcome, and gate trace.
+      x-policy-precedence:
+        version: v1
+        ordering:
+          - risk_profile
+          - news_geopolitics
+          - liquidity
+          - execution_feasibility
+          - source_freshness
+          - portfolio_limits
+          - venue_constraints
+        decision_rule:
+          - any gate status=block -> policy_state=block
+          - else any gate status=review -> policy_state=review
+          - else any gate status=reduce -> policy_state=reduce
+          - else policy_state=allow
+      x-state-transitions:
+        - from: inactive
+          to: actionable_enter
+          when: policy_state in [allow, reduce] and intent_state=active and execution_state=in_range
+        - from: actionable_enter
+          to: enter_out_of_range
+          when: intent_state=out_of_range or execution_state=out_of_range
+        - from: enter_out_of_range
+          to: actionable_enter_repriced
+          when: intent_state=active and execution_state=in_range and new plan_revision is published
+        - from: actionable_enter
+          to: review_entry
+          when: policy_state=review
+        - from: actionable_enter
+          to: blocked_entry
+          when: policy_state=block
+        - from: actionable_enter
+          to: hold_open
+          when: position_state=open and exit not requested
+        - from: hold_open
+          to: actionable_exit
+          when: exit intent is active and policy_state in [allow, reduce]
+        - from: actionable_exit
+          to: inactive
+          when: position_state=flat and intent_state in [none, consumed, expired, superseded]
+      required:
+        - actionability_id
+        - entity_ref
+        - snapshot_as_of
+        - axes
+        - actionability_state
+        - actionable_enter
+        - actionable_exit
+        - intent
+        - delivery
+        - evidence_summary
+        - policy_outcome
+      properties:
+        actionability_id:
+          type: string
+        entity_ref:
+          $ref: '#/components/schemas/EntityRef'
+        instrument_type:
+          type: string
+          nullable: true
+          enum: [stock, future]
+        snapshot_as_of:
+          type: string
+          format: date-time
+        axes:
+          $ref: '#/components/schemas/SignalActionabilityAxesV2'
+        actionability_state:
+          type: string
+          enum:
+            - actionable_enter
+            - actionable_enter_repriced
+            - enter_out_of_range
+            - review_entry
+            - actionable_exit
+            - hold_open
+            - blocked_entry
+            - inactive
+        actionable_enter:
+          type: boolean
+        actionable_exit:
+          type: boolean
+        hold_required:
+          type: boolean
+        intent:
+          $ref: '#/components/schemas/SignalIntentV2'
+        entry_plan:
+          $ref: '#/components/schemas/SignalEntryPlanV2'
+        entry_range_now:
+          $ref: '#/components/schemas/SignalEntryRangeNowV2'
+        delivery:
+          $ref: '#/components/schemas/SignalDeliveryV2'
+        evidence_summary:
+          $ref: '#/components/schemas/SignalEvidenceSummaryV2'
+        evidence_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignalEvidenceItemV2'
+        policy_outcome:
+          $ref: '#/components/schemas/SignalPolicyOutcomeV2'
+        reasons:
+          type: array
+          items:
+            type: string
+        signal_origin_run_id:
+          type: string
+          nullable: true
+        signal_origin_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        metrics:
+          type: object
+          additionalProperties: true
+    EntitySignalActionRequestV2:
+      type: object
+      required: [action, source]
+      properties:
+        action:
+          type: string
+          enum: [ack, enter, exit, hold]
+        source:
+          type: string
+          enum: [ui, telegram, system]
+        intent_id:
+          type: string
+          nullable: true
+          description: Required for ack/enter when action is tied to an active intent.
+        actor_id:
+          type: string
+        reason_code:
+          type: string
+        comment:
+          type: string
+        fail_closed_override:
+          type: boolean
+        override_reason:
+          type: string
+        idempotency_key:
+          type: string
+    EntitySignalActionResponseV2:
+      type: object
+      required: [status, entity_ref, action, fail_closed]
+      properties:
+        status:
+          type: string
+          enum: [ok, duplicate, blocked, ignored, not_found]
+        action:
+          type: string
+          enum: [ack, enter, exit, hold]
+        entity_ref:
+          $ref: '#/components/schemas/EntityRef'
+        intent_id:
+          type: string
+          nullable: true
+        signal_id:
+          type: string
+          nullable: true
+        fail_closed:
+          type: boolean
+        request_id:
+          type: string
+          nullable: true
+        recorded_at:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
+          nullable: true
+    PairIntentV2:
+      type: object
+      required: [status]
+      properties:
+        intent_id:
+          type: string
+          nullable: true
+          description: Stable identifier for actionable entry intent revision.
+        source_signal_id:
+          type: string
+          nullable: true
+        source_run_id:
+          type: string
+          nullable: true
+        source_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - out_of_range
+            - expired
+            - consumed
+            - superseded
+            - none
+        ttl_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        consumed_by_action:
+          type: string
+          nullable: true
+          enum: [ack, enter, exit, hold]
+        consumed_at:
+          type: string
+          format: date-time
+          nullable: true
+        consumed_by:
+          type: string
+          nullable: true
+    PairEntryPlanV2:
+      type: object
+      properties:
+        plan_revision:
+          type: integer
+          minimum: 0
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
+        valid_until:
+          type: string
+          format: date-time
+          nullable: true
+        direction:
+          type: string
+          nullable: true
+        entry_stock_min:
+          type: number
+          nullable: true
+        entry_stock_max:
+          type: number
+          nullable: true
+        entry_future_min_per_share:
+          type: number
+          nullable: true
+        entry_future_max_per_share:
+          type: number
+          nullable: true
+        entry_spread_min:
+          type: number
+          nullable: true
+        entry_spread_max:
+          type: number
+          nullable: true
+        entry_spread_pct_min:
+          type: number
+          nullable: true
+        entry_spread_pct_max:
+          type: number
+          nullable: true
+    PairEntryRangeNowV2:
+      type: object
+      required: [in_range]
+      properties:
+        stock_now:
+          type: number
+          nullable: true
+        future_now:
+          type: number
+          nullable: true
+        spread_now:
+          type: number
+          nullable: true
+        spread_pct_now:
+          type: number
+          nullable: true
+        in_range:
+          type: boolean
+        out_of_range_reasons:
+          type: array
+          items:
+            type: string
+    PairDeliveryV2:
+      type: object
+      required: [delivery_action, delivery_allowed]
+      properties:
+        delivery_action:
+          type: string
+          enum: [enter, exit, hold_open, none]
+        delivery_allowed:
+          type: boolean
+        delivery_suppressed_reason:
+          type: string
+          nullable: true
+          enum:
+            - intent_consumed
+            - intent_expired
+            - out_of_range
+            - pair_cooldown
+            - unsupported_action
+            - not_actionable
+        signal_fingerprint:
+          type: string
+          nullable: true
+        out_of_range_notified:
+          type: boolean
+        last_notified_at:
+          type: string
+          format: date-time
+          nullable: true
+    PairActionabilityV2:
+      type: object
+      description: Pair-specialized view over the generalized SignalActionabilityV2 projection.
+      required:
+        - pair_id
+        - stock
+        - future
+        - entity_ref
+        - snapshot_as_of
+        - axes
+        - position_state
+        - actionability_state
+        - actionable_enter
+        - actionable_exit
+        - intent
+        - entry_plan
+        - entry_range_now
+        - delivery
+      properties:
+        pair_id:
+          type: string
+          description: Canonical key STOCK__FUTURE.
+        stock:
+          type: string
+        future:
+          type: string
+        entity_ref:
+          $ref: '#/components/schemas/EntityRef'
+        snapshot_as_of:
+          type: string
+          format: date-time
+        axes:
+          $ref: '#/components/schemas/SignalActionabilityAxesV2'
+        position_state:
+          type: string
+          enum: [flat, open]
+        actionability_state:
+          type: string
+          enum:
+            - actionable_enter
+            - actionable_enter_repriced
+            - enter_out_of_range
+            - review_entry
+            - actionable_exit
+            - hold_open
+            - blocked_entry
+            - inactive
+        actionable_enter:
+          type: boolean
+        actionable_exit:
+          type: boolean
+        hold_required:
+          type: boolean
+          description: True only for explicitly entered and still open pairs.
+        intent:
+          $ref: '#/components/schemas/PairIntentV2'
+        entry_plan:
+          $ref: '#/components/schemas/PairEntryPlanV2'
+        entry_range_now:
+          $ref: '#/components/schemas/PairEntryRangeNowV2'
+        delivery:
+          $ref: '#/components/schemas/PairDeliveryV2'
+        evidence_summary:
+          $ref: '#/components/schemas/SignalEvidenceSummaryV2'
+        evidence_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignalEvidenceItemV2'
+        policy_outcome:
+          $ref: '#/components/schemas/SignalPolicyOutcomeV2'
+        reasons:
+          type: array
+          items:
+            type: string
+        signal_origin_run_id:
+          type: string
+          nullable: true
+        signal_origin_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        metrics:
+          type: object
+          additionalProperties: true
+    PairActionRequestV2:
+      type: object
+      required: [action, source]
+      properties:
+        action:
+          type: string
+          enum: [ack, enter, exit, hold]
+        source:
+          type: string
+          enum: [ui, telegram, system]
+        intent_id:
+          type: string
+          description: Required for ack/enter when action is tied to an actionable entry intent.
+        actor_id:
+          type: string
+        reason_code:
+          type: string
+        comment:
+          type: string
+        fail_closed_override:
+          type: boolean
+        override_reason:
+          type: string
+        idempotency_key:
+          type: string
+    PairActionResponseV2:
+      type: object
+      required: [status, pair_id, action, entity_ref, fail_closed]
+      properties:
+        status:
+          type: string
+          enum: [ok, duplicate, blocked, ignored, not_found]
+        pair_id:
+          type: string
+        action:
+          type: string
+          enum: [ack, enter, exit, hold]
+        entity_ref:
+          $ref: '#/components/schemas/EntityRef'
+        intent_id:
+          type: string
+          nullable: true
+        signal_id:
+          type: string
+          nullable: true
+          description: Optional resolved signal_id for backward audit compatibility.
+        fail_closed:
+          type: boolean
+        request_id:
+          type: string
+          nullable: true
+        recorded_at:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
+          nullable: true
     DecisionRefV2:
       type: object
       required: [decision_id]

@@ -168,17 +168,17 @@ Expected:
 - Message includes bot status, backend status, and active signals count.
 - If backend is unavailable, heartbeat still arrives with `Backend: ERROR`.
 
-## US-14 Keep pending entry actionable until explicit usage
+## US-14 Keep pair actionable until explicit usage
 Actor: Operator
 Goal: Continue seeing actionable `enter` while intent is still valid, even if latest strategy row is `hold`.
 Steps:
 1. Generate an `enter` signal for a pair.
 2. Let next cycle move pair to `hold` without explicit ACK/action usage.
-3. Open `/api/v2/signals/active` or Signals tab.
+3. Open `/api/v2/pairs/actionability` or Signals tab.
 Expected:
-- Pair remains actionable as `enter` within intent TTL.
-- Row contains origin references to original `enter` intent.
-- After explicit ACK/action for that fingerprint, promotion stops.
+- Pair remains visible as `actionable_enter` while current bounds are executable within intent TTL.
+- Row contains `intent_id`, current entry bounds, and origin links to source signal history.
+- After explicit ACK/action for that `intent_id`, Telegram delivery is suppressed for this intent.
 
 ## US-15 Telegram out-of-range update without spam
 Actor: Operator
@@ -190,5 +190,64 @@ Steps:
 Expected:
 - Worker sends one out-of-range update containing current vs planned bounds.
 - Repeated cycles with same fingerprint do not create additional out-of-range messages.
+- If recalculation yields a new executable plan revision, worker can send one new enter update for that new fingerprint.
 - New fingerprint for same pair still respects pair-level cooldown.
+
+## US-16 Pair-level action API for UI and Telegram
+Actor: Operator
+Goal: Confirm usage and executions on pair + intent level without depending on transient signal rows.
+Steps:
+1. Fetch pair row from `/api/v2/pairs/actionability`.
+2. Submit `POST /api/v2/pairs/{pair_id}/actions` with `action=ack|enter|exit` and `intent_id`.
+3. Reload actionability feed.
+Expected:
+- Response includes `status`, `pair_id`, `action`, `intent_id`, and `fail_closed`.
+- Pair projection reflects updated intent/position state.
+- Legacy signal execution audit remains traceable via resolved `signal_id` when available.
+
+## US-17 Single-instrument actionable signal
+Actor: Operator
+Goal: See and use actionable signals for a single stock or future using the same workflow as pair signals.
+Steps:
+1. Open `/api/v2/signals/actionability` with `entity_type=instrument`.
+2. Filter by `instrument_type=stock` or `instrument_type=future`.
+3. Submit action via `POST /api/v2/entities/{entity_type}/{entity_id}/signals/actions`.
+Expected:
+- Instrument rows expose the same lifecycle fields (`actionability_state`, `intent`, `delivery`).
+- Action API behavior (idempotency/fail-closed/audit) matches pair workflow.
+
+## US-18 Conflicting multi-source evidence handling
+Actor: Operator
+Goal: Understand why entry is blocked when sources disagree.
+Steps:
+1. Open one actionable entity row in Signals details.
+2. Inspect `evidence_items`, `evidence_summary`, and `policy_outcome`.
+3. Verify at least one scenario with technical/fundamental support and contradictory news.
+Expected:
+- Evidence block shows support/oppose weights and conflict score.
+- If veto source is active (for example high-severity adverse news), policy status becomes `block`.
+- Delivery is suppressed with explicit reason, not silently removed from visibility.
+
+## US-19 Review and reduced-risk policy states
+Actor: Operator
+Goal: Distinguish between hard block, manual-review state, and reduced-risk actionable state.
+Steps:
+1. Open `/api/v2/signals/actionability` and inspect entities with `policy_outcome.status`.
+2. Open details and inspect `policy_outcome.gate_trace`.
+Expected:
+- `policy_outcome.status=review` maps to visible `review_entry` state and requires manual confirmation.
+- `policy_outcome.status=reduce` stays actionable but includes explicit risk-size reduction metadata.
+- Policy precedence is auditable through gate priorities and reason codes.
+
+## US-20 Open position with fresh entry intent
+Actor: Operator
+Goal: Keep seeing fresh valid entry opportunities even when position is already open.
+Steps:
+1. Ensure entity has open position from execution ledger.
+2. Generate a new in-range active entry intent for the same entity.
+3. Open Signals and reload.
+Expected:
+- Open position is shown as `hold_open` overlay from position facts.
+- Fresh entry intent remains visible/actionable if policy and range permit.
+- Entry suppression happens only after explicit usage for that intent.
 
