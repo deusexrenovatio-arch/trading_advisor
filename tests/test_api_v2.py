@@ -373,11 +373,17 @@ def test_v2_entity_and_pair_actions_endpoints_are_idempotent(tmp_path):
     app = create_app(settings)
     client = app.server.test_client()
 
+    pair_rows = client.get("/api/v2/pairs/actionability?include_non_actionable=true").get_json()
+    assert isinstance(pair_rows, list)
+    assert len(pair_rows) == 1
+    current_intent_id = str((pair_rows[0].get("intent") or {}).get("intent_id") or "")
+    assert current_intent_id != ""
+
     payload = {
         "action": "ack",
         "source": "ui",
         "actor_id": "tester",
-        "intent_id": "intent-test-1",
+        "intent_id": current_intent_id,
         "idempotency_key": "idem-entity-action-1",
     }
     first = client.post("/api/v2/entities/pair/AAA__AAH6/signals/actions", json=payload)
@@ -397,7 +403,7 @@ def test_v2_entity_and_pair_actions_endpoints_are_idempotent(tmp_path):
         "action": "ack",
         "source": "ui",
         "actor_id": "tester",
-        "intent_id": "intent-test-2",
+        "intent_id": current_intent_id,
         "idempotency_key": "idem-pair-action-1",
     }
     pair_result = client.post("/api/v2/pairs/AAA__AAH6/actions", json=pair_payload)
@@ -410,6 +416,143 @@ def test_v2_entity_and_pair_actions_endpoints_are_idempotent(tmp_path):
         executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
         assert len(executions) == 2
 
+
+def test_v2_pair_actions_reject_stale_intent_id(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-actionability-stale-intent")
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    pair_rows = client.get("/api/v2/pairs/actionability?include_non_actionable=true").get_json()
+    assert isinstance(pair_rows, list)
+    assert len(pair_rows) == 1
+    current_intent_id = str((pair_rows[0].get("intent") or {}).get("intent_id") or "")
+    assert current_intent_id != ""
+
+    response = client.post(
+        "/api/v2/pairs/AAA__AAH6/actions",
+        json={
+            "action": "ack",
+            "source": "ui",
+            "actor_id": "tester",
+            "intent_id": f"stale-{current_intent_id}",
+            "idempotency_key": "idem-stale-intent-1",
+        },
+    )
+    assert response.status_code == 409
+    payload = response.get_json()
+    assert payload["status"] == "blocked"
+    assert payload["message"] == "intent_superseded_or_stale"
+    assert payload["error"] == "intent_mismatch"
+    assert payload["current_intent_id"] == current_intent_id
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        assert executions == []
+
+
+def test_v2_instrument_actions_resolve_pair_context_and_store_execution(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-actionability-instrument-action")
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    instrument_rows = client.get(
+        "/api/v2/signals/actionability?entity_type=instrument&instrument_type=stock&include_non_actionable=true"
+    ).get_json()
+    assert isinstance(instrument_rows, list)
+    assert len(instrument_rows) == 1
+    instrument_row = instrument_rows[0]
+    current_intent_id = str((instrument_row.get("intent") or {}).get("intent_id") or "")
+    assert current_intent_id != ""
+
+    response = client.post(
+        "/api/v2/entities/instrument/AAA/signals/actions",
+        json={
+            "action": "ack",
+            "source": "ui",
+            "actor_id": "tester",
+            "intent_id": current_intent_id,
+            "pair_id": "AAA__AAH6",
+            "idempotency_key": "idem-instrument-action-1",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["entity_ref"]["entity_type"] == "instrument"
+    assert payload["pair_ref"]["entity_type"] == "pair"
+    assert payload["pair_id"] == "AAA__AAH6"
+    assert payload["instrument_type"] == "stock"
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        assert len(executions) == 1
+        assert executions[0].action == "ack"
+
+
+def test_v2_instrument_actions_require_pair_hint_when_ambiguous(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 8, 12, 0, 0)
+        store_signal_run(session, "run-v2-instrument-ambiguous", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-instrument-ambiguous",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.2,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {"score_gate_pass": True},
+                },
+                {
+                    "stock": "AAA",
+                    "future": "AAM6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.3,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {"score_gate_pass": True},
+                },
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    ambiguous = client.post(
+        "/api/v2/entities/instrument/AAA/signals/actions",
+        json={
+            "action": "ack",
+            "source": "ui",
+            "actor_id": "tester",
+            "idempotency_key": "idem-instrument-ambiguous-1",
+        },
+    )
+    assert ambiguous.status_code == 409
+    ambiguous_payload = ambiguous.get_json()
+    assert ambiguous_payload["status"] == "blocked"
+    assert ambiguous_payload["error"] == "ambiguous_instrument_entity"
+    assert isinstance(ambiguous_payload.get("candidate_pairs"), list)
+    assert sorted(ambiguous_payload["candidate_pairs"]) == ["AAA__AAH6", "AAA__AAM6"]
 
 def test_v2_signal_action_fail_closed_blocks_unconfirmed_entry(tmp_path):
     settings = _build_settings(tmp_path, ff_fail_closed_execution=True)

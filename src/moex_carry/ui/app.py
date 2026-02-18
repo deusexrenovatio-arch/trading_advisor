@@ -1473,6 +1473,8 @@ def _build_instrument_actionability_rows(
         row_list.append(("future", future, "future"))
 
     result: list[dict[str, object]] = []
+    pair_id = f"{stock}__{future}" if stock and future else None
+    pair_ref = _build_pair_entity_ref(stock, future) if stock and future else None
     for leg_key, secid, instrument_type in row_list:
         entry_plan = dict(pair_projection.get("entry_plan") or {})
         entry_range_now = dict(pair_projection.get("entry_range_now") or {})
@@ -1502,6 +1504,10 @@ def _build_instrument_actionability_rows(
         instrument_row["instrument_type"] = instrument_type
         instrument_row["entry_plan"] = entry_plan
         instrument_row["entry_range_now"] = entry_range_now
+        instrument_row["pair_id"] = pair_id
+        instrument_row["pair_ref"] = pair_ref
+        instrument_row["pair_stock"] = stock or None
+        instrument_row["pair_future"] = future or None
         instrument_row["stock"] = None
         instrument_row["future"] = None
         result.append(instrument_row)
@@ -1520,6 +1526,13 @@ def _parse_pair_id(value: object) -> tuple[str, str] | None:
         future_value = future.strip()
         if stock_value and future_value:
             return stock_value, future_value
+    return None
+
+
+def _normalize_instrument_type(value: object) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"stock", "future"}:
+        return normalized
     return None
 
 
@@ -3865,6 +3878,7 @@ def create_app(settings: AppSettings) -> Dash:
         entity_ref: dict[str, object],
         intent_id: str | None,
         signal_id_hint: str | None = None,
+        extra_fields: dict[str, object] | None = None,
     ):
         payload, status_code = _extract_response_payload(result)
         if not isinstance(payload, dict):
@@ -3884,16 +3898,128 @@ def create_app(settings: AppSettings) -> Dash:
             "recorded_at": payload.get("created_at"),
             "message": payload.get("message"),
         }
+        if isinstance(extra_fields, dict):
+            response_payload.update(extra_fields)
         if status_code >= 400:
             return jsonify(response_payload), status_code
         return jsonify(response_payload), status_code
 
-    def _record_pair_entity_action(stock: str, future: str, payload: dict[str, object]):
+    def _find_pair_projection(stock: str, future: str) -> dict[str, object] | None:
+        rows, _ = _collect_signal_actionability_rows()
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("stock") or "").strip() != stock:
+                continue
+            if str(row.get("future") or "").strip() != future:
+                continue
+            return row
+        return None
+
+    def _resolve_instrument_pair_context(
+        *,
+        entity_id: str,
+        payload: dict[str, object],
+    ) -> tuple[dict[str, object] | None, str | None]:
+        requested_type = _normalize_instrument_type(payload.get("instrument_type"))
+        requested_pair = _parse_pair_id(payload.get("pair_id"))
+        requested_stock = str(payload.get("stock") or "").strip()
+        requested_future = str(payload.get("future") or "").strip()
+        if not requested_pair and requested_stock and requested_future:
+            requested_pair = (requested_stock, requested_future)
+
+        rows, _ = _collect_signal_actionability_rows()
+        candidates: list[tuple[dict[str, object], str]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            stock = str(row.get("stock") or "").strip()
+            future = str(row.get("future") or "").strip()
+            if not stock or not future:
+                continue
+            inferred_type: str | None = None
+            if entity_id == stock:
+                inferred_type = "stock"
+            elif entity_id == future:
+                inferred_type = "future"
+            if inferred_type is None:
+                continue
+            if requested_type is not None and requested_type != inferred_type:
+                continue
+            if requested_pair is not None and (stock, future) != requested_pair:
+                continue
+            candidates.append((row, inferred_type))
+
+        if not candidates:
+            return None, None
+        if len(candidates) > 1:
+            return {"_ambiguous_pairs": [f"{item[0].get('stock')}__{item[0].get('future')}" for item in candidates]}, None
+        selected_row, selected_type = candidates[0]
+        return selected_row, selected_type
+
+    def _record_pair_entity_action(
+        stock: str,
+        future: str,
+        payload: dict[str, object],
+        *,
+        entity_ref_override: dict[str, object] | None = None,
+        extra_fields: dict[str, object] | None = None,
+    ):
         signal_id_hint = str(payload.get("signal_id") or "").strip() or None
         intent_id = str(payload.get("intent_id") or "").strip() or None
+        projection = _find_pair_projection(stock, future)
+        current_intent_id = None
+        if isinstance(projection, dict):
+            intent_payload = projection.get("intent")
+            if isinstance(intent_payload, dict):
+                current_intent_id = str(intent_payload.get("intent_id") or "").strip() or None
+            if signal_id_hint is None:
+                signal_id_hint = str(projection.get("signal_id") or "").strip() or None
+
+        if intent_id is not None and intent_id != "":
+            if not current_intent_id:
+                return (
+                    jsonify(
+                        {
+                            "status": "blocked",
+                            "action": payload.get("action"),
+                            "entity_ref": entity_ref_override or _build_pair_entity_ref(stock, future),
+                            "intent_id": intent_id,
+                            "signal_id": signal_id_hint,
+                            "fail_closed": bool(settings.ui.ff_fail_closed_execution),
+                            "request_id": None,
+                            "recorded_at": _iso_now(),
+                            "message": "intent_not_active",
+                            "error": "intent_mismatch",
+                        }
+                    ),
+                    409,
+                )
+            if intent_id != current_intent_id:
+                return (
+                    jsonify(
+                        {
+                            "status": "blocked",
+                            "action": payload.get("action"),
+                            "entity_ref": entity_ref_override or _build_pair_entity_ref(stock, future),
+                            "intent_id": intent_id,
+                            "signal_id": signal_id_hint,
+                            "fail_closed": bool(settings.ui.ff_fail_closed_execution),
+                            "request_id": None,
+                            "recorded_at": _iso_now(),
+                            "message": "intent_superseded_or_stale",
+                            "error": "intent_mismatch",
+                            "current_intent_id": current_intent_id,
+                        }
+                    ),
+                    409,
+                )
+
         action_payload = dict(payload)
         action_payload["stock"] = stock
         action_payload["future"] = future
+        if signal_id_hint is not None:
+            action_payload["signal_id"] = signal_id_hint
         result = _record_signal_action(
             signal_id=signal_id_hint,
             payload=action_payload,
@@ -3902,9 +4028,10 @@ def create_app(settings: AppSettings) -> Dash:
         )
         return _normalize_entity_action_result(
             result,
-            entity_ref=_build_pair_entity_ref(stock, future),
+            entity_ref=entity_ref_override or _build_pair_entity_ref(stock, future),
             intent_id=intent_id,
             signal_id_hint=signal_id_hint,
+            extra_fields=extra_fields,
         )
 
     @server.route("/api/v2/entities/<entity_type>/<path:entity_id>/signals/actions", methods=["POST"])
@@ -3926,23 +4053,82 @@ def create_app(settings: AppSettings) -> Dash:
         action = str(payload.get("action") or "").strip().lower()
         if action not in {"ack", "enter", "exit", "hold"}:
             return _bad_request("action must be one of: ack, enter, exit, hold")
-        return jsonify(
-            {
-                "status": "ignored",
-                "action": action,
-                "entity_ref": {
-                    "entity_type": "instrument",
-                    "entity_id": str(entity_id).strip(),
-                    "asset_id": str(entity_id).strip() or None,
-                    "ticker": str(entity_id).strip() or None,
-                },
-                "intent_id": intent_id,
-                "signal_id": None,
-                "fail_closed": bool(settings.ui.ff_fail_closed_execution),
-                "request_id": None,
-                "recorded_at": _iso_now(),
-                "message": "instrument_actions_not_supported_yet",
-            }
+        instrument_id = str(entity_id).strip()
+        if not instrument_id:
+            return _bad_request("entity_id is required for instrument")
+
+        resolved_row, resolved_type = _resolve_instrument_pair_context(
+            entity_id=instrument_id,
+            payload=dict(payload),
+        )
+        if isinstance(resolved_row, dict) and "_ambiguous_pairs" in resolved_row:
+            return (
+                jsonify(
+                    {
+                        "status": "blocked",
+                        "action": action,
+                        "entity_ref": {
+                            "entity_type": "instrument",
+                            "entity_id": instrument_id,
+                            "asset_id": instrument_id or None,
+                            "ticker": instrument_id or None,
+                        },
+                        "intent_id": intent_id,
+                        "signal_id": None,
+                        "fail_closed": bool(settings.ui.ff_fail_closed_execution),
+                        "request_id": None,
+                        "recorded_at": _iso_now(),
+                        "message": "instrument_entity_is_ambiguous_use_pair_id",
+                        "error": "ambiguous_instrument_entity",
+                        "candidate_pairs": resolved_row.get("_ambiguous_pairs"),
+                    }
+                ),
+                409,
+            )
+        if not isinstance(resolved_row, dict):
+            return (
+                jsonify(
+                    {
+                        "status": "not_found",
+                        "action": action,
+                        "entity_ref": {
+                            "entity_type": "instrument",
+                            "entity_id": instrument_id,
+                            "asset_id": instrument_id or None,
+                            "ticker": instrument_id or None,
+                        },
+                        "intent_id": intent_id,
+                        "signal_id": None,
+                        "fail_closed": bool(settings.ui.ff_fail_closed_execution),
+                        "request_id": None,
+                        "recorded_at": _iso_now(),
+                        "message": "instrument_entity_has_no_active_pair_context",
+                    }
+                ),
+                404,
+            )
+
+        stock = str(resolved_row.get("stock") or "").strip()
+        future = str(resolved_row.get("future") or "").strip()
+        if not stock or not future:
+            return _bad_request("instrument resolution failed")
+        pair_id = f"{stock}__{future}"
+        instrument_ref = {
+            "entity_type": "instrument",
+            "entity_id": instrument_id,
+            "asset_id": instrument_id or None,
+            "ticker": instrument_id or None,
+        }
+        return _record_pair_entity_action(
+            stock,
+            future,
+            dict(payload),
+            entity_ref_override=instrument_ref,
+            extra_fields={
+                "pair_ref": _build_pair_entity_ref(stock, future),
+                "pair_id": pair_id,
+                "instrument_type": resolved_type,
+            },
         )
 
     @server.route("/api/v2/pairs/<pair_id>/actions", methods=["POST"])

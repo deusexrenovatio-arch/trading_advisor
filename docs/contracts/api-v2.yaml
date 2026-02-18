@@ -104,9 +104,9 @@ paths:
     post:
       summary: Append entity-level operator action (ack/enter/exit/hold).
       description: >
-        Planned canonical action endpoint for pair and instrument signals.
+        Canonical action endpoint for pair and instrument signals.
         `/pairs/{pair_id}/actions` remains supported as compatibility adapter.
-      x-implementation-status: implemented_phase1_pair_support
+      x-implementation-status: implemented_phase2_entity_support
       parameters:
         - in: path
           name: entity_type
