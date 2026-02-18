@@ -11,6 +11,7 @@ from moex_carry.news.bridge import run_news_gate
 from moex_carry.news.events import EventClusteringReport, cluster_news_events
 from moex_carry.news.ingestion import fetch_rss_news
 from moex_carry.news.inference import run_dual_model_inference_batch
+from moex_carry.news.llm_gateway import NewsLlmPassReport, run_news_llm_full_pass
 from moex_carry.news.linking import default_tag_rows, link_news_item
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
@@ -38,6 +39,11 @@ class NewsSyncSnapshot:
     event_refuted_count: int
     event_resolved_count: int
     cluster_version: str
+    llm_processed_count: int
+    llm_completed_count: int
+    llm_skipped_count: int
+    llm_failed_count: int
+    llm_labeled_count: int
     recent_news_rows: list[dict[str, object]]
     score_by_news: dict[str, dict[str, object]]
     matched_score_rows: list[dict[str, object]]
@@ -214,6 +220,24 @@ def sync_news_runtime(
             primary_links=0,
             cluster_version=settings.news_events.cluster_version,
         )
+    llm_report: NewsLlmPassReport
+    if settings.news_llm.enabled and settings.news_llm.full_pass_enabled:
+        llm_report = run_news_llm_full_pass(
+            session,
+            settings,
+            max_items=settings.news_llm.max_items_per_run,
+        )
+    else:
+        llm_report = NewsLlmPassReport(
+            processed_count=0,
+            completed_count=0,
+            skipped_count=0,
+            failed_count=0,
+            labeled_count=0,
+            provider=settings.news_llm.provider,
+            model_id=settings.news_llm.model_id,
+            prompt_version=settings.news_llm.prompt_version,
+        )
 
     primary_models = [settings.news_models.primary_model] + list(settings.news_models.enabled_models)
     score_by_news = load_primary_news_scores(
@@ -247,6 +271,11 @@ def sync_news_runtime(
         event_refuted_count=event_report.refuted_events,
         event_resolved_count=event_report.resolved_events,
         cluster_version=event_report.cluster_version,
+        llm_processed_count=llm_report.processed_count,
+        llm_completed_count=llm_report.completed_count,
+        llm_skipped_count=llm_report.skipped_count,
+        llm_failed_count=llm_report.failed_count,
+        llm_labeled_count=llm_report.labeled_count,
         recent_news_rows=recent_news_rows,
         score_by_news=score_by_news,
         matched_score_rows=matched_score_rows,
@@ -288,6 +317,8 @@ def run_news_sync_worker(
             f"scores={snapshot.score_count} events={snapshot.event_link_count} "
             f"created={snapshot.event_created_count} updated={snapshot.event_updated_count} "
             f"refuted={snapshot.event_refuted_count} resolved={snapshot.event_resolved_count} "
+            f"llm_processed={snapshot.llm_processed_count} llm_done={snapshot.llm_completed_count} "
+            f"llm_skipped={snapshot.llm_skipped_count} llm_failed={snapshot.llm_failed_count} "
             f"cluster={snapshot.cluster_version} gate={snapshot.news_gate.action}/{snapshot.news_gate.highest_severity} "
             f"matched={len(snapshot.news_gate.matched_items)} elapsed_ms={elapsed_ms}",
             flush=True,

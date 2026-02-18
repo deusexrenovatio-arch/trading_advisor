@@ -40,13 +40,7 @@ from moex_carry.decision_log import DecisionLogStore, build_decision_view, build
 from moex_carry.domain.decision import RiskProfile
 from moex_carry.domain.models import ContractSpec, DividendEvent, Instrument, KeyRate
 from moex_carry.execution.model import build_execution_prices
-from moex_carry.news import (
-    default_tag_rows,
-    fetch_rss_news,
-    link_news_item,
-    run_dual_model_inference,
-    run_news_gate,
-)
+from moex_carry.news import sync_news_runtime
 from moex_carry.selection.ranking import score_pairs_alpha
 from moex_carry.selection.universe import build_pair_mappings
 from moex_carry.strategy.overall_strategy import aggregate_strategy_signals, strategy_signal_to_dict
@@ -58,13 +52,7 @@ from moex_carry.backtest.engine import BacktestResult, backtest_pair
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     delete_signal_history_run,
-    load_news_items,
-    load_primary_news_scores,
-    upsert_news_entity_links,
-    upsert_news_impact_scores,
-    upsert_news_item_tags,
-    upsert_news_items,
-    upsert_news_tags,
+    load_news_backtest_reports,
     store_signal_history,
     store_signal_run,
 )
@@ -76,6 +64,279 @@ def _data_paths(base_dir: Path) -> dict[str, Path]:
     raw_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     return {"raw": raw_dir, "output": output_dir}
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _parse_datetime_utc(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _evaluate_news_weight_quality_gate_report(
+    report_row: dict[str, object] | None,
+    *,
+    required_model: str,
+    expected_horizon: str,
+    max_age_hours: int,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    max_age = max(int(max_age_hours), 1)
+    normalized_required_model = str(required_model or "").strip() or "finbert"
+    normalized_horizon = str(expected_horizon or "").strip() or "1h"
+    now_utc = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(tzinfo=None)
+
+    if not isinstance(report_row, dict):
+        return {
+            "allow_weighting": False,
+            "status": "missing_compare_audit",
+            "report_found": False,
+            "required_model": normalized_required_model,
+            "winner_model": None,
+            "quality_gate_pass": False,
+            "audit_decision": "hold",
+            "horizon_expected": normalized_horizon,
+            "horizon_actual": None,
+            "recorded_at": None,
+            "age_hours": None,
+            "max_age_hours": max_age,
+            "run_id": None,
+        }
+
+    metrics_json = report_row.get("metrics_json")
+    metrics_payload = metrics_json if isinstance(metrics_json, dict) else {}
+    audit_payload = metrics_payload.get("audit") if isinstance(metrics_payload.get("audit"), dict) else {}
+    quality_gate = (
+        audit_payload.get("quality_gate")
+        if isinstance(audit_payload.get("quality_gate"), dict)
+        else {}
+    )
+    winner_payload = metrics_payload.get("winner") if isinstance(metrics_payload.get("winner"), dict) else {}
+
+    winner_model = str(winner_payload.get("model_id") or "").strip() or None
+    audit_decision = str(audit_payload.get("decision") or "").strip().lower() or "hold"
+    quality_gate_pass = bool(quality_gate.get("pass"))
+
+    horizon_actual = str(metrics_payload.get("horizon") or report_row.get("horizon") or "").strip() or None
+    horizon_match = horizon_actual == normalized_horizon if horizon_actual else False
+    winner_match = winner_model == normalized_required_model
+
+    recorded_at = _parse_datetime_utc(audit_payload.get("recorded_at")) or _parse_datetime_utc(
+        report_row.get("created_at")
+    )
+    age_hours: float | None = None
+    stale = True
+    if recorded_at is not None:
+        age_hours = max((now_utc - recorded_at).total_seconds() / 3600.0, 0.0)
+        stale = age_hours > float(max_age)
+
+    allow_weighting = (
+        quality_gate_pass
+        and audit_decision == "promote"
+        and winner_match
+        and horizon_match
+        and not stale
+    )
+    status = "ready" if allow_weighting else "blocked"
+    if not quality_gate_pass:
+        status = "quality_gate_fail"
+    elif audit_decision != "promote":
+        status = "audit_not_promoted"
+    elif not winner_match:
+        status = "winner_model_mismatch"
+    elif not horizon_match:
+        status = "horizon_mismatch"
+    elif stale:
+        status = "stale_report"
+
+    return {
+        "allow_weighting": allow_weighting,
+        "status": status,
+        "report_found": True,
+        "required_model": normalized_required_model,
+        "winner_model": winner_model,
+        "quality_gate_pass": quality_gate_pass,
+        "audit_decision": audit_decision,
+        "horizon_expected": normalized_horizon,
+        "horizon_actual": horizon_actual,
+        "recorded_at": recorded_at.isoformat() + "Z" if recorded_at is not None else None,
+        "age_hours": age_hours,
+        "max_age_hours": max_age,
+        "run_id": report_row.get("run_id"),
+    }
+
+
+def _resolve_news_weight_quality_gate(
+    *,
+    session_factory,
+    settings: AppSettings,
+) -> dict[str, object]:
+    horizon = str(settings.news_models.decision_weight_quality_horizon or "").strip() or "1h"
+    max_age_hours = max(
+        int(_safe_float(settings.news_models.decision_weight_quality_max_age_hours, 72.0)),
+        1,
+    )
+    required_model = str(settings.news_models.primary_model or "").strip() or "finbert"
+    with session_factory() as session:
+        rows = load_news_backtest_reports(
+            session,
+            model_id="__compare__",
+            horizon=horizon,
+            limit=1,
+        )
+        if not rows:
+            rows = load_news_backtest_reports(
+                session,
+                model_id="__compare__",
+                limit=1,
+            )
+    report_row = rows[0] if rows else None
+    return _evaluate_news_weight_quality_gate_report(
+        report_row if isinstance(report_row, dict) else None,
+        required_model=required_model,
+        expected_horizon=horizon,
+        max_age_hours=max_age_hours,
+    )
+
+
+def _summarize_news_model_signal(
+    score_rows: list[dict[str, object]],
+) -> dict[str, float | str]:
+    if not score_rows:
+        return {
+            "direction": "neutral",
+            "net_score": 0.0,
+            "avg_impact": 0.0,
+            "sample_size": 0.0,
+        }
+    weighted_sum = 0.0
+    total_weight = 0.0
+    impact_sum = 0.0
+    for row in score_rows:
+        prob_up = _safe_float(row.get("prob_up"), 0.0)
+        prob_down = _safe_float(row.get("prob_down"), 0.0)
+        impact = max(min(_safe_float(row.get("impact_score"), 0.0), 1.0), 0.0)
+        weight = max(impact, 0.05)
+        weighted_sum += (prob_up - prob_down) * weight
+        total_weight += weight
+        impact_sum += impact
+    net_score = weighted_sum / total_weight if total_weight > 0 else 0.0
+    avg_impact = impact_sum / len(score_rows)
+    if net_score > 0.05:
+        direction = "up"
+    elif net_score < -0.05:
+        direction = "down"
+    else:
+        direction = "neutral"
+    return {
+        "direction": direction,
+        "net_score": net_score,
+        "avg_impact": avg_impact,
+        "sample_size": float(len(score_rows)),
+    }
+
+
+def _apply_news_model_weighting(
+    *,
+    base_weights: dict[str, float],
+    signal_direction: str,
+    gate_action: str,
+    score_rows: list[dict[str, object]],
+    settings: AppSettings,
+) -> tuple[dict[str, float], dict[str, object]]:
+    adjusted = {key: float(value) for key, value in base_weights.items()}
+    summary = _summarize_news_model_signal(score_rows)
+    rollout_mode_raw = str(settings.news_models.decision_weight_rollout_mode or "limited").strip().lower()
+    rollout_mode = rollout_mode_raw if rollout_mode_raw in {"limited", "full"} else "limited"
+    min_sample_size = max(int(_safe_float(settings.news_models.decision_weight_min_sample_size, 3.0)), 0)
+    limited_max_deviation = max(
+        _safe_float(settings.news_models.decision_weight_limited_max_deviation, 0.25),
+        0.0,
+    )
+    threshold = max(_safe_float(settings.news_models.decision_weight_signal_threshold, 0.12), 0.0)
+    min_impact = max(_safe_float(settings.news_models.decision_weight_min_impact, 0.6), 0.0)
+    reduce_factor = min(max(_safe_float(settings.news_models.decision_weight_reduce_factor, 0.5), 0.0), 1.0)
+    boost_factor = max(_safe_float(settings.news_models.decision_weight_boost_factor, 1.1), 1.0)
+    target_key = "arbitrage" if "arbitrage" in adjusted else next(iter(adjusted.keys()), "arbitrage")
+
+    expected_sign = 0
+    direction_raw = str(signal_direction or "").strip().lower()
+    if direction_raw == "cash_and_carry":
+        expected_sign = 1
+    elif direction_raw == "reverse":
+        expected_sign = -1
+
+    factor = 1.0
+    reason = "no_adjustment"
+    net_score = _safe_float(summary.get("net_score"), 0.0)
+    avg_impact = _safe_float(summary.get("avg_impact"), 0.0)
+    sample_size = int(_safe_float(summary.get("sample_size"), 0.0))
+
+    gate_action_normalized = str(gate_action or "").strip().lower()
+    if gate_action_normalized == "reduce":
+        factor = min(factor, reduce_factor)
+        reason = "gate_reduce"
+    elif gate_action_normalized == "block":
+        factor = 0.0
+        reason = "gate_block"
+    elif sample_size < min_sample_size:
+        reason = "insufficient_sample_size"
+    elif expected_sign != 0 and avg_impact >= min_impact and abs(net_score) >= threshold:
+        aligned = (net_score * expected_sign) > 0.0
+        if aligned:
+            factor = max(factor, boost_factor)
+            reason = "model_aligned"
+        else:
+            factor = min(factor, reduce_factor)
+            reason = "model_conflict"
+
+    clamped_for_limited = False
+    if rollout_mode == "limited" and reason != "gate_block":
+        lower_bound = max(1.0 - limited_max_deviation, 0.0)
+        upper_bound = max(1.0 + limited_max_deviation, lower_bound)
+        clamped_factor = min(max(factor, lower_bound), upper_bound)
+        clamped_for_limited = abs(clamped_factor - factor) > 1e-12
+        factor = clamped_factor
+
+    if target_key in adjusted:
+        adjusted[target_key] = max(adjusted[target_key] * factor, 0.0)
+    else:
+        adjusted[target_key] = max(factor, 0.0)
+
+    return adjusted, {
+        "applied": factor != 1.0,
+        "reason": reason,
+        "target_strategy": target_key,
+        "factor": factor,
+        "rollout_mode": rollout_mode,
+        "limited_clamped": clamped_for_limited,
+        "limited_max_deviation": limited_max_deviation,
+        "min_sample_size": min_sample_size,
+        "signal_direction": signal_direction,
+        "model_direction": summary.get("direction"),
+        "model_net_score": net_score,
+        "avg_impact": avg_impact,
+        "sample_size": sample_size,
+    }
 
 
 def fetch_data(settings: AppSettings, max_shares: int | None = None) -> None:
@@ -2226,9 +2487,56 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
         },
     }
     strategy_signals = load_spread_signals([spread_payload])
+    aggregation_weights = dict(settings.aggregation.weights)
+    news_weighting_context: dict[str, object] | None = None
+    with session_factory() as session:
+        news_snapshot = sync_news_runtime(
+            session,
+            settings,
+            enable_ingest=False,
+            enable_inference=(
+                settings.ui.ff_news_model_advisory_enabled
+                or settings.ui.ff_news_bridge_enabled
+            ),
+            gate_enabled=settings.ui.ff_news_bridge_enabled,
+            recent_limit=max(settings.news_ingest.max_items_per_run, 300),
+        )
+    news_gate = news_snapshot.news_gate
+    matched_score_rows = news_snapshot.matched_score_rows
+    news_weight_quality_gate: dict[str, object] | None = None
+    if settings.ui.ff_news_model_decision_weight_enabled:
+        news_weight_quality_gate = _resolve_news_weight_quality_gate(
+            session_factory=session_factory,
+            settings=settings,
+        )
+        if bool(news_weight_quality_gate.get("allow_weighting")):
+            aggregation_weights, news_weighting_context = _apply_news_model_weighting(
+                base_weights=aggregation_weights,
+                signal_direction=signal_direction,
+                gate_action=news_gate.action,
+                score_rows=matched_score_rows,
+                settings=settings,
+            )
+            if isinstance(news_weighting_context, dict):
+                news_weighting_context["quality_gate"] = news_weight_quality_gate
+        else:
+            news_weighting_context = {
+                "applied": False,
+                "reason": "quality_gate_blocked",
+                "target_strategy": "arbitrage"
+                if "arbitrage" in aggregation_weights
+                else next(iter(aggregation_weights.keys()), "arbitrage"),
+                "factor": 1.0,
+                "signal_direction": signal_direction,
+                "model_direction": "neutral",
+                "model_net_score": 0.0,
+                "avg_impact": 0.0,
+                "sample_size": int(len(matched_score_rows)),
+                "quality_gate": news_weight_quality_gate,
+            }
     aggregation_result = aggregate_strategy_signals(
         strategy_signals,
-        settings.aggregation.weights,
+        aggregation_weights,
         settings.aggregation.min_confidence,
         settings.aggregation.max_signals,
     )
@@ -2236,105 +2544,6 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     allocations = proposal["allocations"]
     risk_profile = _risk_profile_from_settings(settings)
     risk_gate = evaluate_risk_profile(risk_profile, allocations)
-    with session_factory() as session:
-        upsert_news_tags(session, default_tag_rows())
-        if settings.news_ingest.enabled and settings.news_ingest.rss_urls:
-            ingested_rows = fetch_rss_news(
-                settings.news_ingest.rss_urls,
-                max_items=settings.news_ingest.max_items_per_run,
-            )
-            if ingested_rows:
-                upsert_news_items(session, ingested_rows)
-
-        recent_news_rows = load_news_items(
-            session,
-            limit=max(settings.news_ingest.max_items_per_run, 300),
-        )
-        entity_rows: list[dict[str, object]] = []
-        tag_rows: list[dict[str, object]] = []
-        score_rows: list[dict[str, object]] = []
-        for news_row in recent_news_rows:
-            news_id = str(news_row.get("news_id") or "").strip()
-            if not news_id:
-                continue
-            linking = link_news_item(
-                news_id=news_id,
-                title=str(news_row.get("title") or ""),
-                content=str(news_row.get("content") or ""),
-            )
-            primary_id = linking.primary_commodity_id or "UNKNOWN"
-            entity_rows.append(
-                {
-                    "news_id": news_id,
-                    "entity_type": "commodity",
-                    "entity_id": primary_id,
-                    "ticker": primary_id if primary_id != "UNKNOWN" else None,
-                    "link_confidence": linking.confidence,
-                    "link_stage": linking.resolution_stage,
-                }
-            )
-            for secondary_id in linking.secondary_commodity_ids:
-                entity_rows.append(
-                    {
-                        "news_id": news_id,
-                        "entity_type": "commodity",
-                        "entity_id": secondary_id,
-                        "ticker": secondary_id,
-                        "link_confidence": max(linking.confidence - 0.1, 0.0),
-                        "link_stage": linking.resolution_stage,
-                    }
-                )
-            for tag_code in linking.tag_codes:
-                tag_rows.append(
-                    {
-                        "news_id": news_id,
-                        "tag_code": tag_code,
-                        "score": linking.confidence,
-                    }
-                )
-            if settings.ui.ff_news_model_advisory_enabled or settings.ui.ff_news_bridge_enabled:
-                text = " ".join(
-                    [
-                        str(news_row.get("title") or ""),
-                        str(news_row.get("content") or ""),
-                    ]
-                ).strip()
-                if text:
-                    score_rows.extend(
-                        run_dual_model_inference(
-                            news_id=news_id,
-                            text=text,
-                            enabled_models=settings.news_models.enabled_models,
-                            finbert_model_name=settings.news_models.finbert_model_name,
-                            nli_model_name=settings.news_models.nli_model_name,
-                            model_version=settings.news_models.model_version,
-                        )
-                    )
-        if entity_rows:
-            upsert_news_entity_links(session, entity_rows)
-        if tag_rows:
-            upsert_news_item_tags(session, tag_rows)
-        if score_rows:
-            upsert_news_impact_scores(session, score_rows)
-
-        primary_models = [settings.news_models.primary_model] + list(settings.news_models.enabled_models)
-        score_by_news = load_primary_news_scores(
-            session,
-            news_ids=[str(row.get("news_id") or "") for row in recent_news_rows],
-            preferred_models=primary_models,
-        )
-        news_gate = run_news_gate(
-            recent_news_rows if settings.ui.ff_news_bridge_enabled else [],
-            score_by_news=score_by_news,
-            lookback_minutes=settings.news_filter.lookback_minutes,
-            block_severity_threshold=settings.news_filter.block_severity_threshold,
-            reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
-        )
-        matched_score_rows = [
-            score_by_news[item.item_id]
-            for item in news_gate.matched_items
-            if item.item_id in score_by_news
-        ]
     futures_path = dirs["raw"] / "futures.csv"
     futures_df = pd.read_csv(futures_path) if futures_path.exists() else pd.DataFrame()
     future_spec_map = {spec.secid: spec for spec in _parse_contract_specs(futures_df)} if not futures_df.empty else {}
@@ -2366,6 +2575,14 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     )
     decision_warnings = list(aggregation_result.warnings)
     decision_warnings.extend(news_gate.errors)
+    if isinstance(news_weighting_context, dict):
+        if bool(news_weighting_context.get("applied")):
+            decision_reasons.append(
+                f"news_weight:{news_weighting_context.get('reason')}:{news_weighting_context.get('factor')}"
+            )
+        else:
+            reason = str(news_weighting_context.get("reason") or "inactive_or_neutral").strip() or "inactive_or_neutral"
+            decision_warnings.append(f"news_weight:{reason}")
     decision_reasons = list(dict.fromkeys(decision_reasons))
     decision_warnings = list(dict.fromkeys(decision_warnings))
     decision_log = {
@@ -2423,6 +2640,32 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
             ],
             "model_selected": settings.news_models.primary_model,
             "gate_action": news_gate.action,
+            "decision_weight": (
+                {
+                    "applied": bool(news_weighting_context.get("applied")),
+                    "reason": str(news_weighting_context.get("reason") or ""),
+                    "target_strategy": str(news_weighting_context.get("target_strategy") or ""),
+                    "factor": _safe_float(news_weighting_context.get("factor"), 1.0),
+                    "rollout_mode": str(news_weighting_context.get("rollout_mode") or ""),
+                    "limited_clamped": bool(news_weighting_context.get("limited_clamped")),
+                    "limited_max_deviation": _safe_float(
+                        news_weighting_context.get("limited_max_deviation"),
+                        0.0,
+                    ),
+                    "min_sample_size": int(_safe_float(news_weighting_context.get("min_sample_size"), 0.0)),
+                    "model_direction": str(news_weighting_context.get("model_direction") or "neutral"),
+                    "model_net_score": _safe_float(news_weighting_context.get("model_net_score"), 0.0),
+                    "avg_impact": _safe_float(news_weighting_context.get("avg_impact"), 0.0),
+                    "sample_size": int(_safe_float(news_weighting_context.get("sample_size"), 0.0)),
+                    "quality_gate": (
+                        news_weighting_context.get("quality_gate")
+                        if isinstance(news_weighting_context.get("quality_gate"), dict)
+                        else None
+                    ),
+                }
+                if isinstance(news_weighting_context, dict)
+                else None
+            ),
         },
         "portfolio_proposal": proposal,
         "risk_checks": [

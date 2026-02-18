@@ -204,6 +204,7 @@ def test_stage_a_news_api_endpoints(tmp_path):
     event_payload = event_resp.get_json()
     assert event_payload["event_id"] == "evt-1"
     assert len(event_payload["news_items"]) == 1
+    assert len(event_payload["llm_runs"]) >= 1
     assert len(event_payload["model_scores"]) >= 1
 
     reaction_resp = client.get("/api/v2/events/evt-1/reaction?window_id=0_30m")
@@ -217,6 +218,7 @@ def test_stage_a_news_api_endpoints(tmp_path):
     feed_rows = feed_resp.get_json()
     assert isinstance(feed_rows, list)
     assert feed_rows[0]["news_event_id"] == "evt-1"
+    assert feed_rows[0]["llm_status"] == "done"
 
     top_resp = client.get("/api/v2/signals/top?commodity=BRENT&k=3")
     assert top_resp.status_code == 200

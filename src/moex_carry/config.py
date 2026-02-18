@@ -357,6 +357,11 @@ class NewsModelsConfig(BaseModel):
     promotion_max_brier: float = 0.25
     promotion_min_sample_count: int = 30
     promotion_min_ticker_stability: float = 0.55
+    decision_weight_quality_horizon: str = "1h"
+    decision_weight_quality_max_age_hours: int = 72
+    decision_weight_rollout_mode: str = "limited"
+    decision_weight_min_sample_size: int = 3
+    decision_weight_limited_max_deviation: float = 0.25
     decision_weight_signal_threshold: float = 0.12
     decision_weight_min_impact: float = 0.6
     decision_weight_reduce_factor: float = 0.5
@@ -369,6 +374,44 @@ class NewsEventsConfig(BaseModel):
     cluster_window_hours: int = 48
     similarity_threshold: float = 0.35
     resolve_after_hours: int = 72
+    anchor_seed_enabled: bool = True
+    anchor_link_enabled: bool = True
+    anchor_cluster_version: str = "anchor-scheduled-v1"
+    anchor_match_window_minutes: int = 90
+    anchor_seed_padding_days: int = 2
+    anchor_episode_seed_enabled: bool = False
+    anchor_episode_cluster_version: str = "anchor-episodic-v1"
+    anchor_episode_sources: list[str] = ["nws_alerts", "nhc", "ukmto"]
+    anchor_episode_match_window_minutes: int = 240
+    anchor_request_timeout_sec: int = 20
+    anchor_user_agent: str = "moex-carry/0.1 (+news-anchor)"
+    anchor_nws_url: str = "https://api.weather.gov/alerts/active?event=Hurricane%20Warning,Storm%20Warning,Tropical%20Storm%20Warning"
+    anchor_nhc_url: str = "https://www.nhc.noaa.gov/CurrentStorms.json"
+    anchor_ukmto_url: str = "https://www.ukmto.org/recent-incidents"
+
+
+class NewsLlmConfig(BaseModel):
+    enabled: bool = False
+    full_pass_enabled: bool = False
+    provider: str = "openai"
+    model_id: str = "gpt-5-mini"
+    api_base_url: str = "https://api.openai.com/v1"
+    api_key_env: str = "OPENAI_API_KEY"
+    prompt_version: str = "news-v1"
+    label_version: str = "v1"
+    max_items_per_run: int = 50
+    max_input_chars: int = 6000
+    max_output_tokens: int = 512
+    max_calls_per_run: int = 0
+    max_prompt_tokens_per_run: int = 0
+    max_completion_tokens_per_run: int = 0
+    max_total_tokens_per_run: int = 0
+    request_timeout_sec: int = 45
+    max_retries: int = 2
+    retry_backoff_sec: float = 1.5
+    temperature: float = 0.0
+    top_impact_priority: bool = True
+    min_impact_for_priority: float = 0.0
 
 
 class AppSettings(BaseSettings):
@@ -395,6 +438,7 @@ class AppSettings(BaseSettings):
     news_ingest: NewsIngestConfig = NewsIngestConfig()
     news_models: NewsModelsConfig = NewsModelsConfig()
     news_events: NewsEventsConfig = NewsEventsConfig()
+    news_llm: NewsLlmConfig = NewsLlmConfig()
 
 
 def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
