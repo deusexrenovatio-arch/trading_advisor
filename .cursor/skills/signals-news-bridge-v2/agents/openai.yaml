@@ -1,0 +1,4 @@
+interface:
+  display_name: "Signals News Bridge v2"
+  short_description: "Link news impact events to signal lifecycle and decision audit refs"
+  default_prompt: "Use this skill to design or implement deterministic runtime linkage between news events and signal or decision contracts in API v2."
