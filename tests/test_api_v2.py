@@ -126,6 +126,291 @@ def test_v2_signals_active_and_actions_idempotency(tmp_path):
     assert isinstance(top_pairs_response.get_json(), list)
 
 
+def test_v2_signals_actionability_exposes_axes_and_policy_trace(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 4, 12, 0, 0)
+        store_signal_run(session, "run-v2-actionability-review", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-actionability-review",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.35,
+                    "signal_reasons": ["test-review"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "pretrade_status": "check",
+                        "news_gate_action": "reduce",
+                    },
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get("/api/v2/signals/actionability?entity_type=pair&include_non_actionable=true")
+    assert response.status_code == 200
+    rows = response.get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["entity_ref"]["entity_type"] == "pair"
+    assert row["axes"]["policy_state"] in {"allow", "reduce", "review", "block"}
+    assert row["axes"]["intent_state"] in {"none", "active", "out_of_range", "consumed", "expired", "superseded"}
+    assert row["actionability_state"] in {
+        "actionable_enter",
+        "actionable_enter_repriced",
+        "enter_out_of_range",
+        "review_entry",
+        "actionable_exit",
+        "hold_open",
+        "blocked_entry",
+        "inactive",
+    }
+    policy = row["policy_outcome"]
+    assert policy["status"] in {"allow", "reduce", "review", "block"}
+    assert policy["precedence_version"] == "v1"
+    assert isinstance(policy["gate_trace"], list)
+    assert len(policy["gate_trace"]) >= 1
+    assert {"gate_id", "status", "priority"}.issubset(policy["gate_trace"][0].keys())
+
+
+def test_v2_signals_actionability_derives_evidence_from_gate_metrics(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 6, 12, 0, 0)
+        store_signal_run(session, "run-v2-actionability-evidence", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-actionability-evidence",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.31,
+                    "signal_reasons": ["news_veto"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "pretrade_status": "check",
+                        "risk_gate_status": "reduce",
+                        "news_gate_action": "block",
+                        "news_gate_reasons": ["news_event_high_impact"],
+                        "liquidity_gate_status": "pass",
+                        "orderbook_pass": False,
+                        "source_freshness_status": "review",
+                    },
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get("/api/v2/signals/actionability?entity_type=pair&include_non_actionable=true")
+    assert response.status_code == 200
+    rows = response.get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+
+    evidence_items = row["evidence_items"]
+    assert isinstance(evidence_items, list)
+    assert len(evidence_items) >= 4
+
+    source_keys = {str(item.get("source_key") or "") for item in evidence_items}
+    assert "technical_score_gate" in source_keys
+    assert "news_geopolitics_gate" in source_keys
+    assert "liquidity_orderbook" in source_keys
+
+    freshness_values = [item.get("freshness_sec") for item in evidence_items if item.get("freshness_sec") is not None]
+    assert freshness_values
+    assert min(int(value) for value in freshness_values) >= 0
+
+    summary = row["evidence_summary"]
+    assert summary["veto_active"] is True
+    assert isinstance(summary.get("veto_reasons"), list)
+
+    policy = row["policy_outcome"]
+    assert policy["status"] == "block"
+    assert policy["applied_gate_id"] in {"news_geopolitics", "risk_profile"}
+
+
+def test_v2_signals_actionability_supports_instrument_filter_and_pairs_view(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 5, 12, 0, 0)
+        store_signal_run(session, "run-v2-actionability-instrument", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-actionability-instrument",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.4,
+                    "signal_reasons": ["test-enter"],
+                    "signal_metrics": {"score_gate_pass": True},
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    instrument_response = client.get(
+        "/api/v2/signals/actionability?entity_type=instrument&instrument_type=stock&include_non_actionable=true"
+    )
+    assert instrument_response.status_code == 200
+    instrument_rows = instrument_response.get_json()
+    assert isinstance(instrument_rows, list)
+    assert len(instrument_rows) == 1
+    assert instrument_rows[0]["entity_ref"]["entity_type"] == "instrument"
+    assert instrument_rows[0]["instrument_type"] == "stock"
+
+    pair_response = client.get("/api/v2/pairs/actionability?include_non_actionable=true")
+    assert pair_response.status_code == 200
+    pair_rows = pair_response.get_json()
+    assert isinstance(pair_rows, list)
+    assert len(pair_rows) == 1
+    assert pair_rows[0]["pair_id"] == "AAA__AAH6"
+    assert pair_rows[0]["entity_ref"]["entity_type"] == "pair"
+    assert "axes" in pair_rows[0]
+    assert "policy_outcome" in pair_rows[0]
+
+
+def test_v2_pairs_actionability_preserves_entry_plan_and_live_range_fields(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 7, 12, 0, 0)
+        store_signal_run(session, "run-v2-actionability-pair-fields", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-actionability-pair-fields",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.45,
+                    "signal_reasons": ["test-enter"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "entry_stock_min": 99.0,
+                        "entry_stock_max": 101.0,
+                        "entry_future_min_per_share": 100.0,
+                        "entry_future_max_per_share": 102.0,
+                        "entry_spread_min": 0.5,
+                        "entry_spread_max": 1.5,
+                        "entry_spread_pct_min": 0.005,
+                        "entry_spread_pct_max": 0.015,
+                        "spread_pct": 0.01,
+                        "spread_mid": 1.0,
+                        "spot_mid": 100.0,
+                        "future_mid": 101.0,
+                    },
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get("/api/v2/pairs/actionability?include_non_actionable=true")
+    assert response.status_code == 200
+    rows = response.get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+
+    plan = row["entry_plan"]
+    assert plan["entry_stock_min"] == 99.0
+    assert plan["entry_stock_max"] == 101.0
+    assert plan["entry_future_min_per_share"] == 100.0
+    assert plan["entry_future_max_per_share"] == 102.0
+
+    live = row["entry_range_now"]
+    assert live["stock_now"] == 100.0
+    assert live["future_now"] == 101.0
+    assert live["spread_now"] == 1.0
+    assert live["spread_pct_now"] == 0.01
+
+
+def test_v2_entity_and_pair_actions_endpoints_are_idempotent(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-actionability-actions")
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    payload = {
+        "action": "ack",
+        "source": "ui",
+        "actor_id": "tester",
+        "intent_id": "intent-test-1",
+        "idempotency_key": "idem-entity-action-1",
+    }
+    first = client.post("/api/v2/entities/pair/AAA__AAH6/signals/actions", json=payload)
+    assert first.status_code == 200
+    first_data = first.get_json()
+    assert first_data["status"] == "ok"
+    assert first_data["entity_ref"]["entity_type"] == "pair"
+    assert first_data["action"] == "ack"
+
+    second = client.post("/api/v2/entities/pair/AAA__AAH6/signals/actions", json=payload)
+    assert second.status_code == 200
+    second_data = second.get_json()
+    assert second_data["status"] == "duplicate"
+    assert second_data["action"] == "ack"
+
+    pair_payload = {
+        "action": "ack",
+        "source": "ui",
+        "actor_id": "tester",
+        "intent_id": "intent-test-2",
+        "idempotency_key": "idem-pair-action-1",
+    }
+    pair_result = client.post("/api/v2/pairs/AAA__AAH6/actions", json=pair_payload)
+    assert pair_result.status_code == 200
+    pair_data = pair_result.get_json()
+    assert pair_data["status"] == "ok"
+    assert pair_data["pair_id"] == "AAA__AAH6"
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        assert len(executions) == 2
+
+
 def test_v2_signal_action_fail_closed_blocks_unconfirmed_entry(tmp_path):
     settings = _build_settings(tmp_path, ff_fail_closed_execution=True)
     engine = create_engine_from_settings(settings)

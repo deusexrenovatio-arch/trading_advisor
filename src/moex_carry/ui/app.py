@@ -45,7 +45,7 @@ from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.pretrade.delay_gate import run_delay_gate
 from moex_carry.signals_ack import build_signal_fingerprint, parse_ack_note
-from moex_carry.signals_delivery import signal_delivery_state
+from moex_carry.signals_delivery import parse_iso_utc, signal_delivery_state
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_decision_view_projection,
@@ -657,6 +657,870 @@ def _build_gate_results_from_row(row: dict[str, object], signal_id: str) -> list
         pretrade_reasons=row.get("pretrade_reasons"),
         stable_id=_stable_id,
     )
+
+
+_ACTIONABILITY_GATE_PRIORITIES: tuple[tuple[str, int], ...] = (
+    ("risk_profile", 1),
+    ("news_geopolitics", 2),
+    ("liquidity", 3),
+    ("execution_feasibility", 4),
+    ("source_freshness", 5),
+    ("portfolio_limits", 6),
+    ("venue_constraints", 7),
+)
+
+
+def _normalize_gate_status(value: object, *, default: str = "unavailable") -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"pass", "reduce", "review", "block", "unavailable"}:
+        return normalized
+    return default
+
+
+def _coerce_string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        result: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                result.append(text)
+        return result
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return [text]
+    return []
+
+
+def _contains_reason_token(reasons: list[str], *tokens: str) -> bool:
+    lowered = [item.lower() for item in reasons]
+    for token in tokens:
+        token_value = token.lower()
+        if any(token_value in reason for reason in lowered):
+            return True
+    return False
+
+
+_EVIDENCE_SOURCE_KINDS = {
+    "technical",
+    "fundamental",
+    "news",
+    "quant_model",
+    "liquidity",
+    "risk",
+    "manual",
+    "other",
+}
+_EVIDENCE_STANCES = {"support", "oppose", "neutral"}
+_EVIDENCE_SEVERITIES = {"low", "medium", "high", "critical"}
+
+
+def _normalize_evidence_source_kind(value: object, *, default: str = "other") -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in _EVIDENCE_SOURCE_KINDS:
+        return normalized
+    return default
+
+
+def _normalize_evidence_stance(value: object, *, default: str = "neutral") -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in _EVIDENCE_STANCES:
+        return normalized
+    return default
+
+
+def _normalize_evidence_severity(value: object) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if normalized in _EVIDENCE_SEVERITIES:
+        return normalized
+    return None
+
+
+def _derive_evidence_freshness_sec(observed_at: object, snapshot_as_of: object) -> int | None:
+    observed_dt = parse_iso_utc(observed_at)
+    snapshot_dt = parse_iso_utc(snapshot_as_of)
+    if observed_dt is None or snapshot_dt is None:
+        return None
+    delta_sec = int((snapshot_dt - observed_dt).total_seconds())
+    if delta_sec < 0:
+        return 0
+    return delta_sec
+
+
+def _normalize_evidence_item(
+    item: dict[str, object],
+    *,
+    snapshot_as_of: object,
+    fallback_source_key_parts: tuple[object, ...] = (),
+) -> dict[str, object]:
+    normalized_item = dict(item)
+    normalized_item["source_kind"] = _normalize_evidence_source_kind(
+        normalized_item.get("source_kind"),
+        default="other",
+    )
+    normalized_item["stance"] = _normalize_evidence_stance(
+        normalized_item.get("stance"),
+        default="neutral",
+    )
+    normalized_item["reason_codes"] = _coerce_string_list(normalized_item.get("reason_codes"))
+
+    source_key = str(normalized_item.get("source_key") or "").strip()
+    if not source_key:
+        source_key = _stable_id(
+            "evidence",
+            normalized_item.get("source_kind"),
+            normalized_item.get("observed_at"),
+            *fallback_source_key_parts,
+            normalized_item.get("reason_codes"),
+        )
+    normalized_item["source_key"] = source_key
+
+    severity = _normalize_evidence_severity(normalized_item.get("severity"))
+    normalized_item["severity"] = severity
+
+    confidence = _to_float(normalized_item.get("confidence"))
+    if confidence is not None:
+        normalized_item["confidence"] = min(max(float(confidence), 0.0), 1.0)
+
+    freshness_sec = normalized_item.get("freshness_sec")
+    freshness_value = None
+    if freshness_sec is not None:
+        parsed = _to_float(freshness_sec)
+        if parsed is not None:
+            freshness_value = max(int(parsed), 0)
+    if freshness_value is None:
+        freshness_value = _derive_evidence_freshness_sec(
+            normalized_item.get("observed_at"),
+            snapshot_as_of,
+        )
+    if freshness_value is not None:
+        normalized_item["freshness_sec"] = freshness_value
+
+    return normalized_item
+
+
+def _derive_evidence_items_from_row(row: dict[str, object]) -> list[dict[str, object]]:
+    metrics = row.get("signal_metrics")
+    metric_map = metrics if isinstance(metrics, dict) else {}
+    reasons = [str(item) for item in (row.get("signal_reasons") or []) if str(item).strip()]
+    observed_at = row.get("timestamp")
+
+    items: list[dict[str, object]] = []
+
+    score_gate_pass = metric_map.get("score_gate_pass")
+    if score_gate_pass is None:
+        score_gate_pass = row.get("score_gate_pass")
+    score_gate_bool = _parse_bool(score_gate_pass)
+    if score_gate_bool is not None:
+        items.append(
+            {
+                "source_key": "technical_score_gate",
+                "source_kind": "technical",
+                "stance": "support" if score_gate_bool else "oppose",
+                "weight": 1.0,
+                "confidence": _to_float(metric_map.get("score_exec_probability")),
+                "severity": "medium" if not score_gate_bool else None,
+                "observed_at": observed_at,
+                "reason_codes": ["score_gate_pass" if score_gate_bool else "score_gate_fail"],
+                "payload": {"score_gate_pass": bool(score_gate_bool)},
+            }
+        )
+
+    gate_specs: tuple[tuple[str, str, str, str], ...] = (
+        ("risk_gate_status", "risk", "risk_profile_gate", "risk_gate_reasons"),
+        ("news_gate_action", "news", "news_geopolitics_gate", "news_gate_reasons"),
+        ("liquidity_gate_status", "liquidity", "liquidity_gate", "liquidity_gate_reasons"),
+        ("source_freshness_status", "other", "source_freshness_gate", "source_freshness_reasons"),
+        ("portfolio_limit_status", "risk", "portfolio_limits_gate", "portfolio_limit_reasons"),
+        ("venue_constraints_status", "other", "venue_constraints_gate", "venue_constraints_reasons"),
+    )
+    for status_key, source_kind, source_key, reasons_key in gate_specs:
+        status = _normalize_gate_status(metric_map.get(status_key), default="unavailable")
+        if status == "unavailable":
+            continue
+        reason_codes = _coerce_string_list(metric_map.get(reasons_key))
+        payload = {"gate_status": status, "gate_id": source_key}
+        if status == "block":
+            payload["veto"] = True
+        severity = None
+        if status == "reduce":
+            severity = "medium"
+        elif status == "review":
+            severity = "high"
+        elif status == "block":
+            severity = "critical"
+        items.append(
+            {
+                "source_key": source_key,
+                "source_kind": source_kind,
+                "stance": "support" if status == "pass" else "oppose",
+                "weight": 1.0,
+                "observed_at": observed_at,
+                "severity": severity,
+                "reason_codes": reason_codes,
+                "payload": payload,
+            }
+        )
+
+    pretrade_status = str(
+        metric_map.get("pretrade_status") or row.get("pretrade_status") or ""
+    ).strip().lower()
+    if pretrade_status:
+        veto = pretrade_status in {"hold", "block"}
+        stance = "support"
+        severity = None
+        if pretrade_status in {"check", "pending"}:
+            stance = "oppose"
+            severity = "medium"
+        elif veto:
+            stance = "oppose"
+            severity = "critical"
+        items.append(
+            {
+                "source_key": "execution_pretrade",
+                "source_kind": "risk",
+                "stance": stance,
+                "weight": 1.0,
+                "observed_at": observed_at,
+                "severity": severity,
+                "reason_codes": [f"pretrade_{pretrade_status}"],
+                "payload": {
+                    "pretrade_status": pretrade_status,
+                    "veto": veto,
+                },
+            }
+        )
+
+    orderbook_pass = _parse_bool(metric_map.get("orderbook_pass"))
+    if orderbook_pass is not None:
+        reason_codes = _coerce_string_list(metric_map.get("orderbook_data_warnings"))
+        if not reason_codes:
+            reason_codes = ["orderbook_pass" if orderbook_pass else "orderbook_fail"]
+        items.append(
+            {
+                "source_key": "liquidity_orderbook",
+                "source_kind": "liquidity",
+                "stance": "support" if orderbook_pass else "oppose",
+                "weight": 1.0,
+                "observed_at": observed_at,
+                "severity": "high" if not orderbook_pass else None,
+                "reason_codes": reason_codes,
+                "payload": {"orderbook_pass": bool(orderbook_pass)},
+            }
+        )
+
+    if _contains_reason_token(reasons, "news_veto", "geopolitical_veto"):
+        items.append(
+            {
+                "source_key": "news_reason_veto",
+                "source_kind": "news",
+                "stance": "oppose",
+                "weight": 1.0,
+                "observed_at": observed_at,
+                "severity": "critical",
+                "reason_codes": ["reason_veto"],
+                "payload": {"veto": True},
+            }
+        )
+
+    if _contains_reason_token(reasons, "fundamental_support", "long_term_support"):
+        items.append(
+            {
+                "source_key": "fundamental_support",
+                "source_kind": "fundamental",
+                "stance": "support",
+                "weight": 1.0,
+                "observed_at": observed_at,
+                "reason_codes": ["fundamental_support"],
+                "payload": {},
+            }
+        )
+    if _contains_reason_token(reasons, "fundamental_veto", "fundamental_oppose"):
+        items.append(
+            {
+                "source_key": "fundamental_oppose",
+                "source_kind": "fundamental",
+                "stance": "oppose",
+                "weight": 1.0,
+                "observed_at": observed_at,
+                "severity": "high",
+                "reason_codes": ["fundamental_oppose"],
+                "payload": {},
+            }
+        )
+
+    return items
+
+
+def _extract_evidence_items(row: dict[str, object]) -> list[dict[str, object]]:
+    metrics = row.get("signal_metrics")
+    metric_map = metrics if isinstance(metrics, dict) else {}
+    snapshot_as_of = row.get("timestamp")
+
+    raw = row.get("evidence_items")
+    if raw is None:
+        raw = metric_map.get("evidence_items")
+
+    items: list[dict[str, object]] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            items.append(
+                _normalize_evidence_item(
+                    item,
+                    snapshot_as_of=snapshot_as_of,
+                )
+            )
+
+    existing_source_keys = {
+        str(item.get("source_key") or "").strip()
+        for item in items
+        if isinstance(item, dict)
+    }
+    for item in _derive_evidence_items_from_row(row):
+        if not isinstance(item, dict):
+            continue
+        normalized_item = _normalize_evidence_item(
+            item,
+            snapshot_as_of=snapshot_as_of,
+            fallback_source_key_parts=(row.get("stock"), row.get("future"), row.get("run_id")),
+        )
+        source_key = str(normalized_item.get("source_key") or "").strip()
+        if source_key and source_key in existing_source_keys:
+            continue
+        if source_key:
+            existing_source_keys.add(source_key)
+        items.append(normalized_item)
+
+    return items
+
+
+def _summarize_evidence_items(
+    evidence_items: list[dict[str, object]],
+    reasons: list[str],
+) -> dict[str, object]:
+    support_weight = 0.0
+    oppose_weight = 0.0
+    neutral_weight = 0.0
+    veto_reasons: list[str] = []
+
+    for item in evidence_items:
+        stance = str(item.get("stance") or "neutral").strip().lower()
+        weight = _to_float(item.get("weight"))
+        if weight is None:
+            weight = 1.0
+        if stance == "support":
+            support_weight += float(weight)
+        elif stance == "oppose":
+            oppose_weight += float(weight)
+        else:
+            neutral_weight += float(weight)
+        payload = item.get("payload")
+        item_veto = False
+        if isinstance(payload, dict):
+            item_veto = bool(payload.get("veto"))
+        severity = str(item.get("severity") or "").strip().lower()
+        if item_veto or severity == "critical":
+            reason_codes = _coerce_string_list(item.get("reason_codes"))
+            if reason_codes:
+                veto_reasons.extend(reason_codes)
+            else:
+                veto_reasons.append(str(item.get("source_key") or "veto"))
+
+    if _contains_reason_token(reasons, "news_veto", "geopolitical_veto", "risk_veto"):
+        veto_reasons.append("reason_veto")
+
+    total = support_weight + oppose_weight + neutral_weight
+    if total > 0:
+        conflict_score = min((2.0 * min(support_weight, oppose_weight)) / total, 1.0)
+    else:
+        conflict_score = 0.0
+
+    return {
+        "support_weight_total": float(support_weight),
+        "oppose_weight_total": float(oppose_weight),
+        "neutral_weight_total": float(neutral_weight),
+        "conflict_score": float(conflict_score),
+        "veto_active": bool(veto_reasons),
+        "veto_reasons": veto_reasons,
+    }
+
+
+def _derive_actionability_gate_trace(
+    row: dict[str, object],
+    *,
+    delivery: dict[str, object],
+    evidence_summary: dict[str, object],
+) -> list[dict[str, object]]:
+    metrics = row.get("signal_metrics")
+    metric_map = metrics if isinstance(metrics, dict) else {}
+    reasons = [str(item) for item in (row.get("signal_reasons") or []) if str(item).strip()]
+    effective_action = str(row.get("signal_action_effective") or row.get("signal_action") or "").strip().lower()
+
+    trace: list[dict[str, object]] = []
+    for gate_id, priority in _ACTIONABILITY_GATE_PRIORITIES:
+        status = "pass"
+        reason_codes: list[str] = []
+        details: dict[str, object] = {}
+
+        if gate_id == "risk_profile":
+            raw_status = metric_map.get("risk_gate_status")
+            if raw_status is None and _contains_reason_token(reasons, "risk_block", "risk_limit"):
+                raw_status = "block"
+            status = _normalize_gate_status(raw_status, default="pass")
+            if status != "pass":
+                reason_codes = _coerce_string_list(metric_map.get("risk_gate_reasons")) or ["risk_profile_gate"]
+        elif gate_id == "news_geopolitics":
+            raw_status = metric_map.get("news_gate_action")
+            if raw_status is None and bool(evidence_summary.get("veto_active")):
+                raw_status = "block"
+            status = _normalize_gate_status(raw_status, default="pass")
+            if status != "pass":
+                reason_codes = _coerce_string_list(metric_map.get("news_gate_reasons"))
+                if not reason_codes and bool(evidence_summary.get("veto_active")):
+                    reason_codes = [str(item) for item in evidence_summary.get("veto_reasons") or []]
+                if not reason_codes:
+                    reason_codes = ["news_gate"]
+        elif gate_id == "liquidity":
+            raw_status = metric_map.get("liquidity_gate_status")
+            if raw_status is None:
+                orderbook_pass = _parse_bool(metric_map.get("orderbook_pass"))
+                if orderbook_pass is False:
+                    raw_status = "reduce"
+            status = _normalize_gate_status(raw_status, default="pass")
+            if status != "pass":
+                reason_codes = _coerce_string_list(metric_map.get("liquidity_gate_reasons")) or [
+                    "liquidity_gate",
+                ]
+        elif gate_id == "execution_feasibility":
+            raw_status = metric_map.get("execution_gate_status")
+            if raw_status is None:
+                if effective_action == "hold_pretrade":
+                    raw_status = "block"
+                elif effective_action == "check_pretrade":
+                    raw_status = "review"
+                elif (
+                    str(delivery.get("delivery_suppressed_reason") or "").strip().lower()
+                    == "entry_out_of_range"
+                ):
+                    raw_status = "reduce"
+            status = _normalize_gate_status(raw_status, default="pass")
+            if status != "pass":
+                reason_codes = _coerce_string_list(metric_map.get("execution_gate_reasons"))
+                if not reason_codes and str(delivery.get("delivery_suppressed_reason") or "").strip().lower():
+                    reason_codes = [str(delivery.get("delivery_suppressed_reason"))]
+                if not reason_codes:
+                    reason_codes = ["execution_gate"]
+            details = {
+                "entry_range_eligible": bool(delivery.get("entry_range_eligible")),
+                "entry_signal_expired": bool(delivery.get("entry_signal_expired")),
+            }
+        elif gate_id == "source_freshness":
+            raw_status = metric_map.get("source_freshness_status")
+            status = _normalize_gate_status(raw_status, default="unavailable")
+            if status != "pass":
+                reason_codes = _coerce_string_list(metric_map.get("source_freshness_reasons"))
+        elif gate_id == "portfolio_limits":
+            raw_status = metric_map.get("portfolio_limit_status")
+            status = _normalize_gate_status(raw_status, default="unavailable")
+            if status != "pass":
+                reason_codes = _coerce_string_list(metric_map.get("portfolio_limit_reasons"))
+        elif gate_id == "venue_constraints":
+            raw_status = metric_map.get("venue_constraints_status")
+            status = _normalize_gate_status(raw_status, default="unavailable")
+            if status != "pass":
+                reason_codes = _coerce_string_list(metric_map.get("venue_constraints_reasons"))
+
+        trace.append(
+            {
+                "gate_id": gate_id,
+                "status": status,
+                "priority": priority,
+                "reason_codes": reason_codes,
+                "details": details,
+            }
+        )
+    return trace
+
+
+def _resolve_policy_outcome(
+    gate_trace: list[dict[str, object]],
+    *,
+    risk_scale_multiplier: float | None,
+) -> dict[str, object]:
+    ordered = sorted(gate_trace, key=lambda item: int(item.get("priority") or 999))
+
+    def _first(status_value: str) -> dict[str, object] | None:
+        for item in ordered:
+            if str(item.get("status") or "").strip().lower() == status_value:
+                return item
+        return None
+
+    selected = _first("block")
+    final_status = "block" if selected is not None else "allow"
+    if selected is None:
+        selected = _first("review")
+        if selected is not None:
+            final_status = "review"
+    if selected is None:
+        selected = _first("reduce")
+        if selected is not None:
+            final_status = "reduce"
+    if selected is None:
+        selected = _first("pass")
+        if selected is None and ordered:
+            selected = ordered[0]
+
+    selected_reason_codes = (
+        [str(item) for item in (selected.get("reason_codes") or []) if str(item).strip()]
+        if isinstance(selected, dict)
+        else []
+    )
+    applied_gate_id = str(selected.get("gate_id") or "").strip() if isinstance(selected, dict) else None
+    applied_priority = int(selected.get("priority") or 0) if isinstance(selected, dict) else None
+
+    outcome: dict[str, object] = {
+        "status": final_status,
+        "reasons": selected_reason_codes,
+        "blocking_gate": applied_gate_id if final_status == "block" else None,
+        "precedence_version": "v1",
+        "applied_gate_id": applied_gate_id or None,
+        "applied_gate_priority": applied_priority,
+        "manual_review_required": final_status == "review",
+        "risk_scale_multiplier": (
+            float(risk_scale_multiplier)
+            if final_status == "reduce" and risk_scale_multiplier is not None
+            else None
+        ),
+        "gate_trace": ordered,
+    }
+    return outcome
+
+
+def _map_delivery_suppressed_reason_v2(reason: object) -> str | None:
+    normalized = str(reason or "").strip().lower()
+    if not normalized:
+        return None
+    mapping = {
+        "signal_used": "intent_consumed",
+        "entry_expired": "intent_expired",
+        "entry_out_of_range": "out_of_range",
+        "unsupported_action": "unsupported_action",
+    }
+    return mapping.get(normalized, "not_actionable")
+
+
+def _derive_intent_state_v2(row: dict[str, object], delivery: dict[str, object]) -> str:
+    action = str(row.get("signal_action") or "").strip().lower()
+    if action != "enter":
+        return "none"
+    if bool(row.get("signal_used")):
+        return "consumed"
+    if bool(delivery.get("entry_signal_expired")):
+        return "expired"
+    if not bool(delivery.get("entry_range_eligible")):
+        return "out_of_range"
+    return "active"
+
+
+def _derive_delivery_state_v2(delivery: dict[str, object]) -> str:
+    if bool(delivery.get("delivery_allowed")):
+        return "not_sent"
+    reason = str(delivery.get("delivery_suppressed_reason") or "").strip().lower()
+    if reason == "entry_out_of_range":
+        return "out_of_range_notified"
+    if reason == "cooldown":
+        return "cooldown"
+    return "suppressed"
+
+
+def _derive_actionability_state_v2(
+    *,
+    signal_action: str,
+    policy_state: str,
+    intent_state: str,
+    position_state: str,
+    execution_state: str,
+    has_origin: bool,
+) -> str:
+    if policy_state == "block":
+        return "blocked_entry"
+    if signal_action == "exit":
+        if position_state == "open" and policy_state in {"allow", "reduce"}:
+            return "actionable_exit"
+        return "inactive"
+    if signal_action == "enter":
+        if policy_state == "review":
+            return "review_entry"
+        if intent_state == "out_of_range" or execution_state == "out_of_range":
+            return "enter_out_of_range"
+        if intent_state == "active":
+            if has_origin:
+                return "actionable_enter_repriced"
+            return "actionable_enter"
+        if position_state == "open":
+            return "hold_open"
+        return "inactive"
+    if position_state == "open":
+        return "hold_open"
+    return "inactive"
+
+
+def _build_signal_actionability_projection(
+    row: dict[str, object],
+    *,
+    callback_ttl_hours: int,
+) -> dict[str, object]:
+    signal_id = str(row.get("signal_id") or _build_signal_id_from_row(row))
+    signal_action = str(row.get("signal_action") or "").strip().lower()
+    position_state = str(row.get("position_state") or "flat").strip().lower()
+    if position_state not in {"flat", "open"}:
+        position_state = "open" if bool(row.get("position_open")) else "flat"
+
+    signal_action_effective = _derive_effective_signal_action(row)
+    delivery = signal_delivery_state(
+        {**row, "signal_action_effective": signal_action_effective},
+        callback_ttl_hours=callback_ttl_hours,
+    )
+    evidence_items = _extract_evidence_items(row)
+    signal_reasons = [str(item) for item in (row.get("signal_reasons") or []) if str(item).strip()]
+    evidence_summary = _summarize_evidence_items(evidence_items, signal_reasons)
+    risk_scale_multiplier = _to_float(
+        row.get("risk_scale_multiplier")
+        if row.get("risk_scale_multiplier") is not None
+        else (
+            row.get("signal_metrics", {}).get("risk_scale_multiplier")
+            if isinstance(row.get("signal_metrics"), dict)
+            else None
+        )
+    )
+    gate_trace = _derive_actionability_gate_trace(
+        row,
+        delivery=delivery,
+        evidence_summary=evidence_summary,
+    )
+    policy_outcome = _resolve_policy_outcome(gate_trace, risk_scale_multiplier=risk_scale_multiplier)
+    policy_state = str(policy_outcome.get("status") or "allow")
+    intent_state = _derive_intent_state_v2(row, delivery)
+    execution_state = "not_applicable"
+    if signal_action == "enter":
+        execution_state = "in_range" if bool(delivery.get("entry_range_eligible")) else "out_of_range"
+    delivery_state = _derive_delivery_state_v2(delivery)
+    source_conflict_state = "none"
+    if bool(evidence_summary.get("veto_active")):
+        source_conflict_state = "veto"
+    else:
+        conflict_score = _to_float(evidence_summary.get("conflict_score")) or 0.0
+        if conflict_score >= 0.75:
+            source_conflict_state = "high"
+        elif conflict_score >= 0.4:
+            source_conflict_state = "medium"
+        elif conflict_score > 0:
+            source_conflict_state = "low"
+
+    has_origin = bool(row.get("signal_origin_run_id")) or bool(row.get("signal_origin_timestamp"))
+    actionability_state = _derive_actionability_state_v2(
+        signal_action=signal_action,
+        policy_state=policy_state,
+        intent_state=intent_state,
+        position_state=position_state,
+        execution_state=execution_state,
+        has_origin=has_origin,
+    )
+
+    timestamp_raw = row.get("timestamp")
+    signal_ts = parse_iso_utc(timestamp_raw)
+    ttl_expires_at = None
+    if signal_ts is not None:
+        ttl_expires_at = (
+            signal_ts + timedelta(hours=max(int(callback_ttl_hours or 72), 1))
+        ).isoformat().replace("+00:00", "Z")
+
+    delivery_action = str(delivery.get("delivery_action") or "").strip().lower()
+    if delivery_action not in {"enter", "exit", "hold_open"}:
+        delivery_action = "none"
+
+    signal_fingerprint = str(row.get("signal_fingerprint") or "").strip()
+    if not signal_fingerprint:
+        signal_fingerprint = _stable_id(
+            "fingerprint",
+            row.get("run_id"),
+            row.get("timestamp"),
+            row.get("stock"),
+            row.get("future"),
+            signal_action,
+            length=24,
+        )
+
+    intent_id = _stable_id("intent", signal_fingerprint, signal_id, length=24)
+    intent_consumed = intent_state == "consumed"
+    consumed_action = "ack" if intent_consumed else None
+    if intent_consumed and _contains_reason_token(signal_reasons, "enter_used", "explicit_enter"):
+        consumed_action = "enter"
+
+    signal_metrics = row.get("signal_metrics") if isinstance(row.get("signal_metrics"), dict) else {}
+    entry_plan = {
+        "plan_revision": int(signal_metrics.get("plan_revision") or (1 if has_origin else 0)),
+        "generated_at": row.get("timestamp"),
+        "valid_until": ttl_expires_at,
+        "direction": row.get("signal_direction"),
+        "entry_price_min": _to_float(row.get("entry_stock_min")),
+        "entry_price_max": _to_float(row.get("entry_stock_max")),
+        "entry_spread_min": _to_float(row.get("entry_spread_min")),
+        "entry_spread_max": _to_float(row.get("entry_spread_max")),
+        "entry_spread_pct_min": _to_float(row.get("entry_spread_pct_min")),
+        "entry_spread_pct_max": _to_float(row.get("entry_spread_pct_max")),
+        "execution_window_sec": int(signal_metrics.get("execution_window_sec") or 0) or None,
+    }
+
+    entry_range_now = {
+        "price_now": _to_float(row.get("spot_mid")),
+        "spread_now": _to_float(row.get("spread_mid")),
+        "spread_pct_now": _to_float(row.get("spread_pct")),
+        "in_range": bool(delivery.get("entry_range_eligible")),
+        "out_of_range_reasons": (
+            ["entry_out_of_range"]
+            if not bool(delivery.get("entry_range_eligible")) and signal_action == "enter"
+            else []
+        ),
+    }
+
+    projection: dict[str, object] = {
+        "actionability_id": _stable_id("act", signal_id, signal_fingerprint, length=24),
+        "signal_id": signal_id,
+        "entity_ref": _build_pair_entity_ref(row.get("stock"), row.get("future")),
+        "snapshot_as_of": row.get("timestamp"),
+        "axes": {
+            "policy_state": policy_state,
+            "intent_state": intent_state,
+            "position_state": position_state,
+            "execution_state": execution_state,
+            "delivery_state": delivery_state,
+            "source_conflict_state": source_conflict_state,
+        },
+        "position_state": position_state,
+        "actionability_state": actionability_state,
+        "actionable_enter": actionability_state in {"actionable_enter", "actionable_enter_repriced"},
+        "actionable_exit": actionability_state == "actionable_exit",
+        "hold_required": position_state == "open",
+        "intent": {
+            "intent_id": intent_id,
+            "source_signal_id": signal_id,
+            "source_run_id": row.get("run_id"),
+            "source_timestamp": row.get("timestamp"),
+            "status": intent_state,
+            "ttl_expires_at": ttl_expires_at,
+            "consumed_by_action": consumed_action,
+            "consumed_at": row.get("signal_used_at") if intent_consumed else None,
+            "consumed_by": row.get("signal_used_by") if intent_consumed else None,
+        },
+        "entry_plan": entry_plan,
+        "entry_range_now": entry_range_now,
+        "delivery": {
+            "delivery_action": delivery_action,
+            "delivery_allowed": bool(delivery.get("delivery_allowed")),
+            "delivery_suppressed_reason": _map_delivery_suppressed_reason_v2(
+                delivery.get("delivery_suppressed_reason")
+            ),
+            "signal_fingerprint": signal_fingerprint,
+            "out_of_range_notified": delivery_state == "out_of_range_notified",
+            "last_notified_at": None,
+        },
+        "evidence_summary": evidence_summary,
+        "evidence_items": evidence_items,
+        "policy_outcome": policy_outcome,
+        "reasons": signal_reasons,
+        "signal_origin_run_id": row.get("signal_origin_run_id"),
+        "signal_origin_timestamp": row.get("signal_origin_timestamp"),
+        "metrics": signal_metrics,
+        "run_id": row.get("run_id"),
+        "timestamp": row.get("timestamp"),
+        "stock": row.get("stock"),
+        "future": row.get("future"),
+        "signal_action": signal_action,
+        "signal_direction": row.get("signal_direction"),
+        "signal_score": row.get("signal_score"),
+        "entry_stock_min": _to_float(row.get("entry_stock_min")),
+        "entry_stock_max": _to_float(row.get("entry_stock_max")),
+        "entry_future_min_per_share": _to_float(row.get("entry_future_min_per_share")),
+        "entry_future_max_per_share": _to_float(row.get("entry_future_max_per_share")),
+        "entry_spread_min": _to_float(row.get("entry_spread_min")),
+        "entry_spread_max": _to_float(row.get("entry_spread_max")),
+        "entry_spread_pct_min": _to_float(row.get("entry_spread_pct_min")),
+        "entry_spread_pct_max": _to_float(row.get("entry_spread_pct_max")),
+        "spot_mid": _to_float(row.get("spot_mid")),
+        "future_mid": _to_float(row.get("future_mid")),
+        "spread_mid": _to_float(row.get("spread_mid")),
+        "spread_pct": _to_float(row.get("spread_pct")),
+        "pretrade_status": row.get("pretrade_status"),
+    }
+    return projection
+
+
+def _build_instrument_actionability_rows(
+    pair_projection: dict[str, object],
+) -> list[dict[str, object]]:
+    stock = str(pair_projection.get("stock") or "").strip()
+    future = str(pair_projection.get("future") or "").strip()
+    if not stock and not future:
+        return []
+
+    row_list: list[tuple[str, str, str]] = []
+    if stock:
+        row_list.append(("stock", stock, "stock"))
+    if future:
+        row_list.append(("future", future, "future"))
+
+    result: list[dict[str, object]] = []
+    for leg_key, secid, instrument_type in row_list:
+        entry_plan = dict(pair_projection.get("entry_plan") or {})
+        entry_range_now = dict(pair_projection.get("entry_range_now") or {})
+        if leg_key == "stock":
+            entry_plan["entry_price_min"] = _to_float(pair_projection.get("entry_stock_min"))
+            entry_plan["entry_price_max"] = _to_float(pair_projection.get("entry_stock_max"))
+            entry_range_now["price_now"] = _to_float(pair_projection.get("spot_mid"))
+        else:
+            entry_plan["entry_price_min"] = _to_float(pair_projection.get("entry_future_min_per_share"))
+            entry_plan["entry_price_max"] = _to_float(pair_projection.get("entry_future_max_per_share"))
+            entry_range_now["price_now"] = _to_float(pair_projection.get("future_mid"))
+
+        instrument_row = dict(pair_projection)
+        instrument_row["actionability_id"] = _stable_id(
+            "act",
+            pair_projection.get("actionability_id"),
+            instrument_type,
+            secid,
+            length=24,
+        )
+        instrument_row["entity_ref"] = {
+            "entity_type": "instrument",
+            "entity_id": secid,
+            "asset_id": secid,
+            "ticker": secid,
+        }
+        instrument_row["instrument_type"] = instrument_type
+        instrument_row["entry_plan"] = entry_plan
+        instrument_row["entry_range_now"] = entry_range_now
+        instrument_row["stock"] = None
+        instrument_row["future"] = None
+        result.append(instrument_row)
+    return result
+
+
+def _parse_pair_id(value: object) -> tuple[str, str] | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    for sep in ("__", ":", "|", "/"):
+        if sep not in raw:
+            continue
+        stock, future = raw.split(sep, 1)
+        stock_value = stock.strip()
+        future_value = future.strip()
+        if stock_value and future_value:
+            return stock_value, future_value
+    return None
 
 
 def _extract_response_payload(result) -> tuple[object | None, int]:
@@ -2831,6 +3695,272 @@ def create_app(settings: AppSettings) -> Dash:
             )
             payload.append(enriched_row)
         return jsonify(payload)
+
+    def _collect_signal_actionability_rows() -> tuple[list[dict[str, object]], int]:
+        legacy = signals_active_v2_api()
+        rows, status_code = _extract_response_payload(legacy)
+        if status_code >= 400:
+            return [], status_code
+        if not isinstance(rows, list):
+            return [], 200
+
+        callback_ttl_hours = int(getattr(settings.telegram, "callback_ttl_hours", 72) or 72)
+        payload: list[dict[str, object]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            payload.append(
+                _build_signal_actionability_projection(
+                    row,
+                    callback_ttl_hours=callback_ttl_hours,
+                )
+            )
+        payload.sort(key=lambda item: str(item.get("snapshot_as_of") or ""), reverse=True)
+        payload.sort(key=lambda item: 0 if str(item.get("position_state") or "") == "open" else 1)
+        return payload, 200
+
+    @server.route("/api/v2/signals/actionability", methods=["GET"])
+    def signals_actionability_v2_api():
+        rows, status_code = _collect_signal_actionability_rows()
+        if status_code >= 400:
+            return jsonify([])
+
+        entity_type = str(request.args.get("entity_type") or "").strip().lower()
+        if entity_type not in {"", "pair", "instrument"}:
+            return _bad_request("entity_type must be one of: pair, instrument")
+        instrument_type_filter = str(request.args.get("instrument_type") or "").strip().lower()
+        if instrument_type_filter not in {"", "stock", "future"}:
+            return _bad_request("instrument_type must be one of: stock, future")
+        include_non_actionable = _coerce_bool(
+            request.args.get("include_non_actionable"),
+            default=False,
+        )
+        limit = max(_parse_int(request.args.get("limit"), 500), 0)
+
+        projected: list[dict[str, object]] = []
+        for row in rows:
+            if entity_type in {"", "pair"}:
+                projected.append(dict(row))
+            if entity_type in {"", "instrument"}:
+                projected.extend(_build_instrument_actionability_rows(row))
+
+        if instrument_type_filter:
+            projected = [
+                row
+                for row in projected
+                if str(row.get("instrument_type") or "").strip().lower() == instrument_type_filter
+            ]
+
+        if not include_non_actionable:
+            projected = [
+                row
+                for row in projected
+                if str(row.get("actionability_state") or "").strip().lower()
+                in {"actionable_enter", "actionable_enter_repriced", "actionable_exit", "hold_open"}
+                or bool(row.get("hold_required"))
+            ]
+
+        if limit > 0:
+            projected = projected[:limit]
+        return jsonify(projected)
+
+    @server.route("/api/v2/pairs/actionability", methods=["GET"])
+    def pairs_actionability_v2_api():
+        include_non_actionable = _coerce_bool(
+            request.args.get("include_non_actionable"),
+            default=False,
+        )
+        include_open_holds = _coerce_bool(
+            request.args.get("include_open_holds"),
+            default=True,
+        )
+        limit = max(_parse_int(request.args.get("limit"), 500), 0)
+
+        rows, status_code = _collect_signal_actionability_rows()
+        if status_code >= 400:
+            return jsonify([])
+
+        projected: list[dict[str, object]] = []
+        for row in rows:
+            state = str(row.get("actionability_state") or "").strip().lower()
+            if not include_non_actionable and state not in {
+                "actionable_enter",
+                "actionable_enter_repriced",
+                "actionable_exit",
+                "hold_open",
+            }:
+                continue
+            if not include_open_holds and state == "hold_open":
+                continue
+
+            pair_id = f"{str(row.get('stock') or '').strip()}__{str(row.get('future') or '').strip()}"
+            pair_row = {
+                "pair_id": pair_id,
+                "stock": row.get("stock"),
+                "future": row.get("future"),
+                "entity_ref": row.get("entity_ref"),
+                "snapshot_as_of": row.get("snapshot_as_of"),
+                "axes": row.get("axes"),
+                "position_state": row.get("position_state"),
+                "actionability_state": row.get("actionability_state"),
+                "actionable_enter": bool(row.get("actionable_enter")),
+                "actionable_exit": bool(row.get("actionable_exit")),
+                "hold_required": bool(row.get("hold_required")),
+                "intent": row.get("intent"),
+                "entry_plan": {
+                    "plan_revision": (row.get("entry_plan") or {}).get("plan_revision")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "generated_at": (row.get("entry_plan") or {}).get("generated_at")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "valid_until": (row.get("entry_plan") or {}).get("valid_until")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "direction": (row.get("entry_plan") or {}).get("direction")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "entry_stock_min": row.get("entry_stock_min"),
+                    "entry_stock_max": row.get("entry_stock_max"),
+                    "entry_future_min_per_share": row.get("entry_future_min_per_share"),
+                    "entry_future_max_per_share": row.get("entry_future_max_per_share"),
+                    "entry_spread_min": row.get("entry_spread_min"),
+                    "entry_spread_max": row.get("entry_spread_max"),
+                    "entry_spread_pct_min": row.get("entry_spread_pct_min"),
+                    "entry_spread_pct_max": row.get("entry_spread_pct_max"),
+                },
+                "entry_range_now": {
+                    "stock_now": row.get("spot_mid"),
+                    "future_now": row.get("future_mid"),
+                    "spread_now": row.get("spread_mid"),
+                    "spread_pct_now": row.get("spread_pct"),
+                    "in_range": bool((row.get("entry_range_now") or {}).get("in_range"))
+                    if isinstance(row.get("entry_range_now"), dict)
+                    else False,
+                    "out_of_range_reasons": (
+                        (row.get("entry_range_now") or {}).get("out_of_range_reasons") or []
+                    )
+                    if isinstance(row.get("entry_range_now"), dict)
+                    else [],
+                },
+                "delivery": row.get("delivery"),
+                "evidence_summary": row.get("evidence_summary"),
+                "evidence_items": row.get("evidence_items"),
+                "policy_outcome": row.get("policy_outcome"),
+                "reasons": row.get("reasons") or [],
+                "signal_origin_run_id": row.get("signal_origin_run_id"),
+                "signal_origin_timestamp": row.get("signal_origin_timestamp"),
+                "metrics": row.get("metrics") or {},
+                "signal_id": row.get("signal_id"),
+            }
+            projected.append(pair_row)
+
+        if limit > 0:
+            projected = projected[:limit]
+        return jsonify(projected)
+
+    def _normalize_entity_action_result(
+        result,
+        *,
+        entity_ref: dict[str, object],
+        intent_id: str | None,
+        signal_id_hint: str | None = None,
+    ):
+        payload, status_code = _extract_response_payload(result)
+        if not isinstance(payload, dict):
+            return result
+        fail_closed_payload = payload.get("fail_closed")
+        fail_closed = False
+        if isinstance(fail_closed_payload, dict):
+            fail_closed = bool(fail_closed_payload.get("enabled"))
+        response_payload = {
+            "status": payload.get("status", "ok"),
+            "action": payload.get("action"),
+            "entity_ref": entity_ref,
+            "intent_id": intent_id,
+            "signal_id": payload.get("signal_id") or signal_id_hint,
+            "fail_closed": fail_closed,
+            "request_id": payload.get("execution_event_id") or payload.get("action_id"),
+            "recorded_at": payload.get("created_at"),
+            "message": payload.get("message"),
+        }
+        if status_code >= 400:
+            return jsonify(response_payload), status_code
+        return jsonify(response_payload), status_code
+
+    def _record_pair_entity_action(stock: str, future: str, payload: dict[str, object]):
+        signal_id_hint = str(payload.get("signal_id") or "").strip() or None
+        intent_id = str(payload.get("intent_id") or "").strip() or None
+        action_payload = dict(payload)
+        action_payload["stock"] = stock
+        action_payload["future"] = future
+        result = _record_signal_action(
+            signal_id=signal_id_hint,
+            payload=action_payload,
+            source_default="ui",
+            legacy_mode=False,
+        )
+        return _normalize_entity_action_result(
+            result,
+            entity_ref=_build_pair_entity_ref(stock, future),
+            intent_id=intent_id,
+            signal_id_hint=signal_id_hint,
+        )
+
+    @server.route("/api/v2/entities/<entity_type>/<path:entity_id>/signals/actions", methods=["POST"])
+    def entity_signals_actions_v2_api(entity_type: str, entity_id: str):
+        payload = request.get_json(silent=True)
+        if payload is None or not isinstance(payload, dict):
+            return _bad_request("invalid_json")
+        normalized_entity_type = str(entity_type or "").strip().lower()
+        if normalized_entity_type not in {"pair", "instrument"}:
+            return _bad_request("entity_type must be one of: pair, instrument")
+        if normalized_entity_type == "pair":
+            pair = _parse_pair_id(entity_id)
+            if pair is None:
+                return _bad_request("pair entity_id must be STOCK__FUTURE or STOCK:FUTURE")
+            stock, future = pair
+            return _record_pair_entity_action(stock, future, dict(payload))
+
+        intent_id = str(payload.get("intent_id") or "").strip() or None
+        action = str(payload.get("action") or "").strip().lower()
+        if action not in {"ack", "enter", "exit", "hold"}:
+            return _bad_request("action must be one of: ack, enter, exit, hold")
+        return jsonify(
+            {
+                "status": "ignored",
+                "action": action,
+                "entity_ref": {
+                    "entity_type": "instrument",
+                    "entity_id": str(entity_id).strip(),
+                    "asset_id": str(entity_id).strip() or None,
+                    "ticker": str(entity_id).strip() or None,
+                },
+                "intent_id": intent_id,
+                "signal_id": None,
+                "fail_closed": bool(settings.ui.ff_fail_closed_execution),
+                "request_id": None,
+                "recorded_at": _iso_now(),
+                "message": "instrument_actions_not_supported_yet",
+            }
+        )
+
+    @server.route("/api/v2/pairs/<pair_id>/actions", methods=["POST"])
+    def pair_actions_v2_api(pair_id: str):
+        payload = request.get_json(silent=True)
+        if payload is None or not isinstance(payload, dict):
+            return _bad_request("invalid_json")
+        pair = _parse_pair_id(pair_id)
+        if pair is None:
+            return _bad_request("pair_id must be STOCK__FUTURE or STOCK:FUTURE")
+        stock, future = pair
+        result = _record_pair_entity_action(stock, future, dict(payload))
+        response_payload, status_code = _extract_response_payload(result)
+        if not isinstance(response_payload, dict):
+            return result
+        pair_response = dict(response_payload)
+        pair_response["pair_id"] = f"{stock}__{future}"
+        return jsonify(pair_response), status_code
 
     def _record_signal_action(
         signal_id: str | None,
