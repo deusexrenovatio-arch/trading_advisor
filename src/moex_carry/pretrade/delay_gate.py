@@ -127,7 +127,8 @@ def run_delay_gate(
     stock_sell_min = float(spot_target) * (1.0 - stock_eps_value)
     fut_buy_max = float(future_target) * (1.0 + future_eps_value)
     fut_sell_min = float(future_target) * (1.0 - future_eps_value)
-    spread_band = float(spot_target) * spread_eps_value
+    spread_base = max(abs(float(spread_target)), 1.0)
+    spread_band = spread_base * spread_eps_value
     spread_min = float(spread_target) - spread_band
     spread_max = float(spread_target) + spread_band
 

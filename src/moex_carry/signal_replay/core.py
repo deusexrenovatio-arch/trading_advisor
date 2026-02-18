@@ -261,7 +261,7 @@ def _build_split_band_fn(
             return False
         stock_band = target_spot * stock_tol
         future_band = target_future * future_tol
-        spread_base = target_spot if target_spot > 0 else max(abs(target_spread), 1.0)
+        spread_base = max(abs(target_spread), 1.0)
         spread_band = spread_base * spread_tol
         return (
             abs(spot_now - target_spot) <= stock_band

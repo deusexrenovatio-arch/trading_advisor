@@ -121,6 +121,31 @@ def test_split_tolerance_overrides_fallback():
     assert split.metrics.unfilled_entry_rate == 0.0
 
 
+def test_split_tolerance_uses_spread_target_not_spot_notional():
+    base = _series(
+        [
+            ("2026-01-01 10:00:00", 100.0, 101.0),
+            ("2026-01-01 10:30:00", 99.0, 102.0),
+            ("2026-01-01 11:00:00", 99.0, 102.0),
+        ]
+    )
+    split = run_minute_replay(
+        series_base=base,
+        pair=_pair(),
+        settings=_settings(
+            {
+                "entry_price_tolerance_pct": 0.001,
+                "entry_stock_tolerance_pct": 0.03,
+                "entry_future_tolerance_pct": 0.03,
+                "entry_spread_tolerance_pct": 0.03,
+            }
+        ),
+        dividends=[],
+        key_rates=[],
+    )
+    assert split.metrics.unfilled_entry_rate == 1.0
+
+
 def test_replay_is_sign_sensitive_for_negative_move():
     base = _series(
         [

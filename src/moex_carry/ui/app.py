@@ -322,7 +322,8 @@ def _build_pretrade_fail_open_result(
     stock_sell_min = float(spot_target) * (1.0 - float(stock_eps))
     fut_buy_max = float(future_target) * (1.0 + float(future_eps))
     fut_sell_min = float(future_target) * (1.0 - float(future_eps))
-    spread_band = float(spot_target) * float(spread_eps)
+    spread_base = max(abs(float(spread_target)), 1.0)
+    spread_band = spread_base * float(spread_eps)
     spread_min = float(spread_target) - spread_band
     spread_max = float(spread_target) + spread_band
 
@@ -1680,6 +1681,14 @@ def _resolve_entry_tolerance_from_settings(settings: AppSettings) -> float:
     return min(max(float(parsed), 0.0001), 0.05)
 
 
+def _resolve_spread_tolerance_from_settings(settings: AppSettings) -> float:
+    raw = getattr(settings.spread_carry_alpha, "entry_spread_tolerance_pct", None)
+    parsed = _to_float(raw)
+    if parsed is None:
+        return _resolve_entry_tolerance_from_settings(settings)
+    return min(max(float(parsed), 0.0001), 0.05)
+
+
 def _build_dynamic_entry_plan(
     *,
     spot_mid: float | None,
@@ -1687,7 +1696,9 @@ def _build_dynamic_entry_plan(
     spread_mid: float | None,
     spread_pct: float | None,
     tolerance: float,
+    spread_tolerance: float | None = None,
 ) -> dict[str, float | None]:
+    spread_tol = tolerance if spread_tolerance is None else min(max(float(spread_tolerance), 0.0001), 0.05)
     spot = float(spot_mid) if spot_mid is not None else None
     future = float(future_mid) if future_mid is not None else None
     spread_value = float(spread_mid) if spread_mid is not None else None
@@ -1700,15 +1711,16 @@ def _build_dynamic_entry_plan(
 
     spread_band = None
     spread_pct_band = None
-    if spot is not None and spot > 0:
-        spread_band = float(spot * tolerance)
-        spread_pct_band = float(spread_band / spot)
-    elif spread_value is not None:
-        spread_band = float(max(abs(spread_value), 1.0) * tolerance)
-        spread_pct_band = float(tolerance)
+    if spread_value is not None:
+        spread_band = float(max(abs(spread_value), 1.0) * spread_tol)
+        if spot is not None and spot != 0:
+            spread_pct_band = float(spread_band / abs(spot))
+        elif spread_pct_value is not None:
+            spread_pct_band = float(max(abs(spread_pct_value), 0.000001) * spread_tol)
 
     return {
         "entry_price_tolerance_pct": float(tolerance),
+        "entry_spread_tolerance_pct": float(spread_tol),
         "entry_stock_min": float(spot * (1.0 - tolerance)) if spot is not None and spot > 0 else None,
         "entry_stock_max": float(spot * (1.0 + tolerance)) if spot is not None and spot > 0 else None,
         "entry_future_min_per_share": (
@@ -1773,6 +1785,10 @@ def _enrich_entry_plan_metrics(
     if tolerance is None:
         tolerance = _resolve_entry_tolerance_from_settings(settings)
     tolerance = min(max(float(tolerance), 0.0001), 0.05)
+    spread_tolerance = _to_float(merged.get("entry_spread_tolerance_pct"))
+    if spread_tolerance is None:
+        spread_tolerance = _resolve_spread_tolerance_from_settings(settings)
+    spread_tolerance = min(max(float(spread_tolerance), 0.0001), 0.05)
 
     spot_mid = _coalesce_float(merged, ("spot_mid", "spot", "stock_mid", "stock_price", "stock_last_price"))
     future_mid = _coalesce_float(
@@ -1787,6 +1803,7 @@ def _enrich_entry_plan_metrics(
         spread_mid=spread_mid,
         spread_pct=spread_pct,
         tolerance=tolerance,
+        spread_tolerance=spread_tolerance,
     )
     merged.update(dynamic_plan)
     return merged

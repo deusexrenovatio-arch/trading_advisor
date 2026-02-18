@@ -77,7 +77,7 @@ def _execution_band_ok(
     tol = max(float(tolerance), 0.0)
     stock_band = target_spot * tol
     future_band = target_future * tol
-    spread_band = target_spot * tol if target_spot > 0 else max(abs(target_spread), 1.0) * tol
+    spread_band = max(abs(target_spread), 1.0) * tol
     return (
         abs(spot_now - target_spot) <= stock_band
         and abs(future_now - target_future) <= future_band

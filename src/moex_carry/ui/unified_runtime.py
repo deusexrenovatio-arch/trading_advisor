@@ -571,6 +571,15 @@ def _resolve_entry_tolerance(settings: AppSettings) -> float:
     return min(max(float(parsed), 0.0001), 0.05)
 
 
+def _resolve_spread_tolerance(settings: AppSettings) -> float:
+    alpha_cfg = settings.spread_carry_alpha
+    raw_value = getattr(alpha_cfg, "entry_spread_tolerance_pct", None)
+    parsed = _safe_float(raw_value)
+    if parsed is None:
+        return _resolve_entry_tolerance(settings)
+    return min(max(float(parsed), 0.0001), 0.05)
+
+
 def _entry_plan_from_latest(
     *,
     spot_mid: float | None,
@@ -578,7 +587,9 @@ def _entry_plan_from_latest(
     spread_mid: float | None,
     spread_pct: float | None,
     tolerance: float,
+    spread_tolerance: float | None = None,
 ) -> dict[str, float | None]:
+    spread_tol = tolerance if spread_tolerance is None else min(max(float(spread_tolerance), 0.0001), 0.05)
     spot = float(spot_mid) if spot_mid is not None else None
     future = float(future_mid) if future_mid is not None else None
     spread_value = float(spread_mid) if spread_mid is not None else None
@@ -590,12 +601,12 @@ def _entry_plan_from_latest(
 
     spread_band = None
     spread_pct_band = None
-    if spot is not None and spot > 0:
-        spread_band = float(spot * tolerance)
-        spread_pct_band = float(spread_band / spot)
-    elif spread_value is not None:
-        spread_band = float(max(abs(spread_value), 1.0) * tolerance)
-        spread_pct_band = float(tolerance)
+    if spread_value is not None:
+        spread_band = float(max(abs(spread_value), 1.0) * spread_tol)
+        if spot is not None and spot != 0:
+            spread_pct_band = float(spread_band / abs(spot))
+        elif spread_pct_value is not None:
+            spread_pct_band = float(max(abs(spread_pct_value), 0.000001) * spread_tol)
 
     entry_stock_min = float(spot * (1.0 - tolerance)) if spot is not None and spot > 0 else None
     entry_stock_max = float(spot * (1.0 + tolerance)) if spot is not None and spot > 0 else None
@@ -624,6 +635,7 @@ def _entry_plan_from_latest(
     )
     return {
         "entry_price_tolerance_pct": float(tolerance),
+        "entry_spread_tolerance_pct": float(spread_tol),
         "entry_stock_min": entry_stock_min,
         "entry_stock_max": entry_stock_max,
         "entry_future_min_per_share": entry_future_min,
@@ -686,12 +698,14 @@ def _build_pair_rows(
     spread_mid = _safe_float(latest.get("spread_mid"))
     spread_pct = _safe_float(latest.get("spread_pct"))
     entry_tolerance = _resolve_entry_tolerance(settings)
+    spread_tolerance = _resolve_spread_tolerance(settings)
     entry_plan = _entry_plan_from_latest(
         spot_mid=spot_mid,
         future_mid=future_mid,
         spread_mid=spread_mid,
         spread_pct=spread_pct,
         tolerance=entry_tolerance,
+        spread_tolerance=spread_tolerance,
     )
 
     entry_spread = _safe_float(latest.get("entry_spread_pct_exec"))

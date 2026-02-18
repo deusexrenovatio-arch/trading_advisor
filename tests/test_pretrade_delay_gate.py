@@ -131,5 +131,5 @@ def test_delay_gate_supports_split_tolerances_for_price_bands():
     assert bands["stock_sell_min"] == pytest.approx(98.0)
     assert bands["future_buy_max_per_share"] == pytest.approx(103.525)
     assert bands["future_sell_min_per_share"] == pytest.approx(98.475)
-    assert bands["spread_min"] == pytest.approx(-4.0)
-    assert bands["spread_max"] == pytest.approx(2.0)
+    assert bands["spread_min"] == pytest.approx(-1.03)
+    assert bands["spread_max"] == pytest.approx(-0.97)

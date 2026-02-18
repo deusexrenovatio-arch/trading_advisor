@@ -1365,3 +1365,50 @@ def test_signals_active_requires_score_gate_by_default_and_supports_override(tmp
     data_all = response_all.get_json()
     assert isinstance(data_all, list)
     assert len(data_all) == 2
+
+
+def test_signals_active_repriced_enter_uses_spread_based_tolerance(tmp_path):
+    settings = _build_settings(tmp_path)
+    settings.spread_carry_alpha.entry_price_tolerance_pct = 0.02
+    settings.spread_carry_alpha.entry_spread_tolerance_pct = 0.03
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_run(
+            session,
+            "run-spread-basis",
+            datetime(2025, 1, 12, 12, 0, 0),
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "hold",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.1,
+                    "signal_reasons": ["replay_hold"],
+                    "signal_metrics": {
+                        "spot_mid": 100.0,
+                        "future_mid": 101.0,
+                        "spread_mid": -1.0,
+                        "spread_pct": -0.01,
+                        "score_gate_pass": True,
+                    },
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    response = client.get("/api/signals/active?require_score_gate=false")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    row = data[0]
+    assert row["signal_action"] == "enter"
+    assert "repriced_from_hold_flat" in row["signal_reasons"]
+    assert abs(float(row["entry_stock_min"]) - 98.0) < 1e-9
+    assert abs(float(row["entry_stock_max"]) - 102.0) < 1e-9
+    assert abs(float(row["entry_spread_min"]) - (-1.03)) < 1e-9
+    assert abs(float(row["entry_spread_max"]) - (-0.97)) < 1e-9

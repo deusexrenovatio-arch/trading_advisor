@@ -556,6 +556,15 @@ def _resolve_entry_tolerance(alpha_cfg: object) -> float:
     return min(max(value, 0.0001), 0.05)
 
 
+def _resolve_spread_tolerance(alpha_cfg: object, fallback: float) -> float:
+    raw_value = getattr(alpha_cfg, "entry_spread_tolerance_pct", None)
+    try:
+        value = float(raw_value) if raw_value is not None else float(fallback)
+    except (TypeError, ValueError):
+        value = float(fallback)
+    return min(max(value, 0.0001), 0.05)
+
+
 def _build_signal_trade_plan(
     *,
     direction: str,
@@ -571,13 +580,14 @@ def _build_signal_trade_plan(
     alpha_cfg: object,
 ) -> dict[str, object]:
     entry_tolerance = _resolve_entry_tolerance(alpha_cfg)
+    spread_tolerance = _resolve_spread_tolerance(alpha_cfg, entry_tolerance)
     stock_target = float(spot_mid)
     future_target = float(future_mid)
     spread_target = float(spread_mid_value)
     direction_norm = "reverse" if str(direction).lower() == "reverse" else "cash_and_carry"
 
-    spread_band = stock_target * entry_tolerance if stock_target > 0 else abs(spread_target) * entry_tolerance
-    spread_pct_band = spread_band / stock_target if stock_target > 0 else entry_tolerance
+    spread_band = max(abs(spread_target), 1.0) * spread_tolerance
+    spread_pct_band = spread_band / abs(stock_target) if stock_target != 0 else spread_tolerance
 
     entry_stock_min = stock_target * (1.0 - entry_tolerance)
     entry_stock_max = stock_target * (1.0 + entry_tolerance)
@@ -611,6 +621,7 @@ def _build_signal_trade_plan(
 
     return {
         "entry_price_tolerance_pct": entry_tolerance,
+        "entry_spread_tolerance_pct": spread_tolerance,
         "entry_stock_min": entry_stock_min,
         "entry_stock_max": entry_stock_max,
         "entry_future_min_per_share": entry_future_min,
@@ -732,7 +743,7 @@ def _execution_band_ok(
     tol = max(float(tolerance), 0.0)
     stock_band = target_spot * tol
     future_band = target_future * tol
-    spread_band = target_spot * tol if target_spot > 0 else max(abs(target_spread), 1.0) * tol
+    spread_band = max(abs(target_spread), 1.0) * tol
     return (
         abs(spot_now - target_spot) <= stock_band
         and abs(future_now - target_future) <= future_band
