@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commodity News Linking"
+  short_description: "Map raw news to canonical commodity, ticker, and tag entities"
+  default_prompt: "Use this skill to build deterministic, testable linking from news text to commodity entities and taxonomy tags."

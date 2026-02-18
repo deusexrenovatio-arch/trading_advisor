@@ -1,0 +1,4 @@
+interface:
+  display_name: "News Impact Backtest Lab"
+  short_description: "Leakage-safe evaluation workflow for news impact models"
+  default_prompt: "Use this skill to run or update backtests for news impact models with horizon labels, calibration checks, and promotion gates."
