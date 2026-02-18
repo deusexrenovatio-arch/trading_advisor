@@ -44,10 +44,13 @@ from moex_carry.signals_ack import build_signal_fingerprint, parse_ack_note
 from moex_carry.signals_delivery import parse_iso_utc, signal_delivery_state
 from moex_carry.news import (
     build_signal_news_links,
+    build_event_study_leakage_audit,
     compare_news_models,
     compute_event_fragmentation_report,
+    rebuild_event_market_reactions,
     run_news_backtest,
     run_news_gate,
+    summarize_event_study,
 )
 from moex_carry.news.taxonomy import impact_to_severity
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
@@ -69,6 +72,7 @@ from moex_carry.storage.repositories import (
     load_news_items,
     load_news_labels,
     load_news_llm_runs,
+    load_news_model_eval_records,
     load_news_signal_links,
     load_primary_news_scores,
     load_open_executions,
@@ -2219,6 +2223,7 @@ def _build_news_feed_events_from_event_layer(
         limit=max(len(event_ids) * 10, 1000),
     )
     labels = load_news_labels(session, target_level="event", target_ids=event_ids, limit=max(len(event_ids) * 5, 500))
+    llm_rows = load_news_llm_runs(session, target_level="event", limit=max(len(event_ids) * 10, 1000))
 
     entities_by_news: dict[str, list[dict[str, object]]] = {}
     for row in entity_links:
@@ -2263,6 +2268,15 @@ def _build_news_feed_events_from_event_layer(
         if not event_id or direction not in {"positive", "negative", "neutral", "uncertain"}:
             continue
         label_direction_by_event.setdefault(event_id, direction)
+    llm_status_by_event: dict[str, str] = {}
+    for row in llm_rows:
+        event_id = str(row.get("target_id") or "").strip()
+        if not event_id or event_id not in event_ids:
+            continue
+        status = str(row.get("status") or "").strip().lower()
+        if not status:
+            continue
+        llm_status_by_event.setdefault(event_id, status)
 
     events: list[dict[str, object]] = []
     for event_row in event_rows:
@@ -2348,6 +2362,7 @@ def _build_news_feed_events_from_event_layer(
             "event_status": event_row.get("event_status"),
             "cluster_version": event_row.get("cluster_version"),
             "label_direction": label_direction_by_event.get(event_id),
+            "llm_status": llm_status_by_event.get(event_id),
         }
         events.append(result_row)
 
@@ -3429,6 +3444,7 @@ def create_app(settings: AppSettings) -> Dash:
             news_ids = [str(row.get("news_id") or "").strip() for row in event_items if row.get("news_id")]
             news_rows = load_news_items_by_ids(session, news_ids)
             labels = load_news_labels(session, target_level="event", target_ids=[event_key], limit=200)
+            llm_runs = load_news_llm_runs(session, target_level="event", target_id=event_key, limit=200)
             model_scores = load_news_impact_scores(
                 session,
                 target_level="event",
@@ -3442,6 +3458,7 @@ def create_app(settings: AppSettings) -> Dash:
         payload["news_items"] = news_rows
         payload["event_items"] = event_items
         payload["labels"] = labels
+        payload["llm_runs"] = llm_runs
         payload["model_scores"] = model_scores
         payload["signal_refs"] = signal_refs
         payload["reactions_preview"] = reactions_preview
@@ -3672,6 +3689,7 @@ def create_app(settings: AppSettings) -> Dash:
             reaction_rows = load_event_market_reactions(session, limit=0)
             llm_rows = load_news_llm_runs(session, limit=0)
             annotation_rows = load_news_annotations(session, limit=0)
+            eval_rows = load_news_model_eval_records(session, limit=5000)
             fragmentation_report = compute_event_fragmentation_report(session)
 
         event_status_counts: dict[str, int] = {}
@@ -3694,6 +3712,11 @@ def create_app(settings: AppSettings) -> Dash:
             key = str(row.get("status") or "unknown").strip() or "unknown"
             llm_status_counts[key] = int(llm_status_counts.get(key, 0)) + 1
 
+        promotion_state_counts: dict[str, int] = {}
+        for row in eval_rows:
+            key = str(row.get("promotion_state") or "unknown").strip() or "unknown"
+            promotion_state_counts[key] = int(promotion_state_counts.get(key, 0)) + 1
+
         payload = {
             "events_total": len(event_rows),
             "event_items_total": len(event_item_rows),
@@ -3706,6 +3729,8 @@ def create_app(settings: AppSettings) -> Dash:
             "llm_status_counts": llm_status_counts,
             "reactions_total": len(reaction_rows),
             "annotations_total": len(annotation_rows),
+            "model_eval_records_total": len(eval_rows),
+            "promotion_state_counts": promotion_state_counts,
             "fragmentation": fragmentation_report,
         }
         return _observe_request("v2_validation_summary", started_at, jsonify(payload))
@@ -3716,69 +3741,126 @@ def create_app(settings: AppSettings) -> Dash:
         commodity = str(request.args.get("commodity") or "").strip().upper()
         window_id = str(request.args.get("window_id") or request.args.get("window") or "").strip() or None
         sampling_freq = str(request.args.get("sampling_freq") or "").strip() or None
+        event_time_mode = str(request.args.get("event_time_mode") or "published").strip().lower() or "published"
+        if event_time_mode not in {"published", "ingested"}:
+            return _observe_request("v2_validation_event_study", started_at, _bad_request("invalid_event_time_mode"))
+        from_raw = request.args.get("from")
+        to_raw = request.args.get("to")
+        from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
+        to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
+        if from_raw and from_ts is None:
+            return _observe_request("v2_validation_event_study", started_at, _bad_request("invalid_from"))
+        if to_raw and to_ts is None:
+            return _observe_request("v2_validation_event_study", started_at, _bad_request("invalid_to"))
+        exclude_overlap = bool(_parse_bool(request.args.get("exclude_overlap")) or False)
+        audit_leakage_raw = _parse_bool(request.args.get("audit_leakage"))
+        audit_leakage = True if audit_leakage_raw is None else bool(audit_leakage_raw)
+        rebuild_if_missing_param = _parse_bool(request.args.get("rebuild_if_missing"))
+        rebuild_if_missing = True if rebuild_if_missing_param is None else bool(rebuild_if_missing_param)
+        rebuild_max_events = max(_parse_int(request.args.get("rebuild_max_events"), 0), 0)
+        estimation_lookback_days = max(_parse_int(request.args.get("estimation_lookback_days"), 7), 1)
         limit = max(_parse_int(request.args.get("limit"), 10000), 0)
+        rebuild_report: dict[str, object] | None = None
+        audit_event_rows: list[dict[str, object]] = []
         with session_factory() as session:
+            scoped_event_ids: set[str] | None = None
+            if from_ts is not None or to_ts is not None:
+                scoped_events = load_news_events(
+                    session,
+                    published_from=_isoformat_utc(from_ts),
+                    published_to=_isoformat_utc(to_ts),
+                    limit=0,
+                )
+                scoped_event_ids = {
+                    str(row.get("event_id") or "").strip()
+                    for row in scoped_events
+                    if str(row.get("event_id") or "").strip()
+                }
             reactions = load_event_market_reactions(
                 session,
                 window_id=window_id,
                 sampling_freq=sampling_freq,
                 limit=limit,
             )
+            if rebuild_if_missing and not reactions:
+                build = rebuild_event_market_reactions(
+                    session,
+                    published_from=from_ts,
+                    published_to=to_ts,
+                    window_ids=[window_id] if window_id else None,
+                    sampling_freqs=[sampling_freq] if sampling_freq else ("1m", "5m", "15m"),
+                    estimation_lookback_days=estimation_lookback_days,
+                    max_events=rebuild_max_events,
+                    event_time_mode=event_time_mode,
+                )
+                rebuild_report = {
+                    "events_seen": build.events_seen,
+                    "events_processed": build.events_processed,
+                    "windows_processed": build.windows_processed,
+                    "rows_upserted": build.rows_upserted,
+                    "overlap_rows": build.overlap_rows,
+                    "skipped_rows": build.skipped_rows,
+                }
+                reactions = load_event_market_reactions(
+                    session,
+                    window_id=window_id,
+                    sampling_freq=sampling_freq,
+                    limit=limit,
+                )
             if commodity:
                 reactions = [
                     row
                     for row in reactions
                     if commodity in str(row.get("instrument_id") or "").strip().upper()
                 ]
-            event_ids = [str(row.get("event_id") or "").strip() for row in reactions if row.get("event_id")]
+            if scoped_event_ids is not None:
+                reactions = [
+                    row
+                    for row in reactions
+                    if str(row.get("event_id") or "").strip() in scoped_event_ids
+                ]
+            event_ids = sorted({str(row.get("event_id") or "").strip() for row in reactions if row.get("event_id")})
             label_rows = load_news_labels(
                 session,
                 target_level="event",
                 target_ids=event_ids,
                 limit=max(len(event_ids) * 2, 1000),
             )
-
-        direction_by_event: dict[str, str] = {}
-        for row in label_rows:
-            event_id = str(row.get("target_id") or "").strip()
-            direction = str(row.get("direction") or "").strip().lower()
-            if not event_id or not direction:
-                continue
-            if direction in {"positive", "negative", "neutral", "uncertain"}:
-                direction_by_event.setdefault(event_id, direction)
-
-        values_by_direction: dict[str, list[float]] = {
-            "positive": [],
-            "negative": [],
-            "neutral": [],
-            "uncertain": [],
-            "unlabeled": [],
-        }
-        for row in reactions:
-            event_id = str(row.get("event_id") or "").strip()
-            direction = direction_by_event.get(event_id, "unlabeled")
-            car_value = row.get("car")
-            if car_value is None:
-                continue
-            try:
-                values_by_direction.setdefault(direction, []).append(float(car_value))
-            except (TypeError, ValueError):
-                continue
-
-        summary = {}
-        for direction, values in values_by_direction.items():
-            avg_car = float(sum(values) / len(values)) if values else None
-            summary[direction] = {
-                "count": len(values),
-                "avg_car": avg_car,
-            }
-
+            if audit_leakage and event_ids:
+                audit_event_rows = load_news_events(
+                    session,
+                    event_ids=event_ids,
+                    limit=max(len(event_ids) * 2, 1000),
+                )
+        summary_payload = summarize_event_study(
+            reactions=reactions,
+            labels=label_rows,
+            exclude_overlap=exclude_overlap,
+        )
+        leakage_audit = (
+            build_event_study_leakage_audit(
+                reactions=reactions,
+                events=audit_event_rows,
+                event_time_mode=event_time_mode,
+            )
+            if audit_leakage
+            else None
+        )
         payload = {
             "commodity": commodity or None,
             "window_id": window_id,
             "sampling_freq": sampling_freq,
-            "sample_count": len(reactions),
-            "car_summary_by_direction": summary,
+            "event_time_mode": event_time_mode,
+            "sample_count": int(summary_payload.get("sample_count") or 0),
+            "sample_count_before_overlap_filter": int(
+                summary_payload.get("sample_count_before_overlap_filter") or 0
+            ),
+            "excluded_overlap_count": int(summary_payload.get("excluded_overlap_count") or 0),
+            "exclude_overlap": bool(summary_payload.get("exclude_overlap")),
+            "car_summary_by_direction": summary_payload.get("car_summary_by_direction") or {},
+            "fdr_method": summary_payload.get("fdr_method"),
+            "leakage_audit": leakage_audit,
+            "rebuild_report": rebuild_report,
         }
         return _observe_request("v2_validation_event_study", started_at, jsonify(payload))
 
@@ -4126,6 +4208,27 @@ def create_app(settings: AppSettings) -> Dash:
                             "metrics_json": report,
                         },
                     )
+            compare_run_id = _stable_id(
+                "news-bt",
+                "__compare__",
+                horizon,
+                from_ts.isoformat(),
+                to_ts.isoformat(),
+                str(comparison.get("audit", {}).get("comparison_hash") if isinstance(comparison.get("audit"), dict) else ""),
+                datetime.now(timezone.utc).isoformat(),
+                length=20,
+            )
+            upsert_news_backtest_report(
+                session,
+                {
+                    "run_id": compare_run_id,
+                    "period_from": from_ts.isoformat() + "Z",
+                    "period_to": to_ts.isoformat() + "Z",
+                    "horizon": horizon,
+                    "model_id": "__compare__",
+                    "metrics_json": comparison if isinstance(comparison, dict) else {},
+                },
+            )
             recent_reports = load_news_backtest_reports(session, horizon=horizon, limit=10)
         payload = dict(comparison)
         payload["recent_reports"] = recent_reports

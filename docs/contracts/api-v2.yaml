@@ -536,6 +536,16 @@ paths:
           schema:
             type: string
         - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
           name: window_id
           schema:
             type: string
@@ -543,6 +553,31 @@ paths:
           name: sampling_freq
           schema:
             type: string
+        - in: query
+          name: event_time_mode
+          schema:
+            type: string
+            enum: [published, ingested]
+        - in: query
+          name: exclude_overlap
+          schema:
+            type: boolean
+        - in: query
+          name: audit_leakage
+          schema:
+            type: boolean
+        - in: query
+          name: rebuild_if_missing
+          schema:
+            type: boolean
+        - in: query
+          name: rebuild_max_events
+          schema:
+            type: integer
+        - in: query
+          name: estimation_lookback_days
+          schema:
+            type: integer
         - in: query
           name: limit
           schema:
@@ -1710,6 +1745,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NewsSignalRefV2'
+        event_status:
+          type: string
+          nullable: true
+        cluster_version:
+          type: string
+          nullable: true
+        label_direction:
+          type: string
+          nullable: true
+        llm_status:
+          type: string
+          nullable: true
     EventListItemV2:
       type: object
       additionalProperties: true
@@ -1846,6 +1893,41 @@ components:
     ValidationEventStudyV2:
       type: object
       additionalProperties: true
+      properties:
+        commodity:
+          type: string
+          nullable: true
+        window_id:
+          type: string
+          nullable: true
+        sampling_freq:
+          type: string
+          nullable: true
+        event_time_mode:
+          type: string
+          nullable: true
+        sample_count:
+          type: integer
+        sample_count_before_overlap_filter:
+          type: integer
+        excluded_overlap_count:
+          type: integer
+        exclude_overlap:
+          type: boolean
+        fdr_method:
+          type: string
+          nullable: true
+        leakage_audit:
+          type: object
+          nullable: true
+          additionalProperties: true
+        rebuild_report:
+          type: object
+          nullable: true
+          additionalProperties: true
+        car_summary_by_direction:
+          type: object
+          additionalProperties: true
     NewsBacktestV2:
       type: object
       additionalProperties: true

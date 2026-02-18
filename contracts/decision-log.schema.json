@@ -468,7 +468,26 @@
             },
             "model_net_score": { "type": "number" },
             "avg_impact": { "type": "number" },
-            "sample_size": { "type": "integer" }
+            "sample_size": { "type": "integer" },
+            "quality_gate": {
+              "type": ["object", "null"],
+              "properties": {
+                "allow_weighting": { "type": "boolean" },
+                "status": { "type": "string" },
+                "report_found": { "type": "boolean" },
+                "required_model": { "type": ["string", "null"] },
+                "winner_model": { "type": ["string", "null"] },
+                "quality_gate_pass": { "type": "boolean" },
+                "audit_decision": { "type": "string" },
+                "horizon_expected": { "type": ["string", "null"] },
+                "horizon_actual": { "type": ["string", "null"] },
+                "recorded_at": { "type": ["string", "null"], "format": "date-time" },
+                "age_hours": { "type": ["number", "null"] },
+                "max_age_hours": { "type": ["number", "null"] },
+                "run_id": { "type": ["string", "null"] }
+              },
+              "additionalProperties": false
+            }
           },
           "additionalProperties": false
         }

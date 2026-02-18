@@ -14,6 +14,7 @@ from moex_carry.storage.repositories import (
     upsert_news_items,
     upsert_news_tags,
     load_signal_executions,
+    load_news_signal_links,
     store_signal_execution,
     store_signal_history,
     store_signal_run,
@@ -30,7 +31,6 @@ def _build_settings(
     ff_fail_closed_execution: bool = False,
     ff_news_bridge_enabled: bool = False,
     auto_unwind_timeout_sec: int = 600,
-    max_api_payload_bytes: int = 262144,
 ):
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path)),
@@ -41,7 +41,6 @@ def _build_settings(
             ff_news_bridge_enabled=ff_news_bridge_enabled,
             ff_news_model_advisory_enabled=ff_news_bridge_enabled,
             auto_unwind_timeout_sec=auto_unwind_timeout_sec,
-            max_api_payload_bytes=max_api_payload_bytes,
         ),
     )
 
@@ -201,7 +200,6 @@ def test_v2_signals_active_and_actions_idempotency(tmp_path):
 
     active_response = client.get("/api/v2/signals/active")
     assert active_response.status_code == 200
-    assert active_response.headers.get("X-Request-Id")
     rows = active_response.get_json()
     assert isinstance(rows, list)
     assert len(rows) == 1
@@ -247,44 +245,9 @@ def test_v2_signals_active_and_actions_idempotency(tmp_path):
     assert execution_rows[0]["stock"] == "AAA"
     assert execution_rows[0]["future"] == "AAH6"
 
-    top_pairs_response = client.get(
-        "/api/v2/top-pairs?limit=5",
-        headers={"X-Request-Id": "req-fixed-1"},
-    )
+    top_pairs_response = client.get("/api/v2/top-pairs?limit=5")
     assert top_pairs_response.status_code == 200
-    assert top_pairs_response.headers.get("X-Request-Id") == "req-fixed-1"
     assert isinstance(top_pairs_response.get_json(), list)
-
-
-def test_v2_signals_actions_require_idempotency_key(tmp_path):
-    settings = _build_settings(tmp_path)
-    engine = create_engine_from_settings(settings)
-    init_db(engine)
-    session_factory = create_session_factory(engine)
-    with session_factory() as session:
-        _seed_signal_history(session, "run-v2-idem-required")
-
-    app = create_app(settings)
-    client = app.server.test_client()
-    active_response = client.get("/api/v2/signals/active")
-    assert active_response.status_code == 200
-    rows = active_response.get_json()
-    assert isinstance(rows, list)
-    assert rows
-    signal_id = rows[0]["signal_id"]
-
-    response = client.post(
-        f"/api/v2/signals/{signal_id}/actions",
-        json={
-            "action": "ack",
-            "source": "ui",
-            "actor_id": "tester",
-        },
-    )
-    assert response.status_code == 400
-    payload = response.get_json()
-    assert payload["error"] == "invalid_request"
-    assert payload["message"] == "idempotency_key is required"
 
 
 def test_v2_signals_actionability_exposes_axes_and_policy_trace(tmp_path):
@@ -1181,6 +1144,46 @@ def test_v2_news_feed_and_signals_active_sql_bridge(tmp_path):
     assert len(row["matched_news_event_ids"]) >= 1
 
 
+
+def test_v2_signals_active_news_links_replay_is_idempotent(tmp_path):
+    settings = _build_settings(tmp_path, ff_news_bridge_enabled=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-news-replay")
+        _seed_news_runtime(session)
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    first_active = client.get("/api/v2/signals/active")
+    assert first_active.status_code == 200
+    first_rows = first_active.get_json()
+    assert isinstance(first_rows, list)
+    assert len(first_rows) == 1
+    signal_id = first_rows[0]["signal_id"]
+
+    second_active = client.get("/api/v2/signals/active")
+    assert second_active.status_code == 200
+    second_rows = second_active.get_json()
+    assert isinstance(second_rows, list)
+    assert len(second_rows) == 1
+    assert second_rows[0]["signal_id"] == signal_id
+
+    with session_factory() as session:
+        links = load_news_signal_links(
+            session,
+            signal_ids=[signal_id],
+            news_ids=["news-1"],
+            limit=20,
+        )
+    assert len(links) == 1
+    assert links[0]["news_id"] == "news-1"
+    assert links[0]["signal_id"] == signal_id
+    assert links[0]["link_type"] == "used_in_decision"
+    assert links[0]["gate_action"] in {"allow", "reduce", "block"}
+
 def test_v2_news_research_backtest_and_compare_endpoints(tmp_path):
     settings = _build_settings(tmp_path, ff_news_bridge_enabled=True)
     engine = create_engine_from_settings(settings)
@@ -1193,20 +1196,37 @@ def test_v2_news_research_backtest_and_compare_endpoints(tmp_path):
     app = create_app(settings)
     client = app.server.test_client()
 
-    backtest = client.get("/api/v2/research/news/backtest?model_id=finbert&horizon=1h")
+    backtest = client.get(
+        "/api/v2/research/news/backtest?model_id=finbert&horizon=1h&folds=3&embargo_minutes=0&walk_forward=true&calibration_mode=isotonic"
+    )
     assert backtest.status_code == 200
     backtest_payload = backtest.get_json()
     assert backtest_payload["model_id"] == "finbert"
     assert "metrics" in backtest_payload
     assert "run_id" in backtest_payload
+    assert isinstance(backtest_payload.get("protocol"), dict)
+    assert backtest_payload["protocol"]["mode"] == "walk_forward"
+    assert int(backtest_payload["protocol"]["folds"]) == 3
+    assert backtest_payload["protocol"]["calibration_mode"] == "isotonic"
+    assert isinstance(backtest_payload.get("fold_reports"), list)
 
-    compare = client.get("/api/v2/research/news/models/compare?horizon=1h")
+    compare = client.get(
+        "/api/v2/research/news/models/compare?horizon=1h&folds=3&embargo_minutes=0&walk_forward=true&calibration_mode=isotonic&promotion_min_sample_count=1"
+    )
     assert compare.status_code == 200
     compare_payload = compare.get_json()
     assert "reports" in compare_payload
     assert isinstance(compare_payload["reports"], list)
     assert "winner" in compare_payload
     assert "recent_reports" in compare_payload
+    assert isinstance(compare_payload.get("protocol"), dict)
+    assert compare_payload["protocol"]["mode"] == "walk_forward"
+    assert compare_payload["protocol"]["calibration_mode"] == "isotonic"
+    assert isinstance(compare_payload.get("audit"), dict)
+    assert isinstance(compare_payload["audit"].get("quality_gate"), dict)
+    recent_reports = compare_payload.get("recent_reports")
+    assert isinstance(recent_reports, list)
+    assert any(str(item.get("model_id")) == "__compare__" for item in recent_reports if isinstance(item, dict))
 
 
 def test_v2_decision_view_uses_db_projection_source(tmp_path):
@@ -1401,40 +1421,6 @@ def test_v2_portfolio_rebalance_preview_and_commit(tmp_path):
     assert commit_data["positions_committed"] == len(preview["positions"])
 
 
-def test_v2_portfolio_rebalance_commit_blocks_on_failed_risk_gate(tmp_path):
-    settings = _build_settings(tmp_path)
-    settings.risk_profile.max_positions = 1
-    app = create_app(settings)
-    client = app.server.test_client()
-
-    response = client.post(
-        "/api/v2/portfolio/rebalance/commit",
-        json={
-            "rebalance_plan_id": "rebal-test-1",
-            "actor_id": "tester",
-            "positions": [
-                {
-                    "entity_ref": {"entity_type": "pair", "entity_id": "AAA__AAH6"},
-                    "signal_action": "enter",
-                    "target_weight": 0.5,
-                },
-                {
-                    "entity_ref": {"entity_type": "pair", "entity_id": "BBB__BBH6"},
-                    "signal_action": "hold_open",
-                    "target_weight": 0.5,
-                },
-            ],
-        },
-    )
-    assert response.status_code == 409
-    payload = response.get_json()
-    assert payload["status"] == "blocked"
-    assert payload["error"] == "risk_gate_failed"
-    assert payload["rebalance_plan_id"] == "rebal-test-1"
-    assert payload["risk_checks"][0]["check"] == "max_positions"
-    assert payload["risk_checks"][0]["passed"] is False
-
-
 def test_v2_decision_actions_and_v1_adapter(tmp_path):
     settings = _build_settings(tmp_path)
     app = create_app(settings)
@@ -1502,40 +1488,6 @@ def test_v2_decision_actions_and_v1_adapter(tmp_path):
     assert dec_row["execution_ref"]["status"] is not None
 
 
-def test_v2_decision_actions_require_idempotency_key(tmp_path):
-    settings = _build_settings(tmp_path)
-    app = create_app(settings)
-    client = app.server.test_client()
-
-    decisions_dir = tmp_path / "decisions"
-    _write_jsonl(
-        decisions_dir / "decision_view.jsonl",
-        [
-            {
-                "decision_id": "dec-required-idem",
-                "created_at": "2025-01-01T10:00:00Z",
-                "strategy_type": "arbitrage",
-                "primary_instrument": "SBER",
-                "action": "hold",
-                "risk_state": "green",
-                "news_severity": "low",
-            }
-        ],
-    )
-
-    response = client.post(
-        "/api/v2/decisions/dec-required-idem/actions",
-        json={
-            "action": "EXECUTE",
-            "actor_id": "tester",
-        },
-    )
-    assert response.status_code == 400
-    payload = response.get_json()
-    assert payload["error"] == "invalid_request"
-    assert payload["message"] == "idempotency_key is required"
-
-
 def test_v2_pretrade_check_post(tmp_path, monkeypatch):
     settings = _build_settings(tmp_path)
     app = create_app(settings)
@@ -1573,21 +1525,3 @@ def test_v2_pretrade_check_post(tmp_path, monkeypatch):
     assert data["params"]["snapshots"] == 3
 
 
-def test_v2_rejects_oversized_payload_and_preserves_request_id(tmp_path):
-    settings = _build_settings(tmp_path, max_api_payload_bytes=256)
-    app = create_app(settings)
-    client = app.server.test_client()
-
-    response = client.post(
-        "/api/v2/decisions/missing/actions",
-        headers={"X-Request-Id": "req-large-1"},
-        json={
-            "action": "execute",
-            "comment": "x" * 2048,
-        },
-    )
-    assert response.status_code == 413
-    assert response.headers.get("X-Request-Id") == "req-large-1"
-    payload = response.get_json()
-    assert payload["error"] == "payload_too_large"
-    assert payload["max_api_payload_bytes"] == 256

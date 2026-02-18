@@ -1,6 +1,6 @@
 import argparse
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import yaml
@@ -158,6 +158,110 @@ def main() -> None:
         help="Comma-separated list (e.g. BRN,GOLD,NG_US). Default: all configured profiles.",
     )
 
+    news_llm_pass_parser = subparsers.add_parser(
+        "news_llm_pass",
+        help="Run full LLM pass over event-layer records with cache/retry policy.",
+    )
+    _add_common_args(news_llm_pass_parser)
+    news_llm_pass_parser.add_argument("--max-items", type=int, default=None)
+
+    news_llm_batch_parser = subparsers.add_parser(
+        "news_llm_batch_export",
+        help="Export OpenAI Batch API request rows for event-layer LLM labeling.",
+    )
+    _add_common_args(news_llm_batch_parser)
+    news_llm_batch_parser.add_argument("--max-items", type=int, default=None)
+    news_llm_batch_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output JSONL path. Default: data/output/news_llm_batch_requests.jsonl",
+    )
+    news_llm_batch_parser.add_argument(
+        "--include-cached",
+        action="store_true",
+        help="Include events that already have cache hits for the same model/prompt/input_hash.",
+    )
+
+    news_hitl_export_parser = subparsers.add_parser(
+        "news_hitl_export",
+        help="Export top event tasks for manual ChatGPT-web labeling (no API token spend).",
+    )
+    _add_common_args(news_hitl_export_parser)
+    news_hitl_export_parser.add_argument("--max-items", type=int, default=10)
+    news_hitl_export_parser.add_argument("--min-impact", type=float, default=0.0)
+    news_hitl_export_parser.add_argument("--ticker", type=str, default=None, help="Optional ticker filter, e.g. NG_US")
+    news_hitl_export_parser.add_argument("--include-labeled", action="store_true")
+    news_hitl_export_parser.add_argument(
+        "--format",
+        type=str,
+        default="batch",
+        choices=["jsonl", "json", "md", "batch"],
+        help="Output format for manual labeling payload.",
+    )
+    news_hitl_export_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output path. Default: data/output/news_hitl_tasks.<format>",
+    )
+    news_hitl_export_parser.add_argument(
+        "--print",
+        action="store_true",
+        help="Print exported prompt content to stdout for direct copy/paste.",
+    )
+
+    news_hitl_import_parser = subparsers.add_parser(
+        "news_hitl_import",
+        help="Import manual ChatGPT-web labels into event-level labels + annotations.",
+    )
+    _add_common_args(news_hitl_import_parser)
+    news_hitl_import_parser.add_argument(
+        "--input",
+        type=str,
+        default=None,
+        help="Input path with labels. Default: data/output/news_hitl_answer.jsonl",
+    )
+    news_hitl_import_parser.add_argument("--author-id", type=str, default="operator")
+    news_hitl_import_parser.add_argument("--reason", type=str, default="chatgpt_web_manual_label")
+    news_hitl_import_parser.add_argument("--label-version", type=str, default="v1")
+    news_hitl_import_parser.add_argument("--prompt-version", type=str, default=None)
+
+    news_reactions_parser = subparsers.add_parser(
+        "news_reactions",
+        help="Rebuild event-market reaction rows (raw/abnormal/CAR) for event-study validation.",
+    )
+    _add_common_args(news_reactions_parser)
+    news_reactions_parser.add_argument("--from-date", type=str, default=None)
+    news_reactions_parser.add_argument("--to-date", type=str, default=None)
+    news_reactions_parser.add_argument(
+        "--event-ids",
+        type=str,
+        default=None,
+        help="Comma-separated event IDs to rebuild.",
+    )
+    news_reactions_parser.add_argument(
+        "--window-ids",
+        type=str,
+        default="0_30m,30m_2h,2h_1d,1d_5d",
+        help="Comma-separated window ids.",
+    )
+    news_reactions_parser.add_argument(
+        "--sampling-freqs",
+        type=str,
+        default="1m,5m,15m",
+        help="Comma-separated sampling frequencies.",
+    )
+    news_reactions_parser.add_argument("--max-events", type=int, default=0)
+    news_reactions_parser.add_argument("--estimation-lookback-days", type=int, default=7)
+    news_reactions_parser.add_argument(
+        "--event-time-mode",
+        type=str,
+        choices=["published", "ingested"],
+        default="published",
+        help="Anchor event windows to published or ingested timestamp.",
+    )
+
     news_benchmark_parser = subparsers.add_parser(
         "news_benchmark",
         help="Benchmark news model inference matrix and suggest host-optimized safe profile.",
@@ -309,6 +413,206 @@ def main() -> None:
                 commodities=commodities,
             )
         print(json.dumps(report, ensure_ascii=False, default=str))
+    elif args.command == "news_llm_pass":
+        from moex_carry.news import run_news_llm_full_pass
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        with session_factory() as session:
+            report = run_news_llm_full_pass(
+                session,
+                settings,
+                max_items=args.max_items,
+            )
+        print(
+            json.dumps(
+                {
+                    "processed_count": report.processed_count,
+                    "completed_count": report.completed_count,
+                    "skipped_count": report.skipped_count,
+                    "failed_count": report.failed_count,
+                    "labeled_count": report.labeled_count,
+                    "provider": report.provider,
+                    "model_id": report.model_id,
+                    "prompt_version": report.prompt_version,
+                    "token_in_total": report.token_in_total,
+                    "token_out_total": report.token_out_total,
+                    "budget_exhausted": report.budget_exhausted,
+                    "budget_reason": report.budget_reason,
+                },
+                ensure_ascii=False,
+            )
+        )
+    elif args.command == "news_llm_batch_export":
+        from moex_carry.news import build_news_llm_batch_requests
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        with session_factory() as session:
+            report = build_news_llm_batch_requests(
+                session,
+                settings,
+                max_items=args.max_items,
+                include_cached=bool(args.include_cached),
+            )
+
+        output_path = Path(args.output) if args.output else (resolve_paths(settings).data_dir / "output" / "news_llm_batch_requests.jsonl")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        requests_rows = report.get("requests") if isinstance(report, dict) else []
+        if not isinstance(requests_rows, list):
+            requests_rows = []
+        with output_path.open("w", encoding="utf-8") as handle:
+            for row in requests_rows:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        print(
+            json.dumps(
+                {
+                    "output_path": str(output_path),
+                    "provider": report.get("provider"),
+                    "model_id": report.get("model_id"),
+                    "prompt_version": report.get("prompt_version"),
+                    "requested_count": int(report.get("requested_count") or 0),
+                    "exported_count": int(report.get("exported_count") or 0),
+                    "skipped_cached_count": int(report.get("skipped_cached_count") or 0),
+                    "include_cached": bool(args.include_cached),
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+    elif args.command == "news_hitl_export":
+        from moex_carry.news.hitl import build_news_hitl_tasks, export_news_hitl_tasks, summarize_news_hitl_state
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        output_format = str(args.format).strip().lower()
+        if args.output:
+            output_path = Path(args.output)
+        else:
+            output_path = resolve_paths(settings).data_dir / "output" / f"news_hitl_tasks.{output_format}"
+        answer_path = resolve_paths(settings).data_dir / "output" / "news_hitl_answer.jsonl"
+
+        with session_factory() as session:
+            tasks = build_news_hitl_tasks(
+                session,
+                settings,
+                max_items=args.max_items,
+                min_impact=args.min_impact,
+                only_unlabeled=not bool(args.include_labeled),
+                ticker=args.ticker,
+            )
+            state = summarize_news_hitl_state(session)
+        exported_path = export_news_hitl_tasks(tasks=tasks, output_path=output_path, output_format=output_format)
+        if not answer_path.exists():
+            answer_path.write_text("", encoding="utf-8")
+        if args.print:
+            print("----- COPY THIS TO CHATGPT WEB -----")
+            print(exported_path.read_text(encoding="utf-8"))
+            print("----- END COPY BLOCK -----")
+            print()
+        next_command = (
+            "python -m moex_carry.cli news_hitl_import "
+            f"--config {args.config or 'configs/default.yaml'} "
+            f"--input {answer_path}"
+        )
+        print(
+            json.dumps(
+                {
+                    "output_path": str(exported_path),
+                    "answer_path": str(answer_path),
+                    "output_format": output_format,
+                    "tasks_exported": len(tasks),
+                    "max_items": int(args.max_items),
+                    "min_impact": float(args.min_impact),
+                    "ticker": str(args.ticker).strip().upper() if args.ticker else None,
+                    "include_labeled": bool(args.include_labeled),
+                    "next_command": next_command,
+                    "state": state,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+    elif args.command == "news_hitl_import":
+        from moex_carry.news.hitl import apply_news_hitl_labels, load_hitl_label_rows, summarize_news_hitl_state
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        input_path = Path(args.input) if args.input else (resolve_paths(settings).data_dir / "output" / "news_hitl_answer.jsonl")
+        rows = load_hitl_label_rows(input_path)
+        prompt_version = str(args.prompt_version or settings.news_llm.prompt_version or "news-v1")
+        with session_factory() as session:
+            report = apply_news_hitl_labels(
+                session,
+                label_rows=rows,
+                author_id=args.author_id,
+                reason=args.reason,
+                label_version=args.label_version,
+                prompt_version=prompt_version,
+            )
+            state = summarize_news_hitl_state(session)
+        print(
+            json.dumps(
+                {
+                    "input_path": str(input_path),
+                    "loaded_rows": len(rows),
+                    "report": report,
+                    "state": state,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+    elif args.command == "news_reactions":
+        from moex_carry.news import rebuild_event_market_reactions
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        from_dt = datetime.fromisoformat(args.from_date) if args.from_date else None
+        to_dt = datetime.fromisoformat(args.to_date) if args.to_date else None
+        event_ids = (
+            [item.strip() for item in str(args.event_ids).split(",") if item.strip()]
+            if args.event_ids
+            else None
+        )
+        window_ids = [item.strip() for item in str(args.window_ids).split(",") if item.strip()]
+        sampling_freqs = [item.strip() for item in str(args.sampling_freqs).split(",") if item.strip()]
+        with session_factory() as session:
+            report = rebuild_event_market_reactions(
+                session,
+                event_ids=event_ids,
+                published_from=from_dt,
+                published_to=to_dt,
+                window_ids=window_ids,
+                sampling_freqs=sampling_freqs,
+                estimation_lookback_days=args.estimation_lookback_days,
+                max_events=args.max_events,
+                event_time_mode=args.event_time_mode,
+            )
+        print(
+            json.dumps(
+                {
+                    "event_time_mode": args.event_time_mode,
+                    "events_seen": report.events_seen,
+                    "events_processed": report.events_processed,
+                    "windows_processed": report.windows_processed,
+                    "rows_upserted": report.rows_upserted,
+                    "overlap_rows": report.overlap_rows,
+                    "skipped_rows": report.skipped_rows,
+                },
+                ensure_ascii=False,
+            )
+        )
     elif args.command == "news_benchmark":
         from moex_carry.news import parse_positive_int_list, run_news_inference_benchmark
         from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
