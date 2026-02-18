@@ -3203,6 +3203,20 @@ def create_app(settings: AppSettings) -> Dash:
                                 used_at=exec_ts,
                                 used_by=_signal_used_by_from_ack(ack_note),
                             )
+                    action_note = _parse_signal_action_note(exec_row.note)
+                    if isinstance(action_note, dict):
+                        fingerprint_raw = action_note.get("fingerprint")
+                        source = str(action_note.get("source") or "").strip().lower()
+                        if (
+                            isinstance(fingerprint_raw, str)
+                            and fingerprint_raw.strip()
+                            and source in {"ui", "telegram", "v1_adapter"}
+                        ):
+                            _register_usage(
+                                fingerprint_raw.strip(),
+                                used_at=exec_ts,
+                                used_by=_signal_used_by_from_action(action_note),
+                            )
                     continue
 
                 action_note = _parse_signal_action_note(exec_row.note)
@@ -3213,7 +3227,7 @@ def create_app(settings: AppSettings) -> Dash:
                     if (
                         isinstance(fingerprint_raw, str)
                         and fingerprint_raw.strip()
-                        and requested_action == "enter"
+                        and requested_action in {"enter", "ack"}
                         and source in {"ui", "telegram", "v1_adapter"}
                     ):
                         _register_usage(

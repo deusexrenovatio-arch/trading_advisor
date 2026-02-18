@@ -456,6 +456,64 @@ def test_v2_pair_actions_reject_stale_intent_id(tmp_path):
         assert executions == []
 
 
+def test_v2_pair_ack_consumes_intent_in_projection(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime.utcnow().replace(microsecond=0)
+        store_signal_run(session, "run-v2-ack-consume", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-ack-consume",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.25,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {"score_gate_pass": True},
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    before_rows = client.get("/api/v2/pairs/actionability?include_non_actionable=true").get_json()
+    assert isinstance(before_rows, list)
+    assert len(before_rows) == 1
+    before = before_rows[0]
+    intent_id = str((before.get("intent") or {}).get("intent_id") or "")
+    assert intent_id != ""
+    assert str((before.get("intent") or {}).get("status") or "") == "active"
+
+    action = client.post(
+        "/api/v2/pairs/AAA__AAH6/actions",
+        json={
+            "action": "ack",
+            "source": "ui",
+            "actor_id": "tester",
+            "intent_id": intent_id,
+            "idempotency_key": "idem-ack-consume-1",
+        },
+    )
+    assert action.status_code == 200
+    assert action.get_json()["status"] == "ok"
+
+    after_rows = client.get("/api/v2/pairs/actionability?include_non_actionable=true").get_json()
+    assert isinstance(after_rows, list)
+    assert len(after_rows) == 1
+    after = after_rows[0]
+    assert str((after.get("intent") or {}).get("status") or "") == "consumed"
+    assert after["actionability_state"] in {"inactive", "hold_open"}
+    assert str((after.get("delivery") or {}).get("delivery_suppressed_reason") or "") == "intent_consumed"
+
+
 def test_v2_instrument_actions_resolve_pair_context_and_store_execution(tmp_path):
     settings = _build_settings(tmp_path)
     engine = create_engine_from_settings(settings)
