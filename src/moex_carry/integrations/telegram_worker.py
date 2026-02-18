@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
@@ -300,15 +301,135 @@ class TelegramWorker:
             chat_id,
             "Команды:\n/start — зарегистрировать чат для рассылки\n/help — показать эту справку",
         )
+
+    @staticmethod
+    def _extract_pair_from_row(row: dict[str, object]) -> tuple[str, str]:
+        stock = str(row.get("stock") or "").strip()
+        future = str(row.get("future") or "").strip()
+        if stock and future:
+            return stock, future
+
+        pair_id = str(row.get("pair_id") or "").strip()
+        if "__" in pair_id:
+            stock_value, future_value = pair_id.split("__", 1)
+            stock = stock_value.strip()
+            future = future_value.strip()
+            if stock and future:
+                return stock, future
+
+        entity_ref = row.get("entity_ref")
+        if isinstance(entity_ref, dict):
+            stock = str(entity_ref.get("stock") or "").strip()
+            future = str(entity_ref.get("future") or "").strip()
+            if stock and future:
+                return stock, future
+            entity_id = str(entity_ref.get("entity_id") or "").strip()
+            if "__" in entity_id:
+                stock_value, future_value = entity_id.split("__", 1)
+                stock = stock_value.strip()
+                future = future_value.strip()
+                if stock and future:
+                    return stock, future
+        return "", ""
+
+    def _normalize_row_for_worker(self, row: dict[str, object]) -> dict[str, object]:
+        normalized = dict(row)
+        stock, future = self._extract_pair_from_row(normalized)
+        if stock:
+            normalized["stock"] = stock
+        if future:
+            normalized["future"] = future
+        if stock and future:
+            normalized.setdefault("pair_id", f"{stock}__{future}")
+
+        metrics = normalized.get("metrics")
+        if not isinstance(normalized.get("signal_metrics"), dict) and isinstance(metrics, dict):
+            normalized["signal_metrics"] = dict(metrics)
+
+        delivery = normalized.get("delivery")
+        if isinstance(delivery, dict):
+            normalized.setdefault("delivery_action", delivery.get("delivery_action"))
+            normalized.setdefault("delivery_allowed", delivery.get("delivery_allowed"))
+            normalized.setdefault("delivery_suppressed_reason", delivery.get("delivery_suppressed_reason"))
+            normalized.setdefault("signal_fingerprint", delivery.get("signal_fingerprint"))
+
+        intent = normalized.get("intent")
+        intent_status = ""
+        if isinstance(intent, dict):
+            intent_status = str(intent.get("status") or "").strip().lower()
+            normalized.setdefault("run_id", intent.get("source_run_id"))
+            normalized.setdefault("timestamp", intent.get("source_timestamp"))
+            normalized.setdefault("signal_used", intent_status == "consumed")
+            normalized.setdefault("signal_used_at", intent.get("consumed_at"))
+            normalized.setdefault("intent_id", intent.get("intent_id"))
+            normalized.setdefault("entry_signal_expired", intent_status == "expired")
+        else:
+            intent = {}
+
+        if not normalized.get("timestamp"):
+            normalized["timestamp"] = normalized.get("snapshot_as_of")
+
+        entry_plan = normalized.get("entry_plan")
+        if isinstance(entry_plan, dict):
+            normalized.setdefault("entry_stock_min", entry_plan.get("entry_stock_min"))
+            normalized.setdefault("entry_stock_max", entry_plan.get("entry_stock_max"))
+            normalized.setdefault("entry_future_min_per_share", entry_plan.get("entry_future_min_per_share"))
+            normalized.setdefault("entry_future_max_per_share", entry_plan.get("entry_future_max_per_share"))
+            normalized.setdefault("entry_spread_min", entry_plan.get("entry_spread_min"))
+            normalized.setdefault("entry_spread_max", entry_plan.get("entry_spread_max"))
+            normalized.setdefault("entry_spread_pct_min", entry_plan.get("entry_spread_pct_min"))
+            normalized.setdefault("entry_spread_pct_max", entry_plan.get("entry_spread_pct_max"))
+            if normalized.get("entry_stock_min") is None:
+                normalized["entry_stock_min"] = entry_plan.get("entry_price_min")
+            if normalized.get("entry_stock_max") is None:
+                normalized["entry_stock_max"] = entry_plan.get("entry_price_max")
+            normalized.setdefault("signal_direction", entry_plan.get("direction"))
+
+        entry_range = normalized.get("entry_range_now")
+        if isinstance(entry_range, dict):
+            if normalized.get("spot_mid") is None:
+                normalized["spot_mid"] = (
+                    entry_range.get("stock_now")
+                    if entry_range.get("stock_now") is not None
+                    else entry_range.get("price_now")
+                )
+            normalized.setdefault("future_mid", entry_range.get("future_now"))
+            normalized.setdefault("spread_mid", entry_range.get("spread_now"))
+            normalized.setdefault("spread_pct", entry_range.get("spread_pct_now"))
+            in_range = entry_range.get("in_range")
+            if in_range is not None and normalized.get("entry_range_eligible") is None:
+                normalized["entry_range_eligible"] = bool(in_range)
+
+        if normalized.get("signal_action") is None:
+            delivery_action = str(normalized.get("delivery_action") or "").strip().lower()
+            if delivery_action in {"enter", "exit", "hold_open"}:
+                normalized["signal_action"] = delivery_action
+            else:
+                state = str(normalized.get("actionability_state") or "").strip().lower()
+                if state == "actionable_exit":
+                    normalized["signal_action"] = "exit"
+                elif state == "hold_open":
+                    normalized["signal_action"] = "hold_open"
+                else:
+                    normalized["signal_action"] = "enter"
+
+        if normalized.get("signal_score") is None and isinstance(metrics, dict):
+            normalized["signal_score"] = metrics.get("total_score")
+
+        return normalized
+
     def _post_ack(self, callback_entry: dict[str, object], *, user_id: int, username: str | None, chat_id: int) -> None:
         run_id = str(callback_entry.get("run_id") or "").strip()
         timestamp = str(callback_entry.get("timestamp") or "").strip()
-        stock = str(callback_entry.get("stock") or "").strip()
-        future = str(callback_entry.get("future") or "").strip()
+        stock, future = self._extract_pair_from_row(callback_entry)
+        stock = str(stock or "").strip()
+        future = str(future or "").strip()
         signal_action = str(callback_entry.get("signal_action") or "").strip().lower()
-        signal_direction = callback_entry.get("signal_direction")
         fingerprint = str(callback_entry.get("fingerprint") or "").strip()
-        if not all([run_id, timestamp, stock, future, signal_action, fingerprint]):
+        pair_id = str(callback_entry.get("pair_id") or "").strip()
+        if not pair_id and stock and future:
+            pair_id = f"{stock}__{future}"
+        if not all([run_id, timestamp, stock, future, signal_action, fingerprint, pair_id]):
             raise ValueError("invalid_callback_entry")
 
         note = build_ack_note(
@@ -320,16 +441,33 @@ class TelegramWorker:
             telegram_username=username,
             telegram_chat_id=chat_id,
         )
+        idempotency_key = str(callback_entry.get("idempotency_key") or "").strip()
+        if not idempotency_key:
+            token = str(callback_entry.get("token") or "").strip()
+            idempotency_key = f"telegram-ack:{token or fingerprint}"
+        actor_id = (
+            f"telegram:{username}"
+            if isinstance(username, str) and username.strip()
+            else f"telegram:{int(user_id)}"
+        )
         payload = {
-            "stock": stock,
-            "future": future,
-            "direction": signal_direction,
             "action": "ack",
-            "status": "acknowledged",
+            "source": "telegram",
+            "actor_id": actor_id,
+            "idempotency_key": idempotency_key,
             "note": note,
         }
+        intent_id = str(callback_entry.get("intent_id") or "").strip()
+        if intent_id:
+            payload["intent_id"] = intent_id
+        signal_id = str(callback_entry.get("signal_id") or "").strip()
+        if signal_id:
+            payload["signal_id"] = signal_id
         response = self._backend_session.post(
-            f"{self._backend_base_url}/api/signals/execute",
+            (
+                f"{self._backend_base_url}/api/v2/entities/pair/"
+                f"{quote(pair_id, safe=':_|/')}/signals/actions"
+            ),
             json=payload,
             timeout=20,
         )
@@ -522,8 +660,17 @@ class TelegramWorker:
         if changed:
             self._save_state()
 
-    def _fetch_active_signals(self) -> list[dict[str, object]]:
+    def _fetch_active_signals(self, *, include_non_actionable: bool = False) -> list[dict[str, object]]:
+        include_non_actionable_qs = "true" if include_non_actionable else "false"
         endpoints = (
+            (
+                f"{self._backend_base_url}/api/v2/pairs/actionability"
+                f"?include_non_actionable={include_non_actionable_qs}&include_open_holds=true&limit=5000"
+            ),
+            (
+                f"{self._backend_base_url}/api/v2/signals/actionability"
+                f"?entity_type=pair&include_non_actionable={include_non_actionable_qs}&limit=5000"
+            ),
             f"{self._backend_base_url}/api/v2/signals/active",
             f"{self._backend_base_url}/api/signals/active",
         )
@@ -538,7 +685,8 @@ class TelegramWorker:
             payload = response.json()
             if not isinstance(payload, list):
                 return []
-            return [item for item in payload if isinstance(item, dict)]
+            rows = [item for item in payload if isinstance(item, dict)]
+            return [self._normalize_row_for_worker(item) for item in rows]
         if last_error is not None:
             raise last_error
         return []
@@ -659,14 +807,29 @@ class TelegramWorker:
             tz_label = localized.tzname() or self._display_timezone_name
             return f"{localized.strftime('%d.%m.%Y %H:%M')} {tz_label}"
 
-        action_raw = str(row.get("signal_action") or "").strip().lower()
+        delivery_payload = row.get("delivery")
+        delivery_action = (
+            str(delivery_payload.get("delivery_action") or "").strip().lower()
+            if isinstance(delivery_payload, dict)
+            else ""
+        )
+        action_raw = str(row.get("signal_action") or delivery_action).strip().lower()
         action_label = {
             "enter": "🟢 ENTER",
             "exit": "🔴 EXIT",
             "hold_open": "🟡 HOLD_OPEN",
         }.get(action_raw, f"⚪ {action_raw.upper() or 'UNKNOWN'}")
 
+        entry_plan = row.get("entry_plan")
+        entry_plan_map = entry_plan if isinstance(entry_plan, dict) else {}
+        entry_range_now = row.get("entry_range_now")
+        entry_range_map = entry_range_now if isinstance(entry_range_now, dict) else {}
+        metrics = row.get("signal_metrics")
+        metrics_map = metrics if isinstance(metrics, dict) else {}
+
         direction_raw = str(row.get("signal_direction") or "").strip().lower()
+        if not direction_raw:
+            direction_raw = str(entry_plan_map.get("direction") or "").strip().lower()
         direction_label = {
             "cash_and_carry": "Cash-and-carry",
             "reverse": "Reverse",
@@ -675,27 +838,62 @@ class TelegramWorker:
 
         stock = str(row.get("stock") or "").strip() or "N/A"
         future = str(row.get("future") or "").strip() or "N/A"
-        timestamp = _fmt_timestamp(row.get("timestamp"))
+        timestamp = _fmt_timestamp(row.get("timestamp") or row.get("snapshot_as_of"))
 
         entry_stock_min = row.get("entry_stock_min")
         entry_stock_max = row.get("entry_stock_max")
+        if entry_stock_min is None:
+            entry_stock_min = entry_plan_map.get("entry_stock_min")
+        if entry_stock_max is None:
+            entry_stock_max = entry_plan_map.get("entry_stock_max")
+        if entry_stock_min is None:
+            entry_stock_min = entry_plan_map.get("entry_price_min")
+        if entry_stock_max is None:
+            entry_stock_max = entry_plan_map.get("entry_price_max")
+
         entry_future_min = row.get("entry_future_min_per_share")
         entry_future_max = row.get("entry_future_max_per_share")
+        if entry_future_min is None:
+            entry_future_min = entry_plan_map.get("entry_future_min_per_share")
+        if entry_future_max is None:
+            entry_future_max = entry_plan_map.get("entry_future_max_per_share")
+
         entry_spread_min = row.get("entry_spread_min")
         entry_spread_max = row.get("entry_spread_max")
+        if entry_spread_min is None:
+            entry_spread_min = entry_plan_map.get("entry_spread_min")
+        if entry_spread_max is None:
+            entry_spread_max = entry_plan_map.get("entry_spread_max")
+
         entry_spread_pct_min = row.get("entry_spread_pct_min")
         entry_spread_pct_max = row.get("entry_spread_pct_max")
+        if entry_spread_pct_min is None:
+            entry_spread_pct_min = entry_plan_map.get("entry_spread_pct_min")
+        if entry_spread_pct_max is None:
+            entry_spread_pct_max = entry_plan_map.get("entry_spread_pct_max")
+
         current_spread_pct = row.get("spread_pct")
+        if current_spread_pct is None:
+            current_spread_pct = entry_range_map.get("spread_pct_now")
         tp = row.get("tp_spread_pct_level")
+        if tp is None:
+            tp = metrics_map.get("tp_spread_pct_level")
         sl = row.get("sl_spread_pct_level")
+        if sl is None:
+            sl = metrics_map.get("sl_spread_pct_level")
         forecast_days = row.get("forecast_exit_days")
+        if forecast_days is None:
+            forecast_days = metrics_map.get("forecast_exit_days")
+        score = row.get("signal_score")
+        if score is None:
+            score = metrics_map.get("total_score")
 
         lines = [
             "📣 Новый сигнал",
             f"{action_label}",
             f"📈 Пара: {stock}/{future}",
             f"🧭 Направление: {direction_label}",
-            f"⭐ Score: {_fmt_number(row.get('signal_score'))}",
+            f"⭐ Score: {_fmt_number(score)}",
             f"⏱ Время: {timestamp}",
         ]
 
@@ -746,7 +944,7 @@ class TelegramWorker:
         target_chats = self._registered_chats()
         if not target_chats:
             return
-        rows = self._fetch_active_signals()
+        rows = self._fetch_active_signals(include_non_actionable=True)
         if not rows:
             return
 
@@ -777,11 +975,26 @@ class TelegramWorker:
         changed = False
 
         for row in rows:
-            delivery = signal_delivery_state(
-                row,
-                callback_ttl_hours=int(self.cfg.callback_ttl_hours),
-                now_utc=now_dt,
-            )
+            delivery_payload = row.get("delivery")
+            if isinstance(delivery_payload, dict):
+                delivery = {
+                    "delivery_action": str(delivery_payload.get("delivery_action") or "").strip().lower(),
+                    "delivery_allowed": bool(delivery_payload.get("delivery_allowed")),
+                    "delivery_suppressed_reason": delivery_payload.get("delivery_suppressed_reason"),
+                    "signal_used": bool(row.get("signal_used")),
+                    "entry_signal_expired": bool(row.get("entry_signal_expired")),
+                    "entry_range_eligible": bool(row.get("entry_range_eligible")),
+                }
+                if "entry_range_eligible" not in row:
+                    entry_range_now = row.get("entry_range_now")
+                    if isinstance(entry_range_now, dict) and entry_range_now.get("in_range") is not None:
+                        delivery["entry_range_eligible"] = bool(entry_range_now.get("in_range"))
+            else:
+                delivery = signal_delivery_state(
+                    row,
+                    callback_ttl_hours=int(self.cfg.callback_ttl_hours),
+                    now_utc=now_dt,
+                )
             action = str(delivery.get("delivery_action") or "").strip().lower()
             if action not in _SIGNAL_ACTIONS:
                 continue
@@ -825,10 +1038,21 @@ class TelegramWorker:
                             else {}
                         )
                         out_of_range_notified = str(tracking_entry.get("out_of_range_notified_at") or "").strip()
+                        entry_range_eligible = row.get("entry_range_eligible")
+                        if entry_range_eligible is None:
+                            entry_range_map = row.get("entry_range_now")
+                            if isinstance(entry_range_map, dict):
+                                if entry_range_map.get("in_range") is not None:
+                                    entry_range_eligible = bool(entry_range_map.get("in_range"))
+                        out_of_range_now = False
+                        if isinstance(entry_range_eligible, bool):
+                            out_of_range_now = not entry_range_eligible
+                        elif _entry_plan_has_bounds(baseline_plan):
+                            out_of_range_now = not _entry_range_eligible_for_plan(row, baseline_plan)
                         if (
                             _entry_plan_has_bounds(baseline_plan)
                             and not out_of_range_notified
-                            and not _entry_range_eligible_for_plan(row, baseline_plan)
+                            and out_of_range_now
                         ):
                             update_text = self._format_out_of_range_update(
                                 row=row,
@@ -869,12 +1093,26 @@ class TelegramWorker:
             delivered = False
             for chat_id in target_chats:
                 token = uuid.uuid4().hex[:10]
+                pair_id = f"{stock}__{future}"
+                intent_payload = row.get("intent")
+                intent_id = (
+                    str(intent_payload.get("intent_id") or "").strip()
+                    if isinstance(intent_payload, dict)
+                    else ""
+                )
                 callbacks[token] = {
+                    "token": token,
                     "fingerprint": fingerprint,
                     "run_id": run_id,
                     "timestamp": timestamp,
                     "stock": stock,
                     "future": future,
+                    "pair_id": pair_id,
+                    "entity_type": "pair",
+                    "entity_id": pair_id,
+                    "intent_id": intent_id or None,
+                    "signal_id": row.get("signal_id"),
+                    "idempotency_key": f"telegram-ack:{token}",
                     "signal_action": action,
                     "signal_direction": direction,
                     "chat_id": chat_id,

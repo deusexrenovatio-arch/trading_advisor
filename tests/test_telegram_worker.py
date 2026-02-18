@@ -50,6 +50,7 @@ class _FakeBackendSession:
         self._active_batches = list(active_batches or [[]])
         self._active_index = 0
         self.execute_payloads: list[dict[str, object]] = []
+        self.post_calls: list[tuple[str, dict[str, object]]] = []
         self.get_calls: list[str] = []
 
     def get(self, url: str, timeout: int) -> _FakeResponse:
@@ -62,6 +63,7 @@ class _FakeBackendSession:
         return _FakeResponse(payload)
 
     def post(self, url: str, json: dict[str, object], timeout: int) -> _FakeResponse:
+        self.post_calls.append((url, json))
         self.execute_payloads.append(json)
         return _FakeResponse({"status": "ok"})
 
@@ -516,7 +518,7 @@ def test_worker_throttles_new_enter_fingerprints_per_pair(tmp_path):
     assert len(telegram_session.sent_messages) == 1
 
 
-def test_worker_prefers_v2_active_endpoint(tmp_path):
+def test_worker_prefers_pair_actionability_endpoint(tmp_path):
     settings = _build_settings(tmp_path, allowed_user_ids=[111], callback_ttl_hours=24)
     rows = [
         {
@@ -541,7 +543,7 @@ def test_worker_prefers_v2_active_endpoint(tmp_path):
     worker._broadcast_signals()
 
     assert backend_session.get_calls
-    assert backend_session.get_calls[0].endswith("/api/v2/signals/active")
+    assert "/api/v2/pairs/actionability" in backend_session.get_calls[0]
 
 
 def test_worker_callback_ack_happy_path(tmp_path):
@@ -588,7 +590,10 @@ def test_worker_callback_ack_happy_path(tmp_path):
     assert len(backend_session.execute_payloads) == 1
     payload = backend_session.execute_payloads[0]
     assert payload["action"] == "ack"
-    assert payload["status"] == "acknowledged"
+    assert payload["source"] == "telegram"
+    assert str(payload.get("idempotency_key") or "").startswith("telegram-ack:")
+    assert backend_session.post_calls
+    assert backend_session.post_calls[0][0].endswith("/api/v2/entities/pair/AAA__AAH6/signals/actions")
     note_payload = parse_ack_note(payload["note"])
     assert note_payload is not None
     assert note_payload["fingerprint"] == "fp123"
