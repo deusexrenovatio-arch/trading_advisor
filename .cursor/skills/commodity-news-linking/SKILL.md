@@ -9,6 +9,13 @@ description: Deterministic workflow for linking raw news to canonical commodity,
 Map each news item to canonical market entities and taxonomy tags with reproducible rules.
 Use this before impact scoring, news gates, and signal enrichment.
 
+## Skill dependencies and lifecycle gates
+- Start phase: run `parallel-worktree-flow` before changes in a feature worktree.
+- Mapping design phase: apply this skill when updating deterministic rules and crosswalk logic.
+- Integration phase: co-use with `signals-news-bridge-v2` when links are exposed in signal APIs.
+- Evaluation phase: co-use with `news-impact-backtest-lab` for leakage-safe validation.
+- Pre-push phase: run required checks from `docs/DEV_WORKFLOW.md`; treat failures as blockers.
+
 ## Required inputs
 - News payload: `title`, `content` or `summary`, `source`, `published_at`, `language`.
 - Canonical dictionaries: commodity codes, ticker aliases, issuer aliases, tag taxonomy.
@@ -47,6 +54,11 @@ Use this before impact scoring, news gates, and signal enrichment.
 - Dictionary and alias mapping unit tests.
 - Ambiguous and multilingual fixture tests.
 - Regression tests for stable mappings on known headlines.
+
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check`.
+- Run targeted tests for updated mapping logic and API projections.
+- If contracts change, update docs and keep `AGENTS.md` skill registry in sync.
 
 ## Output checklist
 - Crosswalk rules updated and versioned.

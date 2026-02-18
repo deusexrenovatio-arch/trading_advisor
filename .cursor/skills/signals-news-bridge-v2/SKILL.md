@@ -9,6 +9,13 @@ description: Link news_impact events to runtime signal lifecycle and decision/ex
 Create a deterministic bridge between news impact events and signals.
 Use this skill for online signal explainability and audit linkage, not just offline model scoring.
 
+## Skill dependencies and lifecycle gates
+- Start phase: run `parallel-worktree-flow` before runtime/API changes.
+- Linking phase: co-use with `commodity-news-linking` for canonical entity references.
+- Evaluation phase: co-use with `news-impact-backtest-lab` for calibration and leakage-safe validation.
+- API phase: update contracts first, then implementation and tests.
+- Pre-push phase: run required checks from `docs/DEV_WORKFLOW.md`; treat failures as blockers.
+
 ## Non-goals
 - Do not tune NLP models here.
 - Do not replace backtest labeling workflows. Use `news-impact-backtest-lab` for that.
@@ -62,6 +69,11 @@ This bridge answers "which news affected this signal right now" for gating, expl
 - Link model and idempotency rules implemented.
 - Signal and news endpoints expose bridge references.
 - Tests pass for runtime and replay flows.
+
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check`.
+- Run targeted tests for signal/news endpoints and replay idempotency.
+- Keep API docs and acceptance scenarios aligned with bridge fields.
 
 ## References
 - Read `references/link-payloads.md` for minimal payload contract examples.

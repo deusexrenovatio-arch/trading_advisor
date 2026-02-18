@@ -9,6 +9,13 @@ description: "Evaluation workflow for news to price-impact models: dataset assem
 Evaluate whether news signals predict futures price movement with reproducible metrics and promotion gates.
 Use this for model quality decisions, not for runtime signal routing.
 
+## Skill dependencies and lifecycle gates
+- Start phase: run `parallel-worktree-flow` before starting experiment changes.
+- Data-linking phase: co-use with `commodity-news-linking` to ensure canonical entity mapping quality.
+- Runtime bridge phase: co-use with `signals-news-bridge-v2` when metrics affect runtime gates.
+- Recheck phase: rerun this workflow after label, split, or metric changes.
+- Pre-push phase: run required checks from `docs/DEV_WORKFLOW.md`; treat failures as blockers.
+
 ## Required inputs
 - Linked dataset: news item, mapped commodity or instrument, publication timestamp.
 - Price series: aligned candles for chosen horizons.
@@ -49,6 +56,11 @@ Use this for model quality decisions, not for runtime signal routing.
 - Deterministic fixture tests for label generation.
 - Split and embargo tests to prevent leakage regressions.
 - Golden report snapshot test for metric schema stability.
+
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check`.
+- Run targeted backtest and metric tests that cover changed horizons or calibration.
+- Ensure promotion thresholds and evaluation references remain documented.
 
 ## Output checklist
 - Dataset and label recipe versioned.
