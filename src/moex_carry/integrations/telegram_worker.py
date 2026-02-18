@@ -418,7 +418,14 @@ class TelegramWorker:
 
         return normalized
 
-    def _post_ack(self, callback_entry: dict[str, object], *, user_id: int, username: str | None, chat_id: int) -> None:
+    def _post_ack(
+        self,
+        callback_entry: dict[str, object],
+        *,
+        user_id: int,
+        username: str | None,
+        chat_id: int,
+    ) -> str:
         run_id = str(callback_entry.get("run_id") or "").strip()
         timestamp = str(callback_entry.get("timestamp") or "").strip()
         stock, future = self._extract_pair_from_row(callback_entry)
@@ -471,7 +478,18 @@ class TelegramWorker:
             json=payload,
             timeout=20,
         )
+        if int(getattr(response, "status_code", 200)) == 409:
+            message = ""
+            try:
+                body = response.json()
+            except Exception:
+                body = None
+            if isinstance(body, dict):
+                message = str(body.get("message") or "").strip().lower()
+            if message == "intent_superseded_or_stale":
+                return "intent_stale"
         response.raise_for_status()
+        return "ok"
 
     def _is_callback_expired(self, callback_entry: dict[str, object]) -> bool:
         created_at = _parse_iso(callback_entry.get("created_at"))
@@ -585,11 +603,17 @@ class TelegramWorker:
         username_raw = from_user.get("username")
         username = str(username_raw).strip() if isinstance(username_raw, str) and username_raw.strip() else None
         try:
-            self._post_ack(entry, user_id=user_id, username=username, chat_id=chat_id)
+            ack_result = self._post_ack(entry, user_id=user_id, username=username, chat_id=chat_id)
         except Exception:
             logger.exception("Failed to store Telegram ACK.")
             if callback_query_id:
                 self._answer_callback(callback_query_id, "Не удалось записать ACK.")
+            return
+        if ack_result == "intent_stale":
+            callbacks.pop(token, None)
+            self._save_state()
+            if callback_query_id:
+                self._answer_callback(callback_query_id, "Сигнал устарел, используйте новый enter.")
             return
 
         callbacks.pop(token, None)

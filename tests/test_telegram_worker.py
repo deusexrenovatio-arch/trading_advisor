@@ -46,9 +46,14 @@ class _FakeTelegramSession:
 
 
 class _FakeBackendSession:
-    def __init__(self, active_batches: list[list[dict[str, object]]] | None = None):
+    def __init__(
+        self,
+        active_batches: list[list[dict[str, object]]] | None = None,
+        post_responses: list[tuple[int, dict[str, object]]] | None = None,
+    ):
         self._active_batches = list(active_batches or [[]])
         self._active_index = 0
+        self._post_responses = list(post_responses or [])
         self.execute_payloads: list[dict[str, object]] = []
         self.post_calls: list[tuple[str, dict[str, object]]] = []
         self.get_calls: list[str] = []
@@ -65,6 +70,9 @@ class _FakeBackendSession:
     def post(self, url: str, json: dict[str, object], timeout: int) -> _FakeResponse:
         self.post_calls.append((url, json))
         self.execute_payloads.append(json)
+        if self._post_responses:
+            status_code, payload = self._post_responses.pop(0)
+            return _FakeResponse(payload, status_code=status_code)
         return _FakeResponse({"status": "ok"})
 
 
@@ -647,6 +655,66 @@ def test_worker_callback_rejects_expired_token(tmp_path):
     assert backend_session.execute_payloads == []
     assert token not in worker._state["pending_callbacks"]
     assert len(telegram_session.answered_callbacks) == 1
+
+
+def test_worker_callback_marks_stale_intent_and_drops_token(tmp_path):
+    settings = _build_settings(tmp_path, allowed_user_ids=[111])
+    token = "stale-intent-1"
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    telegram_session = _FakeTelegramSession(
+        updates_batches=[
+            [
+                {
+                    "update_id": 1,
+                    "callback_query": {
+                        "id": "cb-stale",
+                        "data": f"ack:{token}",
+                        "from": {"id": 111, "username": "alice"},
+                        "message": {"chat": {"id": 111}},
+                    },
+                }
+            ]
+        ]
+    )
+    backend_session = _FakeBackendSession(
+        post_responses=[
+            (
+                409,
+                {
+                    "status": "blocked",
+                    "message": "intent_superseded_or_stale",
+                    "error": "intent_mismatch",
+                },
+            )
+        ]
+    )
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["pending_callbacks"] = {
+        token: {
+            "fingerprint": "fp-stale-1",
+            "run_id": "run-1",
+            "timestamp": "2025-01-01T10:00:00",
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "chat_id": 111,
+            "created_at": now_iso,
+            "pair_id": "AAA__AAH6",
+            "intent_id": "intent-stale",
+        }
+    }
+
+    worker._process_updates()
+
+    assert token not in worker._state["pending_callbacks"]
+    assert len(telegram_session.answered_callbacks) == 1
+    answer_text = str(telegram_session.answered_callbacks[0]["text"])
+    assert "устарел" in answer_text
 
 
 def test_worker_daily_healthcheck_sent_once_per_day(tmp_path):
