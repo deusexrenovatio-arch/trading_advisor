@@ -1,0 +1,4 @@
+news_models:
+  inference_batch_size: 1
+  inference_text_max_chars: 1500
+  inference_thread_cap: 4

@@ -244,6 +244,46 @@ Changed
 Verification
 - Data file parse check:
   - `node -e \"global.window={}; require('./docs/architecture/architecture-map-data.js'); console.log(window.ARCH_MAP_DATA.nodes.length, window.ARCH_MAP_DATA.links.length)\"`
+## 2026-02-18 - News Stage C/D hardening: LLM budget guardrails + leakage audit mode
+
+Changed
+- Stage C:
+  - Added per-run LLM budget guardrails in `news_llm` config:
+    - `max_calls_per_run`
+    - `max_prompt_tokens_per_run`
+    - `max_completion_tokens_per_run`
+    - `max_total_tokens_per_run`
+  - Extended `moex-carry news_llm_pass` output with:
+    - `token_in_total`, `token_out_total`
+    - `budget_exhausted`, `budget_reason`
+  - Added OpenAI Batch export command:
+    - `moex-carry news_llm_batch_export`
+    - exports `/v1/chat/completions` JSONL rows with cache-aware filtering.
+- Stage D:
+  - Added `event_time_mode` support (`published|ingested`) in reaction rebuild:
+    - CLI: `moex-carry news_reactions --event-time-mode ...`
+    - API: `GET /api/v2/validation/event-study?event_time_mode=...`
+  - Added leakage audit summary to event-study response:
+    - `leakage_audit` with checked rows, violations, rate, sample event ids.
+  - Updated API contract for new params/fields in `docs/contracts/api-v2.yaml`.
+
+## 2026-02-16 - News inference safe-performance profile + host benchmark
+
+Changed
+- Added host benchmark command for news model inference:
+  - `moex-carry news_benchmark`
+  - evaluates matrix of `thread_cap x batch_size x text_max_chars` and returns recommended overrides.
+  - optional profile artifact export with `--write-profile <path>`.
+- Added reusable safe baseline profile:
+  - `configs/news-safe-performance.yaml`
+  - defaults tuned for stable CPU usage:
+    - `inference_thread_cap: 4`
+    - `inference_batch_size: 1`
+    - `inference_text_max_chars: 1500`
+- Extended inference runtime limiter to support controlled forced re-apply (`force=True`) for benchmark sweeps.
+
+Verification
+- `python -m pytest -q tests/test_news_inference.py tests/test_news_benchmark.py`
 
 ## 2026-02-13 - Sprint 4 follow-up: runbook hardening + v2 surface cleanup
 

@@ -7,6 +7,11 @@ from time import sleep
 from sqlalchemy.orm import Session
 
 from moex_carry.config import AppSettings
+from moex_carry.news.anchors import (
+    link_news_to_scheduled_anchors,
+    seed_canonical_scheduled_events,
+    seed_episodic_anchor_events,
+)
 from moex_carry.news.bridge import run_news_gate
 from moex_carry.news.events import EventClusteringReport, cluster_news_events
 from moex_carry.news.ingestion import fetch_rss_news
@@ -206,6 +211,52 @@ def sync_news_runtime(
             resolve_after_hours=settings.news_events.resolve_after_hours,
             cluster_version=settings.news_events.cluster_version,
         )
+        published_values = [
+            _parse_published_dt(row.get("published_at"))
+            for row in recent_news_rows
+            if _parse_published_dt(row.get("published_at")) is not None
+        ]
+        if published_values and settings.news_events.anchor_seed_enabled:
+            seed_canonical_scheduled_events(
+                session,
+                period_from=min(published_values),
+                period_to=max(published_values),
+                cluster_version=settings.news_events.anchor_cluster_version,
+                padding_days=settings.news_events.anchor_seed_padding_days,
+            )
+        if recent_news_rows and settings.news_events.anchor_link_enabled:
+            link_news_to_scheduled_anchors(
+                session,
+                news_rows=recent_news_rows,
+                cluster_version=settings.news_events.anchor_cluster_version,
+                window_minutes=settings.news_events.anchor_match_window_minutes,
+            )
+        if settings.news_events.anchor_episode_seed_enabled:
+            seed_episodic_anchor_events(
+                session,
+                cluster_version=settings.news_events.anchor_episode_cluster_version,
+                sources=settings.news_events.anchor_episode_sources,
+                timeout_sec=settings.news_events.anchor_request_timeout_sec,
+                user_agent=settings.news_events.anchor_user_agent,
+                nws_url=settings.news_events.anchor_nws_url,
+                nhc_url=settings.news_events.anchor_nhc_url,
+                ukmto_url=settings.news_events.anchor_ukmto_url,
+                bsee_url=settings.news_events.anchor_bsee_url,
+                panama_url=settings.news_events.anchor_panama_url,
+                suez_url=settings.news_events.anchor_suez_url,
+                fred_release_url=settings.news_events.anchor_fred_release_url,
+                fred_release_ids=settings.news_events.anchor_fred_release_ids,
+                fred_api_key_env=settings.news_events.anchor_fred_api_key_env,
+            )
+        if recent_news_rows and settings.news_events.anchor_link_enabled:
+            link_news_to_scheduled_anchors(
+                session,
+                news_rows=recent_news_rows,
+                cluster_version=settings.news_events.anchor_episode_cluster_version,
+                window_minutes=settings.news_events.anchor_episode_match_window_minutes,
+                link_role="episodic_anchor",
+                link_type="episodic_anchor",
+            )
     else:
         event_report = EventClusteringReport(
             processed_news=len(recent_news_rows),
@@ -281,6 +332,25 @@ def sync_news_runtime(
         matched_score_rows=matched_score_rows,
         news_gate=news_gate,
     )
+
+
+def _parse_published_dt(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def run_news_sync_worker(

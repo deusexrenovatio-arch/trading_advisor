@@ -7,9 +7,11 @@ from moex_carry.news.taxonomy import TAG_TAXONOMY
 
 
 DEFAULT_COMMODITY_ALIASES: dict[str, tuple[str, ...]] = {
-    "OIL": ("oil", "brent", "wti", "opec", "barrel", "crude"),
-    "GAS": ("gas", "lng", "natural gas"),
+    "BRN": ("brent", "brent crude", "ice brent", "crude oil", "opec", "barrel"),
+    "NG_US": ("natural gas", "henry hub", "nymex gas", "lng"),
     "GOLD": ("gold", "bullion"),
+    "OIL": ("oil", "wti", "crude"),
+    "GAS": ("gas", "lng", "natural gas"),
     "SILVER": ("silver"),
     "COPPER": ("copper"),
     "NICKEL": ("nickel"),
@@ -26,7 +28,26 @@ TAG_RULES: dict[str, tuple[str, ...]] = {
     "DEM_DEC": ("demand fell", "consumption down", "recession", "slowdown"),
     "GEO_POL": ("sanction", "war", "conflict", "geopolitical"),
     "ECON_POL": ("rate hike", "rate cut", "central bank", "inflation", "fed"),
-    "WEATHER": ("hurricane", "storm", "flood", "drought", "freeze"),
+    "WEATHER": (
+        "hurricane",
+        "storm",
+        "flood",
+        "drought",
+        "freeze",
+        "cold snap",
+        "heat wave",
+        "heatwave",
+        "blizzard",
+        "snowstorm",
+        "extreme weather",
+        "temperature",
+        "warmer",
+        "colder",
+        "winter",
+        "weather",
+        "el nino",
+        "la nina",
+    ),
     "TECH_DEV": ("technology", "battery", "electrification", "innovation"),
     "MARKET": ("hedge fund", "positioning", "risk-on", "risk-off"),
     "PRICE_MOV": ("price rose", "price fell", "forecast", "target price"),
@@ -70,9 +91,13 @@ def _match_tags(text: str) -> tuple[list[str], list[str]]:
     found: list[str] = []
     rules: list[str] = []
     for code, keywords in TAG_RULES.items():
-        if any(keyword in text for keyword in keywords):
-            found.append(code)
-            rules.append(f"tag:{code}")
+        for keyword in keywords:
+            # Use token boundaries so "war" does not match "warmer".
+            pattern = rf"(?<![a-z0-9]){re.escape(keyword.lower())}(?![a-z0-9])"
+            if re.search(pattern, text):
+                found.append(code)
+                rules.append(f"tag:{code}")
+                break
     if not found:
         found = ["MARKET"]
     return found, rules

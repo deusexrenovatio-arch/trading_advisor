@@ -12,6 +12,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from moex_carry.config import AppSettings
+from moex_carry.news.anchors import (
+    link_news_to_scheduled_anchors,
+    seed_canonical_scheduled_events,
+    seed_episodic_anchor_events,
+)
 from moex_carry.news.events import cluster_news_events
 from moex_carry.news.ingestion import fetch_gdelt_news
 from moex_carry.news.inference import run_dual_model_inference_batch
@@ -83,6 +88,72 @@ def _iter_date_windows(
             break
         cursor = window_end + timedelta(days=1)
     return windows
+
+
+def _parse_news_published_at(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return _as_utc_naive(value)
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return _as_utc_naive(parsed)
+
+
+def _fetch_gdelt_window_paginated(
+    *,
+    query: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    max_items: int,
+    min_request_interval_sec: float,
+    timeout_sec: int,
+    max_pages: int,
+) -> list[dict[str, object]]:
+    page_limit = max(int(max_pages), 1)
+    cursor_end = end_dt
+    seen_ids: set[str] = set()
+    collected: list[dict[str, object]] = []
+    for _ in range(page_limit):
+        if cursor_end <= start_dt:
+            break
+        rows = fetch_gdelt_news(
+            query=query,
+            start_dt=start_dt,
+            end_dt=cursor_end,
+            max_items=max_items,
+            min_request_interval_sec=min_request_interval_sec,
+            timeout_sec=timeout_sec,
+        )
+        if not rows:
+            break
+        oldest_published: datetime | None = None
+        new_rows = 0
+        for row in rows:
+            news_id = str(row.get("news_id") or "").strip()
+            if news_id and news_id in seen_ids:
+                continue
+            if news_id:
+                seen_ids.add(news_id)
+            collected.append(row)
+            new_rows += 1
+            published_at = _parse_news_published_at(row.get("published_at"))
+            if published_at is None:
+                continue
+            if oldest_published is None or published_at < oldest_published:
+                oldest_published = published_at
+        if new_rows <= 0:
+            break
+        if oldest_published is None:
+            break
+        next_end = oldest_published.replace(tzinfo=timezone.utc) - timedelta(seconds=1)
+        if next_end >= cursor_end:
+            break
+        cursor_end = next_end
+    return collected
 
 
 def _selected_profiles(settings: AppSettings, commodities: Iterable[str] | None) -> list[object]:
@@ -537,6 +608,7 @@ def run_news_backfill(
     event_resolved_count = 0
     quote_count = 0
     windows_processed = 0
+    episodic_seed_done = False
 
     for profile in profiles:
         ticker = str(profile.ticker).strip().upper()
@@ -549,13 +621,14 @@ def run_news_backfill(
         for window_start, window_end in windows:
             windows_processed += 1
             if settings.news_ingest.gdelt_enabled:
-                rows = fetch_gdelt_news(
+                rows = _fetch_gdelt_window_paginated(
                     query=str(profile.gdelt_query),
                     start_dt=window_start,
                     end_dt=window_end,
                     max_items=settings.news_ingest.gdelt_max_records_per_call,
                     min_request_interval_sec=settings.news_ingest.gdelt_min_request_interval_sec,
                     timeout_sec=settings.news_ingest.gdelt_request_timeout_sec,
+                    max_pages=settings.news_ingest.gdelt_backfill_max_pages_per_window,
                 )
             else:
                 rows = []
@@ -651,6 +724,48 @@ def run_news_backfill(
                     resolve_after_hours=settings.news_events.resolve_after_hours,
                     cluster_version=settings.news_events.cluster_version,
                 )
+                if settings.news_events.anchor_seed_enabled:
+                    seed_canonical_scheduled_events(
+                        session,
+                        period_from=window_start.replace(tzinfo=None),
+                        period_to=window_end.replace(tzinfo=None),
+                        cluster_version=settings.news_events.anchor_cluster_version,
+                        padding_days=settings.news_events.anchor_seed_padding_days,
+                    )
+                if settings.news_events.anchor_link_enabled:
+                    link_news_to_scheduled_anchors(
+                        session,
+                        news_rows=rows,
+                        cluster_version=settings.news_events.anchor_cluster_version,
+                        window_minutes=settings.news_events.anchor_match_window_minutes,
+                    )
+                if settings.news_events.anchor_episode_seed_enabled and not episodic_seed_done:
+                    seed_episodic_anchor_events(
+                        session,
+                        cluster_version=settings.news_events.anchor_episode_cluster_version,
+                        sources=settings.news_events.anchor_episode_sources,
+                        timeout_sec=settings.news_events.anchor_request_timeout_sec,
+                        user_agent=settings.news_events.anchor_user_agent,
+                        nws_url=settings.news_events.anchor_nws_url,
+                        nhc_url=settings.news_events.anchor_nhc_url,
+                        ukmto_url=settings.news_events.anchor_ukmto_url,
+                        bsee_url=settings.news_events.anchor_bsee_url,
+                        panama_url=settings.news_events.anchor_panama_url,
+                        suez_url=settings.news_events.anchor_suez_url,
+                        fred_release_url=settings.news_events.anchor_fred_release_url,
+                        fred_release_ids=settings.news_events.anchor_fred_release_ids,
+                        fred_api_key_env=settings.news_events.anchor_fred_api_key_env,
+                    )
+                    episodic_seed_done = True
+                if settings.news_events.anchor_link_enabled:
+                    link_news_to_scheduled_anchors(
+                        session,
+                        news_rows=rows,
+                        cluster_version=settings.news_events.anchor_episode_cluster_version,
+                        window_minutes=settings.news_events.anchor_episode_match_window_minutes,
+                        link_role="episodic_anchor",
+                        link_type="episodic_anchor",
+                    )
                 event_link_count += int(event_report.linked_news)
                 event_created_count += int(event_report.created_events)
                 event_updated_count += int(event_report.updated_events)

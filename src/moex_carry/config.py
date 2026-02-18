@@ -328,6 +328,7 @@ class NewsIngestConfig(BaseModel):
     max_items_per_run: int = 100
     gdelt_enabled: bool = True
     gdelt_max_records_per_call: int = 250
+    gdelt_backfill_max_pages_per_window: int = 8
     gdelt_min_request_interval_sec: float = 5.2
     gdelt_request_timeout_sec: int = 40
     backfill_start_date: str = "2018-01-01"
@@ -388,6 +389,12 @@ class NewsEventsConfig(BaseModel):
     anchor_nws_url: str = "https://api.weather.gov/alerts/active?event=Hurricane%20Warning,Storm%20Warning,Tropical%20Storm%20Warning"
     anchor_nhc_url: str = "https://www.nhc.noaa.gov/CurrentStorms.json"
     anchor_ukmto_url: str = "https://www.ukmto.org/recent-incidents"
+    anchor_bsee_url: str = "https://www.bsee.gov/resources-tools/planning-preparedness/hurricane/hurricane-history"
+    anchor_panama_url: str = "https://pancanal.com/en/maritime-services/advisory-to-shipping/"
+    anchor_suez_url: str = "https://www.suezcanal.gov.eg/English/Navigation/NavigationCirculars/Pages/default.aspx"
+    anchor_fred_release_url: str = "https://api.stlouisfed.org/fred/release/dates"
+    anchor_fred_release_ids: list[int] = []
+    anchor_fred_api_key_env: str = "FRED_API_KEY"
 
 
 class NewsLlmConfig(BaseModel):
