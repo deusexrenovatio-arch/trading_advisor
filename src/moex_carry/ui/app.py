@@ -3429,6 +3429,8 @@ def create_app(settings: AppSettings) -> Dash:
                 current_metrics = row.metrics if isinstance(row.metrics, dict) else {}
                 fallback_metrics: dict[str, object] | None = None
                 pending_intent_promoted = False
+                repriced_from_hold_flat = False
+                entry_intent_consumed = False
                 signal_fingerprint = build_signal_fingerprint(
                     run_id=signal_run_id,
                     timestamp=signal_timestamp,
@@ -3467,7 +3469,9 @@ def create_app(settings: AppSettings) -> Dash:
                         signal_action="enter",
                         signal_fingerprint=intent_fingerprint,
                     )
-                    if not bool(intent_usage.get("signal_used")):
+                    if bool(intent_usage.get("signal_used")):
+                        entry_intent_consumed = True
+                    else:
                         pending_intent_promoted = True
                         action = "enter"
                         signal_fingerprint = intent_fingerprint
@@ -3480,13 +3484,40 @@ def create_app(settings: AppSettings) -> Dash:
                             signal_direction = entry_intent_row.direction
                         if "pending_entry_intent_active" not in signal_reasons:
                             signal_reasons.append("pending_entry_intent_active")
+                if action == "hold_flat" and entry_intent_consumed:
+                    continue
                 if action == "hold_flat":
+                    action = "enter"
+                    repriced_from_hold_flat = True
+                    signal_fingerprint = build_signal_fingerprint(
+                        run_id=signal_run_id,
+                        timestamp=signal_timestamp,
+                        stock=row.stock_secid,
+                        future=row.future_secid,
+                        signal_action=action,
+                    )
+                    usage_fields = _signal_usage_fields(
+                        run_id=signal_run_id,
+                        timestamp=signal_timestamp,
+                        stock=row.stock_secid,
+                        future=row.future_secid,
+                        signal_action=action,
+                        signal_fingerprint=signal_fingerprint,
+                    )
+                    if "repriced_from_hold_flat" not in signal_reasons:
+                        signal_reasons.append("repriced_from_hold_flat")
+                if (
+                    action == "enter"
+                    and not is_open
+                    and repriced_from_hold_flat
+                    and bool(usage_fields.get("signal_used"))
+                ):
                     continue
                 signal_metrics = _enrich_entry_plan_metrics(
                     settings=settings,
                     current_metrics=current_metrics,
                     fallback_metrics=fallback_metrics,
-                    force_rebuild=pending_intent_promoted,
+                    force_rebuild=(pending_intent_promoted or repriced_from_hold_flat),
                 )
                 if (
                     pending_intent_promoted
