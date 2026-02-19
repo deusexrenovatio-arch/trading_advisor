@@ -1,6 +1,6 @@
 base:
   test:
-    start_date: "2025-02-01"
+    start_date: "2026-01-19"
     end_date: "2026-02-18"
   universe:
     max_pairs: 55
@@ -15,6 +15,7 @@ base:
     entry_stock_tolerance_pct: 0.02
     entry_future_tolerance_pct: 0.025
     entry_spread_tolerance_pct: 0.03
+    floor_tolerance: 0.05
     signal_cutoff_before_day_end_minutes: 0
   rates:
     use_trading_days: false
@@ -27,6 +28,26 @@ base:
     target_utilization: 0.9
 
 search_space:
+  strategy.z_window:
+    type: "int"
+    min: 30
+    max: 120
+    step: 10
+  strategy.TP_pct:
+    type: "float"
+    min: 0.005
+    max: 0.03
+    step: 0.0025
+  strategy.SL_pct:
+    type: "float"
+    min: 0.005
+    max: 0.03
+    step: 0.0025
+  strategy.execution_lag_minutes:
+    type: "int"
+    min: 20
+    max: 60
+    step: 5
   strategy.entry_spread_tolerance_pct:
     type: "float"
     min: 0.003
@@ -47,11 +68,31 @@ search_space:
     min: 60
     max: 420
     step: 30
+  strategy.floor_tolerance:
+    type: "float"
+    min: 0.0
+    max: 0.2
+    step: 0.01
+  strategy.riskbuffer_floor:
+    type: "float"
+    min: 0.0
+    max: 0.05
+    step: 0.005
   strategy.signal_cutoff_before_day_end_minutes:
     type: "int"
     min: 0
     max: 45
     step: 5
+  allocation.max_turnover_pct:
+    type: "float"
+    min: 0.15
+    max: 0.6
+    step: 0.05
+  rebalance.target_utilization:
+    type: "float"
+    min: 0.7
+    max: 1.0
+    step: 0.05
 
 cv:
   folds: 4

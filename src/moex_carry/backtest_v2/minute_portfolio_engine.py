@@ -131,14 +131,7 @@ def run_minute_portfolio_backtest(
 ) -> BacktestReport:
     resolved, warnings = _resolve_config(request)
     start_date, end_date = _resolve_date_range(resolved)
-    trading_days = _resolve_trading_days(data_store, start_date, end_date)
-    if not trading_days:
-        raise ValueError("No trading days in requested range")
-
-    metric_start = metric_start or trading_days[0]
-    metric_end = metric_end or trading_days[-1]
-    if metric_start > metric_end:
-        raise ValueError("metric_start must be <= metric_end")
+    calendar_days = _resolve_trading_days(data_store, start_date, end_date)
 
     data_dir_raw = getattr(data_store, "data_dir", None)
     if data_dir_raw is None:
@@ -196,6 +189,23 @@ def run_minute_portfolio_backtest(
     if not tapes:
         raise ValueError("No minute tapes loaded for requested universe")
 
+    tape_days = sorted(
+        {
+            day
+            for tape in tapes.values()
+            for day in tape.snapshots_by_day.keys()
+            if start_date <= day <= end_date
+        }
+    )
+    trading_days = tape_days if tape_days else calendar_days
+    if not trading_days:
+        raise ValueError("No trading days in requested range")
+
+    metric_start = metric_start or trading_days[0]
+    metric_end = metric_end or trading_days[-1]
+    if metric_start > metric_end:
+        raise ValueError("metric_start must be <= metric_end")
+
     portfolio_cfg = resolved.get("portfolio", {}) if isinstance(resolved, Mapping) else {}
     initial_equity = float(portfolio_cfg.get("account_equity") or 1_000_000.0)
     if initial_equity <= 0:
@@ -220,6 +230,26 @@ def run_minute_portfolio_backtest(
             equity=equity,
             open_positions=open_positions,
         )
+        filled_entry_pairs: set[str] = set()
+        for pid, tape in tapes.items():
+            entry_event = _first_entry_event_for_day(tape, day)
+            if entry_event is not None and entry_event.event_type == "entry_filled":
+                filled_entry_pairs.add(pid)
+        if filled_entry_pairs:
+            max_pairs_held = max(int(getattr(rebalance_config, "max_pairs_held", 0) or 0), 0)
+            if max_pairs_held > 0:
+                expanded_pairs = set(desired_pairs)
+                for pid in sorted(filled_entry_pairs):
+                    if pid in expanded_pairs:
+                        continue
+                    if len(expanded_pairs) >= max_pairs_held:
+                        break
+                    expanded_pairs.add(pid)
+                desired_pairs = expanded_pairs
+            else:
+                desired_pairs = set(desired_pairs) | filled_entry_pairs
+        for pid in filled_entry_pairs:
+            desired_weights[pid] = max(float(desired_weights.get(pid, 0.0) or 0.0), 1.0)
 
         entry_signals = 0
         unfilled_entries = 0
@@ -300,7 +330,12 @@ def run_minute_portfolio_backtest(
         if candidate_entries:
             budget = max(cash * max(min(float(rebalance_config.target_utilization), 1.0), 0.0), 0.0)
             if budget > 0:
-                weights = [max(float(desired_weights.get(pid, 0.0)), 0.0) for pid, _ in candidate_entries]
+                weights = []
+                for pid, _ in candidate_entries:
+                    weight = max(float(desired_weights.get(pid, 0.0) or 0.0), 0.0)
+                    if weight <= 0.0 and pid in filled_entry_pairs:
+                        weight = 1.0
+                    weights.append(weight)
                 weight_sum = sum(weights)
                 if weight_sum <= 0:
                     weights = [1.0] * len(candidate_entries)

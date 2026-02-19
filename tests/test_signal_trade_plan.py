@@ -26,8 +26,8 @@ def test_build_signal_trade_plan_cash_and_carry():
 
     assert plan["entry_stock_min"] == pytest.approx(99.8)
     assert plan["entry_stock_max"] == pytest.approx(100.2)
-    assert plan["entry_spread_pct_min"] == pytest.approx(0.008)
-    assert plan["entry_spread_pct_max"] == pytest.approx(0.012)
+    assert plan["entry_spread_pct_min"] == pytest.approx(0.00998)
+    assert plan["entry_spread_pct_max"] == pytest.approx(0.01002)
     assert plan["tp_spread_pct_level"] == pytest.approx(0.03)
     assert plan["sl_spread_pct_level"] == pytest.approx(-0.005)
     assert plan["tp_stock_level_if_fut_const"] == pytest.approx(102.0)

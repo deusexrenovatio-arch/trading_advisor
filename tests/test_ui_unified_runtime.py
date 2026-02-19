@@ -8,6 +8,7 @@ import pandas as pd
 
 from moex_carry.config import AppSettings, DataConfig, SpreadCarryAlphaConfig, UiConfig
 from moex_carry.ui.app import create_app
+import moex_carry.ui.unified_runtime as unified_runtime
 from moex_carry.ui.unified_runtime import (
     build_unified_market_snapshot,
     build_unified_spread_series,
@@ -335,3 +336,65 @@ def test_manual_refresh_defaults_to_incremental_and_supports_force_full(tmp_path
     refresh_force = client.post("/api/signals/refresh", json={"force_full": True})
     assert refresh_force.status_code == 200
     assert calls == ["incremental"]
+
+
+def test_forward_forecast_uses_minute_horizon_and_converts_half_life_to_days(monkeypatch):
+    frame = pd.DataFrame(
+        [
+            {"date": "2026-01-10", "exec_ts": "2026-01-10 10:00:00", "spread_pct": -0.010},
+            {"date": "2026-01-10", "exec_ts": "2026-01-10 10:30:00", "spread_pct": -0.009},
+            {"date": "2026-01-10", "exec_ts": "2026-01-10 11:00:00", "spread_pct": -0.008},
+            {"date": "2026-01-11", "exec_ts": "2026-01-11 10:00:00", "spread_pct": -0.007},
+            {"date": "2026-01-11", "exec_ts": "2026-01-11 10:30:00", "spread_pct": -0.006},
+            {"date": "2026-01-11", "exec_ts": "2026-01-11 11:00:00", "spread_pct": -0.005},
+        ]
+    )
+    calls: list[int] = []
+
+    def _fake_alpha_metrics(_series, *, horizon, tp, sl):
+        del tp, sl
+        calls.append(int(horizon))
+        return SimpleNamespace(p_hit_tp=0.6, p_hit_sl=0.2, half_life=4.0)
+
+    monkeypatch.setattr(unified_runtime, "alpha_metrics", _fake_alpha_metrics)
+
+    settings = AppSettings(
+        data=DataConfig(data_dir="."),
+        spread_carry_alpha=SpreadCarryAlphaConfig(H_max_days=2, TP_pct=0.01, SL_pct=0.01),
+        ui=UiConfig(),
+    )
+    forecast = unified_runtime._build_forward_signal_forecast(
+        frame=frame,
+        settings=settings,
+        tp_net=None,
+        as_of_snapshot=date(2026, 1, 11),
+    )
+
+    # 2 days * 3 bars/day = 6, capped by len(series)-1 = 5.
+    assert calls == [5]
+    assert forecast["forward_half_life_days"] == 4.0 / 3.0
+    assert forecast["forecast_exit_days"] == 1
+
+
+def test_forward_forecast_fallback_without_date_columns():
+    frame = pd.DataFrame(
+        [
+            {"spread_pct": -0.010},
+            {"spread_pct": -0.009},
+            {"spread_pct": -0.008},
+            {"spread_pct": -0.007},
+        ]
+    )
+    settings = AppSettings(
+        data=DataConfig(data_dir="."),
+        spread_carry_alpha=SpreadCarryAlphaConfig(H_max_days=3, TP_pct=0.01, SL_pct=0.01),
+        ui=UiConfig(),
+    )
+    forecast = unified_runtime._build_forward_signal_forecast(
+        frame=frame,
+        settings=settings,
+        tp_net=None,
+        as_of_snapshot=date(2026, 1, 11),
+    )
+    # Without date/exec_ts we treat each bar as one day.
+    assert forecast["forecast_exit_days"] >= 1

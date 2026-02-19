@@ -908,6 +908,13 @@ class TelegramWorker:
         forecast_days = row.get("forecast_exit_days")
         if forecast_days is None:
             forecast_days = metrics_map.get("forecast_exit_days")
+        forecast_tp_probability = row.get("forecast_tp_probability")
+        if forecast_tp_probability is None:
+            forecast_tp_probability = metrics_map.get("forecast_tp_probability")
+        forecast_sl_probability = row.get("forecast_sl_probability")
+        if forecast_sl_probability is None:
+            forecast_sl_probability = metrics_map.get("forecast_sl_probability")
+        forecast_model = str(row.get("forecast_model") or metrics_map.get("forecast_model") or "").strip()
         score = row.get("signal_score")
         if score is None:
             score = metrics_map.get("total_score")
@@ -957,8 +964,16 @@ class TelegramWorker:
 
         if tp is not None or sl is not None:
             lines.append(f"• TP/SL spread: {_fmt_percent(tp)} / {_fmt_percent(sl)}")
+        if forecast_tp_probability is not None or forecast_sl_probability is not None:
+            lines.append(
+                "• Forecast TP/SL prob: "
+                f"{_fmt_percent(forecast_tp_probability)} / {_fmt_percent(forecast_sl_probability)}"
+            )
         if forecast_days is not None:
-            lines.append(f"• Прогноз выхода: {forecast_days} дн")
+            if forecast_model:
+                lines.append(f"• Прогноз выхода: {forecast_days} дн ({forecast_model})")
+            else:
+                lines.append(f"• Прогноз выхода: {forecast_days} дн")
 
         lines.append("")
         lines.append("Нажмите кнопку ниже, если использовали сигнал.")

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
+import moex_carry.backtest_v2.minute_portfolio_engine as minute_portfolio_engine
 from moex_carry.backtest_v2.minute_portfolio_engine import (
     clear_minute_replay_tape_cache,
     minute_replay_tape_cache_size,
@@ -16,8 +17,10 @@ from moex_carry.backtest_v2.minute_portfolio_engine import (
 from moex_carry.backtest_v2.engine import build_rebalance_config
 from moex_carry.config_resolver import resolve_backtest_request
 from moex_carry.contracts.strategy_test import BacktestRequest
-from moex_carry.domain.portfolio import PairSpec
+from moex_carry.domain.portfolio import PairSpec, SnapshotPerPair
 from moex_carry.hpo.minute_period_pnl import compute_minute_window_metrics
+from moex_carry.portfolio.minute_snapshot_adapter import MinuteDayEvent, MinutePairTape
+from moex_carry.portfolio.rebalance_controller import pair_key
 
 
 @dataclass
@@ -240,3 +243,86 @@ def test_minute_portfolio_tape_cache_prewarm_and_clear(tmp_path):
 
     clear_minute_replay_tape_cache()
     assert minute_replay_tape_cache_size() == 0
+
+
+def test_minute_portfolio_engine_allocates_filled_entry_without_controller_weight(tmp_path, monkeypatch):
+    day = date(2026, 1, 10)
+    request = BacktestRequest()
+    request.test.start_date = day
+    request.test.end_date = day
+    request.execution.mode = "INTRADAY_MINUTE"
+    request.execution.execution_model = "MINUTE_REPLAY"
+    request.execution.minute_fail_fast = True
+    request.rebalance.cadence = "daily"
+    request.rebalance.target_utilization = 1.0
+    request.universe.max_pairs = 2
+
+    pair_a = PairSpec(
+        stock_secid="AAA",
+        future_secid="AAH6",
+        expiry=date(2026, 3, 19),
+        lot_size=1.0,
+        multiplier=1.0,
+        tick_size=0.01,
+    )
+    pair_b = PairSpec(
+        stock_secid="BBB",
+        future_secid="BBH6",
+        expiry=date(2026, 3, 19),
+        lot_size=1.0,
+        multiplier=1.0,
+        tick_size=0.01,
+    )
+
+    def _make_tape(pair: PairSpec) -> MinutePairTape:
+        pid = pair_key(pair.stock_secid, pair.future_secid)
+        snapshot = SnapshotPerPair(
+            as_of=datetime(2026, 1, 10, 18, 40),
+            stock_secid=pair.stock_secid,
+            future_secid=pair.future_secid,
+            expiry=pair.expiry,
+            spot_mid=100.0,
+            future_mid=101.0,
+            spread_mid=-1.0,
+            spread_pct=-0.01,
+            decision="hold",
+        )
+        event = MinuteDayEvent(
+            pair_id=pid,
+            day=day,
+            ts=datetime(2026, 1, 10, 10, 20),
+            event_type="entry_filled",
+            signal_action="hold",
+            trade_cycle=1,
+            trade_pnl_cash=None,
+            trade_return_pct_net=None,
+            entry_wait_minutes=20.0,
+            exit_wait_minutes=None,
+            unfilled_reason=None,
+        )
+        return MinutePairTape(pair=pair, snapshots_by_day={day: snapshot}, events_by_day={day: [event]})
+
+    tapes = {
+        pair_key(pair_a.stock_secid, pair_a.future_secid): _make_tape(pair_a),
+        pair_key(pair_b.stock_secid, pair_b.future_secid): _make_tape(pair_b),
+    }
+
+    def _fake_load_pair_tape(*, pair, **_kwargs):
+        return tapes.get(pair_key(pair.stock_secid, pair.future_secid))
+
+    def _fake_desired_pairs_for_day(**_kwargs):
+        pid_a = pair_key(pair_a.stock_secid, pair_a.future_secid)
+        return {pid_a}, {pid_a: 1.0}
+
+    monkeypatch.setattr(minute_portfolio_engine, "_load_pair_tape", _fake_load_pair_tape)
+    monkeypatch.setattr(minute_portfolio_engine, "_desired_pairs_for_day", _fake_desired_pairs_for_day)
+
+    store = _DummyMinuteStore(data_dir=tmp_path, days=[day])
+    report = run_minute_portfolio_backtest(
+        request=request,
+        universe=[pair_a, pair_b],
+        data_store=store,
+    )
+
+    assert report.equity_curve[-1].positions == 2
+    assert float(report.summary_metrics["PortfolioUnfilledEntryRate"]) == pytest.approx(0.0)

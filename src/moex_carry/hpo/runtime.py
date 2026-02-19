@@ -5,7 +5,7 @@ import math
 import random
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -333,16 +333,81 @@ def _fallback_fold_lengths(total_days: int) -> tuple[int, int, int, int]:
     return train_days, val_days, test_days, step_days
 
 
+def _coerce_calendar_day(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    # ISO dates are expected in cached minute series payloads.
+    if len(text) >= 10:
+        try:
+            return date.fromisoformat(text[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _minute_calendar_dates(
+    *,
+    request: Any,
+    data_dir: Path,
+    universe: list[Any],
+) -> list[date]:
+    from moex_carry.signal_replay import load_pair_minute_series
+
+    start_date = request.test.start_date
+    end_date = request.test.end_date
+    if start_date is None or end_date is None:
+        return []
+    days: set[date] = set()
+    for pair in universe:
+        payload = load_pair_minute_series(
+            data_dir=data_dir,
+            stock=pair.stock_secid,
+            future=pair.future_secid,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if payload is None or payload.series_base is None or payload.series_base.empty:
+            continue
+        frame = payload.series_base
+        if "date" in frame.columns:
+            values = frame["date"].tolist()
+        elif "exec_ts" in frame.columns:
+            values = frame["exec_ts"].tolist()
+        else:
+            continue
+        for raw in values:
+            day = _coerce_calendar_day(raw)
+            if day is None:
+                continue
+            if start_date <= day <= end_date:
+                days.add(day)
+    return sorted(days)
+
+
 def _build_folds(request: HpoRequest, data_dir: Path) -> tuple[list[Any], dict[str, Any]]:
     base_request = request.base
     universe = build_universe_from_request(base_request, data_dir)
-    data_store = HistoryDataStore(
-        data_dir,
-        universe,
-        start_date=base_request.test.start_date,
-        end_date=base_request.test.end_date,
-    )
-    dates = data_store.get_calendar(base_request.test.start_date, base_request.test.end_date)
+    execution_mode = str(base_request.execution.mode or "INTRADAY_MINUTE").upper()
+    execution_model = str(base_request.execution.execution_model or "MINUTE_REPLAY").upper()
+
+    dates: list[date] = []
+    if execution_mode == "INTRADAY_MINUTE" and execution_model == "MINUTE_REPLAY":
+        dates = _minute_calendar_dates(request=base_request, data_dir=data_dir, universe=universe)
+    if not dates:
+        data_store = HistoryDataStore(
+            data_dir,
+            universe,
+            start_date=base_request.test.start_date,
+            end_date=base_request.test.end_date,
+        )
+        dates = data_store.get_calendar(base_request.test.start_date, base_request.test.end_date)
     if not dates:
         raise ValueError("calendar_empty")
     total_days = len(dates)

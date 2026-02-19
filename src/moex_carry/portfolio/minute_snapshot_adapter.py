@@ -92,6 +92,19 @@ def _to_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def _to_optional_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "t"}:
+        return True
+    if text in {"0", "false", "no", "n", "f"}:
+        return False
+    return None
+
+
 def _row_score_components(row: pd.Series) -> tuple[float, float, float]:
     score_floor_raw = _to_float(row.get("score_floor"))
     score_alpha_raw = _to_float(row.get("score_alpha"))
@@ -109,8 +122,8 @@ def _row_score_components(row: pd.Series) -> tuple[float, float, float]:
 
 def _snapshot_from_row(*, pair: PairSpec, row: pd.Series, day: date) -> SnapshotPerPair:
     exec_ts = _to_datetime(row.get("exec_ts")) or datetime.combine(day, datetime.min.time())
-    floor_pass = _to_bool(row.get("floor_pass"), default=False)
-    liq_pass = _to_bool(row.get("liquidity_pass"), default=False)
+    floor_pass = _to_optional_bool(row.get("floor_pass"))
+    liq_pass = _to_optional_bool(row.get("liquidity_pass"))
     score_floor, score_alpha, total_score = _row_score_components(row)
     dte = None
     if pair.expiry is not None:
@@ -163,6 +176,11 @@ def _snapshot_from_row(*, pair: PairSpec, row: pd.Series, day: date) -> Snapshot
             "exit_fill_status": str(row.get("exit_fill_status") or ""),
         },
     )
+
+
+def _select_snapshot_row(day_frame: pd.DataFrame) -> pd.Series:
+    # Snapshot reflects end-of-day state; entry/exit events are extracted independently.
+    return day_frame.iloc[-1]
 
 
 def _event_from_row(*, pair_id: str, day: date, row: pd.Series) -> list[MinuteDayEvent]:
@@ -275,8 +293,8 @@ def build_minute_pair_tape(*, replay: pd.DataFrame, pair: PairSpec) -> MinutePai
     snapshots_by_day: dict[date, SnapshotPerPair] = {}
     events_by_day: dict[date, list[MinuteDayEvent]] = {}
     for day, day_frame in work.groupby("date", sort=True):
-        last_row = day_frame.iloc[-1]
-        snapshots_by_day[day] = _snapshot_from_row(pair=pair, row=last_row, day=day)
+        snapshot_row = _select_snapshot_row(day_frame)
+        snapshots_by_day[day] = _snapshot_from_row(pair=pair, row=snapshot_row, day=day)
 
         day_events: list[MinuteDayEvent] = []
         seen_event_keys: set[tuple[str, datetime, int | None, str | None]] = set()
