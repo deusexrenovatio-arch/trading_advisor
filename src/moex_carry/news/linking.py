@@ -72,6 +72,34 @@ def normalize_text(title: str | None, content: str | None) -> str:
     return text
 
 
+def _contains_alias(text: str, alias: str) -> bool:
+    needle = str(alias or "").strip().lower()
+    if not needle:
+        return False
+    if " " in needle or "-" in needle or "/" in needle:
+        return needle in text
+    pattern = rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])"
+    return re.search(pattern, text) is not None
+
+
+def text_supports_ticker(
+    *,
+    ticker: str | None,
+    title: str | None,
+    content: str | None,
+    min_hits: int = 1,
+) -> bool:
+    normalized_ticker = str(ticker or "").strip().upper()
+    aliases = DEFAULT_COMMODITY_ALIASES.get(normalized_ticker)
+    if not aliases:
+        return False
+    text = f" {normalize_text(title, content)} "
+    if not text.strip():
+        return False
+    hits = sum(1 for alias in aliases if _contains_alias(text, alias))
+    return bool(hits >= max(int(min_hits), 1))
+
+
 def _match_commodities(text: str) -> tuple[list[str], list[str]]:
     matched: list[tuple[str, int]] = []
     rules: list[str] = []

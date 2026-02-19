@@ -280,6 +280,7 @@ class NewsIngestConfig(BaseModel):
         ticker: str
         name: str
         gdelt_query: str
+        newsapi_query: str | None = None
         rss_urls: list[str] = []
         price_source: str = "yfinance"
         price_symbol: str = ""
@@ -331,9 +332,23 @@ class NewsIngestConfig(BaseModel):
     gdelt_backfill_max_pages_per_window: int = 8
     gdelt_min_request_interval_sec: float = 5.2
     gdelt_request_timeout_sec: int = 40
+    newsapi_enabled: bool = False
+    newsapi_base_url: str = "https://newsapi.org/v2/everything"
+    newsapi_api_key_env: str = "NEWSAPI_API_KEY"
+    newsapi_api_key: str | None = None
+    newsapi_language: str = "en"
+    newsapi_sort_by: str = "publishedAt"
+    newsapi_domains: list[str] = []
+    newsapi_max_records_per_call: int = 100
+    newsapi_backfill_max_pages_per_window: int = 2
+    newsapi_request_timeout_sec: int = 30
+    newsapi_daily_limit: int = 100
+    newsapi_daily_state_path: str = "./data/state/newsapi_usage.json"
     backfill_start_date: str = "2018-01-01"
     backfill_chunk_days: int = 7
     backfill_max_windows_per_commodity: int = 0
+    backfill_window_order: str = "chronological"
+    backfill_shock_bar_minutes: int = 60
     qc_min_news_per_ticker: int = 500
     qc_min_price_points_per_ticker: int = 500
     commodity_profiles: list[CommodityProfile] = Field(default_factory=_default_profiles)
@@ -367,6 +382,13 @@ class NewsModelsConfig(BaseModel):
     decision_weight_min_impact: float = 0.6
     decision_weight_reduce_factor: float = 0.5
     decision_weight_boost_factor: float = 1.1
+    target_mode_default: str = "legacy"
+    target_v2_processing_lag_sec: int = 60
+    target_v2_use_midpoint: bool = True
+    target_v2_market_min_clean_events_5m: int = 400
+    target_v2_market_min_clean_events_1h: int = 300
+    target_v2_market_min_clean_events_4h: int = 250
+    target_v2_market_min_clean_events_1d: int = 200
 
 
 class NewsEventsConfig(BaseModel):

@@ -214,6 +214,18 @@ news_ingest:
   gdelt_max_records_per_call: 250
   gdelt_min_request_interval_sec: 5.2
   gdelt_request_timeout_sec: 40
+  newsapi_enabled: false
+  newsapi_base_url: "https://newsapi.org/v2/everything"
+  newsapi_api_key_env: "NEWSAPI_API_KEY"
+  newsapi_api_key: null
+  newsapi_language: "en"
+  newsapi_sort_by: "publishedAt"
+  newsapi_domains: []
+  newsapi_max_records_per_call: 100
+  newsapi_backfill_max_pages_per_window: 2
+  newsapi_request_timeout_sec: 30
+  newsapi_daily_limit: 100
+  newsapi_daily_state_path: "./data/state/newsapi_usage.json"
   backfill_start_date: "2018-01-01"
   backfill_chunk_days: 7
   backfill_max_windows_per_commodity: 0

@@ -444,6 +444,167 @@ class EventMarketReactionModel(Base):
     computed_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
 
 
+class EventTargetV2Model(Base):
+    __tablename__ = "event_target_v2"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "symbol",
+            "horizon",
+            name="uq_event_target_v2",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String, index=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    horizon: Mapped[str] = mapped_column(String, index=True)
+    t_pub: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True, index=True)
+    t_anchor: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True, index=True)
+    t_event: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True, index=True)
+    event_time_source: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    t0: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    t1: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    p0: Mapped[float] = mapped_column(Float)
+    p1: Mapped[float] = mapped_column(Float)
+    r_raw: Mapped[float] = mapped_column(Float)
+    r_post: Mapped[float | None] = mapped_column(Float, nullable=True)
+    r_pre: Mapped[float | None] = mapped_column(Float, nullable=True)
+    r_exp: Mapped[float] = mapped_column(Float)
+    ar: Mapped[float] = mapped_column(Float, index=True)
+    sigma_pre: Mapped[float] = mapped_column(Float, index=True)
+    sigma_hat: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    z_post: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    z_pre: Mapped[float | None] = mapped_column(Float, nullable=True)
+    z_hold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    z_big: Mapped[float | None] = mapped_column(Float, nullable=True)
+    impact_bin: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    impact_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    overlap_count: Mapped[int] = mapped_column(Integer, default=0)
+    echo_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    premove_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    label_v2: Mapped[int] = mapped_column(Integer, index=True)
+    is_hi_conf: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    leakage_postmove: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_repost: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_overlapped: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    price_source: Mapped[str] = mapped_column(String, default="mid", index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class ExpReturnBucketStatsV2Model(Base):
+    __tablename__ = "exp_return_bucket_stats_v2"
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol",
+            "horizon",
+            "bucket_b",
+            "bucket_v",
+            "bucket_s",
+            "lookback_start",
+            "lookback_end",
+            name="uq_exp_return_bucket_stats_v2",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    horizon: Mapped[str] = mapped_column(String, index=True)
+    bucket_b: Mapped[int] = mapped_column(Integer, index=True)
+    bucket_v: Mapped[int] = mapped_column(Integer, index=True)
+    bucket_s: Mapped[int] = mapped_column(Integer, index=True)
+    lookback_start: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    lookback_end: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    n: Mapped[int] = mapped_column(Integer)
+    mean_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    median_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class EventFactorScoreV2Model(Base):
+    __tablename__ = "event_factor_score_v2"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "symbol",
+            "factor_name",
+            "model_name",
+            name="uq_event_factor_score_v2",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String, index=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    factor_name: Mapped[str] = mapped_column(String, index=True)
+    p_entail_bull: Mapped[float] = mapped_column(Float)
+    p_entail_bear: Mapped[float] = mapped_column(Float)
+    factor_score: Mapped[float] = mapped_column(Float, index=True)
+    factor_conf: Mapped[float] = mapped_column(Float, index=True)
+    model_name: Mapped[str] = mapped_column(String, index=True)
+    computed_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class ModelPredV2Model(Base):
+    __tablename__ = "model_pred_v2"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "event_id",
+            "symbol",
+            "horizon",
+            name="uq_model_pred_v2",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String, index=True)
+    event_id: Mapped[str] = mapped_column(String, index=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    horizon: Mapped[str] = mapped_column(String, index=True)
+    p_move: Mapped[float] = mapped_column(Float)
+    p_up_given_move: Mapped[float] = mapped_column(Float)
+    p_up: Mapped[float] = mapped_column(Float)
+    p_down: Mapped[float] = mapped_column(Float)
+    p_hold: Mapped[float] = mapped_column(Float)
+    decision: Mapped[int] = mapped_column(Integer, index=True)
+    threshold_set_id: Mapped[str] = mapped_column(String, index=True)
+    model_version: Mapped[str] = mapped_column(String, index=True)
+    is_calibrated: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class GateRunV2Model(Base):
+    __tablename__ = "gate_run_v2"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "symbol",
+            "horizon",
+            name="uq_gate_run_v2",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String, index=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    horizon: Mapped[str] = mapped_column(String, index=True)
+    period_start: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    period_end: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    market_pass: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    leakage_pass: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    supervised_pass_shadow: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    supervised_pass_prod: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    baseline_pass: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    utility_pass: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    overall_pass_prod: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    metrics_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    winner_model_version: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
 class NewsAnnotationModel(Base):
     __tablename__ = "news_annotations"
 

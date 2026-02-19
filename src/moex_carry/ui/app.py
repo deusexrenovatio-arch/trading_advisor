@@ -8,13 +8,10 @@ import os
 from pathlib import Path
 import threading
 import uuid
-from datetime import datetime, time as dt_time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
-import requests
 from dash import Dash, Input, Output, State, dash_table, dcc, html
-from dash.dash_table.Format import Format, Scheme, Trim
 from flask import Flask, jsonify, request
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -25,8 +22,8 @@ from moex_carry.backtest_v2.runtime import run_backtest_v2_cached, serialize_bac
 from moex_carry.data.moex_iss import MoexIssClient
 from moex_carry.decision_log import load_jsonl
 from moex_carry.domain.decision_engine import (
-    build_signal_gate_results,
-    derive_signal_lifecycle_state,
+    build_decision_action_entries,
+    parse_decision_action_request,
 )
 from moex_carry.domain.execution_policy import (
     evaluate_fail_closed_entry,
@@ -52,7 +49,6 @@ from moex_carry.news import (
     run_news_gate,
     summarize_event_study,
 )
-from moex_carry.news.taxonomy import impact_to_severity
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_signal_execution_by_idempotency,
@@ -63,19 +59,15 @@ from moex_carry.storage.repositories import (
     load_news_annotations,
     load_latest_signal_run,
     load_news_backtest_reports,
-    load_news_entity_links,
     load_news_event_items,
     load_news_events,
     load_news_impact_scores,
     load_news_items_by_ids,
-    load_news_item_tags,
-    load_news_items,
     load_news_labels,
     load_news_llm_runs,
     load_news_model_eval_records,
     load_news_signal_links,
     load_news_unmatched_gold,
-    load_primary_news_scores,
     load_open_executions,
     load_signal_executions,
     release_runtime_lease,
@@ -88,6 +80,65 @@ from moex_carry.storage.repositories import (
     upsert_news_annotations,
     upsert_news_backtest_report,
     upsert_news_signal_links,
+)
+from moex_carry.ui.app_helpers_base import (
+    _append_jsonl,
+    _latest_by_decision_id,
+    _table_columns,
+    _decision_columns,
+    _prepare_decisions,
+    _sanitize_value,
+    _parse_bool,
+    _coerce_bool,
+    _default_require_score_gate_for_signals,
+    _default_require_score_gate_for_top_pairs,
+    _resolve_require_score_gate,
+    _apply_score_gate_filter,
+    _record_score_gate_pass,
+    _parse_int,
+    _parse_float,
+    _bad_request,
+    _is_iss_transport_error,
+    _build_pretrade_fail_open_result,
+    _df_to_records,
+    _stringify_datetime_columns,
+    _merge_signal_metrics,
+    _build_execution_quality,
+    _normalize_datetime,
+    _normalize_execution_leg,
+    _normalize_execution_action,
+    _coerce_signal_action_request,
+    _normalize_signal_action_source,
+    _normalize_order_id,
+    _stable_id,
+    _build_pair_entity_ref,
+    _build_signal_id_from_row,
+    _derive_lifecycle_state,
+    _derive_effective_signal_action,
+    _build_gate_results_from_row,
+    _normalize_gate_status,
+    _coerce_string_list,
+    _contains_reason_token,
+    _normalize_evidence_item,
+    _ACTIONABILITY_GATE_PRIORITIES,
+)
+from moex_carry.ui.app_helpers_base import SIGNAL_METRIC_CONTRACT_KEYS as _SIGNAL_METRIC_CONTRACT_KEYS
+from moex_carry.ui.app_helpers_feed import (
+    _parse_daily_time,
+    _resolve_tz,
+    _next_daily_run,
+    _parse_date_bound,
+    _parse_iso_datetime,
+    _isoformat_utc,
+    _load_news_bundle,
+    _build_news_feed_events,
+    _select_primary_model_score,
+    _build_news_feed_events_from_event_layer,
+    _future_scale_from_raw,
+    _read_cache,
+    _write_cache,
+    _apply_query_filters,
+    DECISION_STYLE,
 )
 from moex_carry.ui.data import (
     load_backtest_summary,
@@ -116,6 +167,9 @@ from moex_carry.unified_runtime import (
 )
 
 
+SIGNAL_METRIC_CONTRACT_KEYS = _SIGNAL_METRIC_CONTRACT_KEYS
+
+
 BASE_TABLE_STYLE = {
     "style_table": {"overflowX": "auto", "border": "1px solid #e5e7eb"},
     "style_header": {
@@ -140,713 +194,6 @@ _V1_DEPRECATION_SUNSET_HTTP = "Wed, 01 Jul 2026 00:00:00 GMT"
 _V1_DEPRECATION_SUNSET_DATE = "2026-07-01"
 _DEFAULT_ENTRY_PRICE_TOLERANCE_PCT = 0.0015
 
-
-def _append_jsonl(path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-
-
-def _latest_by_decision_id(records: list[dict[str, object]]) -> dict[str, dict[str, object]]:
-    latest: dict[str, dict[str, object]] = {}
-    for record in records:
-        decision_id = record.get("decision_id")
-        if isinstance(decision_id, str) and decision_id:
-            latest[decision_id] = record
-    return latest
-
-
-def _table_columns(df):
-    return [{"name": col, "id": col} for col in df.columns]
-
-
-def _decision_columns():
-    return [
-        {"name": "Time", "id": "created_at"},
-        {"name": "Decision", "id": "decision_id"},
-        {"name": "Strategy", "id": "strategy_type"},
-        {"name": "Instrument", "id": "primary_instrument"},
-        {"name": "Action", "id": "action"},
-        {"name": "Risk", "id": "risk_state"},
-        {"name": "News", "id": "news_severity"},
-        {
-            "name": "Cost",
-            "id": "cost_round_trip",
-            "type": "numeric",
-            "format": Format(precision=2, scheme=Scheme.fixed, trim=Trim.yes),
-        },
-        {
-            "name": "Max DD",
-            "id": "max_drawdown",
-            "type": "numeric",
-            "format": Format(precision=4, scheme=Scheme.fixed, trim=Trim.yes),
-        },
-    ]
-
-
-def _prepare_decisions(decisions: pd.DataFrame) -> pd.DataFrame:
-    if decisions.empty:
-        return decisions
-    decisions = decisions.copy()
-    if "cost_summary.round_trip_cost" in decisions.columns:
-        decisions["cost_round_trip"] = decisions["cost_summary.round_trip_cost"]
-    if "backtest_metrics.max_drawdown" in decisions.columns:
-        decisions["max_drawdown"] = decisions["backtest_metrics.max_drawdown"]
-    display_columns = [
-        "created_at",
-        "decision_id",
-        "strategy_type",
-        "primary_instrument",
-        "action",
-        "risk_state",
-        "news_severity",
-        "cost_round_trip",
-        "max_drawdown",
-    ]
-    for col in display_columns:
-        if col not in decisions.columns:
-            decisions[col] = None
-    decisions["cost_round_trip"] = pd.to_numeric(decisions["cost_round_trip"], errors="coerce")
-    decisions["max_drawdown"] = pd.to_numeric(decisions["max_drawdown"], errors="coerce")
-    return decisions[display_columns].sort_values("created_at", ascending=False)
-
-
-def _sanitize_value(value):
-    if isinstance(value, float) and math.isnan(value):
-        return None
-    if isinstance(value, dict):
-        return {key: _sanitize_value(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_sanitize_value(item) for item in value]
-    return value
-
-
-def _contains_nan(value) -> bool:
-    if isinstance(value, float) and math.isnan(value):
-        return True
-    if isinstance(value, dict):
-        return any(_contains_nan(item) for item in value.values())
-    if isinstance(value, list):
-        return any(_contains_nan(item) for item in value)
-    return False
-
-
-def _parse_bool(value: object) -> bool | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"1", "true", "yes", "y"}:
-            return True
-        if lowered in {"0", "false", "no", "n"}:
-            return False
-    return None
-
-
-def _coerce_bool(value: object, *, default: bool) -> bool:
-    parsed = _parse_bool(value)
-    if parsed is None:
-        return bool(default)
-    return parsed
-
-
-def _default_require_score_gate_for_signals(settings: AppSettings) -> bool:
-    return bool(getattr(settings.ui, "require_score_gate_by_default", True))
-
-
-def _default_require_score_gate_for_top_pairs(settings: AppSettings) -> bool:
-    # Top-pairs should reflect historical ranking by default.
-    return bool(settings.ui.require_score_gate_top_pairs_by_default)
-
-
-def _resolve_require_score_gate(value: object, *, default: bool) -> bool:
-    return _coerce_bool(value, default=default)
-
-
-def _apply_score_gate_filter(df: pd.DataFrame, *, require_score_gate: bool) -> pd.DataFrame:
-    if not require_score_gate or df.empty or "score_gate_pass" not in df.columns:
-        return df
-    gate_mask = df["score_gate_pass"].map(lambda value: _coerce_bool(value, default=False))
-    return df.loc[gate_mask].copy()
-
-
-def _record_score_gate_pass(record: dict[str, object]) -> bool:
-    direct = _parse_bool(record.get("score_gate_pass"))
-    if direct is not None:
-        return bool(direct)
-    metrics = record.get("signal_metrics")
-    if isinstance(metrics, dict):
-        nested = _parse_bool(metrics.get("score_gate_pass"))
-        if nested is not None:
-            return bool(nested)
-    return False
-
-
-def _parse_int(value: object, default: int) -> int:
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _parse_float(value: object, default: float) -> float:
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _bad_request(message: str, *, details: object | None = None):
-    payload = {"error": "invalid_request", "message": message}
-    if details is not None:
-        payload["details"] = details
-    return jsonify(payload), 400
-
-
-_TRANSPORT_ERROR_TYPES = (
-    requests.exceptions.SSLError,
-    requests.exceptions.ConnectionError,
-    requests.exceptions.Timeout,
-)
-
-
-def _iter_exception_chain(exc: BaseException):
-    current: BaseException | None = exc
-    visited: set[int] = set()
-    while current is not None:
-        key = id(current)
-        if key in visited:
-            break
-        visited.add(key)
-        yield current
-        current = current.__cause__ if current.__cause__ is not None else current.__context__
-
-
-def _is_iss_transport_error(exc: BaseException) -> bool:
-    for item in _iter_exception_chain(exc):
-        if isinstance(item, _TRANSPORT_ERROR_TYPES):
-            return True
-        if isinstance(item, requests.exceptions.RequestException):
-            response = getattr(item, "response", None)
-            if response is None:
-                return True
-    return False
-
-
-def _build_pretrade_fail_open_result(
-    *,
-    stock: str,
-    future: str,
-    direction: str,
-    spot_target: float,
-    future_target: float,
-    spread_target: float,
-    eps: float,
-    stock_eps: float,
-    future_eps: float,
-    spread_eps: float,
-    future_scale: float,
-    qty_fut: float,
-    participation_rate: float,
-    min_hits: int,
-    error_text: str,
-) -> dict[str, object]:
-    stock_buy_max = float(spot_target) * (1.0 + float(stock_eps))
-    stock_sell_min = float(spot_target) * (1.0 - float(stock_eps))
-    fut_buy_max = float(future_target) * (1.0 + float(future_eps))
-    fut_sell_min = float(future_target) * (1.0 - float(future_eps))
-    spread_base = max(abs(float(spread_target)), 1.0)
-    spread_band = spread_base * float(spread_eps)
-    spread_min = float(spread_target) - spread_band
-    spread_max = float(spread_target) + spread_band
-
-    qty_stock = max(float(future_scale), 1.0) * float(qty_fut)
-    min_session_volume_stock = qty_stock / float(participation_rate)
-    min_session_volume_fut = float(qty_fut) / float(participation_rate)
-
-    return {
-        "status": "PLACE",
-        "ready_to_place": True,
-        "manual_confirm_required": True,
-        "degraded": True,
-        "gate_policy": {
-            "mode": "iss_manual_drive_transport_fail_open",
-            "blocking_gates": [],
-            "advisory_gates": [
-                "stock_quote_pass",
-                "fut_quote_pass",
-                "stock_price_pass",
-                "fut_price_pass",
-                "spread_pass",
-                "sync_pass",
-                "stock_volume_pass",
-                "fut_volume_pass",
-            ],
-        },
-        "pair": {
-            "stock": stock,
-            "future": future,
-            "direction": direction,
-        },
-        "targets": {
-            "spot_target": float(spot_target),
-            "future_target_per_share": float(future_target),
-            "spread_target": float(spread_target),
-        },
-        "order_price_bands": {
-            "stock_buy_max": stock_buy_max,
-            "stock_sell_min": stock_sell_min,
-            "future_buy_max_per_share": fut_buy_max,
-            "future_sell_min_per_share": fut_sell_min,
-            "future_buy_max_contract": fut_buy_max * float(future_scale),
-            "future_sell_min_contract": fut_sell_min * float(future_scale),
-            "spread_min": spread_min,
-            "spread_max": spread_max,
-        },
-        "volume_requirements": {
-            "qty_fut_contracts": float(qty_fut),
-            "qty_stock_shares": qty_stock,
-            "participation_rate": float(participation_rate),
-            "min_session_volume_stock": min_session_volume_stock,
-            "min_session_volume_fut_contracts": min_session_volume_fut,
-        },
-        "gates": {},
-        "hits": {
-            "required": int(max(min_hits, 1)),
-            "snapshots": 0,
-        },
-        "reasons": [],
-        "advisory_reasons": ["iss_transport_error"],
-        "diagnostics": {
-            "transport_error": error_text,
-            "eps": float(eps),
-            "stock_eps": float(stock_eps),
-            "future_eps": float(future_eps),
-            "spread_eps": float(spread_eps),
-        },
-    }
-
-
-def _df_to_records(df: pd.DataFrame) -> list[dict[str, object]]:
-    if df.empty:
-        return []
-    cleaned = df.astype(object).where(pd.notna(df), None)
-    records = cleaned.to_dict("records")
-    return [_sanitize_value(record) for record in records]
-
-
-def _stringify_datetime_columns(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    result = df.copy()
-    for column in result.columns:
-        if "date" in str(column).lower():
-            converted = pd.to_datetime(result[column], errors="coerce")
-            if converted.notna().any():
-                result[column] = converted.dt.strftime("%Y-%m-%d")
-                continue
-        if "ts" in str(column).lower() or "time" in str(column).lower():
-            converted = pd.to_datetime(result[column], errors="coerce")
-            if converted.notna().any():
-                result[column] = converted.dt.strftime("%Y-%m-%d %H:%M:%S")
-    return result
-
-
-SIGNAL_METRIC_CONTRACT_KEYS: tuple[str, ...] = (
-    "entry_price_tolerance_pct",
-    "entry_stock_min",
-    "entry_stock_max",
-    "entry_future_min_per_share",
-    "entry_future_max_per_share",
-    "entry_spread_min",
-    "entry_spread_max",
-    "entry_spread_pct_min",
-    "entry_spread_pct_max",
-    "tp_net",
-    "sl_net",
-    "tp_spread_pct_level",
-    "sl_spread_pct_level",
-    "tp_spread_level",
-    "sl_spread_level",
-    "tp_stock_level_if_fut_const",
-    "sl_stock_level_if_fut_const",
-    "tp_future_level_if_stock_const",
-    "sl_future_level_if_stock_const",
-    "forecast_tp_probability",
-    "forecast_sl_probability",
-    "forecast_tp_first_probability",
-    "forecast_sl_first_probability",
-    "forecast_no_exit_first_probability",
-    "forecast_n_effective",
-    "forecast_confidence_tier",
-    "forecast_exit_days",
-    "forecast_exit_date",
-    "forecast_model",
-    "forecast_probability_source",
-    "forward_n_effective",
-    "forward_confidence_tier",
-    "orderbook_pass",
-    "orderbook_stock_min_depth",
-    "orderbook_fut_min_depth",
-    "orderbook_stock_quote_age_sec",
-    "orderbook_fut_quote_age_sec",
-    "orderbook_stock_imbalance",
-    "orderbook_fut_imbalance",
-    "orderbook_stock_quote_available",
-    "orderbook_fut_quote_available",
-    "orderbook_stock_depth_available",
-    "orderbook_fut_depth_available",
-    "orderbook_data_warnings",
-    "floor_rate_annual",
-    "rtc_pct",
-    "spread_pct",
-    "score_model",
-    "score_target_annual",
-    "score_floor",
-    "score_floor_excess_annual",
-    "score_alpha",
-    "score_edge_raw_annual",
-    "score_exec_probability",
-    "score_earn_probability",
-    "score_gate_exec_threshold",
-    "score_gate_earn_threshold",
-    "score_gate_pass",
-    "total_score",
-    "avg_trade_return_annual_recent",
-    "avg_trade_return_annual_operational_recent",
-    "share_target_pass",
-    "unfilled_entry_rate",
-    "unfilled_exit_rate",
-    "forced_exit_rate",
-)
-
-
-def _normalize_signal_metrics(metrics: object) -> dict[str, object]:
-    normalized: dict[str, object]
-    if isinstance(metrics, dict):
-        normalized = {str(key): _sanitize_value(value) for key, value in metrics.items()}
-    else:
-        normalized = {}
-    for key in SIGNAL_METRIC_CONTRACT_KEYS:
-        normalized.setdefault(key, None)
-    return normalized
-
-
-def _merge_signal_metrics(record: dict[str, object]) -> dict[str, object]:
-    metrics = _normalize_signal_metrics(record.get("signal_metrics"))
-    merged = dict(record)
-    merged["signal_metrics"] = metrics
-    for key, value in metrics.items():
-        if key not in merged:
-            merged[key] = _sanitize_value(value)
-    return merged
-
-
-def _build_execution_quality(record: dict[str, object]) -> dict[str, object]:
-    metrics = _normalize_signal_metrics(record.get("signal_metrics"))
-
-    def _pick(*keys: str):
-        for key in keys:
-            if key in record and record.get(key) is not None:
-                return _sanitize_value(record.get(key))
-            if key in metrics and metrics.get(key) is not None:
-                return _sanitize_value(metrics.get(key))
-        return None
-
-    return {
-        "unfilled_entry_rate": _pick("unfilled_entry_rate"),
-        "unfilled_exit_rate": _pick("unfilled_exit_rate"),
-        "forced_exit_rate": _pick("forced_exit_rate"),
-        "entry_wait_minutes_mean": _pick("avg_entry_wait_min_closed"),
-        "exit_wait_minutes_mean": _pick("avg_exit_wait_min_closed"),
-        "trades_closed_sample": _pick("trades_closed"),
-        "entry_signals_sample": _pick("entry_signals"),
-        "exit_signals_sample": _pick("exit_signals"),
-    }
-
-
-def _normalize_datetime(value: datetime) -> datetime:
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
-
-
-def _normalize_execution_leg(value: object) -> str:
-    if value is None:
-        return "other"
-    raw = str(value).strip().lower()
-    if not raw:
-        return "other"
-    if raw in {"stock", "spot", "cash", "equity", "Р В°Р С”РЎвЂ Р С‘РЎРЏ"}:
-        return "stock"
-    if raw in {"future", "futures", "fut", "РЎвЂћРЎРЉРЎР‹РЎвЂЎР ВµРЎР‚РЎРѓ", "РЎвЂћРЎРЉРЎР‹РЎвЂЎР ВµРЎР‚РЎРѓРЎвЂ№"}:
-        return "future"
-    return "other"
-
-
-def _normalize_execution_action(value: object) -> str:
-    raw = str(value or "").strip().lower()
-    if raw in {"exit", "close"}:
-        return "exit"
-    if raw in {"ack", "acknowledged"}:
-        return "ack"
-    if raw in {"enter", "open", "hold_open", "hold"}:
-        # hold_open in execution logs is treated as opening/maintaining leg exposure.
-        return "enter"
-    return raw or "enter"
-
-
-def _coerce_signal_action_request(
-    value: object, *, legacy_mode: bool = False
-) -> tuple[str, str] | None:
-    raw = str(value or "").strip().lower()
-    if raw in {"ack", "acknowledged"}:
-        return "ack", "ack"
-    if raw in {"enter", "open"}:
-        return "enter", "enter"
-    if raw in {"exit", "close"}:
-        return "exit", "exit"
-    if raw in {"hold", "hold_open"}:
-        if legacy_mode:
-            # Keep v1 storage semantics: hold-like actions are persisted as enter.
-            return "enter", "enter"
-        return "hold", "hold_open"
-    return None
-
-
-def _normalize_signal_action_source(value: object, *, default: str) -> str:
-    source = str(value or default).strip().lower()
-    allowed = {"ui", "telegram", "system"}
-    if default == "v1_adapter":
-        allowed.add("v1_adapter")
-    if source in allowed:
-        return source
-    return default
-
-
-def _normalize_order_id(value: object) -> str | None:
-    if value is None:
-        return None
-    raw = str(value).strip()
-    return raw or None
-
-
-def _stable_id(prefix: str, *parts: object, length: int = 16) -> str:
-    raw = "|".join(str(part or "").strip() for part in parts)
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[: max(length, 8)]
-    return f"{prefix}-{digest}"
-
-
-def _build_pair_entity_ref(stock: object, future: object) -> dict[str, object]:
-    stock_value = str(stock or "").strip()
-    future_value = str(future or "").strip()
-    entity_id = f"{stock_value}:{future_value}" if stock_value or future_value else ""
-    return {
-        "entity_type": "pair",
-        "entity_id": entity_id,
-        "ticker": stock_value or None,
-    }
-
-
-def _build_signal_id_from_row(row: dict[str, object]) -> str:
-    fingerprint = str(row.get("signal_fingerprint") or "").strip()
-    if fingerprint:
-        return _stable_id(
-            "sig",
-            fingerprint,
-            row.get("stock"),
-            row.get("future"),
-            row.get("signal_action"),
-        )
-    return _stable_id(
-        "sig",
-        row.get("run_id"),
-        row.get("timestamp"),
-        row.get("stock"),
-        row.get("future"),
-        row.get("signal_action"),
-    )
-
-
-def _derive_lifecycle_state(row: dict[str, object]) -> str:
-    return derive_signal_lifecycle_state(
-        row.get("signal_action"),
-        position_open=bool(row.get("position_open")),
-    )
-
-
-def _derive_effective_signal_action(row: dict[str, object]) -> str:
-    action = str(row.get("signal_action") or "").strip().lower()
-    if action != "enter":
-        return action or "hold"
-    pretrade_status = str(row.get("pretrade_status") or "").strip().lower()
-    if pretrade_status in {"hold", "block"}:
-        return "hold_pretrade"
-    if pretrade_status in {"check", "pending"}:
-        return "check_pretrade"
-    return "enter"
-
-
-def _build_gate_results_from_row(row: dict[str, object], signal_id: str) -> list[dict[str, object]]:
-    metrics = row.get("signal_metrics")
-    if isinstance(metrics, dict) and row.get("score_gate_pass") is not None:
-        metrics = {**metrics, "score_gate_pass": row.get("score_gate_pass")}
-    return build_signal_gate_results(
-        signal_id=signal_id,
-        action=row.get("signal_action"),
-        signal_metrics=metrics,
-        pretrade_status=row.get("pretrade_status"),
-        pretrade_reasons=row.get("pretrade_reasons"),
-        stable_id=_stable_id,
-    )
-
-
-_ACTIONABILITY_GATE_PRIORITIES: tuple[tuple[str, int], ...] = (
-    ("risk_profile", 1),
-    ("news_geopolitics", 2),
-    ("liquidity", 3),
-    ("execution_feasibility", 4),
-    ("source_freshness", 5),
-    ("portfolio_limits", 6),
-    ("venue_constraints", 7),
-)
-
-
-def _normalize_gate_status(value: object, *, default: str = "unavailable") -> str:
-    normalized = str(value or "").strip().lower()
-    if normalized in {"pass", "reduce", "review", "block", "unavailable"}:
-        return normalized
-    return default
-
-
-def _coerce_string_list(value: object) -> list[str]:
-    if isinstance(value, list):
-        result: list[str] = []
-        for item in value:
-            text = str(item).strip()
-            if text:
-                result.append(text)
-        return result
-    if isinstance(value, str):
-        text = value.strip()
-        if text:
-            return [text]
-    return []
-
-
-def _contains_reason_token(reasons: list[str], *tokens: str) -> bool:
-    lowered = [item.lower() for item in reasons]
-    for token in tokens:
-        token_value = token.lower()
-        if any(token_value in reason for reason in lowered):
-            return True
-    return False
-
-
-_EVIDENCE_SOURCE_KINDS = {
-    "technical",
-    "fundamental",
-    "news",
-    "quant_model",
-    "liquidity",
-    "risk",
-    "manual",
-    "other",
-}
-_EVIDENCE_STANCES = {"support", "oppose", "neutral"}
-_EVIDENCE_SEVERITIES = {"low", "medium", "high", "critical"}
-
-
-def _normalize_evidence_source_kind(value: object, *, default: str = "other") -> str:
-    normalized = str(value or "").strip().lower()
-    if normalized in _EVIDENCE_SOURCE_KINDS:
-        return normalized
-    return default
-
-
-def _normalize_evidence_stance(value: object, *, default: str = "neutral") -> str:
-    normalized = str(value or "").strip().lower()
-    if normalized in _EVIDENCE_STANCES:
-        return normalized
-    return default
-
-
-def _normalize_evidence_severity(value: object) -> str | None:
-    normalized = str(value or "").strip().lower()
-    if normalized in _EVIDENCE_SEVERITIES:
-        return normalized
-    return None
-
-
-def _derive_evidence_freshness_sec(observed_at: object, snapshot_as_of: object) -> int | None:
-    observed_dt = parse_iso_utc(observed_at)
-    snapshot_dt = parse_iso_utc(snapshot_as_of)
-    if observed_dt is None or snapshot_dt is None:
-        return None
-    delta_sec = int((snapshot_dt - observed_dt).total_seconds())
-    if delta_sec < 0:
-        return 0
-    return delta_sec
-
-
-def _normalize_evidence_item(
-    item: dict[str, object],
-    *,
-    snapshot_as_of: object,
-    fallback_source_key_parts: tuple[object, ...] = (),
-) -> dict[str, object]:
-    normalized_item = dict(item)
-    normalized_item["source_kind"] = _normalize_evidence_source_kind(
-        normalized_item.get("source_kind"),
-        default="other",
-    )
-    normalized_item["stance"] = _normalize_evidence_stance(
-        normalized_item.get("stance"),
-        default="neutral",
-    )
-    normalized_item["reason_codes"] = _coerce_string_list(normalized_item.get("reason_codes"))
-
-    source_key = str(normalized_item.get("source_key") or "").strip()
-    if not source_key:
-        source_key = _stable_id(
-            "evidence",
-            normalized_item.get("source_kind"),
-            normalized_item.get("observed_at"),
-            *fallback_source_key_parts,
-            normalized_item.get("reason_codes"),
-        )
-    normalized_item["source_key"] = source_key
-
-    severity = _normalize_evidence_severity(normalized_item.get("severity"))
-    normalized_item["severity"] = severity
-
-    confidence = _to_float(normalized_item.get("confidence"))
-    if confidence is not None:
-        normalized_item["confidence"] = min(max(float(confidence), 0.0), 1.0)
-
-    freshness_sec = normalized_item.get("freshness_sec")
-    freshness_value = None
-    if freshness_sec is not None:
-        parsed = _to_float(freshness_sec)
-        if parsed is not None:
-            freshness_value = max(int(parsed), 0)
-    if freshness_value is None:
-        freshness_value = _derive_evidence_freshness_sec(
-            normalized_item.get("observed_at"),
-            snapshot_as_of,
-        )
-    if freshness_value is not None:
-        normalized_item["freshness_sec"] = freshness_value
-
-    return normalized_item
 
 
 def _derive_evidence_items_from_row(row: dict[str, object]) -> list[dict[str, object]]:
@@ -1870,607 +1217,6 @@ def _decrement_leg_bucket(open_legs: dict[str, int], preferred: str) -> None:
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _parse_daily_time(raw: str | None) -> dt_time | None:
-    if not raw:
-        return None
-    value = raw.strip()
-    if not value:
-        return None
-    for fmt in ("%H:%M", "%H:%M:%S"):
-        try:
-            parsed = datetime.strptime(value, fmt)
-            return dt_time(parsed.hour, parsed.minute, parsed.second)
-        except ValueError:
-            continue
-    return None
-
-
-def _resolve_tz(raw: str | None, fallback: str) -> timezone:
-    name = raw or fallback or "UTC"
-    try:
-        return ZoneInfo(name)
-    except Exception:
-        return timezone.utc
-
-
-def _next_daily_run(now_utc: datetime, target: dt_time, tzinfo: timezone) -> datetime:
-    local_now = now_utc.astimezone(tzinfo)
-    target_local = local_now.replace(
-        hour=target.hour,
-        minute=target.minute,
-        second=target.second,
-        microsecond=0,
-    )
-    if target_local <= local_now:
-        target_local = target_local + timedelta(days=1)
-    return target_local.astimezone(timezone.utc)
-
-
-def _parse_date_bound(raw: str, bound: str) -> datetime | None:
-    if not raw:
-        return None
-    raw = raw.strip()
-    if not raw:
-        return None
-    try:
-        if "T" not in raw and " " not in raw:
-            day = datetime.fromisoformat(raw).date()
-            if bound == "end":
-                return datetime.combine(day, datetime.max.time())
-            return datetime.combine(day, datetime.min.time())
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    return _normalize_datetime(parsed)
-
-
-def _parse_iso_datetime(value: object) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return _normalize_datetime(value)
-    raw = str(value).strip()
-    if not raw:
-        return None
-    try:
-        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return _normalize_datetime(parsed)
-
-
-def _isoformat_utc(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    return value.isoformat() + "Z"
-
-
-def _load_news_bundle(
-    session,
-    *,
-    from_ts: datetime | None,
-    to_ts: datetime | None,
-    limit: int,
-    preferred_models: list[str],
-) -> dict[str, object]:
-    item_rows = load_news_items(
-        session,
-        limit=limit,
-        published_from=_isoformat_utc(from_ts),
-        published_to=_isoformat_utc(to_ts),
-    )
-    news_ids = [str(item.get("news_id") or "").strip() for item in item_rows if item.get("news_id")]
-    entity_links = load_news_entity_links(session, news_ids=news_ids, limit=max(limit * 10, 1000))
-    tag_rows = load_news_item_tags(session, news_ids=news_ids, limit=max(limit * 10, 1000))
-    score_rows = load_news_impact_scores(session, news_ids=news_ids, limit=max(limit * 10, 1000))
-    primary_scores = load_primary_news_scores(
-        session,
-        news_ids=news_ids,
-        preferred_models=preferred_models,
-    )
-    signal_links = load_news_signal_links(session, news_ids=news_ids, limit=max(limit * 10, 1000))
-
-    entity_by_news: dict[str, list[dict[str, object]]] = {}
-    tickers_by_news: dict[str, set[str]] = {}
-    for row in entity_links:
-        news_id = str(row.get("news_id") or "").strip()
-        if not news_id:
-            continue
-        entity_by_news.setdefault(news_id, []).append(row)
-        ticker_value = str(row.get("ticker") or row.get("entity_id") or "").strip().upper()
-        if ticker_value:
-            tickers_by_news.setdefault(news_id, set()).add(ticker_value)
-
-    tags_by_news: dict[str, list[str]] = {}
-    for row in tag_rows:
-        news_id = str(row.get("news_id") or "").strip()
-        tag_code = str(row.get("tag_code") or "").strip()
-        if not news_id or not tag_code:
-            continue
-        tags_by_news.setdefault(news_id, []).append(tag_code)
-
-    model_scores_by_news: dict[str, list[dict[str, object]]] = {}
-    for row in score_rows:
-        news_id = str(row.get("news_id") or "").strip()
-        if not news_id:
-            continue
-        model_scores_by_news.setdefault(news_id, []).append(row)
-
-    signal_links_by_news: dict[str, list[dict[str, object]]] = {}
-    for row in signal_links:
-        news_id = str(row.get("news_id") or "").strip()
-        if not news_id:
-            continue
-        signal_links_by_news.setdefault(news_id, []).append(row)
-
-    return {
-        "items": item_rows,
-        "entity_by_news": entity_by_news,
-        "tickers_by_news": tickers_by_news,
-        "tags_by_news": tags_by_news,
-        "model_scores_by_news": model_scores_by_news,
-        "primary_scores": primary_scores,
-        "signal_links_by_news": signal_links_by_news,
-    }
-
-
-def _build_news_feed_events(
-    *,
-    bundle: dict[str, object],
-    severity_filter: str | None,
-    ticker_filter: str | None,
-    entity_filter: str | None,
-    from_ts: datetime | None,
-    to_ts: datetime | None,
-) -> list[dict[str, object]]:
-    items = bundle.get("items")
-    if not isinstance(items, list):
-        return []
-
-    entity_by_news = bundle.get("entity_by_news") if isinstance(bundle.get("entity_by_news"), dict) else {}
-    tickers_by_news = bundle.get("tickers_by_news") if isinstance(bundle.get("tickers_by_news"), dict) else {}
-    tags_by_news = bundle.get("tags_by_news") if isinstance(bundle.get("tags_by_news"), dict) else {}
-    model_scores_by_news = (
-        bundle.get("model_scores_by_news") if isinstance(bundle.get("model_scores_by_news"), dict) else {}
-    )
-    primary_scores = bundle.get("primary_scores") if isinstance(bundle.get("primary_scores"), dict) else {}
-    signal_links_by_news = (
-        bundle.get("signal_links_by_news") if isinstance(bundle.get("signal_links_by_news"), dict) else {}
-    )
-
-    events: list[dict[str, object]] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        news_id = str(item.get("news_id") or "").strip()
-        if not news_id:
-            continue
-        published_at_raw = str(item.get("published_at") or "").strip()
-        published_at = _parse_iso_datetime(published_at_raw)
-        if published_at is None:
-            continue
-        if from_ts is not None and published_at < from_ts:
-            continue
-        if to_ts is not None and published_at > to_ts:
-            continue
-
-        primary_score = primary_scores.get(news_id) if isinstance(primary_scores, dict) else None
-        impact_score = float(primary_score.get("impact_score") or 0.0) if isinstance(primary_score, dict) else 0.0
-        severity = impact_to_severity(impact_score)
-        if severity_filter and severity != severity_filter:
-            continue
-
-        row_tickers_raw = tickers_by_news.get(news_id, set())
-        row_tickers = (
-            row_tickers_raw
-            if isinstance(row_tickers_raw, set)
-            else {str(value).strip().upper() for value in row_tickers_raw if str(value).strip()}
-        )
-        if ticker_filter and ticker_filter not in row_tickers:
-            continue
-
-        entity_rows = entity_by_news.get(news_id, [])
-        if entity_filter:
-            matched_entity = any(
-                str(entity.get("entity_id") or "").strip() == entity_filter
-                for entity in entity_rows
-                if isinstance(entity, dict)
-            )
-            if not matched_entity:
-                continue
-
-        title = str(item.get("title") or "").strip() or "news"
-        summary = str(item.get("content") or "").strip()
-        if summary:
-            summary = summary[:300]
-        else:
-            direction = str((primary_score or {}).get("direction") or "neutral")
-            summary = f"model:{direction}"
-        event_id = _stable_id("news", news_id, published_at_raw, severity, title, summary, length=20)
-        signal_links = signal_links_by_news.get(news_id, [])
-        signal_refs = [
-            {
-                "signal_id": link.get("signal_id"),
-                "decision_id": link.get("decision_id"),
-                "link_type": link.get("link_type"),
-                "gate_action": link.get("gate_action"),
-            }
-            for link in signal_links
-            if isinstance(link, dict)
-        ]
-        decision_id = next(
-            (
-                str(link.get("decision_id") or "").strip()
-                for link in signal_links
-                if isinstance(link, dict) and str(link.get("decision_id") or "").strip()
-            ),
-            None,
-        )
-
-        events.append(
-            {
-                "news_event_id": event_id,
-                "news_id": news_id,
-                "published_at": published_at_raw,
-                "ingested_at": item.get("ingested_at"),
-                "source": item.get("source"),
-                "language": item.get("language"),
-                "url": item.get("url"),
-                "severity": severity,
-                "headline": title,
-                "summary": summary,
-                "headline_count": 1,
-                "decision_ref": {"decision_id": decision_id},
-                "entity_links": [
-                    {
-                        "entity_type": entity.get("entity_type"),
-                        "entity_id": entity.get("entity_id"),
-                        "ticker": entity.get("ticker"),
-                    }
-                    for entity in entity_rows
-                    if isinstance(entity, dict)
-                ],
-                "tags": tags_by_news.get(news_id, []),
-                "model_scores": model_scores_by_news.get(news_id, []),
-                "signal_refs": signal_refs,
-            }
-        )
-    events.sort(key=lambda row: str(row.get("published_at") or ""), reverse=True)
-    return events
-
-
-def _select_primary_model_score(
-    model_scores: list[dict[str, object]],
-    preferred_models: list[str],
-) -> dict[str, object] | None:
-    for model_name in preferred_models:
-        selected = next(
-            (
-                score
-                for score in model_scores
-                if isinstance(score, dict) and str(score.get("model_id") or "").strip() == model_name
-            ),
-            None,
-        )
-        if selected is not None:
-            return selected
-    return next((score for score in model_scores if isinstance(score, dict)), None)
-
-
-def _build_news_feed_events_from_event_layer(
-    session,
-    *,
-    severity_filter: str | None,
-    ticker_filter: str | None,
-    entity_filter: str | None,
-    from_ts: datetime | None,
-    to_ts: datetime | None,
-    limit: int,
-    preferred_models: list[str],
-) -> list[dict[str, object]]:
-    event_rows = load_news_events(
-        session,
-        event_status=None,
-        published_from=_isoformat_utc(from_ts),
-        published_to=_isoformat_utc(to_ts),
-        limit=max(limit, 200),
-    )
-    if not event_rows:
-        return []
-
-    event_ids = [str(row.get("event_id") or "").strip() for row in event_rows if row.get("event_id")]
-    if not event_ids:
-        return []
-    event_item_rows = load_news_event_items(
-        session,
-        event_ids=event_ids,
-        limit=max(len(event_ids) * 30, 1000),
-    )
-    event_to_news_ids: dict[str, list[str]] = {}
-    for row in event_item_rows:
-        if not isinstance(row, dict):
-            continue
-        event_id = str(row.get("event_id") or "").strip()
-        news_id = str(row.get("news_id") or "").strip()
-        if not event_id or not news_id:
-            continue
-        event_to_news_ids.setdefault(event_id, []).append(news_id)
-
-    news_ids = sorted(
-        {
-            news_id
-            for values in event_to_news_ids.values()
-            for news_id in values
-            if isinstance(news_id, str) and news_id
-        }
-    )
-    news_by_id: dict[str, dict[str, object]] = {}
-    for row in load_news_items_by_ids(session, news_ids):
-        if not isinstance(row, dict):
-            continue
-        news_id = str(row.get("news_id") or "").strip()
-        if news_id:
-            news_by_id[news_id] = row
-
-    entity_links = load_news_entity_links(session, news_ids=news_ids, limit=max(len(news_ids) * 10, 1000))
-    tags = load_news_item_tags(session, news_ids=news_ids, limit=max(len(news_ids) * 10, 1000))
-    signal_links = load_news_signal_links(session, event_ids=event_ids, limit=max(len(event_ids) * 10, 1000))
-    score_rows = load_news_impact_scores(
-        session,
-        target_level="event",
-        target_ids=event_ids,
-        limit=max(len(event_ids) * 10, 1000),
-    )
-    labels = load_news_labels(session, target_level="event", target_ids=event_ids, limit=max(len(event_ids) * 5, 500))
-    llm_rows = load_news_llm_runs(session, target_level="event", limit=max(len(event_ids) * 10, 1000))
-
-    entities_by_news: dict[str, list[dict[str, object]]] = {}
-    for row in entity_links:
-        news_id = str(row.get("news_id") or "").strip()
-        if not news_id:
-            continue
-        entities_by_news.setdefault(news_id, []).append(row)
-
-    tags_by_news: dict[str, list[str]] = {}
-    for row in tags:
-        news_id = str(row.get("news_id") or "").strip()
-        tag_code = str(row.get("tag_code") or "").strip()
-        if not news_id or not tag_code:
-            continue
-        tags_by_news.setdefault(news_id, []).append(tag_code)
-
-    scores_by_event: dict[str, list[dict[str, object]]] = {}
-    for row in score_rows:
-        event_id = str(row.get("target_id") or "").strip()
-        if not event_id:
-            continue
-        scores_by_event.setdefault(event_id, []).append(row)
-
-    signal_refs_by_event: dict[str, list[dict[str, object]]] = {}
-    for row in signal_links:
-        event_id = str(row.get("event_id") or "").strip()
-        if not event_id:
-            continue
-        signal_refs_by_event.setdefault(event_id, []).append(
-            {
-                "signal_id": row.get("signal_id"),
-                "decision_id": row.get("decision_id"),
-                "link_type": row.get("link_type"),
-                "gate_action": row.get("gate_action"),
-            }
-        )
-
-    label_direction_by_event: dict[str, str] = {}
-    for row in labels:
-        event_id = str(row.get("target_id") or "").strip()
-        direction = str(row.get("direction") or "").strip().lower()
-        if not event_id or direction not in {"positive", "negative", "neutral", "uncertain"}:
-            continue
-        label_direction_by_event.setdefault(event_id, direction)
-    llm_status_by_event: dict[str, str] = {}
-    for row in llm_rows:
-        event_id = str(row.get("target_id") or "").strip()
-        if not event_id or event_id not in event_ids:
-            continue
-        status = str(row.get("status") or "").strip().lower()
-        if not status:
-            continue
-        llm_status_by_event.setdefault(event_id, status)
-
-    events: list[dict[str, object]] = []
-    for event_row in event_rows:
-        event_id = str(event_row.get("event_id") or "").strip()
-        if not event_id:
-            continue
-        linked_news_ids = event_to_news_ids.get(event_id, [])
-        first_news = next((news_by_id.get(news_id) for news_id in linked_news_ids if news_by_id.get(news_id)), None)
-        event_entities: list[dict[str, object]] = []
-        seen_entity_keys: set[str] = set()
-        event_tags: set[str] = set()
-        event_tickers: set[str] = set()
-        for news_id in linked_news_ids:
-            for entity in entities_by_news.get(news_id, []):
-                if not isinstance(entity, dict):
-                    continue
-                entity_type = str(entity.get("entity_type") or "").strip()
-                entity_id_value = str(entity.get("entity_id") or "").strip()
-                ticker = str(entity.get("ticker") or entity_id_value).strip().upper()
-                if ticker:
-                    event_tickers.add(ticker)
-                entity_key = f"{entity_type}|{entity_id_value}|{ticker}"
-                if entity_key in seen_entity_keys:
-                    continue
-                seen_entity_keys.add(entity_key)
-                event_entities.append(
-                    {
-                        "entity_type": entity_type or "instrument",
-                        "entity_id": entity_id_value or ticker,
-                        "ticker": ticker or None,
-                    }
-                )
-            for tag_code in tags_by_news.get(news_id, []):
-                if tag_code:
-                    event_tags.add(str(tag_code))
-
-        if ticker_filter and ticker_filter not in event_tickers:
-            continue
-        if entity_filter:
-            if not any(str(entity.get("entity_id") or "").strip() == entity_filter for entity in event_entities):
-                continue
-
-        model_scores = scores_by_event.get(event_id, [])
-        primary_score = _select_primary_model_score(model_scores, preferred_models)
-        impact_score = float(primary_score.get("impact_score") or 0.0) if isinstance(primary_score, dict) else 0.0
-        severity = impact_to_severity(impact_score)
-        if severity_filter and severity != severity_filter:
-            continue
-
-        decision_id = next(
-            (
-                str(link.get("decision_id") or "").strip()
-                for link in signal_refs_by_event.get(event_id, [])
-                if isinstance(link, dict) and str(link.get("decision_id") or "").strip()
-            ),
-            None,
-        )
-        headline = str(event_row.get("canonical_summary") or "").strip()
-        if not headline:
-            headline = str((first_news or {}).get("title") or event_id).strip() or event_id
-        summary = str(event_row.get("canonical_mechanism") or "").strip()
-        if not summary:
-            raw_summary = str((first_news or {}).get("content") or "").strip()
-            summary = raw_summary[:300] if raw_summary else f"event:{event_id}"
-
-        result_row = {
-            "news_event_id": event_id,
-            "news_id": str(linked_news_ids[0]) if linked_news_ids else event_id,
-            "published_at": event_row.get("event_first_published_at_utc"),
-            "ingested_at": event_row.get("event_first_ingested_at_utc"),
-            "source": (first_news or {}).get("source") or "event_cluster",
-            "language": (first_news or {}).get("language"),
-            "url": (first_news or {}).get("url"),
-            "severity": severity,
-            "headline": headline,
-            "summary": summary,
-            "headline_count": len(linked_news_ids),
-            "decision_ref": {"decision_id": decision_id},
-            "entity_links": event_entities,
-            "tags": sorted(event_tags),
-            "model_scores": model_scores,
-            "signal_refs": signal_refs_by_event.get(event_id, []),
-            "event_status": event_row.get("event_status"),
-            "cluster_version": event_row.get("cluster_version"),
-            "label_direction": label_direction_by_event.get(event_id),
-            "llm_status": llm_status_by_event.get(event_id),
-        }
-        events.append(result_row)
-
-    events.sort(key=lambda row: str(row.get("published_at") or ""), reverse=True)
-    if limit > 0:
-        return events[:limit]
-    return events
-def _future_scale_from_raw(path, secid: str) -> float:
-    if not path.exists():
-        return 1.0
-    try:
-        futures_df = pd.read_csv(path)
-    except Exception:
-        return 1.0
-    if futures_df.empty or "SECID" not in futures_df.columns:
-        return 1.0
-    rows = futures_df[futures_df["SECID"].astype(str) == str(secid)]
-    if rows.empty:
-        return 1.0
-    row = rows.iloc[0]
-    lot = pd.to_numeric(row.get("LOTVOLUME"), errors="coerce")
-    multiplier = pd.to_numeric(row.get("MULTIPLIER"), errors="coerce")
-    lot_value = float(lot) if pd.notna(lot) and float(lot) > 0 else 1.0
-    mult_value = float(multiplier) if pd.notna(multiplier) and float(multiplier) > 0 else 1.0
-    return lot_value * mult_value
-
-
-def _read_cache(path, ttl_minutes: int) -> list[dict[str, object]] | None:
-    if not path.exists():
-        return None
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-    generated_at = payload.get("generated_at")
-    if not generated_at:
-        return None
-    try:
-        generated_dt = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if datetime.now(timezone.utc) - generated_dt > timedelta(minutes=ttl_minutes):
-        return None
-    series = payload.get("series")
-    if not isinstance(series, list):
-        return None
-    if series and isinstance(series[0], dict):
-        if not {
-            "zscore",
-            "z_entry",
-            "z_exit",
-            "entry_flag",
-            "exit_flag",
-            "entry_cycle",
-            "exit_cycle",
-            "cycle_return_pct",
-        }.issubset(series[0].keys()):
-            return None
-    if _contains_nan(series):
-        return None
-    return series
-
-
-def _write_cache(path, series: list[dict[str, object]]) -> None:
-    payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "series": series,
-    }
-    path.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
-
-
-def _apply_query_filters(df: pd.DataFrame, args) -> pd.DataFrame:
-    if df.empty:
-        return df
-    filters = {
-        "strategy_type": args.get("strategy_type"),
-        "primary_instrument": args.get("primary_instrument"),
-        "risk_state": args.get("risk_state"),
-        "news_severity": args.get("news_severity"),
-    }
-    for column, value in filters.items():
-        if value:
-            df = df[df[column] == value]
-    created_from = args.get("created_from")
-    created_to = args.get("created_to")
-    if created_from or created_to:
-        df = df.copy()
-        df["created_at_parsed"] = pd.to_datetime(df.get("created_at"), errors="coerce")
-        if created_from:
-            df = df[df["created_at_parsed"] >= pd.to_datetime(created_from, errors="coerce")]
-        if created_to:
-            df = df[df["created_at_parsed"] <= pd.to_datetime(created_to, errors="coerce")]
-        df = df.drop(columns=["created_at_parsed"])
-    return df
-
-
-DECISION_STYLE = [
-    {"if": {"column_id": "decision_id"}, "fontFamily": "monospace"},
-    {"if": {"column_id": "action", "filter_query": "{action} = 'approve'"}, "color": "#116329"},
-    {"if": {"column_id": "action", "filter_query": "{action} = 'reject'"}, "color": "#9b1c1c"},
-    {"if": {"column_id": "risk_state", "filter_query": "{risk_state} = 'green'"}, "color": "#116329"},
-    {"if": {"column_id": "risk_state", "filter_query": "{risk_state} = 'yellow'"}, "color": "#a16207"},
-    {"if": {"column_id": "risk_state", "filter_query": "{risk_state} = 'red'"}, "color": "#9b1c1c"},
-    {"if": {"column_id": "news_severity", "filter_query": "{news_severity} = 'high'"}, "color": "#9b1c1c"},
-    {"if": {"column_id": "news_severity", "filter_query": "{news_severity} = 'critical'"}, "color": "#7f1d1d"},
-]
-
 
 def create_app(settings: AppSettings) -> Dash:
     paths = resolve_paths(settings)
@@ -4061,6 +2807,11 @@ def create_app(settings: AppSettings) -> Dash:
         started_at = datetime.now(timezone.utc)
         model_id = str(request.args.get("model_id") or settings.news_models.primary_model).strip()
         horizon = str(request.args.get("horizon") or "1d").strip().lower()
+        target_mode = str(request.args.get("target_mode") or settings.news_models.target_mode_default).strip().lower()
+        two_stage_for_v2_raw = _parse_bool(request.args.get("two_stage_for_v2"))
+        two_stage_for_v2 = True if two_stage_for_v2_raw is None else bool(two_stage_for_v2_raw)
+        utility_cost_per_trade = max(_parse_float(request.args.get("utility_cost_per_trade"), 0.00075), 0.0)
+        utility_bootstrap_iters = max(_parse_int(request.args.get("utility_bootstrap_iters"), 2000), 0)
         epsilon = max(_parse_float(request.args.get("epsilon"), settings.news_models.epsilon_default), 0.0)
         folds = max(_parse_int(request.args.get("folds"), 5), 1)
         embargo_minutes = max(_parse_int(request.args.get("embargo_minutes"), 0), 0)
@@ -4096,6 +2847,10 @@ def create_app(settings: AppSettings) -> Dash:
                 walk_forward=walk_forward,
                 calibration_mode=calibration_mode,
                 calibration_min_train_samples=settings.news_models.calibration_min_train_samples,
+                target_mode=target_mode,
+                two_stage_for_v2=two_stage_for_v2,
+                utility_cost_per_trade=utility_cost_per_trade,
+                utility_bootstrap_iters=utility_bootstrap_iters,
             )
             run_id = _stable_id(
                 "news-bt",
@@ -4125,6 +2880,16 @@ def create_app(settings: AppSettings) -> Dash:
     def news_models_compare_v2_api():
         started_at = datetime.now(timezone.utc)
         horizon = str(request.args.get("horizon") or "1d").strip().lower()
+        target_mode = str(request.args.get("target_mode") or settings.news_models.target_mode_default).strip().lower()
+        two_stage_for_v2_raw = _parse_bool(request.args.get("two_stage_for_v2"))
+        two_stage_for_v2 = True if two_stage_for_v2_raw is None else bool(two_stage_for_v2_raw)
+        utility_cost_per_trade = max(_parse_float(request.args.get("utility_cost_per_trade"), 0.00075), 0.0)
+        utility_bootstrap_iters = max(_parse_int(request.args.get("utility_bootstrap_iters"), 2000), 0)
+        promotion_utility_min_trades = max(_parse_int(request.args.get("promotion_utility_min_trades"), 30), 0)
+        promotion_utility_max_drawdown = max(
+            _parse_float(request.args.get("promotion_utility_max_drawdown"), 0.20),
+            0.0,
+        )
         epsilon = max(_parse_float(request.args.get("epsilon"), settings.news_models.epsilon_default), 0.0)
         folds = max(_parse_int(request.args.get("folds"), 5), 1)
         embargo_minutes = max(_parse_int(request.args.get("embargo_minutes"), 0), 0)
@@ -4183,6 +2948,12 @@ def create_app(settings: AppSettings) -> Dash:
                 walk_forward=walk_forward,
                 calibration_mode=calibration_mode,
                 calibration_min_train_samples=settings.news_models.calibration_min_train_samples,
+                target_mode=target_mode,
+                two_stage_for_v2=two_stage_for_v2,
+                utility_cost_per_trade=utility_cost_per_trade,
+                utility_bootstrap_iters=utility_bootstrap_iters,
+                promotion_utility_min_trades=promotion_utility_min_trades,
+                promotion_utility_max_drawdown=promotion_utility_max_drawdown,
                 promotion_min_accuracy=promotion_min_accuracy,
                 promotion_min_coverage=promotion_min_coverage,
                 promotion_max_brier=promotion_max_brier,

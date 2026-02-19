@@ -229,6 +229,56 @@ def _ensure_news_impact_scores_columns(engine) -> None:
             conn.execute(text(statement))
 
 
+def _ensure_event_target_v2_columns(engine) -> None:
+    inspector = inspect(engine)
+    if "event_target_v2" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("event_target_v2")}
+    statements: list[str] = []
+    if "t_event" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN t_event DATETIME")
+    if "event_time_source" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN event_time_source VARCHAR")
+    if "r_post" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN r_post FLOAT")
+    if "r_pre" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN r_pre FLOAT")
+    if "sigma_hat" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN sigma_hat FLOAT")
+    if "z_post" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN z_post FLOAT")
+    if "z_pre" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN z_pre FLOAT")
+    if "z_hold" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN z_hold FLOAT")
+    if "z_big" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN z_big FLOAT")
+    if "impact_bin" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN impact_bin INTEGER")
+    if "impact_score" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN impact_score FLOAT")
+    if "overlap_count" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN overlap_count INTEGER DEFAULT 0")
+    if "echo_score" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN echo_score FLOAT")
+    if "premove_penalty" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN premove_penalty FLOAT")
+    if "confidence" not in columns:
+        statements.append("ALTER TABLE event_target_v2 ADD COLUMN confidence FLOAT")
+    statements.append("CREATE INDEX IF NOT EXISTS ix_event_target_v2_t_event ON event_target_v2 (t_event)")
+    statements.append(
+        "CREATE INDEX IF NOT EXISTS ix_event_target_v2_event_time_source ON event_target_v2 (event_time_source)"
+    )
+    statements.append("CREATE INDEX IF NOT EXISTS ix_event_target_v2_sigma_hat ON event_target_v2 (sigma_hat)")
+    statements.append("CREATE INDEX IF NOT EXISTS ix_event_target_v2_z_post ON event_target_v2 (z_post)")
+    statements.append("CREATE INDEX IF NOT EXISTS ix_event_target_v2_impact_bin ON event_target_v2 (impact_bin)")
+    statements.append("CREATE INDEX IF NOT EXISTS ix_event_target_v2_impact_score ON event_target_v2 (impact_score)")
+    statements.append("CREATE INDEX IF NOT EXISTS ix_event_target_v2_confidence ON event_target_v2 (confidence)")
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
 def init_db(engine) -> None:
     Base.metadata.create_all(engine)
     _ensure_signal_executions_columns(engine)
@@ -238,6 +288,7 @@ def init_db(engine) -> None:
     _normalize_signal_execution_action_values(engine)
     _ensure_news_signal_links_columns(engine)
     _ensure_news_impact_scores_columns(engine)
+    _ensure_event_target_v2_columns(engine)
 
 
 def _ensure_sqlite_parent_dir(url: str) -> None:

@@ -149,6 +149,15 @@ def _format_gdelt_datetime(value: datetime) -> str:
     return normalized.strftime("%Y%m%d%H%M%S")
 
 
+def _format_iso_datetime(value: datetime) -> str:
+    normalized = value
+    if normalized.tzinfo is None:
+        normalized = normalized.replace(tzinfo=timezone.utc)
+    else:
+        normalized = normalized.astimezone(timezone.utc)
+    return normalized.isoformat().replace("+00:00", "Z")
+
+
 def _respect_gdelt_rate_limit(min_interval_sec: float) -> None:
     global _LAST_GDELT_REQUEST_AT
     now = time.monotonic()
@@ -233,6 +242,96 @@ def fetch_gdelt_news(
                 "source": article.get("domain"),
             },
             source="gdelt",
+        )
+        if normalized is None:
+            continue
+        collected.append(normalized)
+    return collected
+
+
+def fetch_newsapi_news(
+    *,
+    query: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    api_key: str,
+    base_url: str = "https://newsapi.org/v2/everything",
+    page: int = 1,
+    page_size: int = 100,
+    timeout_sec: int = 30,
+    language: str | None = "en",
+    sort_by: str = "publishedAt",
+    domains: Iterable[str] | None = None,
+) -> list[dict[str, object]]:
+    query_value = str(query or "").strip()
+    key_value = str(api_key or "").strip()
+    if not query_value or not key_value:
+        return []
+
+    url = str(base_url or "").strip() or "https://newsapi.org/v2/everything"
+    effective_page = max(int(page), 1)
+    effective_page_size = min(max(int(page_size), 1), 100)
+    params: dict[str, str] = {
+        "q": query_value,
+        "from": _format_iso_datetime(start_dt),
+        "to": _format_iso_datetime(end_dt),
+        "sortBy": str(sort_by or "publishedAt"),
+        "pageSize": str(effective_page_size),
+        "page": str(effective_page),
+    }
+    language_value = str(language or "").strip()
+    if language_value:
+        params["language"] = language_value
+    domain_values = [str(item or "").strip() for item in (domains or []) if str(item or "").strip()]
+    if domain_values:
+        params["domains"] = ",".join(domain_values)
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            headers={"X-Api-Key": key_value},
+            timeout=max(int(timeout_sec), 5),
+        )
+    except requests.RequestException:
+        return []
+
+    if response.status_code != 200:
+        return []
+
+    try:
+        payload = response.json()
+    except ValueError:
+        return []
+
+    if not isinstance(payload, dict):
+        return []
+    if str(payload.get("status") or "").strip().lower() != "ok":
+        return []
+
+    articles = payload.get("articles")
+    if not isinstance(articles, list):
+        return []
+
+    collected: list[dict[str, object]] = []
+    for article in articles:
+        if not isinstance(article, dict):
+            continue
+        source_payload = article.get("source") if isinstance(article.get("source"), dict) else {}
+        source_name = str(source_payload.get("name") or source_payload.get("id") or "").strip()
+        source_label = f"newsapi:{source_name}" if source_name else "newsapi"
+        normalized = normalize_news_record(
+            {
+                "title": article.get("title"),
+                "summary": article.get("description"),
+                "description": article.get("description"),
+                "content": article.get("content"),
+                "published": article.get("publishedAt"),
+                "link": article.get("url"),
+                "language": article.get("language"),
+                "source": source_name or "newsapi",
+            },
+            source=source_label,
         )
         if normalized is None:
             continue

@@ -7,7 +7,12 @@ from sqlalchemy import inspect
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
+    load_event_factor_scores_v2,
     load_event_market_reactions,
+    load_event_target_v2,
+    load_exp_return_bucket_stats_v2,
+    load_gate_run_v2,
+    load_model_pred_v2,
     load_news_annotations,
     load_news_event_links,
     load_news_event_items,
@@ -20,7 +25,12 @@ from moex_carry.storage.repositories import (
     load_news_model_eval_records,
     load_news_unmatched_gold,
     load_news_signal_links,
+    upsert_event_factor_scores_v2,
     upsert_event_market_reactions,
+    upsert_event_target_v2,
+    upsert_exp_return_bucket_stats_v2,
+    upsert_gate_run_v2,
+    upsert_model_pred_v2,
     upsert_news_annotations,
     upsert_news_event_links,
     upsert_news_event_items,
@@ -57,6 +67,11 @@ def test_stage_a_storage_models_and_columns(tmp_path):
     assert "news_llm_runs" in table_names
     assert "news_model_eval_records" in table_names
     assert "event_market_reactions" in table_names
+    assert "event_target_v2" in table_names
+    assert "exp_return_bucket_stats_v2" in table_names
+    assert "event_factor_score_v2" in table_names
+    assert "model_pred_v2" in table_names
+    assert "gate_run_v2" in table_names
     assert "news_annotations" in table_names
 
     impact_columns = {column["name"] for column in inspector.get_columns("news_impact_scores")}
@@ -65,6 +80,17 @@ def test_stage_a_storage_models_and_columns(tmp_path):
 
     link_columns = {column["name"] for column in inspector.get_columns("news_signal_links")}
     assert "event_id" in link_columns
+    target_v2_columns = {column["name"] for column in inspector.get_columns("event_target_v2")}
+    assert "t_event" in target_v2_columns
+    assert "event_time_source" in target_v2_columns
+    assert "r_post" in target_v2_columns
+    assert "r_pre" in target_v2_columns
+    assert "sigma_hat" in target_v2_columns
+    assert "z_post" in target_v2_columns
+    assert "z_pre" in target_v2_columns
+    assert "impact_bin" in target_v2_columns
+    assert "impact_score" in target_v2_columns
+    assert "confidence" in target_v2_columns
 
     session_factory = create_session_factory(engine)
     now = datetime(2026, 1, 10, 11, 0, 0)
@@ -287,6 +313,103 @@ def test_stage_a_storage_models_and_columns(tmp_path):
                 }
             ],
         )
+        upsert_event_target_v2(
+            session,
+            [
+                {
+                    "event_id": "evt-gold-1",
+                    "symbol": "GOLD",
+                    "horizon": "1h",
+                    "t_pub": now.isoformat() + "Z",
+                    "t_anchor": now.isoformat() + "Z",
+                    "t0": now.isoformat() + "Z",
+                    "t1": now.isoformat() + "Z",
+                    "p0": 100.0,
+                    "p1": 101.0,
+                    "r_raw": 0.00995,
+                    "r_exp": 0.0010,
+                    "ar": 0.00895,
+                    "sigma_pre": 0.0045,
+                    "label_v2": 1,
+                    "is_hi_conf": True,
+                    "leakage_postmove": False,
+                    "is_repost": False,
+                    "is_overlapped": False,
+                    "price_source": "mid",
+                }
+            ],
+        )
+        upsert_exp_return_bucket_stats_v2(
+            session,
+            [
+                {
+                    "symbol": "GOLD",
+                    "horizon": "1h",
+                    "bucket_b": 10,
+                    "bucket_v": 1,
+                    "bucket_s": 1,
+                    "lookback_start": now.isoformat() + "Z",
+                    "lookback_end": now.isoformat() + "Z",
+                    "n": 250,
+                    "mean_return": 0.0004,
+                    "median_return": 0.0002,
+                }
+            ],
+        )
+        upsert_event_factor_scores_v2(
+            session,
+            [
+                {
+                    "event_id": "evt-gold-1",
+                    "symbol": "GOLD",
+                    "factor_name": "SUPPLY",
+                    "p_entail_bull": 0.81,
+                    "p_entail_bear": 0.11,
+                    "factor_score": 0.70,
+                    "factor_conf": 0.81,
+                    "model_name": "nli-v2",
+                }
+            ],
+        )
+        upsert_model_pred_v2(
+            session,
+            [
+                {
+                    "run_id": "pred-run-1",
+                    "event_id": "evt-gold-1",
+                    "symbol": "GOLD",
+                    "horizon": "1h",
+                    "p_move": 0.77,
+                    "p_up_given_move": 0.72,
+                    "p_up": 0.55,
+                    "p_down": 0.22,
+                    "p_hold": 0.23,
+                    "decision": 1,
+                    "threshold_set_id": "default-v2",
+                    "model_version": "two-stage-v2",
+                    "is_calibrated": True,
+                }
+            ],
+        )
+        upsert_gate_run_v2(
+            session,
+            {
+                "run_id": "gate-run-1",
+                "symbol": "GOLD",
+                "horizon": "1h",
+                "period_start": now.isoformat() + "Z",
+                "period_end": now.isoformat() + "Z",
+                "market_pass": True,
+                "leakage_pass": True,
+                "supervised_pass_shadow": True,
+                "supervised_pass_prod": False,
+                "baseline_pass": True,
+                "utility_pass": True,
+                "overall_pass_prod": False,
+                "winner_model_version": "two-stage-v2",
+                "metrics_json": {"balanced_accuracy": 0.59},
+            },
+        )
 
         assert len(load_news_events(session, event_ids=["evt-gold-1"])) == 1
         assert len(load_news_event_items(session, event_ids=["evt-gold-1"])) == 1
@@ -301,6 +424,11 @@ def test_stage_a_storage_models_and_columns(tmp_path):
         assert len(load_news_signal_links(session, event_ids=["evt-gold-1"])) == 1
         assert len(load_event_market_reactions(session, event_ids=["evt-gold-1"])) == 1
         assert len(load_news_annotations(session, target_level="event", target_id="evt-gold-1")) == 1
+        assert len(load_event_target_v2(session, event_ids=["evt-gold-1"], horizon="1h")) == 1
+        assert len(load_exp_return_bucket_stats_v2(session, symbol="GOLD", horizon="1h")) == 1
+        assert len(load_event_factor_scores_v2(session, event_id="evt-gold-1", symbol="GOLD")) == 1
+        assert len(load_model_pred_v2(session, run_id="pred-run-1", symbol="GOLD", horizon="1h")) == 1
+        assert len(load_gate_run_v2(session, run_id="gate-run-1", symbol="GOLD", horizon="1h")) == 1
 
 
 def test_stage_a_news_impact_upsert_keeps_article_level_rows(tmp_path):
