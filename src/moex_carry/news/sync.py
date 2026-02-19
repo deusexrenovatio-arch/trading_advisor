@@ -17,7 +17,7 @@ from moex_carry.news.events import EventClusteringReport, cluster_news_events
 from moex_carry.news.ingestion import fetch_rss_news
 from moex_carry.news.inference import run_dual_model_inference_batch
 from moex_carry.news.llm_gateway import NewsLlmPassReport, run_news_llm_full_pass
-from moex_carry.news.linking import default_tag_rows, link_news_item
+from moex_carry.news.linking import default_tag_rows, link_news_item, text_supports_ticker
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
     load_news_items,
@@ -131,14 +131,23 @@ def sync_news_runtime(
         news_id = str(news_row.get("news_id") or "").strip()
         if not news_id:
             continue
+        title = str(news_row.get("title") or "")
+        content = str(news_row.get("content") or "")
         linking = link_news_item(
             news_id=news_id,
-            title=str(news_row.get("title") or ""),
-            content=str(news_row.get("content") or ""),
+            title=title,
+            content=content,
         )
         source_url = str(news_row.get("source") or "").strip()
         source_profile_ticker = source_profile_by_url.get(source_url)
+        supports_profile = False
         if source_profile_ticker:
+            supports_profile = text_supports_ticker(
+                ticker=source_profile_ticker,
+                title=title,
+                content=content,
+            )
+        if source_profile_ticker and supports_profile:
             primary_id = source_profile_ticker
             resolution_stage = "source_profile"
             confidence = max(linking.confidence, 0.95)
@@ -178,8 +187,8 @@ def sync_news_runtime(
         if should_run_inference:
             text = " ".join(
                 [
-                    str(news_row.get("title") or ""),
-                    str(news_row.get("content") or ""),
+                    title,
+                    content,
                 ]
             ).strip()
             if text:

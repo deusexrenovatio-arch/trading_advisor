@@ -11,6 +11,7 @@ Initial commodity set:
 `news_ingest.commodity_profiles` in `configs/default.yaml` defines:
 - commodity ticker
 - GDELT query for historical backfill
+- optional NewsAPI query for historical backfill (`newsapi_query`, falls back to `gdelt_query`)
 - RSS feeds for regular incremental flow
 - price source and symbol:
   - `BRN` -> yfinance `BZ=F`
@@ -37,6 +38,7 @@ Backfill worker (`news_backfill`):
 1. Split requested period into windows (`backfill_chunk_days`).
 2. For each commodity window:
    - Pull GDELT articles (rate-limited by `gdelt_min_request_interval_sec`).
+   - Optionally pull NewsAPI articles (`newsapi_enabled=true`) with hard daily budget (`newsapi_daily_limit`).
    - Upsert into `news_items`.
    - Create deterministic commodity links (`source_profile`) and taxonomy tags.
    - Optional model inference.
@@ -68,6 +70,12 @@ moex-carry news_backfill --config configs/default.yaml --from-date 2018-01-01 --
 Backfill with model scoring:
 ```bash
 moex-carry news_backfill --config configs/default.yaml --from-date 2018-01-01 --to-date 2026-02-16 --run-inference
+```
+
+Backfill with NewsAPI (100 req/day budget):
+```bash
+$env:NEWSAPI_API_KEY="<your_key>"
+moex-carry news_backfill --config configs/default.yaml --from-date 2026-01-01 --to-date 2026-02-19 --commodities BRN,GOLD,NG_US
 ```
 
 Run QC report only:

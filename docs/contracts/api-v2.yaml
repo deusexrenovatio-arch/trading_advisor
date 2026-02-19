@@ -628,6 +628,23 @@ paths:
           schema:
             type: string
         - in: query
+          name: target_mode
+          schema:
+            type: string
+            enum: [legacy, v2]
+        - in: query
+          name: two_stage_for_v2
+          schema:
+            type: boolean
+        - in: query
+          name: utility_cost_per_trade
+          schema:
+            type: number
+        - in: query
+          name: utility_bootstrap_iters
+          schema:
+            type: integer
+        - in: query
           name: promotion_min_accuracy
           schema:
             type: number
@@ -696,6 +713,31 @@ paths:
           name: calibration_mode
           schema:
             type: string
+        - in: query
+          name: target_mode
+          schema:
+            type: string
+            enum: [legacy, v2]
+        - in: query
+          name: two_stage_for_v2
+          schema:
+            type: boolean
+        - in: query
+          name: utility_cost_per_trade
+          schema:
+            type: number
+        - in: query
+          name: utility_bootstrap_iters
+          schema:
+            type: integer
+        - in: query
+          name: promotion_utility_min_trades
+          schema:
+            type: integer
+        - in: query
+          name: promotion_utility_max_drawdown
+          schema:
+            type: number
       responses:
         '200':
           description: Backtest report.

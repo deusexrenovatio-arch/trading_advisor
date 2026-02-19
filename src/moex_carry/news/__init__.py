@@ -20,7 +20,7 @@ from moex_carry.news.events import (
     cluster_news_events,
     compute_event_fragmentation_report,
 )
-from moex_carry.news.ingestion import fetch_rss_news, normalize_news_record
+from moex_carry.news.ingestion import fetch_newsapi_news, fetch_rss_news, normalize_news_record
 from moex_carry.news.inference import (
     apply_inference_runtime_limits,
     run_dual_model_inference,
@@ -40,6 +40,17 @@ from moex_carry.news.reaction import (
 )
 from moex_carry.news.research import compare_news_models, run_news_backtest
 from moex_carry.news.sync import NewsSyncSnapshot, run_news_sync_worker, sync_news_runtime
+from moex_carry.news.target_v2 import EventTargetV2BuildReport, rebuild_event_target_v2
+from moex_carry.news.gold_bootstrap import (
+    EventScoreBackfillReport,
+    HumanToGoldReport,
+    V2SilverBootstrapReport,
+    backfill_event_scores_for_gold,
+    bootstrap_silver_from_v2_targets,
+    promote_human_labels_to_gold,
+)
+from moex_carry.news.factor_autolabel import FactorAutolabelReport, run_factor_autolabel_v2
+from moex_carry.news.daily_cycle import DailySilverCycleReport, run_news_daily_silver_cycle
 
 __all__ = [
     "build_news_items_for_gate",
@@ -61,6 +72,7 @@ __all__ = [
     "cluster_news_events",
     "compute_event_fragmentation_report",
     "fetch_rss_news",
+    "fetch_newsapi_news",
     "normalize_news_record",
     "apply_inference_runtime_limits",
     "run_dual_model_inference",
@@ -76,6 +88,18 @@ __all__ = [
     "summarize_event_study",
     "compare_news_models",
     "run_news_backtest",
+    "EventTargetV2BuildReport",
+    "rebuild_event_target_v2",
+    "HumanToGoldReport",
+    "V2SilverBootstrapReport",
+    "EventScoreBackfillReport",
+    "promote_human_labels_to_gold",
+    "bootstrap_silver_from_v2_targets",
+    "backfill_event_scores_for_gold",
+    "FactorAutolabelReport",
+    "run_factor_autolabel_v2",
+    "DailySilverCycleReport",
+    "run_news_daily_silver_cycle",
     "NewsSyncSnapshot",
     "sync_news_runtime",
     "run_news_sync_worker",

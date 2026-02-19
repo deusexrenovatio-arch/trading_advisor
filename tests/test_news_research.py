@@ -380,3 +380,307 @@ def test_run_news_backtest_supports_5m_horizon(tmp_path):
         )
 
     assert report["protocol"]["horizon_minutes"] == 5
+
+
+def test_run_news_backtest_target_mode_v2_uses_event_target_rows(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    base = datetime(2025, 6, 1, 10, 0, 0)
+
+    with session_factory() as session:
+        for idx in range(3):
+            event_id = f"evt-v2-{idx+1}"
+            news_id = f"news-v2-{idx+1}"
+            t0 = base + timedelta(hours=idx * 2)
+            t1 = t0 + timedelta(hours=1)
+            direction = "up" if idx != 1 else "down"
+            label = 1 if direction == "up" else -1
+
+            session.add(
+                db_models.NewsEventModel(
+                    event_id=event_id,
+                    event_first_published_at_utc=t0,
+                    event_first_ingested_at_utc=t0,
+                    event_last_published_at_utc=t0,
+                    event_status="active",
+                    canonical_summary=f"event-{idx+1}",
+                    canonical_mechanism="scheduled_anchor|event_family=NG_STORAGE_EIA",
+                    cluster_version="det-v1",
+                    created_at=t0,
+                    updated_at=t0,
+                )
+            )
+            session.add(
+                db_models.NewsItemModel(
+                    news_id=news_id,
+                    source="fixture",
+                    url=f"https://example.com/{news_id}",
+                    title=f"v2 sample {idx+1}",
+                    content="sample",
+                    language="en",
+                    published_at=t0,
+                    ingested_at=t0,
+                    hash=f"hash-{news_id}",
+                )
+            )
+            session.add(
+                db_models.NewsEventItemModel(
+                    event_id=event_id,
+                    news_id=news_id,
+                    link_role="primary",
+                    similarity_score=1.0,
+                    added_at=t0,
+                )
+            )
+            session.add(
+                db_models.NewsLabelModel(
+                    label_id=f"lbl-v2-{idx+1}",
+                    target_level="event",
+                    target_id=event_id,
+                    commodity_json=["NG_US"],
+                    market_scope="futures",
+                    instrument_candidates_json=[],
+                    relevance=1.0,
+                    news_type_json=["NG_STORAGE_EIA"],
+                    direction="positive" if label > 0 else "negative",
+                    magnitude=0.8,
+                    lag_bucket="short",
+                    confidence=0.9,
+                    uncertainty_type="none",
+                    geo_scope="US",
+                    evidence_json={},
+                    label_source="rules",
+                    label_version="v1",
+                    model_version=None,
+                    prompt_version=None,
+                    created_at=t0,
+                )
+            )
+            session.add(
+                db_models.NewsImpactScoreModel(
+                    news_id=news_id,
+                    target_level=None,
+                    target_id=None,
+                    model_id="finbert",
+                    model_version="v1",
+                    direction=direction,
+                    prob_up=0.8 if direction == "up" else 0.1,
+                    prob_down=0.8 if direction == "down" else 0.1,
+                    prob_neutral=0.1,
+                    impact_score=0.7,
+                    calibrated=False,
+                    inference_ts=t0,
+                )
+            )
+            session.add(
+                db_models.EventTargetV2Model(
+                    event_id=event_id,
+                    symbol="NG_US",
+                    horizon="1h",
+                    t_pub=t0,
+                    t_anchor=t0,
+                    t0=t0,
+                    t1=t1,
+                    p0=100.0,
+                    p1=101.0 if label > 0 else 99.0,
+                    r_raw=0.01 if label > 0 else -0.01,
+                    r_exp=0.0,
+                    ar=0.01 if label > 0 else -0.01,
+                    sigma_pre=0.003,
+                    label_v2=label,
+                    is_hi_conf=True,
+                    leakage_postmove=False,
+                    is_repost=False,
+                    is_overlapped=False,
+                    price_source="mid",
+                    created_at=t0,
+                    updated_at=t0,
+                )
+            )
+        session.commit()
+
+        report = run_news_backtest(
+            session,
+            model_id="finbert",
+            horizon="1h",
+            period_from=base - timedelta(hours=1),
+            period_to=base + timedelta(hours=8),
+            epsilon=0.0005,
+            folds=2,
+            embargo_minutes=0,
+            walk_forward=True,
+            calibration_mode="none",
+            calibration_min_train_samples=1,
+            target_mode="v2",
+        )
+
+    assert report["protocol"]["target_mode"] == "v2"
+    assert report["protocol"]["decision_policy"] == "two_stage"
+    assert "utility" in report
+    assert "bootstrap_ci_95" in report["utility"]
+    assert int(report["sample_count"]) >= 1
+    assert float(report["metrics"]["accuracy"]) >= 0.0
+
+
+def test_compare_news_models_v2_exposes_utility_gate(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    base = datetime(2025, 7, 10, 9, 0, 0)
+
+    with session_factory() as session:
+        for idx in range(4):
+            event_id = f"evt-v2-cmp-{idx+1}"
+            news_id = f"news-v2-cmp-{idx+1}"
+            t0 = base + timedelta(hours=idx * 2)
+            t1 = t0 + timedelta(hours=1)
+            direction = "up" if idx % 2 == 0 else "down"
+            label = 1 if direction == "up" else -1
+
+            session.add(
+                db_models.NewsEventModel(
+                    event_id=event_id,
+                    event_first_published_at_utc=t0,
+                    event_first_ingested_at_utc=t0,
+                    event_last_published_at_utc=t0,
+                    event_status="active",
+                    canonical_summary=f"event-cmp-{idx+1}",
+                    canonical_mechanism="scheduled_anchor|event_family=NG_STORAGE_EIA",
+                    cluster_version="det-v1",
+                    created_at=t0,
+                    updated_at=t0,
+                )
+            )
+            session.add(
+                db_models.NewsItemModel(
+                    news_id=news_id,
+                    source="fixture",
+                    url=f"https://example.com/{news_id}",
+                    title=f"v2 cmp {idx+1}",
+                    content="sample",
+                    language="en",
+                    published_at=t0,
+                    ingested_at=t0,
+                    hash=f"hash-{news_id}",
+                )
+            )
+            session.add(
+                db_models.NewsEventItemModel(
+                    event_id=event_id,
+                    news_id=news_id,
+                    link_role="primary",
+                    similarity_score=1.0,
+                    added_at=t0,
+                )
+            )
+            session.add(
+                db_models.NewsLabelModel(
+                    label_id=f"lbl-v2-cmp-{idx+1}",
+                    target_level="event",
+                    target_id=event_id,
+                    commodity_json=["NG_US"],
+                    market_scope="futures",
+                    instrument_candidates_json=[],
+                    relevance=1.0,
+                    news_type_json=["NG_STORAGE_EIA"],
+                    direction="positive" if label > 0 else "negative",
+                    magnitude=0.8,
+                    lag_bucket="short",
+                    confidence=0.9,
+                    uncertainty_type="none",
+                    geo_scope="US",
+                    evidence_json={},
+                    label_source="rules",
+                    label_version="v1",
+                    model_version=None,
+                    prompt_version=None,
+                    created_at=t0,
+                )
+            )
+            session.add(
+                db_models.NewsImpactScoreModel(
+                    news_id=news_id,
+                    target_level=None,
+                    target_id=None,
+                    model_id="finbert",
+                    model_version="v1",
+                    direction=direction,
+                    prob_up=0.8 if direction == "up" else 0.1,
+                    prob_down=0.8 if direction == "down" else 0.1,
+                    prob_neutral=0.1,
+                    impact_score=0.7,
+                    calibrated=False,
+                    inference_ts=t0,
+                )
+            )
+            session.add(
+                db_models.NewsImpactScoreModel(
+                    news_id=news_id,
+                    target_level=None,
+                    target_id=None,
+                    model_id="nli",
+                    model_version="v1",
+                    direction="down" if direction == "up" else "up",
+                    prob_up=0.2 if direction == "up" else 0.7,
+                    prob_down=0.7 if direction == "up" else 0.2,
+                    prob_neutral=0.1,
+                    impact_score=0.6,
+                    calibrated=False,
+                    inference_ts=t0 + timedelta(seconds=1),
+                )
+            )
+            session.add(
+                db_models.EventTargetV2Model(
+                    event_id=event_id,
+                    symbol="NG_US",
+                    horizon="1h",
+                    t_pub=t0,
+                    t_anchor=t0,
+                    t0=t0,
+                    t1=t1,
+                    p0=100.0,
+                    p1=101.0 if label > 0 else 99.0,
+                    r_raw=0.01 if label > 0 else -0.01,
+                    r_exp=0.0,
+                    ar=0.01 if label > 0 else -0.01,
+                    sigma_pre=0.003,
+                    label_v2=label,
+                    is_hi_conf=True,
+                    leakage_postmove=False,
+                    is_repost=False,
+                    is_overlapped=False,
+                    price_source="mid",
+                    created_at=t0,
+                    updated_at=t0,
+                )
+            )
+        session.commit()
+
+        comparison = compare_news_models(
+            session,
+            model_ids=["finbert", "nli"],
+            horizon="1h",
+            period_from=base - timedelta(hours=1),
+            period_to=base + timedelta(hours=10),
+            epsilon=0.0005,
+            folds=2,
+            embargo_minutes=0,
+            walk_forward=True,
+            calibration_mode="none",
+            target_mode="v2",
+            promotion_min_accuracy=0.0,
+            promotion_min_coverage=0.0,
+            promotion_max_brier=1.0,
+            promotion_min_sample_count=1,
+            promotion_min_ticker_stability=0.0,
+            promotion_require_baseline_superiority=False,
+            promotion_utility_min_trades=1,
+            promotion_utility_max_drawdown=1.0,
+        )
+
+    assert comparison["protocol"]["target_mode"] == "v2"
+    assert "utility_gate" in comparison["audit"]["quality_gate"]
+    assert "utility" in comparison["reports"][0]

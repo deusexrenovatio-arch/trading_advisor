@@ -72,3 +72,44 @@ def test_sync_uses_source_profile_mapping(tmp_path, monkeypatch):
     assert snapshot.cluster_version == "det-v1"
     assert any(str(row.get("ticker") or "") == "BRN" for row in entity_links)
     assert any(str(row.get("link_stage") or "") == "source_profile" for row in entity_links)
+
+
+def test_sync_does_not_force_source_profile_without_text_support(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    now = datetime.utcnow().replace(microsecond=0)
+
+    def _mock_fetch(urls, *, max_items):
+        assert "https://example.org/rss/brent" in urls
+        return [
+            {
+                "news_id": "news-source-profile-2",
+                "source": "https://example.org/rss/brent",
+                "url": "https://example.org/news/2",
+                "title": "India and UAE sign new defense pact",
+                "content": "Bilateral cooperation and trade corridors are expanding.",
+                "language": "en",
+                "published_at": now.isoformat() + "Z",
+                "ingested_at": now.isoformat() + "Z",
+                "hash": "hash-source-profile-2",
+            }
+        ]
+
+    monkeypatch.setattr("moex_carry.news.sync.fetch_rss_news", _mock_fetch)
+
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+
+    with session_factory() as session:
+        snapshot = sync_news_runtime(
+            session,
+            settings,
+            enable_ingest=True,
+            enable_inference=False,
+            gate_enabled=False,
+            recent_limit=20,
+        )
+        entity_links = load_news_entity_links(session, news_ids=["news-source-profile-2"], limit=50)
+
+    assert snapshot.ingested_count >= 1
+    assert all(str(row.get("link_stage") or "") != "source_profile" for row in entity_links)

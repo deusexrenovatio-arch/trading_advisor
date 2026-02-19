@@ -1,14 +1,13 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-import csv
 import importlib
+import math
+import os
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from io import StringIO
 from typing import Iterable
 
-import requests
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from moex_carry.config import AppSettings
@@ -18,9 +17,24 @@ from moex_carry.news.anchors import (
     seed_episodic_anchor_events,
 )
 from moex_carry.news.events import cluster_news_events
-from moex_carry.news.ingestion import fetch_gdelt_news
+from moex_carry.news.ingestion import fetch_gdelt_news, fetch_newsapi_news
 from moex_carry.news.inference import run_dual_model_inference_batch
-from moex_carry.news.linking import default_tag_rows, link_news_item
+from moex_carry.news.linking import default_tag_rows, link_news_item, text_supports_ticker
+from moex_carry.news.backfill_helpers import (
+    _NewsApiDailyBudget,
+    _as_utc_naive,
+    _fetch_fred_daily_series,
+    _fetch_stooq_daily_series,
+    _iter_date_windows,
+    _merge_news_rows,
+    _normalize_window_order,
+    _parse_news_published_at,
+    _quote_price_for_backfill,
+    _resample_points_to_bar_close,
+    _selected_profiles,
+    _table_count,
+    build_news_backfill_qc_report,
+)
 from moex_carry.storage import models as db
 from moex_carry.storage.repositories import (
     upsert_news_entity_links,
@@ -30,7 +44,6 @@ from moex_carry.storage.repositories import (
     upsert_news_tags,
     upsert_quotes,
 )
-
 
 @dataclass(frozen=True)
 class NewsBackfillReport:
@@ -48,59 +61,101 @@ class NewsBackfillReport:
     event_resolved_count: int
     quote_count: int
     windows_processed: int
+    window_order: str
+    newsapi_requests_used: int
+    newsapi_requests_remaining: int | None
     qc_report: dict[str, object]
 
-
-def _as_utc_naive(value: datetime) -> datetime:
-    normalized = value
-    if normalized.tzinfo is None:
-        normalized = normalized.replace(tzinfo=timezone.utc)
-    else:
-        normalized = normalized.astimezone(timezone.utc)
-    return normalized.replace(tzinfo=None)
-
-
-def _table_count(session: Session, table_model) -> int:
-    value = session.execute(select(func.count()).select_from(table_model)).scalar()
-    return int(value or 0)
-
-
-def _iter_date_windows(
+def _shock_score_by_window(
+    session: Session,
     *,
-    start_date: date,
-    end_date: date,
-    chunk_days: int,
-    max_windows: int,
-) -> list[tuple[datetime, datetime]]:
-    windows: list[tuple[datetime, datetime]] = []
-    cursor = start_date
-    effective_chunk = max(int(chunk_days), 1)
-    limit = max(int(max_windows), 0)
-    while cursor <= end_date:
-        window_end = min(cursor + timedelta(days=effective_chunk - 1), end_date)
-        windows.append(
-            (
-                datetime.combine(cursor, time.min).replace(tzinfo=timezone.utc),
-                datetime.combine(window_end, time.max).replace(tzinfo=timezone.utc),
-            )
+    ticker: str,
+    windows: list[tuple[datetime, datetime]],
+    shock_bar_minutes: int = 60,
+) -> dict[tuple[datetime, datetime], float]:
+    if not windows:
+        return {}
+    global_start = _as_utc_naive(min(window_start for window_start, _ in windows) - timedelta(days=1))
+    global_end = _as_utc_naive(max(window_end for _, window_end in windows) + timedelta(days=1))
+    quote_rows = (
+        session.execute(
+            select(db.QuoteModel)
+            .where(db.QuoteModel.secid == ticker)
+            .where(db.QuoteModel.timestamp >= global_start)
+            .where(db.QuoteModel.timestamp <= global_end)
+            .order_by(db.QuoteModel.timestamp.asc())
         )
-        if limit > 0 and len(windows) >= limit:
-            break
-        cursor = window_end + timedelta(days=1)
-    return windows
+        .scalars()
+        .all()
+    )
+    points: list[tuple[datetime, float]] = []
+    for row in quote_rows:
+        price = _quote_price_for_backfill(row)
+        if price is None:
+            continue
+        points.append((_as_utc_naive(row.timestamp), price))
+    points = _resample_points_to_bar_close(points, bar_minutes=max(int(shock_bar_minutes), 1))
+    if len(points) < 2:
+        return {}
 
+    abs_returns: list[tuple[datetime, float]] = []
+    for idx in range(1, len(points)):
+        ts0, p0 = points[idx - 1]
+        ts1, p1 = points[idx]
+        if p0 <= 0.0 or p1 <= 0.0 or ts1 <= ts0:
+            continue
+        abs_returns.append((ts1, abs(math.log(p1 / p0))))
+    if not abs_returns:
+        return {}
 
-def _parse_news_published_at(value: object) -> datetime | None:
-    if isinstance(value, datetime):
-        return _as_utc_naive(value)
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return _as_utc_naive(parsed)
+    score_map: dict[tuple[datetime, datetime], float] = {}
+    for window_start, window_end in windows:
+        window_start_naive = _as_utc_naive(window_start)
+        window_end_naive = _as_utc_naive(window_end)
+        score = 0.0
+        found = False
+        for ts, abs_ret in abs_returns:
+            if ts < window_start_naive:
+                continue
+            if ts > window_end_naive:
+                break
+            found = True
+            if abs_ret > score:
+                score = abs_ret
+        if found:
+            score_map[(window_start, window_end)] = score
+    return score_map
+
+def _order_windows(
+    session: Session,
+    *,
+    ticker: str,
+    windows: list[tuple[datetime, datetime]],
+    order: str,
+    shock_bar_minutes: int = 60,
+) -> list[tuple[datetime, datetime]]:
+    if not windows:
+        return []
+    mode = _normalize_window_order(order)
+    if mode == "recent_first":
+        return sorted(windows, key=lambda item: item[1], reverse=True)
+    if mode != "shock_first":
+        return windows
+
+    score_map = _shock_score_by_window(
+        session,
+        ticker=ticker,
+        windows=windows,
+        shock_bar_minutes=max(int(shock_bar_minutes), 1),
+    )
+    if not score_map:
+        return sorted(windows, key=lambda item: item[1], reverse=True)
+    return sorted(
+        windows,
+        key=lambda item: (float(score_map.get(item, -1.0)), item[1]),
+        reverse=True,
+    )
+
 
 
 def _fetch_gdelt_window_paginated(
@@ -155,131 +210,72 @@ def _fetch_gdelt_window_paginated(
         cursor_end = next_end
     return collected
 
+def _resolve_newsapi_key(settings: AppSettings) -> str:
+    env_name = str(settings.news_ingest.newsapi_api_key_env or "").strip()
+    if env_name:
+        env_value = str(os.getenv(env_name) or "").strip()
+        if env_value:
+            return env_value
+    config_value = str(settings.news_ingest.newsapi_api_key or "").strip()
+    return config_value
 
-def _selected_profiles(settings: AppSettings, commodities: Iterable[str] | None) -> list[object]:
-    allowed = None
-    if commodities:
-        allowed = {str(item).strip().upper() for item in commodities if str(item).strip()}
-    selected = []
-    for profile in settings.news_ingest.commodity_profiles:
-        ticker = str(profile.ticker).strip().upper()
-        if allowed is not None and ticker not in allowed:
-            continue
-        selected.append(profile)
-    return selected
-
-
-def _fetch_fred_daily_series(
+def _fetch_newsapi_window_paginated(
     *,
-    series_id: str,
-    period_from: date,
-    period_to: date,
+    query: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    api_key: str,
+    base_url: str,
+    max_items: int,
     timeout_sec: int,
+    max_pages: int,
+    language: str | None,
+    sort_by: str,
+    domains: Iterable[str] | None,
+    daily_budget: _NewsApiDailyBudget | None,
 ) -> list[dict[str, object]]:
-    symbol = str(series_id or "").strip()
-    if not symbol:
+    query_value = str(query or "").strip()
+    if not query_value or not str(api_key or "").strip():
         return []
-    try:
-        response = requests.get(
-            "https://fred.stlouisfed.org/graph/fredgraph.csv",
-            params={"id": symbol},
-            timeout=max(int(timeout_sec), 5),
+    page_limit = max(int(max_pages), 1)
+    effective_max = max(int(max_items), 1)
+    seen_ids: set[str] = set()
+    collected: list[dict[str, object]] = []
+    for page in range(1, page_limit + 1):
+        if len(collected) >= effective_max:
+            break
+        page_size = min(100, effective_max - len(collected))
+        if page_size <= 0:
+            break
+        if daily_budget is not None and not daily_budget.reserve(1):
+            break
+        rows = fetch_newsapi_news(
+            query=query_value,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            api_key=api_key,
+            base_url=base_url,
+            page=page,
+            page_size=page_size,
+            timeout_sec=timeout_sec,
+            language=language,
+            sort_by=sort_by,
+            domains=domains,
         )
-    except requests.RequestException:
-        return []
-    if response.status_code != 200:
-        return []
-
-    reader = csv.DictReader(StringIO(response.text))
-    rows: list[dict[str, object]] = []
-    for row in reader:
-        if not isinstance(row, dict):
-            continue
-        raw_date = str(row.get("observation_date") or "").strip()
-        if not raw_date:
-            continue
-        try:
-            point_date = date.fromisoformat(raw_date)
-        except ValueError:
-            continue
-        if point_date < period_from or point_date > period_to:
-            continue
-        raw_value = str(row.get(symbol) or "").strip()
-        if not raw_value or raw_value == ".":
-            continue
-        try:
-            close = float(raw_value)
-        except ValueError:
-            continue
-        ts = datetime.combine(point_date, time(hour=20, minute=0)).replace(tzinfo=timezone.utc)
-        rows.append(
-            {
-                "timestamp": ts.isoformat().replace("+00:00", "Z"),
-                "last": close,
-                "bid": None,
-                "ask": None,
-                "volume": None,
-            }
-        )
-    return rows
-
-
-def _fetch_stooq_daily_series(
-    *,
-    symbol: str,
-    period_from: date,
-    period_to: date,
-    timeout_sec: int,
-) -> list[dict[str, object]]:
-    ticker = str(symbol or "").strip().lower()
-    if not ticker:
-        return []
-    try:
-        response = requests.get(
-            "https://stooq.com/q/d/l/",
-            params={"s": ticker, "i": "d"},
-            timeout=max(int(timeout_sec), 5),
-        )
-    except requests.RequestException:
-        return []
-    if response.status_code != 200:
-        return []
-    if "Date,Open,High,Low,Close" not in response.text:
-        return []
-
-    reader = csv.DictReader(StringIO(response.text))
-    rows: list[dict[str, object]] = []
-    for row in reader:
-        if not isinstance(row, dict):
-            continue
-        raw_date = str(row.get("Date") or "").strip()
-        if not raw_date:
-            continue
-        try:
-            point_date = date.fromisoformat(raw_date)
-        except ValueError:
-            continue
-        if point_date < period_from or point_date > period_to:
-            continue
-        raw_close = str(row.get("Close") or "").strip()
-        if not raw_close:
-            continue
-        try:
-            close = float(raw_close)
-        except ValueError:
-            continue
-        ts = datetime.combine(point_date, time(hour=20, minute=0)).replace(tzinfo=timezone.utc)
-        rows.append(
-            {
-                "timestamp": ts.isoformat().replace("+00:00", "Z"),
-                "last": close,
-                "bid": None,
-                "ask": None,
-                "volume": None,
-            }
-        )
-    return rows
-
+        if not rows:
+            break
+        new_rows = 0
+        for row in rows:
+            news_id = str(row.get("news_id") or "").strip()
+            if news_id and news_id in seen_ids:
+                continue
+            if news_id:
+                seen_ids.add(news_id)
+            collected.append(row)
+            new_rows += 1
+        if new_rows <= 0 or len(rows) < page_size:
+            break
+    return collected
 
 def _fetch_yfinance_series(
     *,
@@ -394,7 +390,6 @@ def _fetch_yfinance_series(
         )
     return rows
 
-
 def _fetch_price_rows_for_profile(
     *,
     profile,
@@ -441,137 +436,6 @@ def _fetch_price_rows_for_profile(
         for item in points
     ]
 
-
-def _has_quote_after(
-    session: Session,
-    *,
-    ticker: str,
-    ts: datetime,
-    max_ts: datetime | None = None,
-) -> bool:
-    if max_ts is not None:
-        query = session.execute(
-            select(db.QuoteModel.id)
-            .where(db.QuoteModel.secid == ticker)
-            .where(db.QuoteModel.timestamp >= ts)
-            .where(db.QuoteModel.timestamp <= max_ts)
-            .order_by(db.QuoteModel.timestamp.asc())
-            .limit(1)
-        )
-    else:
-        query = session.execute(
-            select(db.QuoteModel.id)
-            .where(db.QuoteModel.secid == ticker)
-            .where(db.QuoteModel.timestamp >= ts)
-            .order_by(db.QuoteModel.timestamp.asc())
-            .limit(1)
-        )
-    row = (
-        query
-        .scalars()
-        .first()
-    )
-    return row is not None
-
-
-def build_news_backfill_qc_report(
-    session: Session,
-    *,
-    tickers: Iterable[str],
-    period_from: date,
-    period_to: date,
-    min_news_per_ticker: int,
-    min_price_points_per_ticker: int,
-) -> dict[str, object]:
-    from_dt = datetime.combine(period_from, time.min)
-    to_dt = datetime.combine(period_to, time.max)
-    report_items: list[dict[str, object]] = []
-    all_passed = True
-    for raw_ticker in tickers:
-        ticker = str(raw_ticker).strip().upper()
-        if not ticker:
-            continue
-        joined_rows = session.execute(
-            select(db.NewsItemModel.news_id, db.NewsItemModel.published_at)
-            .join(db.NewsEntityLinkModel, db.NewsEntityLinkModel.news_id == db.NewsItemModel.news_id)
-            .where(
-                db.NewsItemModel.published_at >= from_dt,
-                db.NewsItemModel.published_at <= to_dt,
-                (db.NewsEntityLinkModel.ticker == ticker) | (db.NewsEntityLinkModel.entity_id == ticker),
-            )
-        ).all()
-        news_by_id: dict[str, datetime] = {}
-        per_year: dict[str, int] = {}
-        backtest_ready_1d = 0
-        for news_id, published_at in joined_rows:
-            if news_id in news_by_id:
-                continue
-            ts = _as_utc_naive(published_at)
-            news_by_id[news_id] = ts
-            per_year[str(ts.year)] = per_year.get(str(ts.year), 0) + 1
-            if _has_quote_after(
-                session,
-                ticker=ticker,
-                ts=ts,
-                max_ts=ts + timedelta(days=7),
-            ) and _has_quote_after(
-                session,
-                ticker=ticker,
-                ts=ts + timedelta(days=1),
-                max_ts=ts + timedelta(days=8),
-            ):
-                backtest_ready_1d += 1
-
-        quote_rows = (
-            session.execute(
-                select(db.QuoteModel.timestamp)
-                .where(db.QuoteModel.secid == ticker)
-                .where(db.QuoteModel.timestamp >= from_dt)
-                .where(db.QuoteModel.timestamp <= to_dt)
-                .order_by(db.QuoteModel.timestamp.asc())
-            )
-            .scalars()
-            .all()
-        )
-        news_count = len(news_by_id)
-        quote_count = len(quote_rows)
-        passed = news_count >= min_news_per_ticker and quote_count >= min_price_points_per_ticker
-        all_passed = all_passed and passed
-        report_items.append(
-            {
-                "ticker": ticker,
-                "news_count": news_count,
-                "quote_count": quote_count,
-                "backtest_ready_1d_samples": backtest_ready_1d,
-                "news_per_year": per_year,
-                "first_quote_at": quote_rows[0].isoformat() + "Z" if quote_rows else None,
-                "last_quote_at": quote_rows[-1].isoformat() + "Z" if quote_rows else None,
-                "checks": {
-                    "min_news_per_ticker": {
-                        "threshold": int(min_news_per_ticker),
-                        "value": news_count,
-                        "passed": news_count >= min_news_per_ticker,
-                    },
-                    "min_price_points_per_ticker": {
-                        "threshold": int(min_price_points_per_ticker),
-                        "value": quote_count,
-                        "passed": quote_count >= min_price_points_per_ticker,
-                    },
-                },
-                "passed": passed,
-            }
-        )
-
-    return {
-        "period": {
-            "from": period_from.isoformat(),
-            "to": period_to.isoformat(),
-        },
-        "passed": all_passed,
-        "commodities": report_items,
-    }
-
-
 def run_news_backfill(
     session: Session,
     settings: AppSettings,
@@ -583,6 +447,7 @@ def run_news_backfill(
     run_inference: bool = False,
     chunk_days_override: int | None = None,
     max_windows_per_commodity: int | None = None,
+    window_order_override: str | None = None,
 ) -> NewsBackfillReport:
     profiles = _selected_profiles(settings, commodities)
     chunk_days = (
@@ -595,6 +460,17 @@ def run_news_backfill(
         if max_windows_per_commodity is not None
         else max(int(settings.news_ingest.backfill_max_windows_per_commodity), 0)
     )
+    window_order = _normalize_window_order(
+        window_order_override if window_order_override is not None else settings.news_ingest.backfill_window_order
+    )
+    shock_bar_minutes = max(int(settings.news_ingest.backfill_shock_bar_minutes), 1)
+    newsapi_key = _resolve_newsapi_key(settings) if settings.news_ingest.newsapi_enabled else ""
+    newsapi_budget: _NewsApiDailyBudget | None = None
+    if settings.news_ingest.newsapi_enabled and newsapi_key:
+        newsapi_budget = _NewsApiDailyBudget.load(
+            limit=settings.news_ingest.newsapi_daily_limit,
+            state_path=settings.news_ingest.newsapi_daily_state_path,
+        )
 
     upsert_news_tags(session, default_tag_rows())
     ingested_count = 0
@@ -609,29 +485,57 @@ def run_news_backfill(
     quote_count = 0
     windows_processed = 0
     episodic_seed_done = False
+    newsapi_used_before = newsapi_budget.used if newsapi_budget is not None else 0
 
     for profile in profiles:
         ticker = str(profile.ticker).strip().upper()
+        newsapi_query = str(profile.newsapi_query or profile.gdelt_query or "").strip()
         windows = _iter_date_windows(
             start_date=period_from,
             end_date=period_to,
             chunk_days=chunk_days,
             max_windows=max_windows,
         )
+        windows = _order_windows(
+            session,
+            ticker=ticker,
+            windows=windows,
+            order=window_order,
+            shock_bar_minutes=shock_bar_minutes,
+        )
         for window_start, window_end in windows:
             windows_processed += 1
+            rows: list[dict[str, object]] = []
             if settings.news_ingest.gdelt_enabled:
-                rows = _fetch_gdelt_window_paginated(
-                    query=str(profile.gdelt_query),
-                    start_dt=window_start,
-                    end_dt=window_end,
-                    max_items=settings.news_ingest.gdelt_max_records_per_call,
-                    min_request_interval_sec=settings.news_ingest.gdelt_min_request_interval_sec,
-                    timeout_sec=settings.news_ingest.gdelt_request_timeout_sec,
-                    max_pages=settings.news_ingest.gdelt_backfill_max_pages_per_window,
+                rows.extend(
+                    _fetch_gdelt_window_paginated(
+                        query=str(profile.gdelt_query),
+                        start_dt=window_start,
+                        end_dt=window_end,
+                        max_items=settings.news_ingest.gdelt_max_records_per_call,
+                        min_request_interval_sec=settings.news_ingest.gdelt_min_request_interval_sec,
+                        timeout_sec=settings.news_ingest.gdelt_request_timeout_sec,
+                        max_pages=settings.news_ingest.gdelt_backfill_max_pages_per_window,
+                    )
                 )
-            else:
-                rows = []
+            if settings.news_ingest.newsapi_enabled and newsapi_key and newsapi_query:
+                rows.extend(
+                    _fetch_newsapi_window_paginated(
+                        query=newsapi_query,
+                        start_dt=window_start,
+                        end_dt=window_end,
+                        api_key=newsapi_key,
+                        base_url=settings.news_ingest.newsapi_base_url,
+                        max_items=settings.news_ingest.newsapi_max_records_per_call,
+                        timeout_sec=settings.news_ingest.newsapi_request_timeout_sec,
+                        max_pages=settings.news_ingest.newsapi_backfill_max_pages_per_window,
+                        language=settings.news_ingest.newsapi_language,
+                        sort_by=settings.news_ingest.newsapi_sort_by,
+                        domains=settings.news_ingest.newsapi_domains,
+                        daily_budget=newsapi_budget,
+                    )
+                )
+            rows = _merge_news_rows(rows)
             if not rows:
                 continue
             before_news = _table_count(session, db.NewsItemModel)
@@ -647,23 +551,41 @@ def run_news_backfill(
                 news_id = str(row.get("news_id") or "").strip()
                 if not news_id:
                     continue
-                entity_rows.append(
-                    {
-                        "news_id": news_id,
-                        "entity_type": "commodity",
-                        "entity_id": ticker,
-                        "ticker": ticker,
-                        "link_confidence": 0.98,
-                        "link_stage": "source_profile",
-                    }
-                )
+                title = str(row.get("title") or "")
+                content = str(row.get("content") or "")
 
                 linking = link_news_item(
                     news_id=news_id,
-                    title=str(row.get("title") or ""),
-                    content=str(row.get("content") or ""),
+                    title=title,
+                    content=content,
                 )
+                supports_profile = text_supports_ticker(
+                    ticker=ticker,
+                    title=title,
+                    content=content,
+                )
+                if supports_profile:
+                    primary_id = ticker
+                    primary_confidence = max(linking.confidence, 0.98)
+                    primary_stage = "source_profile"
+                else:
+                    primary_id = linking.primary_commodity_id or "UNKNOWN"
+                    primary_confidence = linking.confidence
+                    primary_stage = linking.resolution_stage
+                if primary_id != "UNKNOWN":
+                    entity_rows.append(
+                        {
+                            "news_id": news_id,
+                            "entity_type": "commodity",
+                            "entity_id": primary_id,
+                            "ticker": primary_id,
+                            "link_confidence": primary_confidence,
+                            "link_stage": primary_stage,
+                        }
+                    )
                 for secondary_id in linking.secondary_commodity_ids:
+                    if secondary_id == primary_id:
+                        continue
                     entity_rows.append(
                         {
                             "news_id": news_id,
@@ -684,7 +606,7 @@ def run_news_backfill(
                     )
 
                 if run_inference:
-                    text = " ".join([str(row.get("title") or ""), str(row.get("content") or "")]).strip()
+                    text = " ".join([title, content]).strip()
                     if text:
                         inference_items.append({"news_id": news_id, "text": text})
             if inference_items:
@@ -793,6 +715,11 @@ def run_news_backfill(
         min_news_per_ticker=max(int(settings.news_ingest.qc_min_news_per_ticker), 0),
         min_price_points_per_ticker=max(int(settings.news_ingest.qc_min_price_points_per_ticker), 0),
     )
+    newsapi_requests_used = (
+        max(int(newsapi_budget.used) - int(newsapi_used_before), 0)
+        if newsapi_budget is not None
+        else 0
+    )
     return NewsBackfillReport(
         period_from=period_from.isoformat(),
         period_to=period_to.isoformat(),
@@ -808,9 +735,15 @@ def run_news_backfill(
         event_resolved_count=event_resolved_count,
         quote_count=quote_count,
         windows_processed=windows_processed,
+        window_order=window_order,
+        newsapi_requests_used=newsapi_requests_used,
+        newsapi_requests_remaining=(
+            int(newsapi_budget.remaining)
+            if newsapi_budget is not None
+            else None
+        ),
         qc_report=qc_report,
     )
-
 
 def run_news_qc(
     session: Session,
