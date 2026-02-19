@@ -570,9 +570,9 @@ def _resolve_incremental_checkpoint_dir(settings: AppSettings, data_dir: Path) -
         return configured
     text = str(configured).replace("\\", "/")
     if text.startswith("./data/"):
-        return data_dir.parent / text[2:]
+        return data_dir / text[len("./data/") :]
     if text.startswith("data/"):
-        return data_dir.parent / text
+        return data_dir / text[len("data/") :]
     return data_dir / configured
 
 
@@ -1466,14 +1466,65 @@ def build_unified_spread_series(
 
 
 def persist_snapshot_to_csv(snapshot: UnifiedMarketSnapshot, data_dir: Path) -> None:
-    output = data_dir / "output"
+    persist_snapshot_to_csv_with_meta(snapshot, data_dir)
+
+
+def _dataframe_sha256(frame: pd.DataFrame) -> str | None:
+    if frame.empty:
+        return None
+    payload = frame.to_csv(index=False).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def persist_snapshot_to_csv_with_meta(
+    snapshot: UnifiedMarketSnapshot,
+    data_dir: Path,
+    *,
+    engine_tag: str = "unified",
+) -> dict[str, Any]:
+    output_root = data_dir / "output"
+    engine_value = str(engine_tag or "unified").strip().lower() or "unified"
+    output = output_root / engine_value
     output.mkdir(parents=True, exist_ok=True)
-    if not snapshot.top_pairs.empty:
-        snapshot.top_pairs.to_csv(output / "top_pairs.csv", index=False)
-    if not snapshot.signals.empty:
-        snapshot.signals.to_csv(output / "signals.csv", index=False)
-    if not snapshot.backtests.empty:
-        snapshot.backtests.to_csv(output / "backtest_summary.csv", index=False)
+
+    datasets = {
+        "top_pairs": snapshot.top_pairs,
+        "signals": snapshot.signals,
+        "backtest_summary": snapshot.backtests,
+    }
+    dataset_meta: dict[str, dict[str, Any]] = {}
+    for dataset_name, frame in datasets.items():
+        csv_name = f"{dataset_name}.csv"
+        target = output / csv_name
+        rows = int(len(frame))
+        if rows > 0:
+            frame.to_csv(target, index=False)
+            exists = True
+        else:
+            if target.exists():
+                target.unlink()
+            exists = False
+        dataset_meta[dataset_name] = {
+            "path": csv_name,
+            "rows": rows,
+            "exists": exists,
+            "sha256": _dataframe_sha256(frame),
+        }
+
+    created_at = snapshot.created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    metadata = {
+        "engine": engine_value,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "snapshot_created_at_utc": created_at,
+        "datasets": dataset_meta,
+        "warnings_total": int(len(snapshot.warnings)),
+        "errors_total": int(len(snapshot.errors)),
+    }
+    (output / "snapshot_meta.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return metadata
 
 
 def resolve_series_date_range(frame: pd.DataFrame) -> tuple[date | None, date | None]:

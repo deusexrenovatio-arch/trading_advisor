@@ -60,10 +60,14 @@ from moex_carry.storage.repositories import (
 )
 from moex_carry.ui.data import (
     load_backtest_summary,
+    load_backtest_summary_with_source,
     load_decision_log,
     load_decision_view,
+    load_projection_sources,
     load_signals,
+    load_signals_with_source,
     load_top_pairs,
+    load_top_pairs_with_source,
 )
 from moex_carry.ui.unified_runtime import (
     UnifiedMarketSnapshot,
@@ -536,9 +540,9 @@ def _normalize_execution_leg(value: object) -> str:
     raw = str(value).strip().lower()
     if not raw:
         return "other"
-    if raw in {"stock", "spot", "cash", "equity", "акция"}:
+    if raw in {"stock", "spot", "cash", "equity", "Р В°Р С”РЎвЂ Р С‘РЎРЏ"}:
         return "stock"
-    if raw in {"future", "futures", "fut", "фьючерс", "фьючерсы"}:
+    if raw in {"future", "futures", "fut", "РЎвЂћРЎРЉРЎР‹РЎвЂЎР ВµРЎР‚РЎРѓ", "РЎвЂћРЎРЉРЎР‹РЎвЂЎР ВµРЎР‚РЎРѓРЎвЂ№"}:
         return "future"
     return "other"
 
@@ -2088,9 +2092,6 @@ def create_app(settings: AppSettings) -> Dash:
         configured = settings.ui.signal_refresh_max_pairs
         if configured is not None and int(configured) > 0:
             return int(configured)
-        strategy_max = int(settings.strategy.max_pairs or 0)
-        if strategy_max > 0:
-            return strategy_max
         if fallback is not None and int(fallback) > 0:
             return int(fallback)
         return None
@@ -2101,9 +2102,9 @@ def create_app(settings: AppSettings) -> Dash:
             return configured
         text = str(configured).replace("\\", "/")
         if text.startswith("./data/"):
-            return paths.data_dir.parent / text[2:]
+            return paths.data_dir / text[len("./data/") :]
         if text.startswith("data/"):
-            return paths.data_dir.parent / text
+            return paths.data_dir / text[len("data/") :]
         return paths.data_dir / configured
 
     def _percentile(values: list[float], q: float) -> float:
@@ -2187,14 +2188,31 @@ def create_app(settings: AppSettings) -> Dash:
         max_pairs: int | None,
         fresh: bool = False,
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        preferred_engine = "unified"
         top_pairs = pd.DataFrame()
         signals = pd.DataFrame()
         backtests = pd.DataFrame()
-        # Default path: serve the latest backend-produced projection (last-good CSV outputs).
+        # Default path: serve the latest unified projection from dedicated engine outputs.
         if not fresh:
-            top_pairs = load_top_pairs(paths.data_dir)
-            signals = load_signals(paths.data_dir)
-            backtests = load_backtest_summary(paths.data_dir)
+            top_pairs, top_pairs_source = load_top_pairs_with_source(
+                paths.data_dir,
+                preferred_engine=preferred_engine,
+            )
+            signals, signals_source = load_signals_with_source(
+                paths.data_dir,
+                preferred_engine=preferred_engine,
+            )
+            backtests, backtests_source = load_backtest_summary_with_source(
+                paths.data_dir,
+                preferred_engine=preferred_engine,
+            )
+            # In unified mode avoid silent mixed projections: fallback-to-legacy triggers recompute.
+            if bool(top_pairs_source.get("fallback_to_legacy")):
+                top_pairs = pd.DataFrame()
+            if bool(signals_source.get("fallback_to_legacy")):
+                signals = pd.DataFrame()
+            if bool(backtests_source.get("fallback_to_legacy")):
+                backtests = pd.DataFrame()
         if top_pairs.empty or signals.empty or backtests.empty:
             snapshot = _unified_snapshot(max_pairs=max_pairs, force=False)
             if top_pairs.empty:
@@ -2540,6 +2558,18 @@ def create_app(settings: AppSettings) -> Dash:
         ok = _run_signal_refresh("manual", force=force_full)
         status_code = 200 if ok else 500
         return jsonify(refresh_state), status_code
+
+
+    @server.route("/api/projections/source", methods=["GET"])
+    def projection_source_api():
+        preferred_engine = "unified" if settings.ui.use_unified_signal_engine else None
+        payload = load_projection_sources(
+            paths.data_dir,
+            preferred_engine=preferred_engine,
+        )
+        payload["active_engine"] = "unified" if settings.ui.use_unified_signal_engine else "legacy"
+        payload["unified_allow_legacy_fallback"] = bool(settings.ui.unified_allow_legacy_fallback)
+        return jsonify(payload)
 
     @server.route("/api/decision-view", methods=["GET"])
     def decision_view_api():
@@ -5064,7 +5094,10 @@ def create_app(settings: AppSettings) -> Dash:
         if not stock or not future:
             return jsonify({"error": "missing_params", "message": "stock and future are required"}), 400
 
-        top_pairs = load_top_pairs(paths.data_dir)
+        top_pairs = load_top_pairs(
+            paths.data_dir,
+            preferred_engine=("unified" if settings.ui.use_unified_signal_engine else None),
+        )
         pair_row = pd.DataFrame()
         if not top_pairs.empty and {"stock", "future"}.issubset(top_pairs.columns):
             pair_row = top_pairs[
@@ -5480,3 +5513,5 @@ def create_app(settings: AppSettings) -> Dash:
 def run_ui(settings: AppSettings) -> None:
     app = create_app(settings)
     app.run(host=settings.ui.host, port=settings.ui.port, debug=False)
+
+
