@@ -2,6 +2,7 @@ from moex_carry.analytics.carry import basis, fair_value, implied_rate, pv_divid
 from moex_carry.analytics.alpha import (
     AlphaMetrics,
     alpha_metrics,
+    first_hit_probabilities,
     half_life_ar1,
     hit_probabilities,
     mfe_mae,
@@ -35,6 +36,7 @@ __all__ = [
     "basis",
     "AlphaMetrics",
     "alpha_metrics",
+    "first_hit_probabilities",
     "hit_probabilities",
     "mfe_mae",
     "spread_volatility",

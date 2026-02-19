@@ -78,6 +78,48 @@ def hit_probabilities(
     return float(np.mean(hit_tp)), float(np.mean(hit_sl))
 
 
+def first_hit_probabilities(
+    spread_pct: Sequence[float],
+    horizon: int,
+    tp: float,
+    sl: float,
+) -> tuple[float, float, float]:
+    if horizon <= 0:
+        return 0.0, 0.0, 0.0
+    values = list(map(float, spread_pct))
+    n = len(values)
+    total = n - horizon
+    if total <= 0:
+        return 0.0, 0.0, 0.0
+    eps = 1e-12
+    tp_hits = 0
+    sl_hits = 0
+    none_hits = 0
+    for idx in range(total):
+        entry = values[idx]
+        window = values[idx + 1 : idx + horizon + 1]
+        tp_idx = None
+        sl_idx = None
+        for step_idx, value in enumerate(window):
+            diff = value - entry
+            if tp_idx is None and diff + eps >= tp:
+                tp_idx = step_idx
+            if sl_idx is None and diff - eps <= -sl:
+                sl_idx = step_idx
+            if tp_idx is not None and sl_idx is not None:
+                break
+        if tp_idx is None and sl_idx is None:
+            none_hits += 1
+            continue
+        if sl_idx is None or (tp_idx is not None and tp_idx < sl_idx):
+            tp_hits += 1
+            continue
+        # Tie goes to SL as conservative fallback for risk gating.
+        sl_hits += 1
+    denom = float(total)
+    return float(tp_hits / denom), float(sl_hits / denom), float(none_hits / denom)
+
+
 def round_trip_cost(
     stock_buy: float,
     stock_sell: float,

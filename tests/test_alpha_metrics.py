@@ -1,4 +1,4 @@
-from moex_carry.analytics.alpha import alpha_metrics, hit_probabilities, round_trip_cost
+from moex_carry.analytics.alpha import alpha_metrics, first_hit_probabilities, hit_probabilities, round_trip_cost
 
 
 def test_round_trip_cost():
@@ -18,3 +18,11 @@ def test_alpha_metrics_quantiles():
     metrics = alpha_metrics(spread_pct, horizon=2, tp=0.01, sl=0.01)
     assert metrics.mfe_q90 >= metrics.mfe_q50
     assert metrics.mae_q50 <= 0.0
+
+
+def test_first_hit_probabilities():
+    spread_pct = [0.0, 0.02, -0.02, 0.03, -0.01]
+    p_tp, p_sl, p_none = first_hit_probabilities(spread_pct, horizon=2, tp=0.01, sl=0.01)
+    assert p_tp == 2.0 / 3.0
+    assert p_sl == 1.0 / 3.0
+    assert p_none == 0.0
