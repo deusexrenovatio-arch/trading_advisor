@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from moex_carry.analytics.alpha import alpha_metrics
+from moex_carry.analytics.alpha import alpha_metrics, first_hit_probabilities
 from moex_carry.config import AppSettings
 from moex_carry.domain.models import KeyRate
 from moex_carry.domain.portfolio import PairSpec
@@ -120,6 +120,14 @@ _SCORE_GATE_P_EARN_THRESHOLD = 0.10
 _SCORE_EARN_BLEND_HISTORY_WEIGHT = 0.50
 _SCORE_EARN_BLEND_FORWARD_WEIGHT = 0.50
 _DEFAULT_ENTRY_PRICE_TOLERANCE_PCT = 0.0015
+_FORWARD_PATH_PRIOR_TP = 0.50
+_FORWARD_PATH_PRIOR_SL = 0.10
+_FORWARD_PATH_PRIOR_STRENGTH = 20.0
+_FORWARD_EXEC_PRIOR = 0.50
+_FORWARD_EXEC_PRIOR_STRENGTH = 20.0
+_FORWARD_TRADE_OUTCOME_PRIOR = 0.50
+_FORWARD_TRADE_OUTCOME_PRIOR_STRENGTH = 10.0
+_FORWARD_TRADE_BLEND_FULL_TRADES = 20.0
 
 
 def _safe_float(value: Any) -> float | None:
@@ -171,6 +179,77 @@ def _infer_minute_bars_per_day(frame: pd.DataFrame) -> int:
     return max(int(round(median_bars)), 1)
 
 
+def _infer_unique_days(frame: pd.DataFrame) -> int:
+    if frame.empty:
+        return 0
+    if "date" in frame.columns:
+        day_series = pd.to_datetime(frame["date"], errors="coerce").dt.date
+    elif "exec_ts" in frame.columns:
+        day_series = pd.to_datetime(frame["exec_ts"], errors="coerce").dt.date
+    else:
+        return 0
+    return int(day_series.dropna().nunique())
+
+
+def _beta_mean(
+    *,
+    successes: float,
+    total: float,
+    prior_mean: float,
+    prior_strength: float,
+) -> float:
+    total_value = max(float(total), 0.0)
+    strength_value = max(float(prior_strength), 0.0)
+    if total_value <= 0 and strength_value <= 0:
+        return _clip01(prior_mean)
+    alpha = _clip01(prior_mean) * strength_value
+    numerator = float(successes) + alpha
+    denominator = total_value + strength_value
+    if denominator <= 0:
+        return _clip01(prior_mean)
+    return _clip01(numerator / denominator)
+
+
+def _forward_exec_probability_from_entries(frame: pd.DataFrame) -> tuple[float, int]:
+    if frame.empty or "entry_fill_status" not in frame.columns:
+        return float(_FORWARD_EXEC_PRIOR), 0
+    status = frame["entry_fill_status"].astype(str).str.strip().str.lower()
+    filled_count = int((status == "filled").sum())
+    unfilled_count = int((status == "entry_unfilled").sum())
+    total_events = filled_count + unfilled_count
+    probability = _beta_mean(
+        successes=float(filled_count),
+        total=float(total_events),
+        prior_mean=_FORWARD_EXEC_PRIOR,
+        prior_strength=_FORWARD_EXEC_PRIOR_STRENGTH,
+    )
+    return float(probability), int(total_events)
+
+
+def _forward_trade_outcome_probability(frame: pd.DataFrame) -> tuple[float | None, float | None, int]:
+    if frame.empty:
+        return None, None, 0
+    if "trade_return_pct_net" not in frame.columns:
+        return None, None, 0
+    if "exit_flag" in frame.columns:
+        exit_mask = frame["exit_flag"].fillna(False).astype(bool)
+    else:
+        exit_mask = pd.Series(False, index=frame.index)
+    returns = pd.to_numeric(frame.loc[exit_mask, "trade_return_pct_net"], errors="coerce").dropna().astype(float)
+    closed = int(returns.size)
+    if closed <= 0:
+        return None, None, 0
+    wins = int((returns > 0.0).sum())
+    p_win = _beta_mean(
+        successes=float(wins),
+        total=float(closed),
+        prior_mean=_FORWARD_TRADE_OUTCOME_PRIOR,
+        prior_strength=_FORWARD_TRADE_OUTCOME_PRIOR_STRENGTH,
+    )
+    p_loss = _clip01(1.0 - p_win)
+    return float(p_win), float(p_loss), int(closed)
+
+
 def _build_forward_signal_forecast(
     *,
     frame: pd.DataFrame,
@@ -183,12 +262,25 @@ def _build_forward_signal_forecast(
     fallback: dict[str, Any] = {
         "forward_tp_probability": 0.0,
         "forward_sl_probability": 0.0,
+        "forward_no_exit_probability": 1.0,
+        "forward_exit_probability": 0.0,
         "forward_earn_probability": 0.0,
+        "forward_exec_probability": float(_FORWARD_EXEC_PRIOR),
         "forward_half_life_days": 0.0,
+        "forward_effective_days": 0.0,
+        "forward_entry_events": 0,
+        "forward_closed_trades": 0,
         "forecast_exit_days": int(horizon_days),
         "forecast_exit_date": fallback_date.isoformat() if fallback_date is not None else None,
         "forecast_model": "h_max_days",
+        "forecast_probability_source": "hybrid_event_path_v1",
     }
+    forward_exec_probability, entry_events = _forward_exec_probability_from_entries(frame)
+    fallback["forward_exec_probability"] = float(forward_exec_probability)
+    fallback["forward_entry_events"] = int(entry_events)
+    p_tp_hist, p_sl_hist, closed_trades = _forward_trade_outcome_probability(frame)
+    fallback["forward_closed_trades"] = int(closed_trades)
+
     if frame.empty or "spread_pct" not in frame.columns:
         return fallback
 
@@ -210,9 +302,38 @@ def _build_forward_signal_forecast(
         tp=tp,
         sl=sl,
     )
-    p_tp = _clip01(stats.p_hit_tp)
-    p_sl = _clip01(stats.p_hit_sl)
-    p_earn_forward = _clip01(p_tp * (1.0 - p_sl))
+    p_tp_path_raw, p_sl_path_raw, p_none_path_raw = first_hit_probabilities(
+        spread_series,
+        horizon=int(horizon_bars),
+        tp=tp,
+        sl=sl,
+    )
+
+    unique_days = _infer_unique_days(frame)
+    effective_days = max(int(unique_days - horizon_days), 0)
+    path_weight = float(effective_days) / (float(effective_days) + float(_FORWARD_PATH_PRIOR_STRENGTH))
+    p_tp_path = _clip01(path_weight * p_tp_path_raw + (1.0 - path_weight) * _FORWARD_PATH_PRIOR_TP)
+    p_sl_path = _clip01(path_weight * p_sl_path_raw + (1.0 - path_weight) * _FORWARD_PATH_PRIOR_SL)
+    if p_tp_path + p_sl_path > 1.0:
+        normalizer = p_tp_path + p_sl_path
+        p_tp_path = _clip01(p_tp_path / normalizer)
+        p_sl_path = _clip01(p_sl_path / normalizer)
+    p_none_path = _clip01(max(0.0, 1.0 - p_tp_path - p_sl_path))
+
+    if p_tp_hist is not None and p_sl_hist is not None and closed_trades > 0:
+        trade_weight = min(float(closed_trades) / float(_FORWARD_TRADE_BLEND_FULL_TRADES), 1.0)
+        p_tp = _clip01((1.0 - trade_weight) * p_tp_path + trade_weight * p_tp_hist)
+        p_sl = _clip01((1.0 - trade_weight) * p_sl_path + trade_weight * p_sl_hist)
+    else:
+        p_tp = p_tp_path
+        p_sl = p_sl_path
+    if p_tp + p_sl > 1.0:
+        normalizer = p_tp + p_sl
+        p_tp = _clip01(p_tp / normalizer)
+        p_sl = _clip01(p_sl / normalizer)
+    p_none = _clip01(max(0.0, 1.0 - p_tp - p_sl))
+    p_exit = _clip01(p_tp + p_sl)
+    p_earn_forward = _clip01(p_tp)
 
     half_life_bars = _safe_float(stats.half_life) or 0.0
     half_life_days = float(half_life_bars) / float(bars_per_day) if bars_per_day > 0 else float(half_life_bars)
@@ -230,11 +351,18 @@ def _build_forward_signal_forecast(
     return {
         "forward_tp_probability": float(p_tp),
         "forward_sl_probability": float(p_sl),
+        "forward_no_exit_probability": float(p_none),
+        "forward_exit_probability": float(p_exit),
         "forward_earn_probability": float(p_earn_forward),
+        "forward_exec_probability": float(forward_exec_probability),
         "forward_half_life_days": float(max(half_life_days, 0.0)),
+        "forward_effective_days": float(effective_days),
+        "forward_entry_events": int(entry_events),
+        "forward_closed_trades": int(closed_trades),
         "forecast_exit_days": int(forecast_exit_days),
         "forecast_exit_date": forecast_exit_date,
         "forecast_model": forecast_model,
+        "forecast_probability_source": "hybrid_event_path_v1",
     }
 
 
@@ -799,7 +927,9 @@ def _build_pair_rows(
         tp_net=tp_net,
         as_of_snapshot=latest_date,
     )
-    p_earn_forward = _clip01(_safe_float(forward_forecast.get("forward_earn_probability")) or 0.0)
+    p_exec_forward = _clip01(_safe_float(forward_forecast.get("forward_exec_probability")) or p_exec)
+    p_earn_forward_conditional = _clip01(_safe_float(forward_forecast.get("forward_earn_probability")) or 0.0)
+    p_earn_forward = _clip01(p_exec_forward * p_earn_forward_conditional)
     p_earn = _blend_probabilities(
         p_earn_historical,
         p_earn_forward,
@@ -850,6 +980,8 @@ def _build_pair_rows(
         "score_earn_probability": p_earn,
         "score_earn_probability_historical": p_earn_historical,
         "score_earn_probability_forward": p_earn_forward,
+        "score_earn_probability_forward_conditional": p_earn_forward_conditional,
+        "score_exec_probability_forward": p_exec_forward,
         "score_earn_blend_history_weight": float(_SCORE_EARN_BLEND_HISTORY_WEIGHT),
         "score_earn_blend_forward_weight": float(_SCORE_EARN_BLEND_FORWARD_WEIGHT),
         "score_gate_exec_threshold": _SCORE_GATE_P_EXEC_THRESHOLD,
@@ -874,9 +1006,16 @@ def _build_pair_rows(
         "sl_spread_pct_level": sl_spread_level,
         "forecast_tp_probability": _safe_float(forward_forecast.get("forward_tp_probability")),
         "forecast_sl_probability": _safe_float(forward_forecast.get("forward_sl_probability")),
+        "forecast_no_exit_probability": _safe_float(forward_forecast.get("forward_no_exit_probability")),
+        "forecast_exit_probability": _safe_float(forward_forecast.get("forward_exit_probability")),
         "forecast_exit_days": _safe_float(forward_forecast.get("forecast_exit_days")),
         "forecast_exit_date": forward_forecast.get("forecast_exit_date"),
         "forecast_model": forward_forecast.get("forecast_model"),
+        "forecast_probability_source": forward_forecast.get("forecast_probability_source"),
+        "forward_exec_probability": _safe_float(forward_forecast.get("forward_exec_probability")),
+        "forward_entry_events": _safe_float(forward_forecast.get("forward_entry_events")),
+        "forward_closed_trades": _safe_float(forward_forecast.get("forward_closed_trades")),
+        "forward_effective_days": _safe_float(forward_forecast.get("forward_effective_days")),
         "forward_half_life_days": _safe_float(forward_forecast.get("forward_half_life_days")),
         "source": source,
     }
@@ -910,6 +1049,8 @@ def _build_pair_rows(
         "score_earn_probability": p_earn,
         "score_earn_probability_historical": p_earn_historical,
         "score_earn_probability_forward": p_earn_forward,
+        "score_earn_probability_forward_conditional": p_earn_forward_conditional,
+        "score_exec_probability_forward": p_exec_forward,
         "score_earn_blend_history_weight": float(_SCORE_EARN_BLEND_HISTORY_WEIGHT),
         "score_earn_blend_forward_weight": float(_SCORE_EARN_BLEND_FORWARD_WEIGHT),
         "score_gate_exec_threshold": _SCORE_GATE_P_EXEC_THRESHOLD,
@@ -930,9 +1071,16 @@ def _build_pair_rows(
         "sl_spread_pct_level": sl_spread_level,
         "forecast_tp_probability": _safe_float(forward_forecast.get("forward_tp_probability")),
         "forecast_sl_probability": _safe_float(forward_forecast.get("forward_sl_probability")),
+        "forecast_no_exit_probability": _safe_float(forward_forecast.get("forward_no_exit_probability")),
+        "forecast_exit_probability": _safe_float(forward_forecast.get("forward_exit_probability")),
         "forecast_exit_days": _safe_float(forward_forecast.get("forecast_exit_days")),
         "forecast_exit_date": forward_forecast.get("forecast_exit_date"),
         "forecast_model": forward_forecast.get("forecast_model"),
+        "forecast_probability_source": forward_forecast.get("forecast_probability_source"),
+        "forward_exec_probability": _safe_float(forward_forecast.get("forward_exec_probability")),
+        "forward_entry_events": _safe_float(forward_forecast.get("forward_entry_events")),
+        "forward_closed_trades": _safe_float(forward_forecast.get("forward_closed_trades")),
+        "forward_effective_days": _safe_float(forward_forecast.get("forward_effective_days")),
         "forward_half_life_days": _safe_float(forward_forecast.get("forward_half_life_days")),
         "avg_trade_return_annual_recent": _safe_float(metrics.avg_trade_return_annual_fill_to_fill_last5),
         "avg_trade_return_annual_operational_recent": _safe_float(metrics.avg_trade_return_annual_operational_last5),
@@ -966,6 +1114,8 @@ def _build_pair_rows(
         "score_earn_probability": p_earn,
         "score_earn_probability_historical": p_earn_historical,
         "score_earn_probability_forward": p_earn_forward,
+        "score_earn_probability_forward_conditional": p_earn_forward_conditional,
+        "score_exec_probability_forward": p_exec_forward,
         "score_earn_blend_history_weight": float(_SCORE_EARN_BLEND_HISTORY_WEIGHT),
         "score_earn_blend_forward_weight": float(_SCORE_EARN_BLEND_FORWARD_WEIGHT),
         "score_gate_exec_threshold": _SCORE_GATE_P_EXEC_THRESHOLD,
@@ -982,9 +1132,16 @@ def _build_pair_rows(
         "sl_spread_pct_level": sl_spread_level,
         "forecast_tp_probability": _safe_float(forward_forecast.get("forward_tp_probability")),
         "forecast_sl_probability": _safe_float(forward_forecast.get("forward_sl_probability")),
+        "forecast_no_exit_probability": _safe_float(forward_forecast.get("forward_no_exit_probability")),
+        "forecast_exit_probability": _safe_float(forward_forecast.get("forward_exit_probability")),
         "forecast_exit_days": _safe_float(forward_forecast.get("forecast_exit_days")),
         "forecast_exit_date": forward_forecast.get("forecast_exit_date"),
         "forecast_model": forward_forecast.get("forecast_model"),
+        "forecast_probability_source": forward_forecast.get("forecast_probability_source"),
+        "forward_exec_probability": _safe_float(forward_forecast.get("forward_exec_probability")),
+        "forward_entry_events": _safe_float(forward_forecast.get("forward_entry_events")),
+        "forward_closed_trades": _safe_float(forward_forecast.get("forward_closed_trades")),
+        "forward_effective_days": _safe_float(forward_forecast.get("forward_effective_days")),
         "forward_half_life_days": _safe_float(forward_forecast.get("forward_half_life_days")),
         "tp_net": tp_net,
         "sl_net": sl_net,
