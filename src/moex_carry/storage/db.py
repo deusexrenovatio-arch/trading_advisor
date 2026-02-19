@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
-from moex_carry.config import AppSettings
+from moex_carry.config import AppSettings, resolve_paths
 from moex_carry.storage.models import Base
 
 
@@ -22,10 +22,38 @@ def _ensure_sqlite_parent_dir(database_url: str) -> None:
         return
     Path(database).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
+def _resolve_database_url(settings: AppSettings) -> str:
+    database_url = str(settings.database.url)
+    try:
+        parsed = make_url(database_url)
+    except Exception:
+        return database_url
+    if not parsed.drivername.startswith("sqlite"):
+        return database_url
+    database = parsed.database
+    if not database or database == ":memory:" or database.startswith("file:"):
+        return database_url
+    database_path = Path(database).expanduser()
+    if database_path.is_absolute():
+        return database_url
+    data_dir = resolve_paths(settings).data_dir
+    text = str(database_path).replace("\\", "/")
+    if text.startswith("./data/"):
+        resolved_path = data_dir / text[len("./data/") :]
+    elif text.startswith("data/"):
+        resolved_path = data_dir / text[len("data/") :]
+    else:
+        resolved_path = data_dir / database_path
+    normalized = str(resolved_path.resolve()).replace("\\", "/")
+    resolved_url = parsed.set(database=normalized)
+    return resolved_url.render_as_string(hide_password=False)
+
+
 
 def create_engine_from_settings(settings: AppSettings):
-    _ensure_sqlite_parent_dir(settings.database.url)
-    return create_engine(settings.database.url, echo=settings.database.echo, future=True)
+    database_url = _resolve_database_url(settings)
+    _ensure_sqlite_parent_dir(database_url)
+    return create_engine(database_url, echo=settings.database.echo, future=True)
 
 
 def create_session_factory(engine) -> sessionmaker[Session]:

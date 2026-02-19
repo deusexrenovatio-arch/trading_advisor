@@ -2542,8 +2542,11 @@ def _resolve_unified_max_pairs(settings: AppSettings, max_pairs: int | None) -> 
     if max_pairs is not None:
         configured = int(max_pairs)
         return configured if configured > 0 else None
-    strategy_max = int(settings.strategy.max_pairs or 0)
-    return strategy_max if strategy_max > 0 else None
+    refresh_max = getattr(settings.ui, "signal_refresh_max_pairs", None)
+    if refresh_max is not None:
+        configured = int(refresh_max)
+        return configured if configured > 0 else None
+    return None
 
 
 def _resolve_incremental_checkpoint_root(settings: AppSettings, data_dir: Path) -> Path:
@@ -2552,9 +2555,9 @@ def _resolve_incremental_checkpoint_root(settings: AppSettings, data_dir: Path) 
         return configured
     text = str(configured).replace("\\", "/")
     if text.startswith("./data/"):
-        return data_dir.parent / text[2:]
+        return data_dir / text[len("./data/") :]
     if text.startswith("data/"):
-        return data_dir.parent / text
+        return data_dir / text[len("data/") :]
     return data_dir / configured
 
 

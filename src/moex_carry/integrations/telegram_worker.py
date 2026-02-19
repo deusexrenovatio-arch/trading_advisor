@@ -77,7 +77,7 @@ class TelegramWorker:
         self._allowed_user_ids = {int(item) for item in self.cfg.allowed_user_ids}
         self._backend_base_url = str(self.cfg.backend_base_url).rstrip("/")
         self._telegram_api_base = f"https://api.telegram.org/bot{self.cfg.bot_token}"
-        self._state_path = self._resolve_state_path(self.cfg.state_path)
+        self._state_path = self._resolve_state_path(self.cfg.state_path, settings.data.data_dir)
         self._telegram_session = telegram_session or requests.Session()
         self._backend_session = backend_session or requests.Session()
         self._sleep_fn = sleep_fn
@@ -89,11 +89,21 @@ class TelegramWorker:
         self._next_signal_fetch_at = 0.0
 
     @staticmethod
-    def _resolve_state_path(raw_path: str) -> Path:
-        path = Path(raw_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
-        return path
+    def _resolve_state_path(raw_path: str, data_dir: str | Path | None = None) -> Path:
+        path = Path(raw_path).expanduser()
+        if path.is_absolute():
+            return path
+        if data_dir is None:
+            return (Path.cwd() / path).resolve()
+        base_dir = Path(data_dir).expanduser()
+        if not base_dir.is_absolute():
+            base_dir = (Path.cwd() / base_dir).resolve()
+        text = str(path).replace("\\", "/")
+        if text.startswith("./data/"):
+            return (base_dir / text[len("./data/") :]).resolve()
+        if text.startswith("data/"):
+            return (base_dir / text[len("data/") :]).resolve()
+        return (base_dir / path).resolve()
 
     @staticmethod
     def _resolve_display_timezone(name: str) -> timezone | ZoneInfo:
