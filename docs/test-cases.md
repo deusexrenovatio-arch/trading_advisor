@@ -13,6 +13,12 @@
 - dev-skill-start-gate -> TC-DEV-WF-001
 - dev-skill-recheck-gate -> TC-DEV-WF-002
 - dev-skill-prepush-gate -> TC-DEV-WF-003
+- first-time-right-goal-contract-gate -> TC-FTR-PROC-001
+- first-time-right-user-case-gate -> TC-FTR-PROC-002
+- first-time-right-budget-stop-gate -> TC-FTR-PROC-003
+- first-time-right-load-readiness-gate -> TC-FTR-PROC-004
+- first-time-right-context-integrity-gate -> TC-FTR-PROC-005
+- first-time-right-repeated-issue-gate -> TC-FTR-PROC-006
 - decision-view -> TC-DEC-API-001, TC-DEC-UI-001
 - decision-view-filters -> TC-DEC-API-005
 - decision-view-aggregation -> TC-DEC-API-002
@@ -64,6 +70,11 @@
 - US-11 Review decisions with server filters -> decision-view, decision-view-filters (TC-DEC-API-001, TC-DEC-API-005, TC-DEC-UI-001).
 - US-12 Confirm signal usage from Telegram -> signals-ack-execute + signals-active (TC-SIG-ACK-API-001, TC-SIG-ACK-UI-001, TC-SIG-ACT-API-001, TC-TG-UI-001, TC-TG-WRK-001, TC-TG-WRK-004).
 - US-13 Morning bot liveness check -> signals-active (TC-TG-UI-002, TC-TG-UI-003, TC-TG-WRK-002, TC-TG-WRK-003).
+- US-14 Complete user-facing flow without hidden gaps -> first-time-right-user-case-gate + signals-active + pretrade-check + signals-execute (TC-FTR-PROC-002, TC-SIG-UI-WORKFLOW-001, TC-PRETRADE-UI-001, TC-SIG-EXEC-UI-001).
+- US-15 Fast convergence to target metrics -> first-time-right-goal-contract-gate + hpo/hpo-status (TC-FTR-PROC-001, TC-HPO-API-001, TC-HPO-API-002).
+- US-16 Long operations are visible and interruptible -> first-time-right-budget-stop-gate (TC-FTR-PROC-003).
+- US-17 Heavy workloads run with load-ready design -> first-time-right-load-readiness-gate + unified-minute-runtime (TC-FTR-PROC-004, TC-PERF-ARCH-UNIT-001, TC-PERF-GATE-MAN-001).
+- US-18 Repeated issues escalate to root-cause review -> first-time-right-repeated-issue-gate (TC-FTR-PROC-006).
 
 ## UI Test Cases
 
@@ -714,13 +725,22 @@ Request:
 Expected:
 - Worker sends only the first one.
 
-### TC-TG-WRK-008 Worker prefers v2 active endpoint
-Acceptance: signals-active
-Automation: tests/test_telegram_worker.py::test_worker_prefers_v2_active_endpoint
+### TC-TG-WRK-008 Worker prefers pair actionability endpoint
+Acceptance: signals-actionability
+Automation: tests/test_telegram_worker.py::test_worker_prefers_pair_actionability_endpoint
 Request:
 - Start worker and run one broadcast cycle.
 Expected:
-- First backend call goes to `/api/v2/signals/active` with fallback to v1 only on failure.
+- First backend call goes to `/api/v2/pairs/actionability` with fallback chain only on failure.
+
+### TC-TG-WRK-009 Stale intent callback is closed with user-facing hint
+Acceptance: signals-actionability
+Automation: tests/test_telegram_worker.py::test_worker_callback_marks_stale_intent_and_drops_token
+Request:
+- Process callback where backend rejects ACK with `message=intent_superseded_or_stale`.
+Expected:
+- Token is removed from pending callbacks.
+- User receives explicit stale-intent hint instead of generic failure.
 
 ### TC-SIG-ACT-API-004 v2 active row exposes delivery contract fields
 Acceptance: signals-active
@@ -938,6 +958,72 @@ Expected:
 - Pre-push gate is deterministic and repeatable.
 - No push is performed with failed required checks.
 
+### TC-FTR-PROC-001 Goal contract is explicit before implementation
+Acceptance: first-time-right-goal-contract-gate
+Automation: manual
+Steps:
+1. Start a non-trivial task (research or user-facing logic).
+2. Record user outcome, acceptance criteria, out-of-scope, and assumptions.
+3. Confirm implementation starts only after contract is explicit.
+Expected:
+- Goal contract is written before coding.
+- Ambiguous target blocks implementation start.
+
+### TC-FTR-PROC-002 User-case completeness is verified before coding
+Acceptance: first-time-right-user-case-gate
+Automation: manual
+Steps:
+1. For the active task, list primary flow.
+2. List edge, negative, interruption/retry, and stale/partial data flows.
+3. Confirm missing scenarios are treated as blockers.
+Expected:
+- Scenario inventory is explicit and covers non-happy paths.
+- Implementation does not proceed with uncovered critical scenarios.
+
+### TC-FTR-PROC-003 Runtime budget and stop/replan controls are defined
+Acceptance: first-time-right-budget-stop-gate
+Automation: manual
+Steps:
+1. Before long command/compute, define runtime and network budget.
+2. Define stop/replan trigger and checkpoint cadence.
+3. Execute smoke-first run before full scale.
+Expected:
+- Long-running operations have ETA, checkpoints, and stop trigger.
+- Trigger breach leads to replanning instead of blind continuation.
+
+### TC-FTR-PROC-004 High-load readiness is designed before heavy runs
+Acceptance: first-time-right-load-readiness-gate
+Automation: manual
+Steps:
+1. For heavy task (HPO/export/inference), define chunking strategy.
+2. Define parallel limits and cache/resume path.
+3. Confirm fallback behavior for degraded runtime.
+Expected:
+- Heavy workload plan includes chunking, bounded parallelism, and resume.
+- Execution is not started without load-readiness plan.
+
+### TC-FTR-PROC-005 Context integrity is enforced against main objective
+Acceptance: first-time-right-context-integrity-gate
+Automation: manual
+Steps:
+1. Review planned changes for active task.
+2. Map each change to main user objective.
+3. Defer side-path work without direct user value.
+Expected:
+- Change list remains aligned with main objective.
+- Context drift is detected and corrected before implementation.
+
+### TC-FTR-PROC-006 Repeated issue escalates to root-cause review
+Acceptance: first-time-right-repeated-issue-gate
+Automation: manual
+Steps:
+1. Detect repeated failure/regression for same problem.
+2. Produce findings + hypotheses + fix plan before next patch.
+3. Run regression checklist after fix.
+Expected:
+- Team switches from patching to structured root-cause workflow.
+- Issue is not closed without explicit regression validation.
+
 ## Regression Checklist (minimum)
 - /api/v2/signals/history returns JSON (no HTML).
 - Signals tab loads and renders history table.
@@ -945,3 +1031,142 @@ Expected:
 
 ## Mapping validation
 - Run `python scripts/validate_test_cases.py` to ensure acceptance scenarios reference real test cases.
+- Run `python scripts/validate_user_needs_catalog.py` to ensure user needs/use-cases map to acceptance scenarios and test cases with full acceptance coverage.
+
+## Planned Pair-Centric Cases (Migration)
+
+### TC-PAIR-ACT-API-001 Pair actionability feed returns usable-now projection
+Preconditions:
+- Backend has fresh signal cycle and market snapshot.
+Steps:
+1. GET `/api/v2/pairs/actionability`.
+Expected:
+- Each row has `pair_id`, `intent`, `entry_plan`, `entry_range_now`, `delivery`.
+- `actionability_state` is one of `actionable_enter|actionable_exit|hold_open|blocked_entry|inactive`.
+- `hold_required=true` only when execution ledger indicates open position.
+
+### TC-PAIR-ACT-API-002 Out-of-range lifecycle is explicit and reversible
+Preconditions:
+- Pair has actionable enter and sent Telegram fingerprint.
+Steps:
+1. Move current prices out of planned corridor.
+2. GET `/api/v2/pairs/actionability`.
+3. Move prices back into recomputed executable bounds.
+4. GET `/api/v2/pairs/actionability` again.
+Expected:
+- First response shows `intent.status=out_of_range` and non-actionable entry.
+- Second response shows new executable revision (`intent_id` changed) and actionable enter restored.
+
+### TC-PAIR-ACT-API-003 Pair action endpoint is idempotent
+Preconditions:
+- At least one row from `/api/v2/pairs/actionability`.
+Steps:
+1. POST `/api/v2/pairs/{pair_id}/actions` with `action=ack`, fixed `idempotency_key`.
+2. Repeat same request with same key.
+Expected:
+- First response `status=ok`.
+- Second response `status=duplicate`.
+
+### TC-PAIR-ACT-TG-001 Telegram sends one out-of-range update per fingerprint
+Preconditions:
+- Telegram worker uses pair-centric endpoint.
+Steps:
+1. Send enter notification for fingerprint A.
+2. Keep prices out-of-range for multiple polling cycles.
+Expected:
+- Exactly one out-of-range update for fingerprint A.
+- No repeated out-of-range messages while fingerprint A stays unchanged.
+
+### TC-ENTITY-ACT-API-001 Canonical actionability feed supports pair and instrument
+Preconditions:
+- Backend has at least one pair signal and one instrument signal in current snapshot.
+Steps:
+1. GET `/api/v2/signals/actionability`.
+2. Filter rows by `entity_ref.entity_type`.
+Expected:
+- Feed contains rows for both `pair` and `instrument`.
+- Common fields (`intent`, `delivery`, `actionability_state`, `policy_outcome`) are present for both.
+
+### TC-ENTITY-ACT-API-002 Conflicting evidence blocks entry deterministically
+Preconditions:
+- Entity has mixed sources: support from technical/fundamental and high-severity opposing news.
+Steps:
+1. GET `/api/v2/signals/actionability` for entity.
+Expected:
+- `evidence_summary.conflict_score` is non-zero.
+- `evidence_summary.veto_active=true`.
+- `policy_outcome.status=block` and delivery is suppressed with explicit reason.
+
+### TC-ENTITY-ACT-API-003 Entity action endpoint idempotency and fail-closed
+Automation: tests/test_api_v2.py::test_v2_entity_and_pair_actions_endpoints_are_idempotent
+Preconditions:
+- Entity row exists in canonical actionability feed.
+Steps:
+1. POST `/api/v2/entities/{entity_type}/{entity_id}/signals/actions` with fixed `idempotency_key`.
+2. Repeat request with same key.
+Expected:
+- First response status is `ok`.
+- Second response status is `duplicate`.
+- Response contains `entity_ref`, `action`, `fail_closed`.
+
+### TC-ENTITY-ACT-API-004 Policy precedence applies deterministic gate order
+Preconditions:
+- Entity has gate trace with at least one `reduce` and one `review` event from different gates.
+Steps:
+1. GET `/api/v2/signals/actionability` for entity.
+Expected:
+- `policy_outcome.precedence_version` is present.
+- Final `policy_outcome.status` follows precedence (`review` dominates `reduce`; `block` dominates all).
+- `policy_outcome.gate_trace` exposes gate priorities and reason codes.
+
+### TC-ENTITY-ACT-API-005 Review state remains visible and non-auto-delivered
+Preconditions:
+- Entity resolves to `policy_outcome.status=review`.
+Steps:
+1. GET `/api/v2/signals/actionability` for entity.
+Expected:
+- `actionability_state=review_entry`.
+- Row is visible in feed.
+- Enter delivery is suppressed or marked for manual review only.
+
+### TC-ENTITY-ACT-API-006 Open-position overlay does not hide fresh enter intent
+Preconditions:
+- Entity has `position_state=open` from execution ledger and a new active in-range enter intent.
+Steps:
+1. GET `/api/v2/signals/actionability` for entity.
+Expected:
+- Row contains open-position overlay (`hold_open` semantics via axes/flags).
+- Fresh enter intent remains visible and traceable (not silently suppressed by hold state).
+
+### TC-ENTITY-ACT-API-007 ACK consumes intent without changing position state
+Automation: tests/test_api_v2.py::test_v2_pair_actions_reject_stale_intent_id
+Preconditions:
+- Active entity intent exists and position is flat.
+Steps:
+1. POST `/api/v2/entities/{entity_type}/{entity_id}/signals/actions` with `action=ack`.
+2. GET `/api/v2/signals/actionability` for same entity.
+Expected:
+- Intent state becomes `consumed`.
+- Position state remains `flat`.
+- Delivery is suppressed with consumed reason for this intent.
+
+### TC-ENTITY-ACT-API-008 Instrument action resolves to pair context
+Automation: tests/test_api_v2.py::test_v2_instrument_actions_resolve_pair_context_and_store_execution
+Preconditions:
+- Instrument appears in `/api/v2/signals/actionability?entity_type=instrument`.
+Steps:
+1. POST `/api/v2/entities/instrument/{entity_id}/signals/actions` with `action=ack` and matching `intent_id`.
+Expected:
+- Response status `ok`.
+- Response keeps `entity_ref.entity_type=instrument` and includes resolved `pair_ref`/`pair_id`.
+- Execution is stored against resolved pair ledger.
+
+### TC-ENTITY-ACT-API-009 Ambiguous instrument requires explicit pair hint
+Automation: tests/test_api_v2.py::test_v2_instrument_actions_require_pair_hint_when_ambiguous
+Preconditions:
+- One instrument participates in multiple actionable pairs.
+Steps:
+1. POST `/api/v2/entities/instrument/{entity_id}/signals/actions` without `pair_id`.
+Expected:
+- Response `409` with `error=ambiguous_instrument_entity`.
+- Payload includes candidate pair ids for explicit disambiguation.

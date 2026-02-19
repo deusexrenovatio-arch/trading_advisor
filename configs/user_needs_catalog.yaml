@@ -1,0 +1,418 @@
+version: 1
+
+needs:
+  - id: need-complete-user-facing-flow
+    title: User can complete action from signal to execution without hidden gaps
+    problem_statement: User hits incomplete scenarios and cannot finish the workflow without manual clarification.
+    value_if_solved: Fewer dropped actions and less back-and-forth to finish operational tasks.
+    user_cases:
+      - uc-actionable-signal-to-execution
+      - uc-degraded-data-safe-handling
+    acceptance_scenarios:
+      - signals-active
+      - pretrade-check
+      - signals-execute
+      - decision-action
+      - first-time-right-user-case-gate
+    test_cases:
+      - TC-SIG-UI-WORKFLOW-001
+      - TC-PRETRADE-UI-001
+      - TC-SIG-EXEC-UI-001
+      - TC-DEC-UI-002
+      - TC-FTR-PROC-002
+
+  - id: need-fast-convergence-to-target
+    title: Parameter search converges to target with fewer clarification loops
+    problem_statement: Expected values are reached slowly due to weak objective framing before compute.
+    value_if_solved: Faster iteration and predictable tuning outcomes.
+    user_cases:
+      - uc-target-metric-locked-tuning
+    acceptance_scenarios:
+      - params-specs
+      - hpo
+      - hpo-status
+      - first-time-right-goal-contract-gate
+    test_cases:
+      - TC-PARAMS-API-001
+      - TC-HPO-API-001
+      - TC-HPO-API-002
+      - TC-FTR-PROC-001
+
+  - id: need-runtime-transparency-and-control
+    title: User sees runtime budget and can stop/replan long operations
+    problem_statement: Long runs and network calls are executed without clear progress and control points.
+    value_if_solved: Better operator control and lower wasted time.
+    user_cases:
+      - uc-long-run-eta-stop-replan
+    acceptance_scenarios:
+      - first-time-right-budget-stop-gate
+      - dev-skill-recheck-gate
+    test_cases:
+      - TC-FTR-PROC-003
+      - TC-DEV-WF-002
+
+  - id: need-high-load-by-design
+    title: Heavy jobs are designed for load from the start
+    problem_statement: Resource-heavy tasks are not consistently planned with chunking/parallel/cache/resume.
+    value_if_solved: Stable throughput under high load and fewer manual restarts.
+    user_cases:
+      - uc-heavy-batch-chunked-resumable
+    acceptance_scenarios:
+      - unified-minute-runtime
+      - first-time-right-load-readiness-gate
+    test_cases:
+      - TC-PERF-GATE-MAN-001
+      - TC-PERF-ARCH-UNIT-001
+      - TC-FTR-PROC-004
+
+  - id: need-context-integrity
+    title: Every change maps to the main user objective
+    problem_statement: Side-path work and context drift delay delivery of the primary business goal.
+    value_if_solved: Higher hit rate on main task and less rework.
+    user_cases:
+      - uc-task-scope-drift-prevention
+    acceptance_scenarios:
+      - first-time-right-context-integrity-gate
+      - dev-skill-recheck-gate
+    test_cases:
+      - TC-FTR-PROC-005
+      - TC-DEV-WF-002
+
+  - id: need-predictive-evolution
+    title: Solution anticipates likely next user needs
+    problem_statement: Follow-up requirements force repeated architecture and contract changes.
+    value_if_solved: Better first-pass completeness and cheaper future iterations.
+    user_cases:
+      - uc-future-needs-extension-ready
+      - uc-repeated-issue-root-cause-first
+    acceptance_scenarios:
+      - first-time-right-goal-contract-gate
+      - first-time-right-repeated-issue-gate
+    test_cases:
+      - TC-FTR-PROC-001
+      - TC-FTR-PROC-006
+
+  - id: need-decision-audit-review
+    title: Decision audit is explorable with filters and aggregation details
+    problem_statement: Operator cannot confidently review decisions if list/filter/aggregation views are fragmented.
+    value_if_solved: Faster and safer operator review before actions.
+    user_cases:
+      - uc-decision-filters-and-aggregation
+    acceptance_scenarios:
+      - decision-view
+      - decision-view-filters
+      - decision-view-aggregation
+      - decision-log-aggregation
+    test_cases:
+      - TC-DEC-API-001
+      - TC-DEC-API-005
+      - TC-DEC-API-002
+      - TC-DEC-API-003
+
+  - id: need-market-scan-history-analysis
+    title: Market scan and signal history are analyzable end-to-end
+    problem_statement: Users lose context without coherent top-pairs, spread drilldown, and history analysis.
+    value_if_solved: Better situational awareness and post-action diagnostics.
+    user_cases:
+      - uc-market-scan-chart-history
+    acceptance_scenarios:
+      - top-pairs
+      - spread-series
+      - signals-history
+      - signals-history-range
+      - signals-history-reasons
+    test_cases:
+      - TC-TOP-API-001
+      - TC-SPREAD-API-001
+      - TC-SIG-HIST-API-001
+      - TC-SIG-HIST-API-002
+      - TC-SIG-HIST-API-004
+
+  - id: need-signal-action-control-loop
+    title: Signal action, acknowledgment, and policy remediation form one control loop
+    problem_statement: Execution lifecycle is brittle if action API, ACK bridge, and auto-remediation are disconnected.
+    value_if_solved: Fewer unresolved execution states and clearer operator control.
+    user_cases:
+      - uc-signal-action-and-ack-bridge
+    acceptance_scenarios:
+      - signals-action-v2
+      - signals-ack-execute
+      - auto-unwind-policy-v2
+    test_cases:
+      - TC-SIG-ACT-API-003
+      - TC-SIG-ACK-API-001
+      - TC-SIG-POLICY-API-001
+
+  - id: need-research-backtest-forward-lifecycle
+    title: Research lifecycle from backtest to forward is fully documented
+    problem_statement: Research flow is incomplete without consistent backtest, run, forward, and UI trigger paths.
+    value_if_solved: Better reproducibility and clearer promotion readiness.
+    user_cases:
+      - uc-backtest-to-forward-cycle
+    acceptance_scenarios:
+      - backtests
+      - backtest-run
+      - forward-start
+      - forward-status
+      - frontend-hpo-run
+    test_cases:
+      - TC-BACK-API-001
+      - TC-BACK-V2-API-001
+      - TC-FWD-API-001
+      - TC-FWD-API-002
+      - TC-HPO-UI-001
+
+  - id: need-ui-platform-entry-and-proxy
+    title: UI entrypoint and proxy contracts are reliable
+    problem_statement: Frontend usability degrades when UI health and proxy contracts are not tracked as user needs.
+    value_if_solved: Stable UI access and predictable backend integration behavior.
+    user_cases:
+      - uc-ui-availability-and-proxy
+    acceptance_scenarios:
+      - frontend
+      - frontend-proxy
+      - frontend-params-specs
+    test_cases:
+      - TC-FE-HTTP-001
+      - TC-FE-PROXY-001
+      - TC-BACK-V2-UI-001
+
+  - id: need-news-portfolio-ops-observability
+    title: News, portfolio control, and ops observability are documented as one operator domain
+    problem_statement: Operations fragment when news actions, portfolio control, and runtime health are documented separately.
+    value_if_solved: Coordinated operating picture for risk and execution quality.
+    user_cases:
+      - uc-news-workspace-and-portfolio-control
+      - uc-ops-health-and-slo-monitoring
+    acceptance_scenarios:
+      - news-feed-v2
+      - portfolio-rebalance-v2
+      - ops-health-v2
+      - ops-slo-v2
+    test_cases:
+      - TC-NEWS-API-001
+      - TC-PORT-API-001
+      - TC-OPS-API-001
+      - TC-OPS-API-002
+
+  - id: need-delivery-governance-baseline
+    title: Delivery governance baseline is documented from stream start to pre-push
+    problem_statement: Team quality drops when mandatory workflow gates at stream start and push boundary are implicit.
+    value_if_solved: Consistent development hygiene and fewer avoidable regressions.
+    user_cases:
+      - uc-dev-stream-start-and-prepush
+    acceptance_scenarios:
+      - dev-skill-start-gate
+      - dev-skill-prepush-gate
+    test_cases:
+      - TC-DEV-WF-001
+      - TC-DEV-WF-003
+
+user_cases:
+  - id: uc-actionable-signal-to-execution
+    title: Single-flow handling from signal review to execution
+    persona: Operator
+    trigger: User opens a live signal and wants to act now.
+    expected_outcome: User sees decision context, blockers, and executes in one flow without switching screens.
+    acceptance_scenarios:
+      - signals-active
+      - signals-execute
+      - decision-action
+    test_cases:
+      - TC-SIG-UI-WORKFLOW-001
+      - TC-SIG-EXEC-UI-001
+      - TC-DEC-UI-002
+
+  - id: uc-degraded-data-safe-handling
+    title: Safe behavior when pretrade or data quality is degraded
+    persona: Operator
+    trigger: Preconditions are missing or stale while user tries to execute.
+    expected_outcome: System fails closed with explicit reasons and next actions.
+    acceptance_scenarios:
+      - pretrade-check
+      - first-time-right-user-case-gate
+    test_cases:
+      - TC-PRETRADE-API-002
+      - TC-FTR-PROC-002
+
+  - id: uc-target-metric-locked-tuning
+    title: Tuning starts from explicit target and acceptance contract
+    persona: Research engineer
+    trigger: User asks for better HPO/backtest result.
+    expected_outcome: Search space and ranking target are explicit before runs start.
+    acceptance_scenarios:
+      - hpo
+      - hpo-status
+      - first-time-right-goal-contract-gate
+    test_cases:
+      - TC-HPO-API-001
+      - TC-HPO-API-002
+      - TC-FTR-PROC-001
+
+  - id: uc-long-run-eta-stop-replan
+    title: Long run is visible and interruptible
+    persona: Operator
+    trigger: Task includes long compute/network stage.
+    expected_outcome: User receives ETA/progress checkpoints and stop/replan trigger is respected.
+    acceptance_scenarios:
+      - first-time-right-budget-stop-gate
+    test_cases:
+      - TC-FTR-PROC-003
+
+  - id: uc-heavy-batch-chunked-resumable
+    title: Heavy batch task executes with chunking and resume
+    persona: Research engineer
+    trigger: Task requires high-volume HPO/export/inference.
+    expected_outcome: Execution uses chunking, bounded parallelism, and resume-safe checkpoints.
+    acceptance_scenarios:
+      - unified-minute-runtime
+      - first-time-right-load-readiness-gate
+    test_cases:
+      - TC-PERF-ARCH-UNIT-001
+      - TC-FTR-PROC-004
+
+  - id: uc-task-scope-drift-prevention
+    title: Scope drift is detected before implementation
+    persona: Product/engineering owner
+    trigger: Implementation path starts deviating from main objective.
+    expected_outcome: Non-value side work is paused and scope is re-anchored to user goal.
+    acceptance_scenarios:
+      - first-time-right-context-integrity-gate
+    test_cases:
+      - TC-FTR-PROC-005
+
+  - id: uc-repeated-issue-root-cause-first
+    title: Repeated issue escalates to root-cause review
+    persona: Maintainer
+    trigger: Same bug/problem returns after one or more fixes.
+    expected_outcome: Team switches from patching to structured root-cause and regression checklist.
+    acceptance_scenarios:
+      - first-time-right-repeated-issue-gate
+    test_cases:
+      - TC-FTR-PROC-006
+
+  - id: uc-future-needs-extension-ready
+    title: Design includes short-horizon extension points
+    persona: Product owner
+    trigger: New requirement arrives in same domain shortly after release.
+    expected_outcome: Existing contracts/modules absorb change without major rewrite.
+    acceptance_scenarios:
+      - first-time-right-goal-contract-gate
+    test_cases:
+      - TC-FTR-PROC-001
+
+  - id: uc-decision-filters-and-aggregation
+    title: Operator filters decisions and inspects aggregation details
+    persona: Operator
+    trigger: User reviews past and current decisions before execution.
+    expected_outcome: Decision list/filter and detail aggregation provide complete audit context.
+    acceptance_scenarios:
+      - decision-view
+      - decision-view-filters
+      - decision-view-aggregation
+      - decision-log-aggregation
+    test_cases:
+      - TC-DEC-API-001
+      - TC-DEC-API-005
+      - TC-DEC-API-002
+      - TC-DEC-API-003
+
+  - id: uc-market-scan-chart-history
+    title: Operator scans market opportunities and investigates history
+    persona: Operator
+    trigger: User evaluates top opportunities and validates behavior against spread and signal history.
+    expected_outcome: Top list, spread chart, and history range/reasons are consistent and usable.
+    acceptance_scenarios:
+      - top-pairs
+      - spread-series
+      - signals-history
+      - signals-history-range
+      - signals-history-reasons
+    test_cases:
+      - TC-TOP-API-001
+      - TC-SPREAD-API-001
+      - TC-SIG-HIST-API-001
+      - TC-SIG-HIST-API-002
+      - TC-SIG-HIST-API-004
+
+  - id: uc-signal-action-and-ack-bridge
+    title: Signal action and ACK are bridged with policy remediation
+    persona: Operator
+    trigger: User acknowledges and executes signals while one-leg imbalance controls are active.
+    expected_outcome: Action endpoint, ACK bridge, and auto-unwind policy are coherent.
+    acceptance_scenarios:
+      - signals-action-v2
+      - signals-ack-execute
+      - auto-unwind-policy-v2
+    test_cases:
+      - TC-SIG-ACT-API-003
+      - TC-SIG-ACK-API-001
+      - TC-SIG-POLICY-API-001
+
+  - id: uc-backtest-to-forward-cycle
+    title: Research cycle runs from backtest through forward checks
+    persona: Research engineer
+    trigger: User runs research validation for strategy changes.
+    expected_outcome: Backtest list/run, forward start/status, and UI HPO trigger are available and consistent.
+    acceptance_scenarios:
+      - backtests
+      - backtest-run
+      - forward-start
+      - forward-status
+      - frontend-hpo-run
+    test_cases:
+      - TC-BACK-API-001
+      - TC-BACK-V2-API-001
+      - TC-FWD-API-001
+      - TC-FWD-API-002
+      - TC-HPO-UI-001
+
+  - id: uc-ui-availability-and-proxy
+    title: UI entry and proxy contracts remain available
+    persona: User
+    trigger: User opens web app and loads proxied data endpoints.
+    expected_outcome: Frontend health and proxy endpoints stay stable for operational usage.
+    acceptance_scenarios:
+      - frontend
+      - frontend-proxy
+      - frontend-params-specs
+    test_cases:
+      - TC-FE-HTTP-001
+      - TC-FE-PROXY-001
+      - TC-BACK-V2-UI-001
+
+  - id: uc-news-workspace-and-portfolio-control
+    title: News intelligence and portfolio control support coordinated actions
+    persona: Operator
+    trigger: User reviews news impact and executes portfolio rebalance controls.
+    expected_outcome: News feed and portfolio rebalance APIs provide decision-ready outputs.
+    acceptance_scenarios:
+      - news-feed-v2
+      - portfolio-rebalance-v2
+    test_cases:
+      - TC-NEWS-API-001
+      - TC-PORT-API-001
+
+  - id: uc-ops-health-and-slo-monitoring
+    title: Operator monitors health and SLO from runtime APIs
+    persona: Operator
+    trigger: User checks platform reliability and incident risk.
+    expected_outcome: Health and SLO endpoints expose actionable observability state.
+    acceptance_scenarios:
+      - ops-health-v2
+      - ops-slo-v2
+    test_cases:
+      - TC-OPS-API-001
+      - TC-OPS-API-002
+
+  - id: uc-dev-stream-start-and-prepush
+    title: Team follows mandatory start and pre-push governance
+    persona: Engineer
+    trigger: User starts a stream or prepares to push changes.
+    expected_outcome: Stream bootstrap and pre-push blocker checks are consistently enforced.
+    acceptance_scenarios:
+      - dev-skill-start-gate
+      - dev-skill-prepush-gate
+    test_cases:
+      - TC-DEV-WF-001
+      - TC-DEV-WF-003

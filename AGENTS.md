@@ -47,6 +47,40 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
   - Avoid deep reference-chasing: prefer opening only files directly linked from `SKILL.md` unless blocked.
   - When variants exist (frameworks, providers, domains), pick only relevant reference files and note that choice.
 - Safety and fallback: If a skill cannot be applied cleanly (missing files, unclear instructions), state the issue, pick the next-best approach, and continue.
+
+### First-Time-Right Quality Protocol (mandatory)
+- Scope: mandatory for research tasks and for user-facing business logic (all flows where user interacts with system behavior).
+- Before implementation, run a `goal contract`:
+  - target user outcome,
+  - acceptance criteria,
+  - explicit out-of-scope,
+  - assumptions requiring validation.
+- Run `user-case completeness gate` before coding:
+  - primary flow,
+  - edge/negative flows,
+  - interruption/retry flow,
+  - stale/partial data flow.
+- Run `execution budget gate` before long commands:
+  - estimate runtime/network/CPU cost,
+  - define stop/replan trigger,
+  - run fast probe first, then scale.
+- For heavy workloads (HPO, large exports, inference batches), design for load from start:
+  - chunking,
+  - parallel workers,
+  - caching/resume,
+  - progress checkpoints with early-stop option.
+- Run `context integrity gate`:
+  - each change must map to main task objective,
+  - no side-path work without explicit value.
+- Run `predictive next-needs gate`:
+  - add extension points and tests for likely next requirements.
+- If issue repeats or fix confidence is low, escalate to `repeated-issue-review` workflow before further patching.
+- Use `docs/checklists/first-time-right-gate.md` as default checklist.
+- Final analytic/delivery report format:
+  1) Confirmed coverage.
+  2) Missing or risky scenarios.
+  3) Resource/time risks and chosen controls.
+  4) Highest-priority fixes or follow-ups.
 </INSTRUCTIONS>
 
 ## Worktree Safety Protocol (mandatory)

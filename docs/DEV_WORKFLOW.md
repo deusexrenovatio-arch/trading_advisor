@@ -37,6 +37,30 @@ Policy:
 - Recheck and pre-push:
   - Re-run the active stream verification skill(s) and then run required checks below.
 
+## First-time-right gate (mandatory)
+- Scope:
+  - Research decisions.
+  - User-facing business logic (API/UI/runtime flows that affect user outcomes).
+- Run `docs/checklists/first-time-right-gate.md`:
+  - before implementation for non-trivial tasks,
+  - before pre-push for changed behavior.
+- Keep `configs/user_needs_catalog.yaml` updated when user-facing behavior or decision flow changes.
+- CI enforces full acceptance-scenario coverage through `configs/user_needs_catalog.yaml`.
+
+Blockers:
+- Primary/edge/negative user scenarios not defined.
+- Acceptance criteria or expected outputs are ambiguous.
+- Long-running/network-heavy step has no budget and stop/replan trigger.
+- Heavy task design does not include chunking/parallel/cache or resume strategy.
+- Changes do not clearly map to the main objective or known user value.
+- Repeated issue is being patched again without structured root-cause review.
+
+Required report block for implementation and reviews:
+1. Confirmed coverage.
+2. Missing or risky scenarios.
+3. Resource/time risks and chosen controls.
+4. Highest-priority fixes or follow-ups.
+
 ## Coverage mapping
 - Manual process acceptance scenarios:
   - `dev-skill-start-gate` -> `TC-DEV-WF-001`
@@ -53,6 +77,7 @@ Policy:
 - `python -m pip install -e ".[dev]"`
 - `python scripts/sync_architecture_map.py --check`
 - `python scripts/validate_test_cases.py`
+- `python scripts/validate_user_needs_catalog.py`
 - `python scripts/validate_skills.py`
 - `pytest`
 

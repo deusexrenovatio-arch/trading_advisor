@@ -30,6 +30,66 @@ scenarios:
       - "Backend, frontend, and docs checks from docs/DEV_WORKFLOW.md pass."
       - "Any failed check blocks push until fixed."
 
+  - id: first-time-right-goal-contract-gate
+    type: manual
+    scope: process
+    test_cases: [TC-FTR-PROC-001]
+    title: First-time-right goal contract gate
+    user_story: Engineer defines user outcome and acceptance contract before implementation.
+    expectations:
+      - "Goal contract includes user outcome, acceptance criteria, out-of-scope, and assumptions."
+      - "Implementation does not start while goal contract is ambiguous."
+
+  - id: first-time-right-user-case-gate
+    type: manual
+    scope: process
+    test_cases: [TC-FTR-PROC-002]
+    title: First-time-right user-case completeness gate
+    user_story: Engineer validates primary, edge, negative, and interruption scenarios before coding.
+    expectations:
+      - "Primary and non-happy-path scenarios are explicitly listed."
+      - "Missing scenario coverage blocks implementation."
+
+  - id: first-time-right-budget-stop-gate
+    type: manual
+    scope: process
+    test_cases: [TC-FTR-PROC-003]
+    title: First-time-right runtime budget and stop/replan gate
+    user_story: Engineer defines runtime budget and stop/replan triggers for long operations.
+    expectations:
+      - "Long-running tasks have ETA, checkpoint cadence, and stop trigger."
+      - "Task is replanned when stop trigger is hit."
+
+  - id: first-time-right-load-readiness-gate
+    type: manual
+    scope: process
+    test_cases: [TC-FTR-PROC-004]
+    title: First-time-right high-load readiness gate
+    user_story: Engineer plans heavy workloads with chunking, parallel limits, and resume-safe checkpoints.
+    expectations:
+      - "High-load tasks define chunking and bounded parallelism."
+      - "Resume path is documented before execution."
+
+  - id: first-time-right-context-integrity-gate
+    type: manual
+    scope: process
+    test_cases: [TC-FTR-PROC-005]
+    title: First-time-right context integrity gate
+    user_story: Engineer keeps all changes aligned with main task objective and user value.
+    expectations:
+      - "Each change maps to the main objective."
+      - "Detached side work is explicitly deferred."
+
+  - id: first-time-right-repeated-issue-gate
+    type: manual
+    scope: process
+    test_cases: [TC-FTR-PROC-006]
+    title: First-time-right repeated issue escalation gate
+    user_story: Repeated issues escalate to structured root-cause review before further patching.
+    expectations:
+      - "Repeated issue triggers findings+hypotheses report."
+      - "Regression checklist is executed before closing."
+
   - id: decision-view
     type: api_list
     scope: backend

@@ -38,6 +38,9 @@ python scripts/sync_architecture_map.py --check
 echo "[pre-push] acceptance mapping consistency"
 python scripts/validate_test_cases.py
 
+echo "[pre-push] user-needs catalog consistency"
+python scripts/validate_user_needs_catalog.py
+
 echo "[pre-push] skill consistency"
 python scripts/validate_skills.py
 
