@@ -120,10 +120,10 @@ def _apply_cost_stress(resolved: dict[str, Any], mult: float) -> None:
         "fee_stock_bps",
         "fee_fut_per_contract",
     ]
-    for field in cost_fields:
-        value = costs.get(field)
+    for field_name in cost_fields:
+        value = costs.get(field_name)
         if value is not None:
-            costs[field] = float(value) * mult
+            costs[field_name] = float(value) * mult
 
     slippage_fields = [
         "half_spread_bps",
@@ -131,10 +131,10 @@ def _apply_cost_stress(resolved: dict[str, Any], mult: float) -> None:
         "slip_fut_bps",
         "slip_fut_ticks",
     ]
-    for field in slippage_fields:
-        value = execution.get(field)
+    for field_name in slippage_fields:
+        value = execution.get(field_name)
         if value is not None:
-            execution[field] = float(value) * mult
+            execution[field_name] = float(value) * mult
 
     resolved["costs"] = costs
     resolved["execution"] = execution

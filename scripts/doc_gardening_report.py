@@ -11,10 +11,16 @@ import yaml
 
 TODO_PATTERN = re.compile(r"\bTODO\b", re.IGNORECASE)
 REQUIRED_DOCS = [
+    Path("docs/README.md"),
     Path("AGENTS.md"),
+    Path("CODEOWNERS"),
     Path("harness-guideline.md"),
     Path("docs/DEV_WORKFLOW.md"),
     Path("docs/checklists/first-time-right-gate.md"),
+    Path("docs/runbooks/governance-remediation.md"),
+    Path("docs/runbooks/flaky-tests-policy.md"),
+    Path("docs/runbooks/local-observability-stack.md"),
+    Path("docs/runbooks/self-heal-escalation.md"),
     Path("memory/agent_memory.yaml"),
     Path("plans/PLANS.yaml"),
 ]

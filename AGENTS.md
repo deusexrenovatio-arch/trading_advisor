@@ -6,11 +6,16 @@
 - Keep context small and rely on mechanical checks.
 - Reference philosophy: https://openai.com/index/harness-engineering/
 - Source-of-truth files:
+  - `docs/README.md`
   - `docs/DEV_WORKFLOW.md`
+  - `docs/workflows/context-budget.md`
+  - `docs/session_handoff.md`
   - `harness-guideline.md`
   - `plans/PLANS.yaml`
   - `memory/agent_memory.yaml`
+  - `CODEOWNERS`
   - `docs/checklists/first-time-right-gate.md`
+  - `docs/runbooks/governance-remediation.md`
   - `scripts/run_lean_gate.py`
 
 ## Non-Negotiable Loop
@@ -18,9 +23,12 @@
 2) Before and after meaningful patches run `python scripts/run_lean_gate.py`.
 3) Keep `plans/PLANS.yaml` statuses aligned with actual progress.
 4) Keep `memory/agent_memory.yaml` updated with durable decisions/incidents/patterns.
-5) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
+  - incidents must use remediation types from `configs/agent_incident_policy.yaml`.
+5) Keep `docs/session_handoff.md` updated and pass `python scripts/validate_session_handoff.py`.
+6) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
   - include `python scripts/validate_quality_scorecards.py`.
-6) Any failing gate is a blocker; fix first, continue after.
+7) Any failing gate is a blocker; fix first, continue after.
+  - use `docs/runbooks/governance-remediation.md` for deterministic fixes.
 
 ## Skills
 ### Available skills
@@ -48,6 +56,7 @@
 - News/signal: `commodity-news-linking` -> `news-impact-backtest-lab` -> `signals-news-bridge-v2`.
 - Research/performance: `ml-backtest-hpo-lab`; add `minute-candle-performance` for high-load paths.
 - Recheck and pre-push: rerun active verification skills and required checks from `docs/DEV_WORKFLOW.md`.
+  - dependency or abstraction changes must include ADR updates under `docs/architecture/adr/`.
 
 ### Skill Usage Rules
 - If user names a skill (or task clearly matches), use that skill in the same turn.

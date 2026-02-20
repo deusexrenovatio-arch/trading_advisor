@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
+
 
 def _load_policy(path: Path) -> dict[str, Any]:
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -30,21 +32,25 @@ def _normalize_command(raw: list[Any], python_executable: str) -> list[str]:
 def run(policy_path: Path) -> int:
     if not policy_path.exists():
         print(f"architecture policy not found: {policy_path.as_posix()}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     try:
         policy = _load_policy(policy_path)
     except Exception as exc:
         print(f"architecture policy validation failed: {exc}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     if policy.get("version") != 1:
         print(f"architecture policy validation failed: unsupported version {policy.get('version')!r}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     checks = policy.get("checks")
     if not isinstance(checks, list) or not checks:
         print("architecture policy validation failed: checks must be a non-empty list")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     blocking_failures: list[str] = []
@@ -73,6 +79,7 @@ def run(policy_path: Path) -> int:
             + ", ".join(sorted(blocking_failures))
             + ")"
         )
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     print("architecture policy: OK")

@@ -58,6 +58,17 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Run lean governance gate + publish metrics
         run: python scripts/run_lean_gate.py --summary-file "$GITHUB_STEP_SUMMARY"
+      - name: Validate dependency ADR contract with diff refs
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python scripts/validate_dependency_decisions.py \
+              --base-sha "${{ github.event.pull_request.base.sha }}" \
+              --head-sha "${{ github.event.pull_request.head.sha }}"
+          else
+            python scripts/validate_dependency_decisions.py \
+              --base-sha "${{ github.event.before }}" \
+              --head-sha "${{ github.sha }}"
+          fi
 
   quality-scorecards:
     needs: governance
@@ -85,6 +96,52 @@ jobs:
         with:
           name: quality-scorecard
           path: quality-scorecard.md
+
+  governance-dashboard:
+    needs:
+      - governance
+      - quality-scorecards
+      - agent-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Build combined governance dashboard
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python scripts/build_governance_dashboard.py \
+              --base-sha "${{ github.event.pull_request.base.sha }}" \
+              --head-sha "${{ github.event.pull_request.head.sha }}" \
+              --output governance-dashboard.md \
+              --artifacts-dir .runlogs/governance-dashboard \
+              --summary-file "$GITHUB_STEP_SUMMARY"
+          else
+            python scripts/build_governance_dashboard.py \
+              --base-sha "${{ github.event.before }}" \
+              --head-sha "${{ github.sha }}" \
+              --output governance-dashboard.md \
+              --artifacts-dir .runlogs/governance-dashboard \
+              --summary-file "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload governance dashboard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governance-dashboard
+          path: |
+            governance-dashboard.md
+            .runlogs/governance-dashboard
 
   backend:
     needs: governance
@@ -149,6 +206,23 @@ jobs:
       - name: Run minute runtime perf gate
         run: pytest tests/perf -q
 
+  nfr-journeys:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run startup and API journey budgets
+        run: pytest tests/perf/test_app_startup_runtime.py tests/perf/test_api_journey_runtime.py -q
+
   frontend:
     needs: governance
     runs-on: ubuntu-latest
@@ -170,6 +244,36 @@ jobs:
         run: npm run lint
       - name: Run build (typecheck)
         run: npm run build
+
+  frontend-e2e:
+    needs: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ui-web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright e2e
+        run: npm run test:e2e
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-e2e-report
+          path: |
+            ui-web/playwright-report
+            ui-web/test-results
 
   commitlint:
     runs-on: ubuntu-latest

@@ -28,6 +28,8 @@ Definitions
 - `api_v2_contract_pass_rate`
 - `idempotent_action_duplicate_rate`
 - `projection_mismatch_rate`
+- `app_startup_time_sec`
+- `core_api_journey_p95_sec`
 
 ## Backend Ops (v2)
 - `v2_pretrade_check_p95_ms`
@@ -48,3 +50,7 @@ Default alert thresholds
 - `execution_rejections_fail_closed_15m >= 5`
 - `pretrade_failures_15m >= 10`
 - `auto_unwind_errors_15m >= 1`
+
+CI budget checks
+- `tests/perf/test_app_startup_runtime.py`: startup <= 12s.
+- `tests/perf/test_api_journey_runtime.py`: critical GET journey calls <= 2s each.

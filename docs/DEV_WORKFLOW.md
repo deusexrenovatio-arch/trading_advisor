@@ -4,6 +4,7 @@
 - Catch regressions early across backend + UI.
 - Keep contract changes visible and reviewed.
 - Make checks repeatable locally and in CI.
+- Keep team context overhead bounded and machine-checked.
 
 ## Mandatory worktree preflight
 - Before any code change, lock expected worktree + branch for the current session:
@@ -61,6 +62,15 @@ Required report block for implementation and reviews:
 3. Resource/time risks and chosen controls.
 4. Highest-priority fixes or follow-ups.
 
+## Context budget gate (mandatory)
+- Keep handoff state in `docs/session_handoff.md`, not in long chat recaps.
+- `## Current Delta` must stay within 8 bullets and contain only actionable changes.
+- Do not copy large instruction catalogs into handoff or status updates.
+- Validation command:
+  - `python scripts/validate_session_handoff.py`
+- Policy and usage:
+  - `docs/workflows/context-budget.md`
+
 ## Coverage mapping
 - Manual process acceptance scenarios:
   - `dev-skill-start-gate` -> `TC-DEV-WF-001`
@@ -74,13 +84,25 @@ Required report block for implementation and reviews:
 - Use progressive disclosure: load only the files/slices required for the active step.
 - Run fast governance loop after each meaningful patch:
   - `python scripts/run_lean_gate.py`
+- On gate failure, use deterministic remediation map:
+  - `docs/runbooks/governance-remediation.md`
 - Keep machine-readable plan state fresh:
   - update `plans/PLANS.yaml` for active/completed/deferred status changes.
   - schema/invariants: `docs/planning/plans-registry.md`
 - Keep operational memory fresh:
   - record durable decisions/incidents/patterns in `memory/agent_memory.yaml`.
+  - incident `remediation_type` must follow `configs/agent_incident_policy.yaml`.
+- Keep handoff delta fresh:
+  - update `docs/session_handoff.md` with current goal, delta, blockers, and next step.
 - Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
 - Before push/PR, always run the full blocker gate below.
+
+## Dependency decision gate (ADR)
+- Any dependency manifest change or high-impact abstraction change must include ADR update.
+- ADR location:
+  - `docs/architecture/adr/`
+- Gate command:
+  - `python scripts/validate_dependency_decisions.py`
 
 ## Required checks (CI + local)
 - Treat this list as a blocker gate for pre-push and PR readiness.
@@ -88,7 +110,11 @@ Required report block for implementation and reviews:
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
 - `python scripts/run_lean_gate.py`
+- `python scripts/validate_session_handoff.py`
 - `python scripts/validate_quality_scorecards.py`
+- `python scripts/validate_python_style.py`
+- `python scripts/validate_structured_logging.py`
+- `python scripts/validate_codeowners.py`
 - `pytest`
 
 ### Frontend (UI)
@@ -96,6 +122,7 @@ Required report block for implementation and reviews:
 - `npm ci`
 - `npm run lint`
 - `npm run build`
+- `npm run test:e2e` (CI required; local run before major UI merges)
 
 ## Automatic pre-push gate (recommended)
 - Enable repository hooks once per clone:
@@ -120,6 +147,34 @@ Required report block for implementation and reviews:
   - Requires backend running with data
 - Demo pipeline: `python scripts/build.py`
 
+## Flaky test policy (blocking for governance)
+- Policy source:
+  - `configs/flaky_policy.yaml`
+  - `docs/runbooks/flaky-tests-policy.md`
+- Validation:
+  - `python scripts/validate_flaky_policy.py`
+- Rules:
+  - no silent ignores,
+  - bounded retries,
+  - quarantine must have owner + issue + TTL + SLA.
+
+## Ownership routing (blocking for governance)
+- Source:
+  - `CODEOWNERS`
+  - `configs/codeowners_policy.yaml`
+- Validation:
+  - `python scripts/validate_codeowners.py`
+- Rule:
+  - governance, architecture, contracts, code, and CI paths must have deterministic owners.
+
+## Local observability stack (recommended)
+- Compose profile:
+  - `docker-compose.observability.yml`
+- Start:
+  - `docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d`
+- Docs:
+  - `docs/runbooks/local-observability-stack.md`
+
 ## Scheduled maintenance (CI)
 - `docs-gardening` workflow runs weekly and on manual trigger:
   - `python scripts/run_lean_gate.py`
@@ -127,8 +182,11 @@ Required report block for implementation and reviews:
   - `python scripts/autonomy_kpi_report.py`
 - `agent-review` CI job publishes deterministic findings artifact for each PR/push:
   - `python scripts/agent_review.py`
+- `governance-dashboard` CI job publishes one combined artifact:
+  - `python scripts/build_governance_dashboard.py`
 - `self-heal` workflow runs daily and on manual trigger:
   - `python scripts/self_heal.py`
+  - if remediation fails, escalate via `docs/runbooks/self-heal-escalation.md`.
 
 ## Branching model
 - `main` is protected; work happens on short-lived branches.

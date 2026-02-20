@@ -60,6 +60,7 @@ python scripts/run_ui.py
 
 See `docs/DEV_WORKFLOW.md` for required checks (backend tests, UI lint/build)
 and optional acceptance/E2E smoke checks.
+Documentation system index: `docs/README.md`.
 
 Recommended: enable pre-push blocker checks once per clone:
 

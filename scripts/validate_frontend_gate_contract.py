@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
+
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -35,6 +37,7 @@ def run(workflow_path: Path, package_json_path: Path) -> int:
         print("frontend gate contract failed:")
         for item in errors:
             print(f"- {item}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     workflow = _load_yaml(workflow_path)
@@ -61,6 +64,31 @@ def run(workflow_path: Path, package_json_path: Path) -> int:
             if not build_present:
                 errors.append("jobs.frontend must run `npm run build`")
 
+    if not isinstance(jobs, dict) or "frontend-e2e" not in jobs:
+        errors.append("ci workflow must define jobs.frontend-e2e")
+    else:
+        frontend_e2e = jobs.get("frontend-e2e") or {}
+        if not isinstance(frontend_e2e, dict):
+            errors.append("jobs.frontend-e2e must be an object")
+        else:
+            steps = frontend_e2e.get("steps") or []
+            run_commands = []
+            if isinstance(steps, list):
+                for step in steps:
+                    if isinstance(step, dict):
+                        run_cmd = step.get("run")
+                        if isinstance(run_cmd, str):
+                            run_commands.append(run_cmd)
+            e2e_present = any("npm run test:e2e" in cmd for cmd in run_commands)
+            artifact_present = any(
+                isinstance(step, dict) and str(step.get("uses", "")).startswith("actions/upload-artifact")
+                for step in (steps if isinstance(steps, list) else [])
+            )
+            if not e2e_present:
+                errors.append("jobs.frontend-e2e must run `npm run test:e2e`")
+            if not artifact_present:
+                errors.append("jobs.frontend-e2e must upload artifacts")
+
     package = _load_json(package_json_path)
     scripts = package.get("scripts") or {}
     if not isinstance(scripts, dict):
@@ -70,11 +98,14 @@ def run(workflow_path: Path, package_json_path: Path) -> int:
             errors.append("ui-web/package.json missing `scripts.lint`")
         if "build" not in scripts:
             errors.append("ui-web/package.json missing `scripts.build`")
+        if "test:e2e" not in scripts:
+            errors.append("ui-web/package.json missing `scripts.test:e2e`")
 
     if errors:
         print("frontend gate contract failed:")
         for item in errors:
             print(f"- {item}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     print("frontend gate contract: OK")

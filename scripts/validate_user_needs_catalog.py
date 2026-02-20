@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 TEST_CASE_PATTERN = re.compile(r"^###\s+(TC-[A-Z0-9-]+)\b")
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 
 
 def _load_yaml(path: str) -> dict[str, Any]:
@@ -192,6 +193,7 @@ def run(
         print("user-needs catalog validation failed:")
         for item in errors:
             print(f"- {item}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     print("user-needs catalog validation: OK")

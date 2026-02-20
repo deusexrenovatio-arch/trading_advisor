@@ -10,11 +10,13 @@ REQUIRED_HEADERS = [
     "## Purpose",
     "## Tests and acceptance",
 ]
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 
 
 def run(path: Path) -> int:
     if not path.exists():
         print(f"design contract failed: missing file {path.as_posix()}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     text = path.read_text(encoding="utf-8-sig", errors="ignore")
@@ -30,6 +32,7 @@ def run(path: Path) -> int:
         print("design contract failed:")
         for item in errors:
             print(f"- {item}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     print("design contract: OK")

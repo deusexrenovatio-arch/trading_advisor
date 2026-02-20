@@ -28,6 +28,18 @@ dimensions:
       - id: design-standards-contract
         command: ["{python}", "scripts/validate_design_contract.py"]
 
+  - id: engineering-taste
+    threshold: 1.0
+    checks:
+      - id: taste-invariants
+        command: ["{python}", "scripts/validate_taste_invariants.py"]
+      - id: python-style
+        command: ["{python}", "scripts/validate_python_style.py"]
+      - id: structured-logging-contract
+        command: ["{python}", "scripts/validate_structured_logging.py"]
+      - id: remediation-guidance
+        command: ["{python}", "scripts/validate_governance_remediation.py"]
+
   - id: product-sense
     threshold: 1.0
     checks:
@@ -35,3 +47,19 @@ dimensions:
         command: ["{python}", "scripts/validate_user_needs_catalog.py"]
       - id: acceptance-mapping
         command: ["{python}", "scripts/validate_test_cases.py"]
+
+  - id: delivery-throughput
+    threshold: 1.0
+    checks:
+      - id: codeowners-routing
+        command: ["{python}", "scripts/validate_codeowners.py"]
+      - id: flaky-policy
+        command: ["{python}", "scripts/validate_flaky_policy.py"]
+      - id: dependency-adr-policy
+        command: ["{python}", "scripts/validate_dependency_decisions.py"]
+
+  - id: observability
+    threshold: 1.0
+    checks:
+      - id: local-observability-stack
+        command: ["{python}", "scripts/validate_observability_stack.py"]

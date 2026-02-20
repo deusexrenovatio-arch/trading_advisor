@@ -43,6 +43,12 @@ def test_validate_agent_memory_passes() -> None:
         raise AssertionError(result.stdout + "\n" + result.stderr)
 
 
+def test_validate_session_handoff_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_session_handoff.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
 def test_validate_quality_scorecards_smoke_passes() -> None:
     result = _run(
         [
@@ -50,6 +56,63 @@ def test_validate_quality_scorecards_smoke_passes() -> None:
             "scripts/validate_quality_scorecards.py",
             "--config",
             "tests/fixtures/quality_scorecards_smoke.yaml",
+        ]
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_flaky_policy_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_flaky_policy.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_codeowners_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_codeowners.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_taste_invariants_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_taste_invariants.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_python_style_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_python_style.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_structured_logging_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_structured_logging.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_observability_stack_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_observability_stack.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_governance_remediation_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_governance_remediation.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_dependency_decisions_smoke_passes() -> None:
+    result = _run(
+        [
+            sys.executable,
+            "scripts/validate_dependency_decisions.py",
+            "--base-sha",
+            "HEAD",
+            "--head-sha",
+            "HEAD",
         ]
     )
     if result.returncode != 0:

@@ -14,6 +14,7 @@ AGENTS_FILE = Path("AGENTS.md")
 AGENTS_SKILL_PATTERN = re.compile(
     r"^- (?P<name>[a-z0-9-]+): .*?\(file:\s*(?P<path>[^)]+)\)\s*$"
 )
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 
 
 def _resolve_skill_path(path_text: str, repo_root: Path) -> Path:
@@ -131,6 +132,7 @@ def run(skills_root: Path, agents_file: Path) -> int:
         print("skill validation failed:")
         for item in errors:
             print(f"- {item}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     print(f"skill validation: OK ({len(skill_dirs)} skills)")

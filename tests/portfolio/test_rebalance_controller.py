@@ -178,7 +178,6 @@ def test_hard_exit_liquidity_streak():
 def test_hysteresis_enter_vs_keep():
     as_of = datetime(2026, 1, 10)
     pair_a = _pair("AAA", "AAA_F", expiry=as_of.date() + timedelta(days=20))
-    pair_b = _pair("BBB", "BBB_F", expiry=as_of.date() + timedelta(days=20))
     snap_a = _snapshot(stock="AAA", fut="AAA_F", as_of=as_of, total_score=0.5)
     snap_b = _snapshot(stock="BBB", fut="BBB_F", as_of=as_of, total_score=0.5)
     position = _position(pair_a, as_of=as_of, entry_spread=0.0)
@@ -201,7 +200,6 @@ def test_hysteresis_enter_vs_keep():
 def test_rotation_replacement_threshold():
     as_of = datetime(2026, 1, 10)
     pair_a = _pair("AAA", "AAA_F", expiry=as_of.date() + timedelta(days=20))
-    pair_b = _pair("BBB", "BBB_F", expiry=as_of.date() + timedelta(days=20))
     snap_a = _snapshot(stock="AAA", fut="AAA_F", as_of=as_of, total_score=0.2)
     snap_b = _snapshot(stock="BBB", fut="BBB_F", as_of=as_of, total_score=0.4)
     position = _position(pair_a, as_of=as_of, entry_spread=0.0)
@@ -245,7 +243,6 @@ def test_band_rebalance_skips_small_change():
 def test_turnover_cap_scales_entries_but_not_hard_exits():
     as_of = datetime(2026, 1, 10)
     pair_a = _pair("AAA", "AAA_F", expiry=as_of.date() + timedelta(days=1))
-    pair_b = _pair("BBB", "BBB_F", expiry=as_of.date() + timedelta(days=20))
     snap_a = _snapshot(stock="AAA", fut="AAA_F", as_of=as_of, dte=0)
     snap_b = _snapshot(stock="BBB", fut="BBB_F", as_of=as_of, total_score=1.0)
     pos_a = _position(pair_a, as_of=as_of, quantity=5)

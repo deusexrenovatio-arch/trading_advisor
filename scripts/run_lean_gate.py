@@ -4,6 +4,8 @@ import argparse
 import subprocess
 import sys
 
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
+
 
 def _run(cmd: list[str]) -> int:
     printable = " ".join(cmd)
@@ -33,11 +35,20 @@ def main() -> int:
         [py, "scripts/sync_architecture_map.py", "--check"],
         [py, "scripts/validate_plans.py"],
         [py, "scripts/validate_agent_memory.py"],
+        [py, "scripts/validate_session_handoff.py"],
         [py, "scripts/validate_harness_guideline.py"],
         [py, "scripts/validate_architecture_policy.py"],
         [py, "scripts/validate_test_cases.py"],
         [py, "scripts/validate_user_needs_catalog.py"],
         [py, "scripts/validate_skills.py"],
+        [py, "scripts/validate_codeowners.py"],
+        [py, "scripts/validate_flaky_policy.py"],
+        [py, "scripts/validate_observability_stack.py"],
+        [py, "scripts/validate_taste_invariants.py"],
+        [py, "scripts/validate_python_style.py"],
+        [py, "scripts/validate_structured_logging.py"],
+        [py, "scripts/validate_dependency_decisions.py"],
+        [py, "scripts/validate_governance_remediation.py"],
     ]
 
     if not args.skip_metrics:
@@ -49,6 +60,11 @@ def main() -> int:
     for cmd in commands:
         code = _run(cmd)
         if code != 0:
+            print(
+                "lean gate: FAILED "
+                f"(command={' '.join(cmd)})\n"
+                f"remediation: see {REMEDIATION_DOC}"
+            )
             return code
 
     print("lean gate: OK")

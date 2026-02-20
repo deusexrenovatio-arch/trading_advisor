@@ -12,7 +12,15 @@ import yaml
 SECTION_KEYS = ("decisions", "incidents", "patterns")
 REQUIRED_FIELDS = {
     "decisions": ("id", "date", "title", "context", "decision", "impact"),
-    "incidents": ("id", "date", "title", "symptom", "root_cause", "remediation"),
+    "incidents": (
+        "id",
+        "date",
+        "title",
+        "symptom",
+        "root_cause",
+        "remediation",
+        "remediation_type",
+    ),
     "patterns": ("id", "date", "title", "pattern", "when_to_use"),
 }
 
@@ -24,6 +32,29 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _load_incident_policy(path: Path) -> tuple[set[str], set[str], list[str]]:
+    if not path.exists():
+        return set(), set(), [f"incident policy missing: {path.as_posix()}"]
+    payload = _load_yaml(path)
+    if payload.get("version") != 1:
+        return set(), set(), [f"incident policy unsupported version: {payload.get('version')!r}"]
+    incident = payload.get("incident") or {}
+    if not isinstance(incident, dict):
+        return set(), set(), ["incident policy invalid: 'incident' must be object"]
+    allowed = incident.get("allowed_remediation_types") or []
+    disallowed = incident.get("disallowed_remediation_types") or []
+    if not isinstance(allowed, list):
+        allowed = []
+    if not isinstance(disallowed, list):
+        disallowed = []
+    allowed_set = {str(item).strip() for item in allowed if str(item).strip()}
+    disallowed_set = {str(item).strip() for item in disallowed if str(item).strip()}
+    errors: list[str] = []
+    if not allowed_set:
+        errors.append("incident policy invalid: allowed_remediation_types is empty")
+    return allowed_set, disallowed_set, errors
+
+
 def _parse_date(value: str, label: str, errors: list[str]) -> None:
     try:
         date.fromisoformat(value)
@@ -31,13 +62,16 @@ def _parse_date(value: str, label: str, errors: list[str]) -> None:
         errors.append(f"{label}: invalid ISO date '{value}'")
 
 
-def run(path: Path) -> int:
+def run(path: Path, policy_path: Path) -> int:
     if not path.exists():
         print(f"agent memory validation failed: file missing {path.as_posix()}")
+        print("remediation: see docs/runbooks/governance-remediation.md")
         return 1
 
     payload = _load_yaml(path)
     errors: list[str] = []
+    allowed_types, disallowed_types, policy_errors = _load_incident_policy(policy_path)
+    errors.extend(policy_errors)
 
     if payload.get("version") != 1:
         errors.append(f"unsupported version: {payload.get('version')!r} (expected 1)")
@@ -82,6 +116,18 @@ def run(path: Path) -> int:
                         text = str(link).strip()
                         if not text:
                             errors.append(f"{label}.links contains empty value")
+            if section == "incidents":
+                remediation_type = str(row.get("remediation_type", "")).strip()
+                if remediation_type:
+                    if allowed_types and remediation_type not in allowed_types:
+                        errors.append(
+                            f"{label}.remediation_type '{remediation_type}' not allowed "
+                            f"(allowed: {sorted(allowed_types)})"
+                        )
+                    if remediation_type in disallowed_types:
+                        errors.append(
+                            f"{label}.remediation_type '{remediation_type}' is disallowed"
+                        )
 
     if total_entries == 0:
         errors.append("agent memory must contain at least one entry")
@@ -90,6 +136,7 @@ def run(path: Path) -> int:
         print("agent memory validation failed:")
         for item in errors:
             print(f"- {item}")
+        print("remediation: see docs/runbooks/governance-remediation.md")
         return 1
 
     print(
@@ -102,8 +149,9 @@ def run(path: Path) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate agent operational memory registry.")
     parser.add_argument("--path", default="memory/agent_memory.yaml")
+    parser.add_argument("--policy", default="configs/agent_incident_policy.yaml")
     args = parser.parse_args()
-    sys.exit(run(Path(args.path)))
+    sys.exit(run(Path(args.path), Path(args.policy)))
 
 
 if __name__ == "__main__":

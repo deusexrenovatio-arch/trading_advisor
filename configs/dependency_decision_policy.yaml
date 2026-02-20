@@ -1,0 +1,18 @@
+version: 1
+
+watch_files:
+  - pyproject.toml
+  - ui-web/package.json
+  - ui-web/package-lock.json
+
+adr:
+  root: docs/architecture/adr
+  file_regex: "^docs/architecture/adr/[0-9]{4}-[a-z0-9-]+\\.md$"
+  required_sections:
+    - "## Status"
+    - "## Date"
+    - "## Context"
+    - "## Decision"
+    - "## Consequences"
+    - "## Alternatives Considered"
+    - "## Validation and Rollout"

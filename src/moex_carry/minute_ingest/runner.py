@@ -13,7 +13,6 @@ from moex_carry.data.moex_iss import MoexIssClient
 from moex_carry.minute_ingest.cursor_state import PairCursorState, load_cursor_state, save_cursor_state
 from moex_carry.minute_ingest.store import (
     MinuteWatermark,
-    UpsertMinuteResult,
     compute_watermark,
     load_minute_series,
     upsert_minute_series,
