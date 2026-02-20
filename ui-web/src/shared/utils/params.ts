@@ -68,7 +68,7 @@ export const formatParamDefault = (spec: ParameterSpec) => {
     return spec.default ? 'Да' : 'Нет'
   }
   if (spec.value_type === 'dict') {
-    let raw: Record<string, unknown> | null = null
+    let raw: Record<string, unknown> | null
     if (typeof spec.default === 'string') {
       try {
         raw = getObject<Record<string, unknown>>(JSON.parse(spec.default))
