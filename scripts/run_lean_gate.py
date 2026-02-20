@@ -31,9 +31,9 @@ def main() -> int:
     py = sys.executable
     commands: list[list[str]] = [
         [py, "scripts/sync_architecture_map.py", "--check"],
+        [py, "scripts/validate_plans.py"],
         [py, "scripts/validate_harness_guideline.py"],
-        [py, "scripts/validate_import_boundaries.py"],
-        [py, "scripts/validate_api_v2_contract_parity.py"],
+        [py, "scripts/validate_architecture_policy.py"],
         [py, "scripts/validate_test_cases.py"],
         [py, "scripts/validate_user_needs_catalog.py"],
         [py, "scripts/validate_skills.py"],

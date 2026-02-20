@@ -1,0 +1,8 @@
+version: 1
+checks:
+  - id: import-boundaries-smoke
+    command: ["{python}", "scripts/validate_import_boundaries.py"]
+    blocking: true
+  - id: api-v2-contract-parity-smoke
+    command: ["{python}", "scripts/validate_api_v2_contract_parity.py"]
+    blocking: true

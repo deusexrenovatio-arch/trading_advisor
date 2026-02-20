@@ -1,0 +1,76 @@
+version: 1
+updated_at: 2026-02-20
+items:
+  - id: P0-AGENT-PLANS-001
+    title: Machine-readable plans registry and schema validation
+    lane: governance
+    status: completed
+    owner: engineering-platform
+    acceptance:
+      - plans/PLANS.yaml exists and is machine-readable
+      - scripts/validate_plans.py validates schema and dependencies
+      - lean gate runs plan validation
+    checks:
+      - python scripts/validate_plans.py
+    docs:
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+      - harness-guideline.md
+    dependencies: []
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-ARCH-POLICY-002
+    title: Hard architecture policy gate for dependency direction and API contract parity
+    lane: architecture
+    status: completed
+    owner: architecture-owner
+    acceptance:
+      - architecture policy config exists
+      - policy gate fails on boundary/contract violations
+      - policy gate is part of lean/CI flow
+    checks:
+      - python scripts/validate_architecture_policy.py
+    docs:
+      - harness-guideline.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-DOC-GC-003
+    title: Scheduled docs-gardening and entropy reporting
+    lane: docs
+    status: completed
+    owner: engineering-enablement
+    acceptance:
+      - scheduled workflow exists
+      - entropy report is generated and attached as artifact
+      - report publishes key hygiene indicators
+    checks:
+      - python scripts/doc_gardening_report.py
+    docs:
+      - docs/DEV_WORKFLOW.md
+      - harness-guideline.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-AGENT-REVIEW-004
+    title: CI agent-review job with findings artifact
+    lane: review
+    status: completed
+    owner: quality-engineering
+    acceptance:
+      - agent-review CI job exists
+      - findings report is generated on every CI run
+      - report is uploaded as artifact
+    checks:
+      - python scripts/agent_review.py
+    docs:
+      - .github/pull_request_template.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20

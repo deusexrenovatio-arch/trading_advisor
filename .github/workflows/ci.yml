@@ -9,6 +9,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  agent-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run deterministic agent review
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python scripts/agent_review.py \
+              --base-sha "${{ github.event.pull_request.base.sha }}" \
+              --head-sha "${{ github.event.pull_request.head.sha }}" \
+              --output agent-review-findings.md \
+              --summary-file "$GITHUB_STEP_SUMMARY"
+          else
+            python scripts/agent_review.py \
+              --base-sha "${{ github.event.before }}" \
+              --head-sha "${{ github.sha }}" \
+              --output agent-review-findings.md \
+              --summary-file "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload agent-review findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-review-findings
+          path: agent-review-findings.md
+
   governance:
     runs-on: ubuntu-latest
     steps:

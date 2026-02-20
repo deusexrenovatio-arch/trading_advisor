@@ -8,14 +8,16 @@
 - Source-of-truth files:
   - `docs/DEV_WORKFLOW.md`
   - `harness-guideline.md`
+  - `plans/PLANS.yaml`
   - `docs/checklists/first-time-right-gate.md`
   - `scripts/run_lean_gate.py`
 
 ## Non-Negotiable Loop
 1) Verify worktree context with `./scripts/worktree_guard.ps1 -Action Check`.
 2) Before and after meaningful patches run `python scripts/run_lean_gate.py`.
-3) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
-4) Any failing gate is a blocker; fix first, continue after.
+3) Keep `plans/PLANS.yaml` statuses aligned with actual progress.
+4) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
+5) Any failing gate is a blocker; fix first, continue after.
 
 ## Skills
 ### Available skills

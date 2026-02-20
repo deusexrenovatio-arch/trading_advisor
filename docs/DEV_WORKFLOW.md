@@ -74,6 +74,9 @@ Required report block for implementation and reviews:
 - Use progressive disclosure: load only the files/slices required for the active step.
 - Run fast governance loop after each meaningful patch:
   - `python scripts/run_lean_gate.py`
+- Keep machine-readable plan state fresh:
+  - update `plans/PLANS.yaml` for active/completed/deferred status changes.
+  - schema/invariants: `docs/planning/plans-registry.md`
 - Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
 - Before push/PR, always run the full blocker gate below.
 
@@ -113,6 +116,13 @@ Required report block for implementation and reviews:
 - E2E UI: `cd ui-web && npm run test:e2e`
   - Requires backend running with data
 - Demo pipeline: `python scripts/build.py`
+
+## Scheduled maintenance (CI)
+- `docs-gardening` workflow runs weekly and on manual trigger:
+  - `python scripts/run_lean_gate.py`
+  - `python scripts/doc_gardening_report.py`
+- `agent-review` CI job publishes deterministic findings artifact for each PR/push:
+  - `python scripts/agent_review.py`
 
 ## Branching model
 - `main` is protected; work happens on short-lived branches.

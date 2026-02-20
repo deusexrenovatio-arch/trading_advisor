@@ -20,6 +20,7 @@
 - [ ] `npm run test:e2e` (optional)
 
 ## Checklist
+- [ ] `plans/PLANS.yaml` updated for status/acceptance changes (if applicable)
 - [ ] Registry updated (if needed)
 - [ ] Contracts updated (if needed)
 - [ ] Tests added/updated

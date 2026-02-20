@@ -7,7 +7,11 @@ from pathlib import Path
 
 REQUIRED_SNIPPETS = [
     "| Principle | Check | Owner | CI Job |",
+    "`python scripts/validate_plans.py`",
+    "`python scripts/validate_architecture_policy.py`",
     "`python scripts/run_lean_gate.py`",
+    "`python scripts/agent_review.py`",
+    "`python scripts/doc_gardening_report.py`",
     "`spec_drift_count`",
     "`boundary_violations`",
     "`manual_scenarios_count`",
