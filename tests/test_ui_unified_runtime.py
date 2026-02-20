@@ -239,6 +239,9 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert "score_gate_pass" in top_pairs_data[0]
     assert isinstance(top_pairs_data[0]["signal_metrics"], dict)
     assert "score_exec_probability" in top_pairs_data[0]["signal_metrics"]
+    assert "forecast_tp_first_probability" in top_pairs_data[0]["signal_metrics"]
+    assert "forecast_n_effective" in top_pairs_data[0]["signal_metrics"]
+    assert "forecast_confidence_tier" in top_pairs_data[0]["signal_metrics"]
     assert isinstance(top_pairs_data[0]["execution_quality"], dict)
     assert "unfilled_entry_rate" in top_pairs_data[0]["execution_quality"]
     assert "forced_exit_rate" in top_pairs_data[0]["execution_quality"]
@@ -398,3 +401,35 @@ def test_forward_forecast_fallback_without_date_columns():
     )
     # Without date/exec_ts we treat each bar as one day.
     assert forecast["forecast_exit_days"] >= 1
+
+
+def test_forward_forecast_event_first_hit_shrinkage_and_effective_sample():
+    frame = pd.DataFrame(
+        [
+            {"spread_pct": 0.00, "signal_action": "enter"},
+            {"spread_pct": 0.02, "signal_action": "enter"},
+            {"spread_pct": -0.01, "signal_action": "enter"},
+            {"spread_pct": 0.03, "signal_action": "enter"},
+            {"spread_pct": -0.02, "signal_action": "enter"},
+            {"spread_pct": 0.04, "signal_action": "enter"},
+            {"spread_pct": -0.03, "signal_action": "enter"},
+            {"spread_pct": 0.05, "signal_action": "hold"},
+        ]
+    )
+    settings = AppSettings(
+        data=DataConfig(data_dir="."),
+        spread_carry_alpha=SpreadCarryAlphaConfig(H_max_days=2, TP_pct=0.01, SL_pct=0.01),
+        ui=UiConfig(),
+    )
+    forecast = unified_runtime._build_forward_signal_forecast(
+        frame=frame,
+        settings=settings,
+        tp_net=None,
+        as_of_snapshot=date(2026, 1, 11),
+    )
+    # Non-overlap selection with horizon=2 yields entries at indices [0, 2, 4].
+    assert int(forecast["forward_n_effective"]) == 3
+    assert forecast["forward_confidence_tier"] == "very_low"
+    assert 0.5 <= float(forecast["forward_tp_first_probability"]) <= 0.7
+    assert 0.05 <= float(forecast["forward_sl_first_probability"]) <= 0.15
+    assert 0.2 <= float(forecast["forward_no_exit_first_probability"]) <= 0.4
