@@ -1713,34 +1713,42 @@ def persist_snapshot_to_csv_with_meta(
     *,
     engine_tag: str = "unified",
 ) -> dict[str, Any]:
+    def _write_projection_csvs(target_dir: Path) -> dict[str, dict[str, Any]]:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        meta: dict[str, dict[str, Any]] = {}
+        for dataset_name, frame in datasets.items():
+            csv_name = f"{dataset_name}.csv"
+            target = target_dir / csv_name
+            rows = int(len(frame))
+            if rows > 0:
+                frame.to_csv(target, index=False)
+                exists = True
+            else:
+                if target.exists():
+                    target.unlink()
+                exists = False
+            meta[dataset_name] = {
+                "path": csv_name,
+                "rows": rows,
+                "exists": exists,
+                "sha256": _dataframe_sha256(frame),
+            }
+        return meta
+
     output_root = data_dir / "output"
     engine_value = str(engine_tag or "unified").strip().lower() or "unified"
     output = output_root / engine_value
-    output.mkdir(parents=True, exist_ok=True)
 
     datasets = {
         "top_pairs": snapshot.top_pairs,
         "signals": snapshot.signals,
         "backtest_summary": snapshot.backtests,
     }
-    dataset_meta: dict[str, dict[str, Any]] = {}
-    for dataset_name, frame in datasets.items():
-        csv_name = f"{dataset_name}.csv"
-        target = output / csv_name
-        rows = int(len(frame))
-        if rows > 0:
-            frame.to_csv(target, index=False)
-            exists = True
-        else:
-            if target.exists():
-                target.unlink()
-            exists = False
-        dataset_meta[dataset_name] = {
-            "path": csv_name,
-            "rows": rows,
-            "exists": exists,
-            "sha256": _dataframe_sha256(frame),
-        }
+    dataset_meta = _write_projection_csvs(output)
+    root_alias_meta: dict[str, dict[str, Any]] | None = None
+    if engine_value == "unified":
+        # Keep legacy output files in sync with unified projections to avoid stale manual reads.
+        root_alias_meta = _write_projection_csvs(output_root)
 
     created_at = snapshot.created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     metadata = {
@@ -1748,6 +1756,8 @@ def persist_snapshot_to_csv_with_meta(
         "generated_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "snapshot_created_at_utc": created_at,
         "datasets": dataset_meta,
+        "root_alias_published": bool(root_alias_meta is not None),
+        "root_alias_datasets": root_alias_meta,
         "warnings_total": int(len(snapshot.warnings)),
         "errors_total": int(len(snapshot.errors)),
     }
