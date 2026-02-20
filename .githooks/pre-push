@@ -35,6 +35,15 @@ python -m pip install -e ".[dev]"
 echo "[pre-push] architecture map consistency"
 python scripts/sync_architecture_map.py --check
 
+echo "[pre-push] harness guideline baseline"
+python scripts/validate_harness_guideline.py
+
+echo "[pre-push] import boundary policy"
+python scripts/validate_import_boundaries.py
+
+echo "[pre-push] API v2 contract parity"
+python scripts/validate_api_v2_contract_parity.py
+
 echo "[pre-push] acceptance mapping consistency"
 python scripts/validate_test_cases.py
 

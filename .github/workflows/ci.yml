@@ -25,12 +25,21 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Verify architecture map sync
         run: python scripts/sync_architecture_map.py --check
+      - name: Validate harness guideline baseline
+        run: python scripts/validate_harness_guideline.py
+      - name: Validate import boundaries
+        run: python scripts/validate_import_boundaries.py
+      - name: Validate API v2 contract parity
+        run: python scripts/validate_api_v2_contract_parity.py
       - name: Validate acceptance mapping
         run: python scripts/validate_test_cases.py
       - name: Validate user-needs catalog
         run: python scripts/validate_user_needs_catalog.py
       - name: Validate skills
         run: python scripts/validate_skills.py
+      - name: Publish harness baseline metrics
+        if: always()
+        run: python scripts/harness_baseline_metrics.py --summary-file "$GITHUB_STEP_SUMMARY"
 
   backend:
     needs: governance

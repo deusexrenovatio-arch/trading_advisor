@@ -76,9 +76,13 @@ Required report block for implementation and reviews:
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
 - `python scripts/sync_architecture_map.py --check`
+- `python scripts/validate_harness_guideline.py`
+- `python scripts/validate_import_boundaries.py`
+- `python scripts/validate_api_v2_contract_parity.py`
 - `python scripts/validate_test_cases.py`
 - `python scripts/validate_user_needs_catalog.py`
 - `python scripts/validate_skills.py`
+- `python scripts/harness_baseline_metrics.py`
 - `pytest`
 
 ### Frontend (UI)
