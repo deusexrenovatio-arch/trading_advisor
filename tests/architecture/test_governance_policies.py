@@ -49,6 +49,12 @@ def test_validate_session_handoff_passes() -> None:
         raise AssertionError(result.stdout + "\n" + result.stderr)
 
 
+def test_validate_pr_only_policy_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_pr_only_policy.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
 def test_validate_quality_scorecards_smoke_passes() -> None:
     result = _run(
         [
