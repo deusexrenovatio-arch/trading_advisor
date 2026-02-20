@@ -11,7 +11,6 @@ from moex_carry.analytics.rates import target_annual_rate
 from moex_carry.analytics.stats import spread_stats
 from moex_carry.config import load_settings
 from moex_carry.data import CbrKeyRateClient, MoexIssClient
-from moex_carry.data.cbr_rates import latest_rate
 from moex_carry.data.dividends import apply_overrides, load_dividends
 from moex_carry.pipeline import _fetch_candles, _future_price_scale, _parse_contract_specs
 from moex_carry.strategy.orchestrator import generate_signal

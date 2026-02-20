@@ -9,6 +9,8 @@ from typing import Any
 
 import yaml
 
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
+
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -70,11 +72,13 @@ def _render_report(
 def run(config_path: Path, report_path: Path | None, summary_file: Path | None) -> int:
     if not config_path.exists():
         print(f"quality scorecards config missing: {config_path.as_posix()}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     config = _load_yaml(config_path)
     if config.get("version") != 1:
         print(f"quality scorecards config has unsupported version: {config.get('version')!r}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     dims_raw = config.get("dimensions")
@@ -142,6 +146,7 @@ def run(config_path: Path, report_path: Path | None, summary_file: Path | None) 
 
     if failed_dimensions:
         print("quality scorecards: FAILED")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
     print("quality scorecards: OK")
     return 0

@@ -141,7 +141,7 @@ const activeSignalsBlockedPretrade = [
 const historyAll = [
   {
     run_id: 'run-1',
-    timestamp: '2026-02-12T10:00:00Z',
+    timestamp: '2026-02-14T10:00:00Z',
     stock: 'SBER',
     future: 'SRH6',
     signal_action: 'enter',
@@ -150,7 +150,7 @@ const historyAll = [
   },
   {
     run_id: 'run-1',
-    timestamp: '2026-02-12T11:00:00Z',
+    timestamp: '2026-02-14T11:00:00Z',
     stock: 'GAZP',
     future: 'GZH6',
     signal_action: 'exit',

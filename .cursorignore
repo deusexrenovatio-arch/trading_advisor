@@ -1,0 +1,23 @@
+# Reduce indexing and retrieval pressure during heavy local compute sessions.
+# Keep source, tests, contracts, docs, and scripts indexable.
+
+# Python and JS dependencies
+.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/node_modules/
+
+# Generated runtime data and logs
+logs/
+.runlogs/
+.tmp/
+data/
+artifacts*/
+*.dmp
+*.hdmp
+
+# Local workspace internals
+.worktree-context.local.json
+

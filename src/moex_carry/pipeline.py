@@ -778,12 +778,6 @@ def _execution_quality_stats(series_df: pd.DataFrame) -> dict[str, float | None]
         if "exit_fill_status" in series_df.columns
         else pd.Series(index=series_df.index, dtype="object")
     )
-    exit_forced = (
-        series_df["exit_forced"]
-        if "exit_forced" in series_df.columns
-        else pd.Series(index=series_df.index, dtype="object")
-    )
-
     entry_unfilled = int((entry_status[entry_signal_mask] == "entry_unfilled").sum())
     exit_unfilled = int((exit_status[exit_signal_mask] == "exit_unfilled").sum())
     forced_exits = int((exit_status[exit_signal_mask] == "forced").sum())

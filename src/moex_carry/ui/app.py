@@ -39,6 +39,7 @@ from moex_carry.domain.pretrade_service import (
 )
 from moex_carry.forward.runtime import load_forward_status, start_forward_run
 from moex_carry.hpo.runtime import load_hpo_status, start_hpo_run
+from moex_carry.logging import emit_api_log
 from moex_carry.minute_ingest.runner import run_incremental_minute_ingest
 from moex_carry.observability.runtime_metrics import ApiObservability
 from moex_carry.parameter_specs import get_parameter_specs
@@ -2012,6 +2013,7 @@ def create_app(settings: AppSettings) -> Dash:
     executions_path = decisions_dir / "execution_requests.jsonl"
     logger = logging.getLogger(__name__)
     observability = ApiObservability(latency_window_size=1000)
+    request_started_at_key = "moex.request_started_at"
 
     def _observe_request(endpoint_key: str, started_at: datetime, result):
         _, status_code = _extract_response_payload(result)
@@ -2376,6 +2378,10 @@ def create_app(settings: AppSettings) -> Dash:
         else:
             logger.info("Signal refresh scheduler enabled (interval=%ss)", refresh_interval)
 
+    @server.before_request
+    def _capture_request_started_at() -> None:
+        request.environ[request_started_at_key] = datetime.now(timezone.utc).timestamp()
+
     @server.after_request
     def _cors_headers(response):
         response.headers["Access-Control-Allow-Origin"] = "*"
@@ -2398,6 +2404,34 @@ def create_app(settings: AppSettings) -> Dash:
             response.headers["Link"] = (
                 f"{existing_link}, {link_value}" if existing_link else link_value
             )
+
+        if request.path.startswith("/api/v2/"):
+            try:
+                started_value = request.environ.get(request_started_at_key)
+                duration_ms = 0.0
+                if started_value is not None:
+                    duration_ms = max(
+                        (datetime.now(timezone.utc).timestamp() - float(started_value)) * 1000.0,
+                        0.0,
+                    )
+                request_id = (
+                    request.headers.get("X-Request-Id")
+                    or request.headers.get("X-Request-ID")
+                    or request.headers.get("X-Correlation-Id")
+                    or request.headers.get("X-Correlation-ID")
+                    or "missing"
+                )
+                emit_api_log(
+                    logger,
+                    component="api-v2",
+                    path=request.path,
+                    method=request.method,
+                    status_code=response.status_code,
+                    request_id=str(request_id),
+                    duration_ms=duration_ms,
+                )
+            except Exception:
+                logger.exception("Failed to emit structured API log")
 
         return response
 

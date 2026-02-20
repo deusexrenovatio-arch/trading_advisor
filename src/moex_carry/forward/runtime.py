@@ -12,7 +12,6 @@ from moex_carry.backtest_v2.runtime import build_universe_from_request
 from moex_carry.config_resolver import resolve_backtest_request
 from moex_carry.contracts.strategy_test import ForwardTestRequest
 from moex_carry.data.history_store import HistoryDataStore
-from moex_carry.domain.portfolio import DailyInstrumentBar
 from moex_carry.forward.engine import ForwardEngineConfig, ForwardTestEngine
 from moex_carry.forward.interfaces import IMarketDataAdapter
 from moex_carry.forward.models import MarketSnapshotInput

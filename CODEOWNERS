@@ -1,0 +1,24 @@
+# Default routing
+* @deusexrenovatio-arch/engineering-platform
+
+# Governance and workflow source-of-truth
+/AGENTS.md @deusexrenovatio-arch/engineering-platform @deusexrenovatio-arch/architecture
+/harness-guideline.md @deusexrenovatio-arch/engineering-platform @deusexrenovatio-arch/architecture
+/docs/DEV_WORKFLOW.md @deusexrenovatio-arch/engineering-platform
+/plans/ @deusexrenovatio-arch/engineering-platform
+/memory/ @deusexrenovatio-arch/engineering-platform
+/docs/runbooks/ @deusexrenovatio-arch/engineering-platform @deusexrenovatio-arch/quality-engineering
+
+# Architecture and contracts
+/docs/architecture/ @deusexrenovatio-arch/architecture
+/docs/contracts/ @deusexrenovatio-arch/architecture @deusexrenovatio-arch/backend
+/contracts/ @deusexrenovatio-arch/architecture @deusexrenovatio-arch/backend
+/configs/ @deusexrenovatio-arch/architecture @deusexrenovatio-arch/quality-engineering
+/scripts/ @deusexrenovatio-arch/engineering-platform
+/.github/workflows/ @deusexrenovatio-arch/engineering-platform
+
+# Product code lanes
+/src/ @deusexrenovatio-arch/backend
+/ui-web/ @deusexrenovatio-arch/frontend
+/tests/ @deusexrenovatio-arch/quality-engineering
+/docs/ @deusexrenovatio-arch/engineering-platform

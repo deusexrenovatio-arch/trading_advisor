@@ -1,0 +1,18 @@
+version: 1
+
+schema:
+  event: api_request_completed
+  required_fields:
+    - event
+    - timestamp_utc
+    - component
+    - path
+    - method
+    - status_code
+    - request_id
+    - duration_ms
+
+guard:
+  api_prefix: /api/v2/
+  app_file: src/moex_carry/ui/app.py
+  logging_module: src/moex_carry/logging.py

@@ -8,7 +8,6 @@ from moex_carry.strategy.strategy_signal import (
     SignalAction,
     StrategyAllocation,
     StrategySignal,
-    StrategyType,
 )
 
 

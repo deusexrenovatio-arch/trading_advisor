@@ -12,6 +12,66 @@ decisions:
       - scripts/run_lean_gate.py
       - .github/workflows/ci.yml
       - .githooks/pre-push
+  - id: ADM-2026-02-20-002
+    date: 2026-02-20
+    title: Convert remaining partial governance gaps into enforceable repository checks
+    context: Partial Harness alignment remained in ADR policy, flaky handling, e2e CI, observability setup, and NFR journey budgets.
+    decision: Add explicit policies plus validators and CI gates instead of relying on informal guidance.
+    impact: Reduced prompt-dependence and stronger machine-verifiable governance across delivery flows.
+    links:
+      - scripts/validate_dependency_decisions.py
+      - scripts/validate_flaky_policy.py
+      - scripts/validate_taste_invariants.py
+      - scripts/validate_observability_stack.py
+      - .github/workflows/ci.yml
+  - id: ADM-2026-02-20-003
+    date: 2026-02-20
+    title: Prefer minimatch override plus ESLint 9 compatibility for ui-web audit remediation
+    context: Upgrading to ESLint 10 introduced peer conflicts while high audit findings were rooted in minimatch.
+    decision: Keep ESLint on 9.x and pin minimatch 10.2.2 via overrides in ui-web dependencies.
+    impact: Removed high/critical findings with minimal frontend linting disruption.
+    links:
+      - ui-web/package.json
+      - ui-web/package-lock.json
+      - docs/architecture/adr/0002-ui-web-audit-remediation-eslint-chain.md
+  - id: ADM-2026-02-20-004
+    date: 2026-02-20
+    title: Introduce explicit multi-agent load guardrails via runbook
+    context: Repeated hard resets and mixed kernel failures appeared under parallel high-load agent sessions.
+    decision: Add a dedicated runtime runbook with strict launch gates and stop/replan thresholds for CPU, memory commit, and disk pressure.
+    impact: Lower probability of commit-limit exhaustion and unstable mixed compute plus driver behavior.
+    links:
+      - agent-runbook.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-02-20-005
+    date: 2026-02-20
+    title: Limit Cursor indexing scope with repository-level .cursorignore
+    context: Crash-window telemetry showed high-churn indexing and retrieval activity during heavy parallel workloads.
+    decision: Add .cursorignore to exclude generated and dependency-heavy paths from indexing by default.
+    impact: Lower background CPU and disk pressure; reduced probability of commit-limit amplification from concurrent indexing.
+    links:
+      - .cursorignore
+      - agent-runbook.md
+  - id: ADM-2026-02-20-006
+    date: 2026-02-20
+    title: Make load-source attribution mandatory in incident RCA
+    context: Prior incidents could be misread when a single process looked small versus system-wide commit and I/O pressure.
+    decision: Extend runbook with a mandatory RCA block that quantifies timeline, top contributors, and trigger versus amplifier roles.
+    impact: Faster and more reliable identification of true overload source, with action thresholds tied to measurable metrics.
+    links:
+      - agent-runbook.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-02-20-007
+    date: 2026-02-20
+    title: Enforce context budget with versioned handoff and lean-gate validator
+    context: Team discussion identified repeated context bloat from long chat recaps and duplicated instruction payloads.
+    decision: Introduce `docs/session_handoff.md` + `docs/workflows/context-budget.md` and validate with `scripts/validate_session_handoff.py` in lean gate.
+    impact: Team handoff becomes short and deterministic; context continuity moves from chat history to repository artifacts.
+    links:
+      - docs/session_handoff.md
+      - docs/workflows/context-budget.md
+      - scripts/validate_session_handoff.py
+      - scripts/run_lean_gate.py
 
 incidents:
   - id: AMI-2026-02-20-001
@@ -20,8 +80,39 @@ incidents:
     symptom: Early edits were applied to a different checkout path and had to be re-synced.
     root_cause: Missing immediate cwd verification before patch phase.
     remediation: Enforce worktree_guard check at task start and before major edit batches.
+    remediation_type: guardrail
     links:
       - scripts/worktree_guard.ps1
+  - id: AMI-2026-02-20-002
+    date: 2026-02-20
+    title: EPERM lock on esbuild/rollup binaries during npm ci
+    symptom: npm cleanup failed to unlink binary files under ui-web/node_modules on Windows.
+    root_cause: Background vite/esbuild processes held file handles during reinstall.
+    remediation: Stop vite/esbuild processes before reinstall and continue with npm install when ci unlink fails.
+    remediation_type: workflow
+    links:
+      - docs/DEV_WORKFLOW.md
+      - ui-web/package-lock.json
+  - id: AMI-2026-02-20-003
+    date: 2026-02-20
+    title: Hard reboot under high multi-agent memory commit pressure
+    symptom: Unexpected reboot and hangs with mixed BSOD and live-kernel events during parallel agent workloads.
+    root_cause: Near-limit commit pressure amplified by concurrent heavy agents plus unstable low-level utility and driver interactions.
+    remediation: Standardize launch gates, concurrency limits, and stop/replan thresholds in a dedicated runbook.
+    remediation_type: guardrail
+    links:
+      - agent-runbook.md
+      - memory/agent_memory.yaml
+  - id: AMI-2026-02-20-004
+    date: 2026-02-20
+    title: Cursor indexing storm during parallel agent execution
+    symptom: Spikes of pending documents, forced index resets, and repeated sync cycles during heavy sessions.
+    root_cause: Background indexing scope included high-churn generated paths while compute agents were active.
+    remediation: Exclude generated paths with .cursorignore and avoid concurrent heavy indexing with three heavy agents.
+    remediation_type: guardrail
+    links:
+      - .cursorignore
+      - agent-runbook.md
 
 patterns:
   - id: AMP-2026-02-20-001
@@ -31,4 +122,44 @@ patterns:
     when_to_use: Any coding task with multi-doc instructions and potential context bloat.
     links:
       - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+  - id: AMP-2026-02-20-002
+    date: 2026-02-20
+    title: No prompt-only remediation
+    pattern: Any repeated failure is resolved by capability, guardrail, docs, test, or workflow updates tracked in-repo.
+    when_to_use: Repeated incidents, flaky regressions, or governance drift.
+    links:
+      - configs/agent_incident_policy.yaml
+      - docs/runbooks/self-heal-escalation.md
+  - id: AMP-2026-02-20-003
+    date: 2026-02-20
+    title: Guardrails before parallelism
+    pattern: Establish measurable resource thresholds before scaling parallel agents; stop scaling on first red signal.
+    when_to_use: Any local session with two or more heavy compute agents.
+    links:
+      - agent-runbook.md
+      - docs/checklists/first-time-right-gate.md
+  - id: AMP-2026-02-20-004
+    date: 2026-02-20
+    title: Exclude high-churn paths from IDE indexing
+    pattern: Keep dependency folders, caches, logs, and generated artifacts outside default index scope.
+    when_to_use: Any repository with parallel compute agents or known local resource pressure.
+    links:
+      - .cursorignore
+      - agent-runbook.md
+  - id: AMP-2026-02-20-005
+    date: 2026-02-20
+    title: Quantify trigger before mitigation
+    pattern: For every crash RCA, rank contributors by CPU, memory commit, and disk pressure in one time window before choosing remediation.
+    when_to_use: Reboots, hangs, BSOD/live dump incidents, or any suspected multi-factor resource overload.
+    links:
+      - agent-runbook.md
+  - id: AMP-2026-02-20-006
+    date: 2026-02-20
+    title: Delta-first handoff over chat recap
+    pattern: Keep working state in plans/memory/session_handoff and communicate only short deltas in chat.
+    when_to_use: Any multi-step task where context growth starts to slow execution or requires frequent history recomposition.
+    links:
+      - docs/session_handoff.md
+      - docs/workflows/context-budget.md
       - docs/DEV_WORKFLOW.md

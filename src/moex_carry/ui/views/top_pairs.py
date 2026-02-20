@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dash
 from dash import dash_table, html
 
 

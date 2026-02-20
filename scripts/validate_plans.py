@@ -13,6 +13,7 @@ import yaml
 ITEM_ID_PATTERN = re.compile(r"^[A-Z0-9-]+$")
 ALLOWED_STATUSES = {"planned", "active", "blocked", "completed", "deferred"}
 ALLOWED_EXECUTION_MODES = {"autonomous", "assisted", "manual"}
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -60,12 +61,14 @@ def _required_list(
 def run(path: Path) -> int:
     if not path.exists():
         print(f"plans file not found: {path.as_posix()}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     try:
         payload = _load_yaml(path)
     except Exception as exc:
         print(f"plans validation failed: invalid YAML ({exc})")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     errors: list[str] = []
@@ -163,6 +166,7 @@ def run(path: Path) -> int:
         print("plans validation failed:")
         for err in errors:
             print(f"- {err}")
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
     ordered_status_counts = ", ".join(

@@ -1,0 +1,10 @@
+version: 1
+
+policy:
+  owner: quality-engineering
+  max_ci_retries: 1
+  max_quarantined_tests: 5
+  quarantine_ttl_days: 14
+  followup_sla_days: 3
+  required_tracking_issue_prefix: "FLAKY-"
+  escalation_runbook: docs/runbooks/flaky-tests-policy.md

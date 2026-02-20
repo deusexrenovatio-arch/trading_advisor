@@ -10,6 +10,7 @@ import yaml
 
 TEST_CASE_PATTERN = re.compile(r"^###\s+(TC-[A-Z0-9-]+)\b")
 SECTION_PATTERN = re.compile(r"^##\s+(.+)$")
+REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 
 
 def _load_yaml(path: str) -> dict[str, Any]:
@@ -77,6 +78,7 @@ def run(config_path: str, doc_path: str) -> int:
         print(f"planned unlinked test cases (non-blocking): {planned_unlinked_cases}")
 
     if scenarios_missing_links or missing_case_links or unlinked_cases:
+        print(f"remediation: see {REMEDIATION_DOC}")
         return 1
     return 0
 

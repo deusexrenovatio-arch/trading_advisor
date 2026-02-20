@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+ESCALATION_RUNBOOK = "docs/runbooks/self-heal-escalation.md"
+
 
 @dataclass(frozen=True)
 class ActionResult:
@@ -43,6 +45,7 @@ def _append_summary(path: Path | None, payload: dict) -> None:
         f"- initial_pass: {payload['initial_pass']}",
         f"- final_pass: {payload['final_pass']}",
         f"- autofix_applied: {payload['autofix_applied']}",
+        f"- escalation_required: {payload['escalation_required']}",
         "",
         "| Action | Return Code | Command |",
         "| --- | --- | --- |",
@@ -94,6 +97,8 @@ def run(report_path: Path, summary_file: Path | None) -> int:
         "initial_pass": initial_pass,
         "final_pass": final_pass,
         "autofix_applied": autofix_applied,
+        "escalation_required": not final_pass,
+        "escalation_runbook": ESCALATION_RUNBOOK,
         "actions": [
             {
                 "action": item.action,
@@ -109,7 +114,7 @@ def run(report_path: Path, summary_file: Path | None) -> int:
     if final_pass:
         print("self-heal: OK")
         return 0
-    print("self-heal: FAILED")
+    print(f"self-heal: FAILED (escalate via {ESCALATION_RUNBOOK})")
     return 1
 
 

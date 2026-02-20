@@ -1,0 +1,13 @@
+version: 1
+
+incident:
+  allowed_remediation_types:
+    - capability
+    - guardrail
+    - docs
+    - test
+    - workflow
+  disallowed_remediation_types:
+    - prompt
+    - prompt-only
+    - reprompt

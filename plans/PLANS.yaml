@@ -158,3 +158,104 @@ items:
       - P0-AGENT-PLANS-001
     started_at: 2026-02-20
     completed_at: 2026-02-20
+
+  - id: P1-HE-PARTIAL-CLOSURE-009
+    title: Close remaining Harness alignment partials with enforceable gates
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - docs index and ADR workflow exist and are validated
+      - flaky, taste, and observability policies are machine-validated
+      - UI e2e CI job runs with artifact upload
+      - self-heal failure path escalates via deterministic runbook and workflow issue
+      - startup and API journey NFR budgets are tested in CI
+    checks:
+      - python scripts/validate_dependency_decisions.py
+      - python scripts/validate_flaky_policy.py
+      - python scripts/validate_taste_invariants.py
+      - python scripts/validate_observability_stack.py
+      - pytest tests/perf/test_app_startup_runtime.py tests/perf/test_api_journey_runtime.py -q
+    docs:
+      - docs/README.md
+      - docs/runbooks/governance-remediation.md
+      - docs/runbooks/flaky-tests-policy.md
+      - docs/runbooks/local-observability-stack.md
+      - docs/runbooks/self-heal-escalation.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+      - P0-QUALITY-SCORECARDS-005
+      - P0-SELF-HEAL-006
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P1-UI-AUDIT-010
+    title: Reduce ui-web npm audit risk in eslint toolchain
+    lane: security
+    status: completed
+    execution_mode: autonomous
+    owner: frontend-platform
+    acceptance:
+      - ui-web dependency updates are documented by ADR
+      - npm audit has no high or critical findings
+      - ui-web lint and build stay green after lockfile update
+    checks:
+      - npm --prefix ui-web audit --json
+      - npm --prefix ui-web run lint
+      - npm --prefix ui-web run build
+    docs:
+      - docs/architecture/adr/0002-ui-web-audit-remediation-eslint-chain.md
+    dependencies:
+      - P0-QUALITY-SCORECARDS-005
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P1-OPS-STABILITY-011
+    title: Agent runtime load guardrail runbook for multi-agent sessions
+    lane: reliability
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - agent-runbook.md defines do and do not rules for CPU, memory, and disk pressure
+      - runbook includes launch gates and stop/replan thresholds for 3-agent sessions
+      - .cursorignore excludes high-churn generated paths to reduce indexing and disk pressure
+      - runbook enforces mandatory RCA load attribution with timeline and top-contributor quantification
+      - plans and memory registries capture durable decision and incident context
+    checks:
+      - python scripts/run_lean_gate.py
+    docs:
+      - agent-runbook.md
+      - .cursorignore
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-HE-PARTIAL-CLOSURE-009
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P1-CONTEXT-BUDGET-012
+    title: Team-wide context budget workflow with machine gate
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - session handoff contract is documented and versioned
+      - lean gate includes context budget validator
+      - governance docs and remediation runbook cover failure handling
+      - plans and memory capture durable rollout decision
+    checks:
+      - python scripts/validate_session_handoff.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/workflows/context-budget.md
+      - docs/session_handoff.md
+      - docs/DEV_WORKFLOW.md
+      - harness-guideline.md
+      - docs/runbooks/governance-remediation.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+      - P1-OPS-STABILITY-011
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
