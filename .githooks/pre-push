@@ -4,27 +4,44 @@ set -euo pipefail
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 
-BLOCK_MAIN_PUSH="${MOEX_CARRY_BLOCK_MAIN_PUSH:-1}"
-ALLOW_MAIN_PUSH="${MOEX_CARRY_ALLOW_MAIN_PUSH:-0}"
+EMERGENCY_MAIN_PUSH="${MOEX_CARRY_EMERGENCY_MAIN_PUSH:-0}"
+EMERGENCY_MAIN_PUSH_REASON="${MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON:-}"
+LEGACY_ALLOW_MAIN_PUSH="${MOEX_CARRY_ALLOW_MAIN_PUSH:-0}"
 SKIP_NPM_CI="${MOEX_CARRY_SKIP_NPM_CI:-0}"
 PUSHES_TO_MAIN=0
 
-if [[ "$BLOCK_MAIN_PUSH" == "1" ]]; then
-  while read -r local_ref local_sha remote_ref remote_sha; do
-    if [[ "${remote_ref:-}" == "refs/heads/main" ]]; then
-      PUSHES_TO_MAIN=1
-    fi
-  done
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "${remote_ref:-}" == "refs/heads/main" ]]; then
+    PUSHES_TO_MAIN=1
+  fi
+done
 
-  if [[ "$PUSHES_TO_MAIN" == "1" && "$ALLOW_MAIN_PUSH" != "1" ]]; then
-    echo "[pre-push] blocked: direct push to main is disabled"
-    echo "[pre-push] use a feature branch + PR flow"
-    echo "[pre-push] override (one command):"
-    echo "  MOEX_CARRY_ALLOW_MAIN_PUSH=1 git push"
-    echo "[pre-push] to disable this rule globally for your shell/session:"
-    echo "  MOEX_CARRY_BLOCK_MAIN_PUSH=0"
+if [[ "$PUSHES_TO_MAIN" == "1" ]]; then
+  if [[ "$LEGACY_ALLOW_MAIN_PUSH" == "1" ]]; then
+    echo "[pre-push] blocked: MOEX_CARRY_ALLOW_MAIN_PUSH is deprecated"
+    echo "[pre-push] PR-only policy is active for main"
+    echo "[pre-push] emergency override (one command):"
+    echo "  MOEX_CARRY_EMERGENCY_MAIN_PUSH=1 MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>' git push"
     exit 1
   fi
+
+  if [[ "$EMERGENCY_MAIN_PUSH" != "1" ]]; then
+    echo "[pre-push] blocked: direct push to main is disabled (PR-only policy)"
+    echo "[pre-push] use a feature branch + PR flow"
+    echo "[pre-push] emergency override (one command):"
+    echo "  MOEX_CARRY_EMERGENCY_MAIN_PUSH=1 MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>' git push"
+    exit 1
+  fi
+
+  if [[ -z "${EMERGENCY_MAIN_PUSH_REASON// }" ]]; then
+    echo "[pre-push] blocked: emergency override requires non-empty MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON"
+    echo "[pre-push] example:"
+    echo "  MOEX_CARRY_EMERGENCY_MAIN_PUSH=1 MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='INC-1234 hotfix' git push"
+    exit 1
+  fi
+
+  echo "[pre-push] emergency main push override accepted"
+  echo "[pre-push] reason: $EMERGENCY_MAIN_PUSH_REASON"
 fi
 
 echo "[pre-push] running required local gates"
