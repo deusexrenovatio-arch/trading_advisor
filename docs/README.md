@@ -36,6 +36,7 @@ This directory is the repository knowledge system for agent-first engineering.
 ## Validation Commands
 - `python scripts/run_lean_gate.py`
 - `python scripts/validate_session_handoff.py`
+- `python scripts/validate_pr_only_policy.py`
 - `python scripts/validate_quality_scorecards.py`
 - `python scripts/validate_python_style.py`
 - `python scripts/validate_structured_logging.py`

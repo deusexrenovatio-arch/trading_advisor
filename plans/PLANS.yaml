@@ -259,3 +259,27 @@ items:
       - P1-OPS-STABILITY-011
     started_at: 2026-02-20
     completed_at: 2026-02-20
+
+  - id: P1-PR-ONLY-013
+    title: Enforce PR-only main flow with machine-checked emergency override contract
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - direct push to `main` is blocked by pre-push hook by default
+      - emergency direct push requires explicit incident/ticket reason
+      - policy docs and governance runbook are aligned and machine-validated
+    checks:
+      - python scripts/validate_pr_only_policy.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+      - README.md
+      - docs/runbooks/governance-remediation.md
+      - harness-guideline.md
+    dependencies:
+      - P1-HE-PARTIAL-CLOSURE-009
+    started_at: 2026-02-20
+    completed_at: 2026-02-20

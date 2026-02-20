@@ -72,6 +72,17 @@ decisions:
       - docs/workflows/context-budget.md
       - scripts/validate_session_handoff.py
       - scripts/run_lean_gate.py
+  - id: ADM-2026-02-20-008
+    date: 2026-02-20
+    title: Make PR-only main flow enforceable with explicit emergency override reason
+    context: A direct merge to `main` bypassed PR review trail even though local gates passed.
+    decision: Harden pre-push to block direct `main` pushes by default and require a reasoned emergency override; add repo validators to keep policy docs and hooks aligned.
+    impact: PR review path becomes default and mechanically enforced; emergency bypass remains auditable.
+    links:
+      - .githooks/pre-push
+      - scripts/validate_pr_only_policy.py
+      - docs/DEV_WORKFLOW.md
+      - AGENTS.md
 
 incidents:
   - id: AMI-2026-02-20-001

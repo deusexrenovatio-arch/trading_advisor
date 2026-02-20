@@ -27,7 +27,12 @@
 5) Keep `docs/session_handoff.md` updated and pass `python scripts/validate_session_handoff.py`.
 6) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
   - include `python scripts/validate_quality_scorecards.py`.
-7) Any failing gate is a blocker; fix first, continue after.
+7) Use PR-only flow for `main`: feature branch -> PR -> merge.
+  - direct push to `main` is blocked by `.githooks/pre-push`.
+  - emergency override requires both:
+    - `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1`
+    - `MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'`
+8) Any failing gate is a blocker; fix first, continue after.
   - use `docs/runbooks/governance-remediation.md` for deterministic fixes.
 
 ## Skills

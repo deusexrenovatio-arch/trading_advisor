@@ -151,10 +151,15 @@ Required report block for implementation and reviews:
   - `python scripts/install_git_hooks.py`
 - This installs `core.hooksPath=.githooks` and runs required backend/frontend checks on `git push`.
 - Any failed required check blocks push.
-- Direct push to `main` is blocked by default.
-- One-time override for emergency/admin pushes:
-  - Bash: `MOEX_CARRY_ALLOW_MAIN_PUSH=1 git push`
-  - PowerShell: `$env:MOEX_CARRY_ALLOW_MAIN_PUSH='1'; git push`
+- Direct push to `main` is blocked (PR-only).
+- Required merge path:
+  - create short-lived feature branch,
+  - push feature branch,
+  - open PR,
+  - merge PR into `main`.
+- Emergency override for direct `main` push (incident/hotfix only, with explicit reason):
+  - Bash: `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1 MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>' git push`
+  - PowerShell: `$env:MOEX_CARRY_EMERGENCY_MAIN_PUSH='1'; $env:MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'; git push`
 - Windows lock workaround for `npm ci` (`EPERM` on `esbuild.exe`):
   - Bash: `MOEX_CARRY_SKIP_NPM_CI=1 git push`
   - PowerShell: `$env:MOEX_CARRY_SKIP_NPM_CI='1'; git push`
@@ -214,6 +219,7 @@ Required report block for implementation and reviews:
 
 ## Branching model
 - `main` is protected; work happens on short-lived branches.
+- PR-only merge policy for `main` is mandatory; no regular direct pushes.
 - Branch naming: `feat/`, `fix/`, `docs/`, `test/`, `chore/`, `refactor/`.
 - Prefer linear history via rebase or squash before merge.
 
