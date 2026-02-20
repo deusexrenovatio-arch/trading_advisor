@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pandas as pd
 
 from moex_carry.config import AppSettings, DataConfig, SpreadCarryAlphaConfig, UiConfig
+from moex_carry.signal_replay.core import ReplayMetrics, ReplayResult
+from moex_carry.signal_replay.incremental import ReplayMutation
 from moex_carry.ui.app import create_app
 import moex_carry.unified_runtime as core_unified_runtime
 import moex_carry.ui.unified_runtime as unified_runtime
@@ -310,6 +312,141 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert "signal_reasons" in history_data[0]
     assert "signal_metrics" in history_data[0]
     assert "trades_closed" in history_data[0]
+
+
+def test_pair_replay_cache_reuses_single_slot_per_pair_window(tmp_path, monkeypatch):
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+    settings.ui.unified_pair_replay_cache_max = 64
+    pair = core_unified_runtime._UniversePair(
+        stock="AAA",
+        stock_name="Alpha",
+        future="AAH6",
+        expiry=date(2026, 3, 19),
+        lot_size=1.0,
+        multiplier=1.0,
+        tick_size=0.01,
+    )
+
+    call_counter = {"count": 0}
+
+    def _fake_compute_pair_replay(**_kwargs):
+        call_counter["count"] += 1
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": "2026-02-12",
+                    "exec_ts": f"2026-02-12 10:0{call_counter['count']}:00",
+                    "spot_mid": 100.0,
+                    "future_mid": 101.0,
+                    "spread_mid": -1.0,
+                    "spread_pct": -0.01,
+                    "signal_action": "hold",
+                }
+            ]
+        )
+        metrics = ReplayMetrics(
+            rows=1,
+            days=1,
+            entry_signals=0,
+            exit_signals=0,
+            trades_closed=0,
+            avg_trade_return_annual_fill_to_fill_last5=None,
+            avg_trade_return_annual_operational_last5=None,
+            share_target_pass=None,
+            unfilled_entry_rate=None,
+            unfilled_exit_rate=None,
+            forced_exit_rate=None,
+            avg_entry_wait_min_closed=None,
+            avg_exit_wait_min_closed=None,
+        )
+        return core_unified_runtime._PairReplayFetch(
+            replay_result=ReplayResult(replay=frame, metrics=metrics, cutoff_minutes=0),
+            source="test",
+            error=None,
+            cache_hit=False,
+            skip_reason=None,
+            fallback_reason=None,
+            replay_mode="full",
+        )
+
+    monkeypatch.setattr(core_unified_runtime, "_compute_pair_replay", _fake_compute_pair_replay)
+
+    with core_unified_runtime._PAIR_REPLAY_CACHE_LOCK:
+        core_unified_runtime._PAIR_REPLAY_CACHE.clear()
+
+    changed_w1 = ReplayMutation(
+        changed=True,
+        append_only=True,
+        earliest_changed_exec_ts=None,
+        watermark_before=None,
+        watermark_after="w1",
+    )
+    changed_w2 = ReplayMutation(
+        changed=True,
+        append_only=True,
+        earliest_changed_exec_ts=None,
+        watermark_before="w1",
+        watermark_after="w2",
+    )
+    unchanged_w2 = ReplayMutation(
+        changed=False,
+        append_only=True,
+        earliest_changed_exec_ts=None,
+        watermark_before="w2",
+        watermark_after="w2",
+    )
+
+    first = core_unified_runtime.get_pair_replay(
+        settings=settings,
+        data_dir=tmp_path,
+        pair=pair,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 12),
+        key_rates=[],
+        force=False,
+        ttl_sec=120,
+        data_watermark="w1",
+        mutation=changed_w1,
+    )
+    assert first.cache_hit is False
+
+    second = core_unified_runtime.get_pair_replay(
+        settings=settings,
+        data_dir=tmp_path,
+        pair=pair,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 12),
+        key_rates=[],
+        force=False,
+        ttl_sec=120,
+        data_watermark="w2",
+        mutation=changed_w2,
+    )
+    assert second.cache_hit is False
+
+    with core_unified_runtime._PAIR_REPLAY_CACHE_LOCK:
+        cache_size = len(core_unified_runtime._PAIR_REPLAY_CACHE)
+        cached_items = list(core_unified_runtime._PAIR_REPLAY_CACHE.values())
+    assert cache_size == 1
+    assert cached_items[0].data_watermark == "w2"
+
+    third = core_unified_runtime.get_pair_replay(
+        settings=settings,
+        data_dir=tmp_path,
+        pair=pair,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 12),
+        key_rates=[],
+        force=False,
+        ttl_sec=120,
+        data_watermark="w2",
+        mutation=unchanged_w2,
+    )
+    assert third.cache_hit is True
+    assert call_counter["count"] == 2
+
+    with core_unified_runtime._PAIR_REPLAY_CACHE_LOCK:
+        core_unified_runtime._PAIR_REPLAY_CACHE.clear()
 
 
 def test_manual_refresh_defaults_to_incremental_and_supports_force_full(tmp_path, monkeypatch):

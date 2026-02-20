@@ -98,7 +98,8 @@ _SNAPSHOT_CACHE: _SnapshotCacheItem | None = None
 
 _PAIR_REPLAY_CACHE_LOCK = threading.Lock()
 _PAIR_REPLAY_CACHE: dict[str, _PairReplayCacheItem] = {}
-_PAIR_REPLAY_CACHE_MAX = 512
+_PAIR_REPLAY_CACHE_MAX_HARD_LIMIT = 512
+_PAIR_REPLAY_CACHE_DEFAULT_MAX = 64
 
 _LAST_REFRESH_TELEMETRY_LOCK = threading.Lock()
 _LAST_REFRESH_TELEMETRY = RefreshTelemetry(
@@ -702,7 +703,6 @@ def _pair_replay_key(
     pair: _UniversePair,
     start_date: date,
     end_date: date,
-    data_watermark: str | None = None,
 ) -> str:
     payload = {
         "sig": _alpha_signature(settings),
@@ -710,16 +710,26 @@ def _pair_replay_key(
         "future": pair.future,
         "start": start_date.isoformat(),
         "end": end_date.isoformat(),
-        "data_watermark": data_watermark,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _evict_pair_cache_if_needed() -> None:
-    if len(_PAIR_REPLAY_CACHE) <= _PAIR_REPLAY_CACHE_MAX:
+def _pair_replay_cache_max(settings: AppSettings) -> int:
+    raw = getattr(settings.ui, "unified_pair_replay_cache_max", _PAIR_REPLAY_CACHE_DEFAULT_MAX)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = _PAIR_REPLAY_CACHE_DEFAULT_MAX
+    value = max(1, value)
+    value = min(value, _PAIR_REPLAY_CACHE_MAX_HARD_LIMIT)
+    return value
+
+
+def _evict_pair_cache_if_needed(max_items: int) -> None:
+    if len(_PAIR_REPLAY_CACHE) <= max_items:
         return
     ordered = sorted(_PAIR_REPLAY_CACHE.items(), key=lambda item: item[1].created_at)
-    drop = len(_PAIR_REPLAY_CACHE) - _PAIR_REPLAY_CACHE_MAX
+    drop = len(_PAIR_REPLAY_CACHE) - max_items
     for key, _ in ordered[:drop]:
         _PAIR_REPLAY_CACHE.pop(key, None)
 
@@ -882,7 +892,6 @@ def get_pair_replay(
         pair=pair,
         start_date=start_date,
         end_date=end_date,
-        data_watermark=data_watermark,
     )
     mutation_payload = mutation or ReplayMutation(
         changed=False,
@@ -896,8 +905,13 @@ def get_pair_replay(
         with _PAIR_REPLAY_CACHE_LOCK:
             cached = _PAIR_REPLAY_CACHE.get(cache_key)
             if cached is not None:
-                age = (now - cached.created_at).total_seconds()
-                if data_watermark is not None or age <= max(int(ttl_sec), 1):
+                cache_hit = False
+                if data_watermark is not None:
+                    cache_hit = cached.data_watermark == data_watermark
+                else:
+                    age = (now - cached.created_at).total_seconds()
+                    cache_hit = age <= max(int(ttl_sec), 1)
+                if cache_hit:
                     skip_reason = "no_data_change" if not mutation_payload.changed else None
                     return _PairReplayFetch(
                         replay_result=cached.replay_result,
@@ -926,7 +940,7 @@ def get_pair_replay(
                 source=str(computed.source or ""),
                 data_watermark=data_watermark,
             )
-            _evict_pair_cache_if_needed()
+            _evict_pair_cache_if_needed(_pair_replay_cache_max(settings))
     return computed
 
 
