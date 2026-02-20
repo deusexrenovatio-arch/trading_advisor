@@ -175,10 +175,10 @@ def test_backfill_signal_history_unified_uses_incremental_ingest(tmp_path, monke
 
     monkeypatch.setattr(pipeline, "fetch_data", fake_fetch_data)
     monkeypatch.setattr(pipeline, "date", FixedDate)
-    monkeypatch.setattr("moex_carry.ui.unified_runtime.list_unified_ingest_pairs", fake_list_pairs)
+    monkeypatch.setattr("moex_carry.unified_runtime.list_unified_ingest_pairs", fake_list_pairs)
     monkeypatch.setattr("moex_carry.minute_ingest.runner.run_incremental_minute_ingest", fake_ingest)
-    monkeypatch.setattr("moex_carry.ui.unified_runtime.build_unified_market_snapshot", fake_snapshot)
-    monkeypatch.setattr("moex_carry.ui.unified_runtime.persist_snapshot_to_csv", lambda *_a, **_k: None)
+    monkeypatch.setattr("moex_carry.unified_runtime.build_unified_market_snapshot", fake_snapshot)
+    monkeypatch.setattr("moex_carry.unified_runtime.persist_snapshot_to_csv", lambda *_a, **_k: None)
 
     settings = AppSettings(
         data=DataConfig(data_dir=str(tmp_path)),

@@ -65,7 +65,7 @@ from moex_carry.ui.data import (
     load_signals,
     load_top_pairs,
 )
-from moex_carry.ui.unified_runtime import (
+from moex_carry.unified_runtime import (
     UnifiedMarketSnapshot,
     build_unified_market_snapshot,
     build_unified_spread_series,

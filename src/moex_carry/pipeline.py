@@ -2351,7 +2351,7 @@ def run_signal_cycle(
         if ranked.empty:
             return pd.DataFrame()
         if save_csv:
-            from moex_carry.ui.unified_runtime import persist_snapshot_to_csv
+            from moex_carry.unified_runtime import persist_snapshot_to_csv
 
             persist_snapshot_to_csv(snapshot, paths.data_dir)
 
@@ -2436,7 +2436,7 @@ def backfill_signal_history(
             data_dir=paths.data_dir,
             max_pairs=resolved_max_pairs,
         )
-        from moex_carry.ui.unified_runtime import persist_snapshot_to_csv
+        from moex_carry.unified_runtime import persist_snapshot_to_csv
 
         engine = create_engine_from_settings(settings)
         init_db(engine)
@@ -2583,7 +2583,7 @@ def _run_unified_incremental_ingest(
     if not bool(getattr(settings.ui, "incremental_replay_enabled", True)):
         return None
     from moex_carry.minute_ingest.runner import run_incremental_minute_ingest
-    from moex_carry.ui.unified_runtime import list_unified_ingest_pairs
+    from moex_carry.unified_runtime import list_unified_ingest_pairs
 
     ingest_pairs = list_unified_ingest_pairs(
         settings,
@@ -2609,7 +2609,7 @@ def _build_unified_snapshot(
     as_of: date | None,
     ingest_cycle=None,
 ):
-    from moex_carry.ui.unified_runtime import build_unified_market_snapshot
+    from moex_carry.unified_runtime import build_unified_market_snapshot
 
     return build_unified_market_snapshot(
         settings,
