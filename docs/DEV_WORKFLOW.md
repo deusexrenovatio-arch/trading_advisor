@@ -21,6 +21,28 @@ Policy:
 - Local context file `.worktree-context.local.json` is intentionally ignored by git.
 - Context lock expires automatically (`ContextTtlHours`, default `12`) and must be re-initialized for a new session.
 
+## Data integrity gate (mandatory before analysis/decisions)
+- Treat data layers as strictly ordered:
+  - source minutes: `data/output/intraday_minute_series/intraday_minute_series_<STOCK>_<FUTURE>.csv`
+  - derived replay: `data/output/incremental_replay/<STOCK>__<FUTURE>.parquet`
+  - derived projections: `data/output/unified/{top_pairs,signals,backtest_summary}.csv`
+- Never compare metrics across mixed layers (for example source CSV days vs stale replay parquet metrics).
+- Run integrity check before any signal-quality, PnL, or probability conclusions:
+  - `python scripts/check_data_integrity.py --data-dir data --max-day-gap 2`
+- Blocker conditions:
+  - any stale replay pair (`source_days - replay_days > max_day_gap`);
+  - replay range starts later than source range for the same pair;
+  - replay max day is behind source max day.
+- After backfill or historical corrections, force replay rebuild before analysis:
+  - `POST /api/signals/refresh` with `{"force_full": true}` (or equivalent CLI flow),
+  - wait until refresh status is not `busy`.
+- If refresh is `busy`/`error`, do not use `fresh=true` API responses for final conclusions.
+
+## Probability confidence gate (mandatory)
+- Always report `forecast_n_effective` and `forecast_confidence_tier` with probability metrics.
+- Treat `very_low`/`low` confidence as advisory only, not as hard production gate input.
+- For production gate decisions, require at least `medium` confidence or explicit user override.
+
 ## Skill invocation gates (mandatory)
 - Start of any new development stream:
   - Run `D:/New Project/.cursor/skills/parallel-worktree-flow/SKILL.md`.
@@ -101,6 +123,8 @@ Required report block for implementation and reviews:
   - PowerShell: `$env:MOEX_CARRY_SKIP_NPM_CI='1'; git push`
 
 ## Optional checks (manual / data-dependent)
+- Data integrity parity:
+  - `python scripts/check_data_integrity.py --data-dir data --max-day-gap 2`
 - Acceptance smoke: `python scripts/acceptance_check.py`
   - Requires backend at `http://127.0.0.1:8050` and UI at `http://127.0.0.1:5176`
   - Scenarios live in `configs/acceptance_scenarios.yaml`

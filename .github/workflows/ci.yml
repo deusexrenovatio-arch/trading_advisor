@@ -31,6 +31,13 @@ jobs:
         run: python scripts/validate_user_needs_catalog.py
       - name: Validate skills
         run: python scripts/validate_skills.py
+      - name: Data integrity parity gate
+        run: |
+          if ls data/output/intraday_minute_series/intraday_minute_series_*.csv >/dev/null 2>&1; then
+            python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+          else
+            echo "Skip data integrity parity gate: no minute source files in checkout."
+          fi
 
   backend:
     needs: governance

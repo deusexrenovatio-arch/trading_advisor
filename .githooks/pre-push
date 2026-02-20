@@ -44,6 +44,13 @@ python scripts/validate_user_needs_catalog.py
 echo "[pre-push] skill consistency"
 python scripts/validate_skills.py
 
+echo "[pre-push] data integrity parity gate"
+if compgen -G "data/output/intraday_minute_series/intraday_minute_series_*.csv" > /dev/null; then
+  python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+else
+  echo "[pre-push] skip data integrity parity (no minute source files)"
+fi
+
 echo "[pre-push] backend test suite"
 pytest
 

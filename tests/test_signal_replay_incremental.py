@@ -219,3 +219,82 @@ def test_true_incremental_reuse_when_watermark_unchanged(tmp_path):
     assert second.mode == "reuse"
     assert second.recomputed is False
     assert second.skip_reason == "no_data_change"
+
+
+def test_true_incremental_rebuilds_when_history_expands_with_same_watermark(tmp_path):
+    settings = _settings()
+    pair = _pair()
+    checkpoint_root = tmp_path / "state" / "incremental_replay"
+    output_root = tmp_path / "output" / "incremental_replay"
+    short_series = _series(
+        [
+            ("2026-01-02 10:00:00", 100.0, 101.0),
+            ("2026-01-02 10:20:00", 100.0, 101.0),
+            ("2026-01-02 10:40:00", 100.5, 100.8),
+            ("2026-01-02 11:00:00", 100.5, 100.8),
+        ]
+    )
+    first = run_true_incremental_replay(
+        pair_id="AAA|AAH6",
+        pair=pair,
+        series_base=short_series,
+        settings=settings,
+        dividends=[],
+        key_rates=[],
+        mutation=ReplayMutation(
+            changed=True,
+            append_only=True,
+            earliest_changed_exec_ts=None,
+            watermark_before=None,
+            watermark_after="wm-static",
+        ),
+        checkpoint_root=checkpoint_root,
+        output_root=output_root,
+        overlap_minutes=180,
+        checkpoint_interval_minutes=60,
+        force_full=False,
+    )
+    assert first.mode == "full"
+
+    expanded_series = _series(
+        [
+            ("2026-01-01 10:00:00", 100.1, 101.2),
+            ("2026-01-01 10:20:00", 100.2, 101.1),
+            ("2026-01-02 10:00:00", 100.0, 101.0),
+            ("2026-01-02 10:20:00", 100.0, 101.0),
+            ("2026-01-02 10:40:00", 100.5, 100.8),
+            ("2026-01-02 11:00:00", 100.5, 100.8),
+        ]
+    )
+    second = run_true_incremental_replay(
+        pair_id="AAA|AAH6",
+        pair=pair,
+        series_base=expanded_series,
+        settings=settings,
+        dividends=[],
+        key_rates=[],
+        mutation=ReplayMutation(
+            changed=False,
+            append_only=True,
+            earliest_changed_exec_ts=None,
+            watermark_before="wm-static",
+            watermark_after="wm-static",
+        ),
+        checkpoint_root=checkpoint_root,
+        output_root=output_root,
+        overlap_minutes=180,
+        checkpoint_interval_minutes=60,
+        force_full=False,
+    )
+
+    baseline = run_minute_replay(
+        series_base=expanded_series,
+        pair=pair,
+        settings=settings,
+        dividends=[],
+        key_rates=[],
+    )
+    assert second.mode == "full"
+    assert second.fallback_reason == "source_history_expanded"
+    assert second.recomputed is True
+    assert second.replay_result.replay.equals(baseline.replay)

@@ -185,8 +185,14 @@ def run_true_incremental_replay(
     engine_signature = _engine_signature(settings=settings, future_spec=future_spec)
     existing_output = _load_replay_output(output_path)
     latest = _load_checkpoint(latest_path)
+    source_history_expanded = _has_source_history_expansion(series, existing_output)
 
-    if not mutation.changed and latest is not None and mutation.watermark_after == latest.source_watermark_after:
+    if (
+        not mutation.changed
+        and latest is not None
+        and mutation.watermark_after == latest.source_watermark_after
+        and not source_history_expanded
+    ):
         reused = existing_output if existing_output is not None else pd.DataFrame()
         result = _build_result_from_frame(reused, cutoff_minutes=cutoff_minutes)
         return IncrementalReplayOutcome(
@@ -213,7 +219,9 @@ def run_true_incremental_replay(
     periodic_checkpoint: Path | None = None
 
     if not force_full and latest is not None:
-        if latest.schema_version != CHECKPOINT_SCHEMA_VERSION:
+        if source_history_expanded:
+            fallback_reason = "source_history_expanded"
+        elif latest.schema_version != CHECKPOINT_SCHEMA_VERSION:
             fallback_reason = "checkpoint_schema_mismatch"
         elif latest.engine_signature != engine_signature:
             fallback_reason = "engine_signature_mismatch"
@@ -627,6 +635,26 @@ def _load_replay_output(path: Path) -> pd.DataFrame | None:
     if not isinstance(frame, pd.DataFrame):
         return None
     return frame
+
+
+def _frame_exec_ts_min(frame: pd.DataFrame | None) -> datetime | None:
+    if frame is None or frame.empty or "exec_ts" not in frame.columns:
+        return None
+    series = pd.to_datetime(frame["exec_ts"], errors="coerce", utc=True).dropna()
+    if series.empty:
+        return None
+    minimum = series.min()
+    if not isinstance(minimum, pd.Timestamp):
+        return None
+    return minimum.tz_convert("UTC").tz_localize(None).to_pydatetime().replace(tzinfo=None)
+
+
+def _has_source_history_expansion(series: pd.DataFrame, replay_output: pd.DataFrame | None) -> bool:
+    source_min = _frame_exec_ts_min(series)
+    replay_min = _frame_exec_ts_min(replay_output)
+    if source_min is None or replay_min is None:
+        return False
+    return bool(source_min < replay_min)
 
 
 def _write_replay_output_atomic(frame: pd.DataFrame, path: Path) -> str:
