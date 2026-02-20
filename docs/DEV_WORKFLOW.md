@@ -92,15 +92,25 @@ Required report block for implementation and reviews:
   - `docs/test-cases.md`
   - `configs/acceptance_scenarios.yaml`
 
+## Lean loop (default while coding)
+- Use progressive disclosure: load only the files/slices required for the active step.
+- Run fast governance loop after each meaningful patch:
+  - `python scripts/run_lean_gate.py`
+- Keep machine-readable plan state fresh:
+  - update `plans/PLANS.yaml` for active/completed/deferred status changes.
+  - schema/invariants: `docs/planning/plans-registry.md`
+- Keep operational memory fresh:
+  - record durable decisions/incidents/patterns in `memory/agent_memory.yaml`.
+- Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
+- Before push/PR, always run the full blocker gate below.
+
 ## Required checks (CI + local)
 - Treat this list as a blocker gate for pre-push and PR readiness.
 
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
-- `python scripts/sync_architecture_map.py --check`
-- `python scripts/validate_test_cases.py`
-- `python scripts/validate_user_needs_catalog.py`
-- `python scripts/validate_skills.py`
+- `python scripts/run_lean_gate.py`
+- `python scripts/validate_quality_scorecards.py`
 - `pytest`
 
 ### Frontend (UI)
@@ -133,6 +143,16 @@ Required report block for implementation and reviews:
 - E2E UI: `cd ui-web && npm run test:e2e`
   - Requires backend running with data
 - Demo pipeline: `python scripts/build.py`
+
+## Scheduled maintenance (CI)
+- `docs-gardening` workflow runs weekly and on manual trigger:
+  - `python scripts/run_lean_gate.py`
+  - `python scripts/doc_gardening_report.py`
+  - `python scripts/autonomy_kpi_report.py`
+- `agent-review` CI job publishes deterministic findings artifact for each PR/push:
+  - `python scripts/agent_review.py`
+- `self-heal` workflow runs daily and on manual trigger:
+  - `python scripts/self_heal.py`
 
 ## Branching model
 - `main` is protected; work happens on short-lived branches.

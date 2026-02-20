@@ -136,10 +136,12 @@ needs:
       - uc-signal-action-and-ack-bridge
     acceptance_scenarios:
       - signals-action-v2
+      - signals-actionability-stale-intent
       - signals-ack-execute
       - auto-unwind-policy-v2
     test_cases:
       - TC-SIG-ACT-API-003
+      - TC-TG-WRK-009
       - TC-SIG-ACK-API-001
       - TC-SIG-POLICY-API-001
 
@@ -342,10 +344,12 @@ user_cases:
     expected_outcome: Action endpoint, ACK bridge, and auto-unwind policy are coherent.
     acceptance_scenarios:
       - signals-action-v2
+      - signals-actionability-stale-intent
       - signals-ack-execute
       - auto-unwind-policy-v2
     test_cases:
       - TC-SIG-ACT-API-003
+      - TC-TG-WRK-009
       - TC-SIG-ACK-API-001
       - TC-SIG-POLICY-API-001
 

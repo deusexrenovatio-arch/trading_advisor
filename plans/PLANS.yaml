@@ -1,0 +1,160 @@
+version: 1
+updated_at: 2026-02-20
+items:
+  - id: P0-AGENT-PLANS-001
+    title: Machine-readable plans registry and schema validation
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - plans/PLANS.yaml exists and is machine-readable
+      - scripts/validate_plans.py validates schema and dependencies
+      - lean gate runs plan validation
+    checks:
+      - python scripts/validate_plans.py
+    docs:
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+      - harness-guideline.md
+    dependencies: []
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-ARCH-POLICY-002
+    title: Hard architecture policy gate for dependency direction and API contract parity
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: architecture-owner
+    acceptance:
+      - architecture policy config exists
+      - policy gate fails on boundary/contract violations
+      - policy gate is part of lean/CI flow
+    checks:
+      - python scripts/validate_architecture_policy.py
+    docs:
+      - harness-guideline.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-DOC-GC-003
+    title: Scheduled docs-gardening and entropy reporting
+    lane: docs
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-enablement
+    acceptance:
+      - scheduled workflow exists
+      - entropy report is generated and attached as artifact
+      - report publishes key hygiene indicators
+    checks:
+      - python scripts/doc_gardening_report.py
+    docs:
+      - docs/DEV_WORKFLOW.md
+      - harness-guideline.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-AGENT-REVIEW-004
+    title: CI agent-review job with findings artifact
+    lane: review
+    status: completed
+    execution_mode: autonomous
+    owner: quality-engineering
+    acceptance:
+      - agent-review CI job exists
+      - findings report is generated on every CI run
+      - report is uploaded as artifact
+    checks:
+      - python scripts/agent_review.py
+    docs:
+      - .github/pull_request_template.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-QUALITY-SCORECARDS-005
+    title: Quality scorecards with merge-blocking thresholds
+    lane: quality
+    status: completed
+    execution_mode: autonomous
+    owner: quality-engineering
+    acceptance:
+      - quality scorecards config exists
+      - validator computes dimension score and enforces thresholds
+      - CI has blocking quality-scorecards job with report artifact
+    checks:
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - harness-guideline.md
+      - docs/DEV_WORKFLOW.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-SELF-HEAL-006
+    title: Deterministic self-heal loop with auto-PR workflow
+    lane: reliability
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - self-heal script attempts deterministic remediations and reruns gates
+      - self-heal workflow runs on schedule and manual trigger
+      - self-heal workflow can open PR when changes are produced
+    checks:
+      - python scripts/self_heal.py
+    docs:
+      - harness-guideline.md
+      - docs/DEV_WORKFLOW.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-AGENT-MEMORY-007
+    title: Agent operational memory registry and validation
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-owner
+    acceptance:
+      - memory registry exists with decisions/incidents/patterns
+      - validator enforces schema and integrity
+      - lean gate validates memory on each run
+    checks:
+      - python scripts/validate_agent_memory.py
+    docs:
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20
+
+  - id: P0-AUTONOMY-KPI-008
+    title: Autonomy KPI reporting for agent-driven development
+    lane: observability
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-enablement
+    acceptance:
+      - KPI report script exists and computes plan/memory/quality signals
+      - docs-gardening workflow publishes KPI report artifact and summary
+      - harness guideline includes KPI definitions
+    checks:
+      - python scripts/autonomy_kpi_report.py
+    docs:
+      - harness-guideline.md
+      - docs/DEV_WORKFLOW.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-02-20
+    completed_at: 2026-02-20

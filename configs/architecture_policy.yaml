@@ -1,0 +1,16 @@
+version: 1
+checks:
+  - id: import-boundaries
+    description: Core modules must not depend on UI package imports.
+    command: ["{python}", "scripts/validate_import_boundaries.py"]
+    blocking: true
+
+  - id: api-v2-contract-parity
+    description: /api/v2 implementation must stay in sync with OpenAPI contract.
+    command: ["{python}", "scripts/validate_api_v2_contract_parity.py"]
+    blocking: true
+
+  - id: architecture-tests
+    description: Architecture-focused regression tests must pass.
+    command: ["pytest", "tests/architecture", "-q"]
+    blocking: true

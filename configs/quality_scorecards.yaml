@@ -1,0 +1,37 @@
+version: 1
+dimensions:
+  - id: reliability
+    threshold: 1.0
+    checks:
+      - id: architecture-policy
+        command: ["{python}", "scripts/validate_architecture_policy.py"]
+      - id: plans-schema
+        command: ["{python}", "scripts/validate_plans.py"]
+
+  - id: security
+    threshold: 1.0
+    checks:
+      - id: secrets-scan
+        command: ["{python}", "scripts/scan_secrets.py"]
+      - id: python-pip-health
+        command: ["{python}", "-m", "pip", "check"]
+
+  - id: frontend
+    threshold: 1.0
+    checks:
+      - id: frontend-gate-contract
+        command: ["{python}", "scripts/validate_frontend_gate_contract.py"]
+
+  - id: design
+    threshold: 1.0
+    checks:
+      - id: design-standards-contract
+        command: ["{python}", "scripts/validate_design_contract.py"]
+
+  - id: product-sense
+    threshold: 1.0
+    checks:
+      - id: user-needs-catalog
+        command: ["{python}", "scripts/validate_user_needs_catalog.py"]
+      - id: acceptance-mapping
+        command: ["{python}", "scripts/validate_test_cases.py"]

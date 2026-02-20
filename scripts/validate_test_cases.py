@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 TEST_CASE_PATTERN = re.compile(r"^###\s+(TC-[A-Z0-9-]+)\b")
+SECTION_PATTERN = re.compile(r"^##\s+(.+)$")
 
 
 def _load_yaml(path: str) -> dict[str, Any]:
@@ -18,20 +19,34 @@ def _load_yaml(path: str) -> dict[str, Any]:
         return {}
 
 
-def _extract_test_cases(doc_path: str) -> set[str]:
+def _extract_test_cases(doc_path: str) -> tuple[set[str], set[str]]:
     text = Path(doc_path).read_text(encoding="utf-8")
-    case_ids: set[str] = set()
+    active_case_ids: set[str] = set()
+    planned_case_ids: set[str] = set()
+    in_planned_section = False
     for line in text.splitlines():
-        match = TEST_CASE_PATTERN.match(line.strip())
+        stripped = line.strip()
+        section = SECTION_PATTERN.match(stripped)
+        if section:
+            section_title = section.group(1).strip().lower()
+            in_planned_section = section_title.startswith("planned ")
+            continue
+
+        match = TEST_CASE_PATTERN.match(stripped)
         if match:
-            case_ids.add(match.group(1))
-    return case_ids
+            case_id = match.group(1)
+            if in_planned_section:
+                planned_case_ids.add(case_id)
+            else:
+                active_case_ids.add(case_id)
+    return active_case_ids, planned_case_ids
 
 
 def run(config_path: str, doc_path: str) -> int:
     config = _load_yaml(config_path)
     scenarios = config.get("scenarios") or []
-    doc_cases = _extract_test_cases(doc_path)
+    doc_cases, planned_doc_cases = _extract_test_cases(doc_path)
+    all_doc_cases = doc_cases.union(planned_doc_cases)
 
     referenced: set[str] = set()
     missing_case_links: list[str] = []
@@ -46,10 +61,11 @@ def run(config_path: str, doc_path: str) -> int:
         for case_id in test_cases:
             case_id = str(case_id)
             referenced.add(case_id)
-            if case_id not in doc_cases:
+            if case_id not in all_doc_cases:
                 missing_case_links.append(f"{scenario_id}:{case_id}")
 
     unlinked_cases = sorted(doc_cases.difference(referenced))
+    planned_unlinked_cases = sorted(planned_doc_cases.difference(referenced))
 
     if scenarios_missing_links:
         print(f"missing test_cases for scenarios: {sorted(scenarios_missing_links)}")
@@ -57,8 +73,10 @@ def run(config_path: str, doc_path: str) -> int:
         print(f"missing test case definitions: {sorted(missing_case_links)}")
     if unlinked_cases:
         print(f"unlinked test cases: {unlinked_cases}")
+    if planned_unlinked_cases:
+        print(f"planned unlinked test cases (non-blocking): {planned_unlinked_cases}")
 
-    if scenarios_missing_links or missing_case_links:
+    if scenarios_missing_links or missing_case_links or unlinked_cases:
         return 1
     return 0
 

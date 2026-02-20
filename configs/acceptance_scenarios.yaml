@@ -250,6 +250,15 @@ scenarios:
       - Scenario resolves signal_id from active feed and sends an action.
       - Response contains status and action/audit references.
       - Telegram usage flags are present for each row.
+  - id: signals-actionability-stale-intent
+    type: manual
+    scope: backend
+    test_cases: [TC-TG-WRK-009]
+    title: Telegram stale-intent callback handling
+    user_story: Operator receives explicit stale-intent guidance when ACK callback token is outdated.
+    expectations:
+      - Pending callback token is removed after stale ACK response.
+      - Worker sends stale-intent hint instead of generic failure.
   - id: signals-execute
     type: signal_action
     scope: backend

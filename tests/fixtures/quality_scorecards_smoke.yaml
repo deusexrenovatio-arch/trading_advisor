@@ -1,0 +1,13 @@
+version: 1
+dimensions:
+  - id: reliability-smoke
+    threshold: 1.0
+    checks:
+      - id: plans
+        command: ["{python}", "scripts/validate_plans.py"]
+
+  - id: product-sense-smoke
+    threshold: 1.0
+    checks:
+      - id: user-needs
+        command: ["{python}", "scripts/validate_user_needs_catalog.py"]
