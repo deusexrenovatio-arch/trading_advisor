@@ -8,6 +8,7 @@ import pandas as pd
 
 from moex_carry.config import AppSettings, DataConfig, SpreadCarryAlphaConfig, UiConfig
 from moex_carry.ui.app import create_app
+import moex_carry.unified_runtime as core_unified_runtime
 import moex_carry.ui.unified_runtime as unified_runtime
 from moex_carry.ui.unified_runtime import (
     build_unified_market_snapshot,
@@ -360,6 +361,7 @@ def test_forward_forecast_uses_minute_horizon_and_converts_half_life_to_days(mon
         return SimpleNamespace(p_hit_tp=0.6, p_hit_sl=0.2, half_life=4.0)
 
     monkeypatch.setattr(unified_runtime, "alpha_metrics", _fake_alpha_metrics)
+    monkeypatch.setattr(core_unified_runtime, "alpha_metrics", _fake_alpha_metrics)
 
     settings = AppSettings(
         data=DataConfig(data_dir="."),
