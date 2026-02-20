@@ -35,3 +35,22 @@ def test_validate_architecture_policy_passes() -> None:
     )
     if result.returncode != 0:
         raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_agent_memory_passes() -> None:
+    result = _run([sys.executable, "scripts/validate_agent_memory.py"])
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
+
+
+def test_validate_quality_scorecards_smoke_passes() -> None:
+    result = _run(
+        [
+            sys.executable,
+            "scripts/validate_quality_scorecards.py",
+            "--config",
+            "tests/fixtures/quality_scorecards_smoke.yaml",
+        ]
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
