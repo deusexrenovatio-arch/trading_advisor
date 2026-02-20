@@ -32,6 +32,7 @@ def main() -> int:
     commands: list[list[str]] = [
         [py, "scripts/sync_architecture_map.py", "--check"],
         [py, "scripts/validate_plans.py"],
+        [py, "scripts/validate_agent_memory.py"],
         [py, "scripts/validate_harness_guideline.py"],
         [py, "scripts/validate_architecture_policy.py"],
         [py, "scripts/validate_test_cases.py"],

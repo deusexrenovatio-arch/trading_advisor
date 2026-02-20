@@ -15,6 +15,8 @@ REQUIRED_DOCS = [
     Path("harness-guideline.md"),
     Path("docs/DEV_WORKFLOW.md"),
     Path("docs/checklists/first-time-right-gate.md"),
+    Path("memory/agent_memory.yaml"),
+    Path("plans/PLANS.yaml"),
 ]
 
 

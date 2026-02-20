@@ -1,0 +1,34 @@
+version: 1
+updated_at: 2026-02-20
+
+decisions:
+  - id: ADM-2026-02-20-001
+    date: 2026-02-20
+    title: Introduce lean governance gate as single fast loop
+    context: High context usage and fragmented checks slowed agent iteration.
+    decision: Consolidate governance checks into scripts/run_lean_gate.py and route CI/pre-push through it.
+    impact: Lower orchestration overhead, deterministic feedback loop, easier agent reuse.
+    links:
+      - scripts/run_lean_gate.py
+      - .github/workflows/ci.yml
+      - .githooks/pre-push
+
+incidents:
+  - id: AMI-2026-02-20-001
+    date: 2026-02-20
+    title: Worktree drift during edits
+    symptom: Early edits were applied to a different checkout path and had to be re-synced.
+    root_cause: Missing immediate cwd verification before patch phase.
+    remediation: Enforce worktree_guard check at task start and before major edit batches.
+    links:
+      - scripts/worktree_guard.ps1
+
+patterns:
+  - id: AMP-2026-02-20-001
+    date: 2026-02-20
+    title: Progressive disclosure first
+    pattern: Read only the smallest set of files needed for the active step, then gate quickly.
+    when_to_use: Any coding task with multi-doc instructions and potential context bloat.
+    links:
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md

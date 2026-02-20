@@ -29,9 +29,16 @@ jobs:
           python scripts/doc_gardening_report.py \
             --output docs-gardening-report.md \
             --summary-file "$GITHUB_STEP_SUMMARY"
+      - name: Build autonomy KPI report
+        run: |
+          python scripts/autonomy_kpi_report.py \
+            --output autonomy-kpi-report.md \
+            --summary-file "$GITHUB_STEP_SUMMARY"
       - name: Upload docs gardening artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: docs-gardening-report
-          path: docs-gardening-report.md
+          path: |
+            docs-gardening-report.md
+            autonomy-kpi-report.md

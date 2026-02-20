@@ -35,6 +35,9 @@ python -m pip install -e ".[dev]"
 echo "[pre-push] lean governance gate"
 python scripts/run_lean_gate.py
 
+echo "[pre-push] quality scorecards gate"
+python scripts/validate_quality_scorecards.py
+
 echo "[pre-push] backend test suite"
 pytest
 
