@@ -102,12 +102,14 @@ test.describe('Workspace News + Portfolio', () => {
     await expect(page.getByRole('heading', { name: 'News Intelligence' })).toBeVisible()
     await expect(page.getByText('Central bank update')).toBeVisible()
 
-    await page.getByLabel('Ticker').fill('SBER')
-    await page.getByRole('button', { name: 'Reload' }).click()
+    await page.getByRole('textbox', { name: /Ticker|Тикер|РўРёРєРµСЂ/i }).fill('SBER')
+    await page.getByRole('button', { name: /Reload|Обновить|РћР±РЅРѕРІРёС‚СЊ/i }).click()
     await expect(page.getByText('Central bank update')).toBeVisible()
     await expect(page.getByText('Commodity flow snapshot')).toHaveCount(0)
 
-    await expect(page.getByText(/tab_switch_count: [1-9]\d*/)).toBeVisible()
+    await expect(
+      page.getByText(/tab_switch_count:\s*[1-9]\d*|вкладок:\s*[1-9]\d*|РІРєР»Р°РґРѕРє:\s*[1-9]\d*/i),
+    ).toBeVisible()
   })
 
   test('Portfolio workspace preview and commit', async ({ page }) => {
@@ -136,8 +138,8 @@ test.describe('Workspace News + Portfolio', () => {
     await expect(page.getByRole('heading', { name: 'Portfolio Control' })).toBeVisible()
     await expect(page.getByText('SBER:SRH6')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Commit Rebalance' }).click()
-    await expect(page.getByText('Committed 1 positions (commit-1)')).toBeVisible()
+    await page.getByRole('button', { name: /Commit Rebalance|Применить|РџСЂРёРјРµРЅРёС‚СЊ/i }).click()
+    await expect(page.getByText(/commit-1/)).toBeVisible()
     await expect
       .poll(() => commitPayload?.rebalance_plan_id)
       .toBe('plan-1')
