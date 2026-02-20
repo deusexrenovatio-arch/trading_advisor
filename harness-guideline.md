@@ -12,6 +12,7 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | --- | --- | --- | --- |
 | Contract-first API surface | `python scripts/validate_api_v2_contract_parity.py` | Backend platform | `governance` |
 | Directional module boundaries (no core -> UI imports) | `python scripts/validate_import_boundaries.py` | Architecture owner | `governance` |
+| Progressive disclosure + short feedback loops | `python scripts/run_lean_gate.py` | Engineering owner | `governance` |
 | Scenario traceability to executable/acceptance cases | `python scripts/validate_test_cases.py` | QA owner | `governance` |
 | User-needs coverage linked to acceptance scenarios | `python scripts/validate_user_needs_catalog.py` | Product owner | `governance` |
 | Skill/workflow compliance as pre-implementation guardrail | `python scripts/validate_skills.py` | Engineering manager | `governance` |

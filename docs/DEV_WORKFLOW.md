@@ -70,19 +70,19 @@ Required report block for implementation and reviews:
   - `docs/test-cases.md`
   - `configs/acceptance_scenarios.yaml`
 
+## Lean loop (default while coding)
+- Use progressive disclosure: load only the files/slices required for the active step.
+- Run fast governance loop after each meaningful patch:
+  - `python scripts/run_lean_gate.py`
+- Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
+- Before push/PR, always run the full blocker gate below.
+
 ## Required checks (CI + local)
 - Treat this list as a blocker gate for pre-push and PR readiness.
 
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
-- `python scripts/sync_architecture_map.py --check`
-- `python scripts/validate_harness_guideline.py`
-- `python scripts/validate_import_boundaries.py`
-- `python scripts/validate_api_v2_contract_parity.py`
-- `python scripts/validate_test_cases.py`
-- `python scripts/validate_user_needs_catalog.py`
-- `python scripts/validate_skills.py`
-- `python scripts/harness_baseline_metrics.py`
+- `python scripts/run_lean_gate.py`
 - `pytest`
 
 ### Frontend (UI)

@@ -32,26 +32,8 @@ echo "[pre-push] running required local gates"
 echo "[pre-push] install python dev dependencies"
 python -m pip install -e ".[dev]"
 
-echo "[pre-push] architecture map consistency"
-python scripts/sync_architecture_map.py --check
-
-echo "[pre-push] harness guideline baseline"
-python scripts/validate_harness_guideline.py
-
-echo "[pre-push] import boundary policy"
-python scripts/validate_import_boundaries.py
-
-echo "[pre-push] API v2 contract parity"
-python scripts/validate_api_v2_contract_parity.py
-
-echo "[pre-push] acceptance mapping consistency"
-python scripts/validate_test_cases.py
-
-echo "[pre-push] user-needs catalog consistency"
-python scripts/validate_user_needs_catalog.py
-
-echo "[pre-push] skill consistency"
-python scripts/validate_skills.py
+echo "[pre-push] lean governance gate"
+python scripts/run_lean_gate.py
 
 echo "[pre-push] backend test suite"
 pytest
