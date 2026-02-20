@@ -16,6 +16,7 @@
   - `title`
   - `lane`
   - `status` (`planned|active|blocked|completed|deferred`)
+  - `execution_mode` (`autonomous|assisted|manual`)
   - `owner`
   - `acceptance` (non-empty list)
   - `checks` (non-empty list)

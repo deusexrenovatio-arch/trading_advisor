@@ -9,6 +9,7 @@
   - `docs/DEV_WORKFLOW.md`
   - `harness-guideline.md`
   - `plans/PLANS.yaml`
+  - `memory/agent_memory.yaml`
   - `docs/checklists/first-time-right-gate.md`
   - `scripts/run_lean_gate.py`
 
@@ -16,8 +17,10 @@
 1) Verify worktree context with `./scripts/worktree_guard.ps1 -Action Check`.
 2) Before and after meaningful patches run `python scripts/run_lean_gate.py`.
 3) Keep `plans/PLANS.yaml` statuses aligned with actual progress.
-4) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
-5) Any failing gate is a blocker; fix first, continue after.
+4) Keep `memory/agent_memory.yaml` updated with durable decisions/incidents/patterns.
+5) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
+  - include `python scripts/validate_quality_scorecards.py`.
+6) Any failing gate is a blocker; fix first, continue after.
 
 ## Skills
 ### Available skills

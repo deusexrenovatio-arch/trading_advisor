@@ -20,6 +20,10 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | Skill/workflow compliance as pre-implementation guardrail | `python scripts/validate_skills.py` | Engineering manager | `governance` |
 | Deterministic second-pass review | `python scripts/agent_review.py` | QA owner | `agent-review` |
 | Scheduled documentation entropy control | `python scripts/doc_gardening_report.py` | Engineering enablement | `docs-gardening` |
+| Quality scorecards with blocking thresholds | `python scripts/validate_quality_scorecards.py` | Architecture + QA | `quality-scorecards` |
+| Autonomous self-heal loop | `python scripts/self_heal.py` | Engineering platform | `self-heal` |
+| Agent operational memory integrity | `python scripts/validate_agent_memory.py` | Engineering owner | `governance` |
+| Autonomy KPI observability | `python scripts/autonomy_kpi_report.py` | Engineering enablement | `docs-gardening` |
 | Runtime regression and behavior stability | `pytest` | Backend + Quant owners | `backend`, `perf-minute-runtime` |
 | Frontend integration safety | `npm --prefix ui-web run lint` + `npm --prefix ui-web run build` | Frontend owner | `frontend` |
 
@@ -30,6 +34,14 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | `boundary_violations` | Count of forbidden imports from core modules into `moex_carry.ui.*` (allowlist excluded) | `scripts/harness_baseline_metrics.py` |
 | `manual_scenarios_count` | Count of scenarios with `type: manual` in acceptance catalog | `scripts/harness_baseline_metrics.py` |
 | `unlinked_test_cases_count` | Count of active (non-planned) `TC-*` definitions not linked from acceptance scenarios | `scripts/harness_baseline_metrics.py` |
+
+## Autonomy KPIs
+| KPI | Definition | Source |
+| --- | --- | --- |
+| `autonomous_completion_rate` | Share of completed plan items with `execution_mode=autonomous` | `scripts/autonomy_kpi_report.py` |
+| `mean_cycle_time_days` | Mean cycle time for completed plan items with start/end dates | `scripts/autonomy_kpi_report.py` |
+| `memory_decisions_count` | Number of decision records in agent memory | `scripts/autonomy_kpi_report.py` |
+| `self_heal_workflow_enabled` | Binary indicator that self-heal CI loop is configured | `scripts/autonomy_kpi_report.py` |
 
 ## Sprint 0 Exit Gate
 - Document exists and contains `Principle -> Check -> Owner -> CI Job` mapping.

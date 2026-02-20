@@ -12,6 +12,7 @@ import yaml
 
 ITEM_ID_PATTERN = re.compile(r"^[A-Z0-9-]+$")
 ALLOWED_STATUSES = {"planned", "active", "blocked", "completed", "deferred"}
+ALLOWED_EXECUTION_MODES = {"autonomous", "assisted", "manual"}
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -104,6 +105,12 @@ def run(path: Path) -> int:
         _required_non_empty_str(raw, "title", item_id or f"items[{idx}]", errors)
         lane = _required_non_empty_str(raw, "lane", item_id or f"items[{idx}]", errors)
         status = _required_non_empty_str(raw, "status", item_id or f"items[{idx}]", errors)
+        execution_mode = _required_non_empty_str(
+            raw,
+            "execution_mode",
+            item_id or f"items[{idx}]",
+            errors,
+        )
         _required_non_empty_str(raw, "owner", item_id or f"items[{idx}]", errors)
         _required_list(raw, "acceptance", item_id or f"items[{idx}]", errors)
         _required_list(raw, "checks", item_id or f"items[{idx}]", errors)
@@ -111,6 +118,11 @@ def run(path: Path) -> int:
         if status and status not in ALLOWED_STATUSES:
             errors.append(
                 f"{item_id}: invalid status '{status}' (allowed: {sorted(ALLOWED_STATUSES)})"
+            )
+        if execution_mode and execution_mode not in ALLOWED_EXECUTION_MODES:
+            errors.append(
+                f"{item_id}: invalid execution_mode '{execution_mode}' "
+                f"(allowed: {sorted(ALLOWED_EXECUTION_MODES)})"
             )
 
         if status:

@@ -12,10 +12,15 @@ REQUIRED_SNIPPETS = [
     "`python scripts/run_lean_gate.py`",
     "`python scripts/agent_review.py`",
     "`python scripts/doc_gardening_report.py`",
+    "`python scripts/validate_quality_scorecards.py`",
+    "`python scripts/self_heal.py`",
+    "`python scripts/validate_agent_memory.py`",
+    "`python scripts/autonomy_kpi_report.py`",
     "`spec_drift_count`",
     "`boundary_violations`",
     "`manual_scenarios_count`",
     "`unlinked_test_cases_count`",
+    "`autonomous_completion_rate`",
 ]
 
 

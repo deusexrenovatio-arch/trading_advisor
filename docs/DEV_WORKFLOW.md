@@ -77,6 +77,8 @@ Required report block for implementation and reviews:
 - Keep machine-readable plan state fresh:
   - update `plans/PLANS.yaml` for active/completed/deferred status changes.
   - schema/invariants: `docs/planning/plans-registry.md`
+- Keep operational memory fresh:
+  - record durable decisions/incidents/patterns in `memory/agent_memory.yaml`.
 - Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
 - Before push/PR, always run the full blocker gate below.
 
@@ -86,6 +88,7 @@ Required report block for implementation and reviews:
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
 - `python scripts/run_lean_gate.py`
+- `python scripts/validate_quality_scorecards.py`
 - `pytest`
 
 ### Frontend (UI)
@@ -121,8 +124,11 @@ Required report block for implementation and reviews:
 - `docs-gardening` workflow runs weekly and on manual trigger:
   - `python scripts/run_lean_gate.py`
   - `python scripts/doc_gardening_report.py`
+  - `python scripts/autonomy_kpi_report.py`
 - `agent-review` CI job publishes deterministic findings artifact for each PR/push:
   - `python scripts/agent_review.py`
+- `self-heal` workflow runs daily and on manual trigger:
+  - `python scripts/self_heal.py`
 
 ## Branching model
 - `main` is protected; work happens on short-lived branches.
