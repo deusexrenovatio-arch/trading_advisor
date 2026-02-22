@@ -30,6 +30,7 @@ This directory is the repository knowledge system for agent-first engineering.
 - `docs/workflows/context-budget.md`
 - `docs/workflows/worktree-governance.md`
 - `docs/runbooks/governance-remediation.md`
+- `docs/runbooks/signal-agent-continuity.md`
 - `docs/runbooks/self-heal-escalation.md`
 - `docs/runbooks/flaky-tests-policy.md`
 

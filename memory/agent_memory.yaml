@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-02-20
+updated_at: 2026-02-22
 
 decisions:
   - id: ADM-2026-02-20-001
@@ -83,6 +83,15 @@ decisions:
       - scripts/validate_pr_only_policy.py
       - docs/DEV_WORKFLOW.md
       - AGENTS.md
+  - id: ADM-2026-02-22-009
+    date: 2026-02-22
+    title: Standardize signal continuity documentation around worktree and data-layer contracts
+    context: Repeated troubleshooting loops showed the same failures around wrong worktree, stale projection files, and mixed metric semantics.
+    decision: Add a dedicated runbook that defines canonical paths, signal semantics, and mandatory verification flow for signal-related changes.
+    impact: Faster root-cause isolation, fewer false regressions, and stable handoffs across sessions and worktrees.
+    links:
+      - docs/runbooks/signal-agent-continuity.md
+      - docs/session_handoff.md
 
 incidents:
   - id: AMI-2026-02-20-001
@@ -124,6 +133,16 @@ incidents:
     links:
       - .cursorignore
       - agent-runbook.md
+  - id: AMI-2026-02-22-005
+    date: 2026-02-22
+    title: Repeated signal verification loops due to projection/file/source mismatch
+    symptom: Same signal questions re-opened because outputs differed between branches, runtime processes, and file paths.
+    root_cause: Checks mixed `data/output/*`, `data/output/unified/*`, and live API state without explicit source contract.
+    remediation: Document and enforce canonical source order and verification checklist in a dedicated signal continuity runbook.
+    remediation_type: docs
+    links:
+      - docs/runbooks/signal-agent-continuity.md
+      - docs/session_handoff.md
 
 patterns:
   - id: AMP-2026-02-20-001
@@ -174,3 +193,11 @@ patterns:
       - docs/session_handoff.md
       - docs/workflows/context-budget.md
       - docs/DEV_WORKFLOW.md
+  - id: AMP-2026-02-22-007
+    date: 2026-02-22
+    title: Source-first verification for signal claims
+    pattern: Any statement about signals must name worktree, runtime process source, and exact data path before interpreting metrics.
+    when_to_use: Signal lifecycle, score-gate, telegram delivery, or data freshness investigations.
+    links:
+      - docs/runbooks/signal-agent-continuity.md
+      - scripts/worktree_guard.ps1

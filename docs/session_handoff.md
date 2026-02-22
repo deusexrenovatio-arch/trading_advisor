@@ -1,23 +1,23 @@
 # Session Handoff
-Updated: 2026-02-20 00:00 UTC
+Updated: 2026-02-22 00:00 UTC
 
 ## Goal
-- Keep governance controls mechanically enforceable with PR-only delivery discipline.
+- Keep signal troubleshooting deterministic across worktrees, runtime processes, and data layers.
 
 ## Current Delta
-- Hardened `.githooks/pre-push` to enforce PR-only flow for `main`.
-- Emergency direct push now requires both override flag and explicit reason.
-- Added `scripts/validate_pr_only_policy.py` and wired it into lean governance gate.
-- Synced policy docs (`AGENTS.md`, `docs/DEV_WORKFLOW.md`, `README.md`) with the new contract.
+- Added `docs/runbooks/signal-agent-continuity.md` with repeated-issue RCA and operational contracts.
+- Documented canonical source order for signal verification: worktree -> process source -> unified projection -> root aliases -> DB.
+- Explicitly separated replay sample metrics (`trades_closed` and related) from real executions (`signal_executions`).
+- Added mandatory signal verification checklist to prevent stale-file and wrong-runtime conclusions.
+- Updated `memory/agent_memory.yaml` with durable decision, incident, and pattern for signal continuity.
 
 ## Blockers
 - None.
 
 ## Next Step
-- Run blocker gate and open PR from a feature branch for policy changes.
+- Apply the runbook in the next signal change cycle and verify no cross-worktree source drift.
 - Keep `## Current Delta` within eight bullets and avoid long transcript copies.
 
 ## Validation
 - Run `python scripts/validate_session_handoff.py` for handoff contract checks.
-- Run `python scripts/validate_pr_only_policy.py` for PR-only contract checks.
 - Run `python scripts/run_lean_gate.py` before and after meaningful patches.
