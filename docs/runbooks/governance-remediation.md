@@ -26,10 +26,13 @@ Use this guide when a governance gate fails.
 - Keep `Current Delta` concise (maximum 8 bullets) and avoid pasting large instruction blocks.
 - For policy details, follow `docs/workflows/context-budget.md`.
 
-## `python scripts/validate_session_handoff.py`
-- Keep `docs/session_handoff.md` compact and up to date for handoff continuity.
-- Required sections: Goal, Current Delta, Blockers, Next Step, Validation.
-- Keep context budget within validator limits (line/bullet caps).
+## `python scripts/validate_pr_only_policy.py`
+- Keep `.githooks/pre-push` in PR-only mode for `main`.
+- Keep `AGENTS.md`, `docs/DEV_WORKFLOW.md`, and `README.md` aligned with the same policy text.
+- Legacy `MOEX_CARRY_ALLOW_MAIN_PUSH` override examples must be removed from policy docs.
+- Emergency direct push is allowed only with both:
+  - `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1`
+  - `MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'`
 
 ## `python scripts/validate_dependency_decisions.py`
 - If dependency manifests changed, add/update an ADR in `docs/architecture/adr/`.

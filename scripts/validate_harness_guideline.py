@@ -9,6 +9,7 @@ REQUIRED_SNIPPETS = [
     "| Principle | Check | Owner | CI Job |",
     "`python scripts/validate_plans.py`",
     "`python scripts/validate_session_handoff.py`",
+    "`python scripts/validate_pr_only_policy.py`",
     "`python scripts/validate_architecture_policy.py`",
     "`python scripts/run_lean_gate.py`",
     "`python scripts/agent_review.py`",

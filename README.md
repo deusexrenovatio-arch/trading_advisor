@@ -68,17 +68,17 @@ Recommended: enable pre-push blocker checks once per clone:
 python scripts/install_git_hooks.py
 ```
 
-By default, pre-push also blocks direct `main` pushes.
-Emergency override:
+By default, pre-push enforces PR-only policy for `main`.
+Emergency override (incident/hotfix only, requires explicit reason):
 
 ```
-MOEX_CARRY_ALLOW_MAIN_PUSH=1 git push
+MOEX_CARRY_EMERGENCY_MAIN_PUSH=1 MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON="<ticket/incident>" git push
 ```
 
 PowerShell variant:
 
 ```
-$env:MOEX_CARRY_ALLOW_MAIN_PUSH='1'; git push
+$env:MOEX_CARRY_EMERGENCY_MAIN_PUSH='1'; $env:MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'; git push
 ```
 
 If `npm ci` fails on Windows with `EPERM` lock errors for `esbuild.exe`,

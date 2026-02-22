@@ -17,6 +17,7 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | Hard architecture policy-as-code | `python scripts/validate_architecture_policy.py` | Architecture owner | `governance` |
 | Progressive disclosure + short feedback loops | `python scripts/run_lean_gate.py` | Engineering owner | `governance` |
 | Context budget and concise handoff contract | `python scripts/validate_session_handoff.py` | Engineering owner | `governance` |
+| PR-only merge discipline for `main` | `python scripts/validate_pr_only_policy.py` | Engineering manager | `governance` |
 | Scenario traceability to executable/acceptance cases | `python scripts/validate_test_cases.py` | QA owner | `governance` |
 | User-needs coverage linked to acceptance scenarios | `python scripts/validate_user_needs_catalog.py` | Product owner | `governance` |
 | Skill/workflow compliance as pre-implementation guardrail | `python scripts/validate_skills.py` | Engineering manager | `governance` |
