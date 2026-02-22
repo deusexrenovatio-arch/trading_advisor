@@ -1,5 +1,5 @@
 # Session Handoff
-Updated: 2026-02-22 12:30 UTC
+Updated: 2026-02-22 09:45 UTC
 
 ## Goal
 - Keep team communication compact while preserving deterministic delivery checks.
@@ -10,6 +10,7 @@ Updated: 2026-02-22 12:30 UTC
 - Added API v2 request-id propagation into response headers and structured logging path.
 - Added API v2 payload-size guard (`ui.max_api_payload_bytes`) returning `413 payload_too_large`.
 - Added regression tests for request-id propagation and payload-size rejection.
+- Stabilized Playwright `Signals filters and history load` fixture dates to stay within default `historyFrom` 7-day window.
 
 ## Blockers
 - None.
