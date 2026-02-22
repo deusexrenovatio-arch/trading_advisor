@@ -12,7 +12,6 @@ from moex_carry.analytics.stats import zscore
 from moex_carry.analytics.time import days_to_expiry, year_fraction
 from moex_carry.config import AppSettings
 from moex_carry.costs.engine import fut_fee_per_share, round_trip_fees, stock_fee_per_share
-from moex_carry.data.cbr_rates import latest_rate
 from moex_carry.domain.models import ContractSpec, DividendEvent, KeyRate
 from moex_carry.execution.model import build_execution_prices
 from moex_carry.strategy.spread_carry_alpha import spread_pnl_pct
@@ -56,6 +55,25 @@ def _row_exec_timestamp(row_date: date, exec_ts_raw: object) -> datetime:
         return parsed
     # In legacy daily-close mode there is no minute anchor, so we pin to end-of-day.
     return datetime.combine(row_date, datetime.min.time()) + timedelta(hours=23, minutes=59)
+
+
+def _build_key_rate_cache(series_dates: list[date], key_rates: list[KeyRate]) -> dict[date, KeyRate | None]:
+    days = sorted(set(series_dates))
+    if not days:
+        return {}
+    if not key_rates:
+        return {day: None for day in days}
+    sorted_rates = sorted(key_rates, key=lambda rate: rate.date)
+    cache: dict[date, KeyRate | None] = {}
+    idx = 0
+    current: KeyRate | None = None
+    total = len(sorted_rates)
+    for day in days:
+        while idx < total and sorted_rates[idx].date <= day:
+            current = sorted_rates[idx]
+            idx += 1
+        cache[day] = current
+    return cache
 
 
 def _iso_or_none(value: datetime | None) -> str | None:
@@ -192,14 +210,34 @@ def _apply_spread_carry_signals(
     except (TypeError, ValueError):
         annual_target_override = None
 
-    series_dates = [_as_date(value) for value in series_df["date"]]
-    series_exec_ts = [
-        _row_exec_timestamp(
-            series_dates[idx],
-            series_df.at[idx, "exec_ts"] if "exec_ts" in series_df.columns else None,
-        )
-        for idx in range(n)
-    ]
+    parsed_dates = pd.to_datetime(series_df["date"], errors="coerce")
+    if parsed_dates.isna().any():
+        bad_value = series_df.loc[parsed_dates.isna(), "date"].iloc[0]
+        raise ValueError(f"Cannot parse date from value: {bad_value!r}")
+    series_dates = parsed_dates.dt.date.tolist()
+
+    if "exec_ts" in series_df.columns:
+        exec_values = pd.to_datetime(series_df["exec_ts"], errors="coerce", utc=True).dt.tz_convert(None).tolist()
+    else:
+        exec_values = [None] * n
+    series_exec_ts: list[datetime] = []
+    for idx, row_date in enumerate(series_dates):
+        raw_exec = exec_values[idx]
+        if pd.isna(raw_exec):
+            series_exec_ts.append(datetime.combine(row_date, datetime.min.time()) + timedelta(hours=23, minutes=59))
+            continue
+        series_exec_ts.append(raw_exec)
+
+    spot_mid_values = series_df["spot_mid"].to_numpy(dtype=float, copy=False)
+    future_mid_values = series_df["future_mid"].to_numpy(dtype=float, copy=False)
+    spread_mid_values = series_df["spread_mid"].to_numpy(copy=False) if "spread_mid" in series_df.columns else [0.0] * n
+    div_sum_values = series_df["div_sum"].to_numpy(copy=False) if "div_sum" in series_df.columns else [0.0] * n
+    pv_div_values = series_df["pv_div"].to_numpy(copy=False) if "pv_div" in series_df.columns else [0.0] * n
+    spot_volume_values = series_df["spot_volume"].to_numpy(copy=False) if "spot_volume" in series_df.columns else [None] * n
+    future_volume_values = (
+        series_df["future_volume"].to_numpy(copy=False) if "future_volume" in series_df.columns else [None] * n
+    )
+    key_rate_by_day = _build_key_rate_cache(series_dates, key_rates)
     spreads_pct = series_df["spread_pct"].tolist()
 
     def _submit_timestamp(signal_idx: int, signal_ts: datetime) -> datetime | None:
@@ -255,14 +293,17 @@ def _apply_spread_carry_signals(
     current_cycle = 0
 
     for idx in range(n):
-        row = series_df.iloc[idx]
         row_date = series_dates[idx]
         row_ts = series_exec_ts[idx]
-        spot_mid = float(row["spot_mid"])
-        future_mid = float(row["future_mid"])
-        spread_mid_value = float(row.get("spread_mid", 0.0))
+        spot_mid = float(spot_mid_values[idx])
+        future_mid = float(future_mid_values[idx])
+        spread_mid_value = float(spread_mid_values[idx])
+        div_sum_value = float(div_sum_values[idx])
+        pv_div_value = float(pv_div_values[idx])
+        spot_volume = spot_volume_values[idx]
+        fut_volume = future_volume_values[idx]
 
-        key_rate_row = latest_rate(key_rates, row_date)
+        key_rate_row = key_rate_by_day.get(row_date)
         key_rate_value = key_rate_row.rate if key_rate_row else 0.0
         r_cb = alpha_cfg.r_cb_annual if alpha_cfg.r_cb_annual is not None else key_rate_value
         r_fund = alpha_cfg.r_fund_annual if alpha_cfg.r_fund_annual is not None else r_cb
@@ -308,7 +349,7 @@ def _apply_spread_carry_signals(
         floor_metrics = compute_floor_metrics(
             spot_buy=exec_prices.stock_buy,
             fut_sell=exec_prices.fut_sell,
-            div_sum=float(row.get("div_sum", 0.0)),
+            div_sum=div_sum_value,
             fees_rt=fees_rt,
             r_cb_annual=r_cb,
             r_fund_annual=r_fund,
@@ -322,8 +363,6 @@ def _apply_spread_carry_signals(
             var_margin_buffer_pct=alpha_cfg.var_margin_buffer_pct,
         )
 
-        spot_volume = row.get("spot_volume")
-        fut_volume = row.get("future_volume")
         dollar_vol_stock = dollar_volume(spot_mid, spot_volume)
         dollar_vol_fut = dollar_volume(future_mid, fut_volume, future_spec.multiplier)
         if dollar_vol_stock is not None and dollar_vol_fut is not None:
@@ -356,10 +395,10 @@ def _apply_spread_carry_signals(
             entry_filter_ok = z <= alpha_cfg.z_entry_threshold
 
         spread_entry_exec_value = spread_entry_exec(
-            exec_prices.stock_buy, float(row.get("pv_div", 0.0)), exec_prices.fut_sell
+            exec_prices.stock_buy, pv_div_value, exec_prices.fut_sell
         )
         spread_exit_exec_value = spread_exit_exec(
-            exec_prices.stock_sell, float(row.get("pv_div", 0.0)), exec_prices.fut_buy
+            exec_prices.stock_sell, pv_div_value, exec_prices.fut_buy
         )
         spread_pct_entry_exec = spread_pct(spread_entry_exec_value, spot_mid)
         spread_pct_exit_exec = spread_pct(spread_exit_exec_value, spot_mid)
