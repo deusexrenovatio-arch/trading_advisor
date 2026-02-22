@@ -98,7 +98,8 @@ _SNAPSHOT_CACHE: _SnapshotCacheItem | None = None
 
 _PAIR_REPLAY_CACHE_LOCK = threading.Lock()
 _PAIR_REPLAY_CACHE: dict[str, _PairReplayCacheItem] = {}
-_PAIR_REPLAY_CACHE_MAX = 512
+_PAIR_REPLAY_CACHE_MAX_HARD_LIMIT = 512
+_PAIR_REPLAY_CACHE_DEFAULT_MAX = 64
 
 _LAST_REFRESH_TELEMETRY_LOCK = threading.Lock()
 _LAST_REFRESH_TELEMETRY = RefreshTelemetry(
@@ -121,6 +122,8 @@ _SCORE_GATE_SIGNAL_SCORE_MIN = 0.0
 _SCORE_GATE_FLOOR_EXCESS_ANNUAL_MIN = 0.0
 _SCORE_GATE_MIN_DAYS = 30
 _SCORE_GATE_MIN_CLOSED_TRADES = 3
+_SCORE_GATE_MAX_TRADES_PER_DAY = 2.0
+_SCORE_ALPHA_ABS_MAX = 2.0
 _SCORE_EARN_BLEND_HISTORY_WEIGHT = 0.50
 _SCORE_EARN_BLEND_FORWARD_WEIGHT = 0.50
 _DEFAULT_ENTRY_PRICE_TOLERANCE_PCT = 0.0015
@@ -702,7 +705,6 @@ def _pair_replay_key(
     pair: _UniversePair,
     start_date: date,
     end_date: date,
-    data_watermark: str | None = None,
 ) -> str:
     payload = {
         "sig": _alpha_signature(settings),
@@ -710,16 +712,26 @@ def _pair_replay_key(
         "future": pair.future,
         "start": start_date.isoformat(),
         "end": end_date.isoformat(),
-        "data_watermark": data_watermark,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _evict_pair_cache_if_needed() -> None:
-    if len(_PAIR_REPLAY_CACHE) <= _PAIR_REPLAY_CACHE_MAX:
+def _pair_replay_cache_max(settings: AppSettings) -> int:
+    raw = getattr(settings.ui, "unified_pair_replay_cache_max", _PAIR_REPLAY_CACHE_DEFAULT_MAX)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = _PAIR_REPLAY_CACHE_DEFAULT_MAX
+    value = max(1, value)
+    value = min(value, _PAIR_REPLAY_CACHE_MAX_HARD_LIMIT)
+    return value
+
+
+def _evict_pair_cache_if_needed(max_items: int) -> None:
+    if len(_PAIR_REPLAY_CACHE) <= max_items:
         return
     ordered = sorted(_PAIR_REPLAY_CACHE.items(), key=lambda item: item[1].created_at)
-    drop = len(_PAIR_REPLAY_CACHE) - _PAIR_REPLAY_CACHE_MAX
+    drop = len(_PAIR_REPLAY_CACHE) - max_items
     for key, _ in ordered[:drop]:
         _PAIR_REPLAY_CACHE.pop(key, None)
 
@@ -882,7 +894,6 @@ def get_pair_replay(
         pair=pair,
         start_date=start_date,
         end_date=end_date,
-        data_watermark=data_watermark,
     )
     mutation_payload = mutation or ReplayMutation(
         changed=False,
@@ -896,8 +907,13 @@ def get_pair_replay(
         with _PAIR_REPLAY_CACHE_LOCK:
             cached = _PAIR_REPLAY_CACHE.get(cache_key)
             if cached is not None:
-                age = (now - cached.created_at).total_seconds()
-                if data_watermark is not None or age <= max(int(ttl_sec), 1):
+                cache_hit = False
+                if data_watermark is not None:
+                    cache_hit = cached.data_watermark == data_watermark
+                else:
+                    age = (now - cached.created_at).total_seconds()
+                    cache_hit = age <= max(int(ttl_sec), 1)
+                if cache_hit:
                     skip_reason = "no_data_change" if not mutation_payload.changed else None
                     return _PairReplayFetch(
                         replay_result=cached.replay_result,
@@ -926,7 +942,7 @@ def get_pair_replay(
                 source=str(computed.source or ""),
                 data_watermark=data_watermark,
             )
-            _evict_pair_cache_if_needed()
+            _evict_pair_cache_if_needed(_pair_replay_cache_max(settings))
     return computed
 
 
@@ -1071,12 +1087,13 @@ def _build_pair_rows(
 
     floor_rate_annual = _safe_float(latest.get("floor_rate_annual")) or 0.0
     score_floor = float(floor_rate_annual - score_target_annual)
-    score_alpha = (
+    score_alpha_raw = (
         _safe_float(metrics.avg_trade_return_annual_operational_last5)
         if metrics.avg_trade_return_annual_operational_last5 is not None
         else _safe_float(metrics.avg_trade_return_annual_fill_to_fill_last5)
     )
-    score_alpha = float(score_alpha or 0.0)
+    score_alpha_raw = float(score_alpha_raw or 0.0)
+    score_alpha = float(max(min(score_alpha_raw, _SCORE_ALPHA_ABS_MAX), -_SCORE_ALPHA_ABS_MAX))
 
     unfilled_entry_rate = _safe_float(metrics.unfilled_entry_rate)
     unfilled_exit_rate = _safe_float(metrics.unfilled_exit_rate)
@@ -1109,6 +1126,7 @@ def _build_pair_rows(
     signal_score = float(p_exec * score_edge_raw_annual)
     days_observed = int(metrics.days)
     trades_closed = int(metrics.trades_closed)
+    trades_per_day = float(trades_closed / days_observed) if days_observed > 0 else None
     score_gate_pass = bool(
         p_exec >= _SCORE_GATE_P_EXEC_THRESHOLD
         and p_earn >= _SCORE_GATE_P_EARN_THRESHOLD
@@ -1116,6 +1134,8 @@ def _build_pair_rows(
         and score_floor >= _SCORE_GATE_FLOOR_EXCESS_ANNUAL_MIN
         and days_observed >= _SCORE_GATE_MIN_DAYS
         and trades_closed >= _SCORE_GATE_MIN_CLOSED_TRADES
+        and trades_per_day is not None
+        and trades_per_day <= _SCORE_GATE_MAX_TRADES_PER_DAY
     )
 
     spot_mid = _safe_float(latest.get("spot_mid"))
@@ -1152,6 +1172,7 @@ def _build_pair_rows(
         "score_target_annual": score_target_annual,
         "score_floor": score_floor,
         "score_floor_excess_annual": score_floor,
+        "score_alpha_raw": score_alpha_raw,
         "score_alpha": score_alpha,
         "score_edge_raw_annual": score_edge_raw_annual,
         "score_exec_probability": p_exec,
@@ -1168,6 +1189,8 @@ def _build_pair_rows(
         "score_gate_floor_excess_annual_min": _SCORE_GATE_FLOOR_EXCESS_ANNUAL_MIN,
         "score_gate_min_days": _SCORE_GATE_MIN_DAYS,
         "score_gate_min_closed_trades": _SCORE_GATE_MIN_CLOSED_TRADES,
+        "score_gate_max_trades_per_day": _SCORE_GATE_MAX_TRADES_PER_DAY,
+        "score_alpha_abs_max": _SCORE_ALPHA_ABS_MAX,
         "score_gate_pass": score_gate_pass,
         "total_score": signal_score,
         "avg_trade_return_annual_recent": _safe_float(metrics.avg_trade_return_annual_fill_to_fill_last5),
@@ -1181,6 +1204,7 @@ def _build_pair_rows(
         "entry_signals": int(metrics.entry_signals),
         "exit_signals": int(metrics.exit_signals),
         "trades_closed": trades_closed,
+        "trades_per_day": trades_per_day,
         "avg_entry_wait_min_closed": _safe_float(metrics.avg_entry_wait_min_closed),
         "avg_exit_wait_min_closed": _safe_float(metrics.avg_exit_wait_min_closed),
         **entry_plan,
@@ -1216,6 +1240,10 @@ def _build_pair_rows(
         reasons.append("no_closed_trades_in_window")
     if metrics.unfilled_entry_rate is not None and float(metrics.unfilled_entry_rate) >= 1.0:
         reasons.append("entries_unfilled")
+    if trades_per_day is not None and trades_per_day > _SCORE_GATE_MAX_TRADES_PER_DAY:
+        reasons.append("excessive_turnover")
+    if abs(score_alpha_raw) > _SCORE_ALPHA_ABS_MAX:
+        reasons.append("score_alpha_capped")
     if metrics.error:
         reasons.append(metrics.error)
 
@@ -1234,6 +1262,7 @@ def _build_pair_rows(
         "score_target_annual": score_target_annual,
         "score_floor": score_floor,
         "score_floor_excess_annual": score_floor,
+        "score_alpha_raw": score_alpha_raw,
         "score_alpha": score_alpha,
         "score_edge_raw_annual": score_edge_raw_annual,
         "score_exec_probability": p_exec,
@@ -1250,6 +1279,8 @@ def _build_pair_rows(
         "score_gate_floor_excess_annual_min": _SCORE_GATE_FLOOR_EXCESS_ANNUAL_MIN,
         "score_gate_min_days": _SCORE_GATE_MIN_DAYS,
         "score_gate_min_closed_trades": _SCORE_GATE_MIN_CLOSED_TRADES,
+        "score_gate_max_trades_per_day": _SCORE_GATE_MAX_TRADES_PER_DAY,
+        "score_alpha_abs_max": _SCORE_ALPHA_ABS_MAX,
         "score_gate_pass": score_gate_pass,
         "total_score": signal_score,
         "decision": decision,
@@ -1297,6 +1328,7 @@ def _build_pair_rows(
         "entry_signals": int(metrics.entry_signals),
         "exit_signals": int(metrics.exit_signals),
         "trades_closed": trades_closed,
+        "trades_per_day": trades_per_day,
         "avg_entry_wait_min_closed": _safe_float(metrics.avg_entry_wait_min_closed),
         "avg_exit_wait_min_closed": _safe_float(metrics.avg_exit_wait_min_closed),
         "source": source,
@@ -1312,6 +1344,7 @@ def _build_pair_rows(
         "score_target_annual": score_target_annual,
         "score_floor": score_floor,
         "score_floor_excess_annual": score_floor,
+        "score_alpha_raw": score_alpha_raw,
         "score_alpha": score_alpha,
         "score_edge_raw_annual": score_edge_raw_annual,
         "score_exec_probability": p_exec,
@@ -1328,6 +1361,8 @@ def _build_pair_rows(
         "score_gate_floor_excess_annual_min": _SCORE_GATE_FLOOR_EXCESS_ANNUAL_MIN,
         "score_gate_min_days": _SCORE_GATE_MIN_DAYS,
         "score_gate_min_closed_trades": _SCORE_GATE_MIN_CLOSED_TRADES,
+        "score_gate_max_trades_per_day": _SCORE_GATE_MAX_TRADES_PER_DAY,
+        "score_alpha_abs_max": _SCORE_ALPHA_ABS_MAX,
         "score_gate_pass": score_gate_pass,
         "total_score": signal_score,
         "spot_mid": spot_mid,
@@ -1373,6 +1408,7 @@ def _build_pair_rows(
         "entry_signals": int(metrics.entry_signals),
         "exit_signals": int(metrics.exit_signals),
         "trades_closed": int(metrics.trades_closed),
+        "trades_per_day": trades_per_day,
         "avg_entry_wait_min_closed": _safe_float(metrics.avg_entry_wait_min_closed),
         "avg_exit_wait_min_closed": _safe_float(metrics.avg_exit_wait_min_closed),
         "signal_reasons": reasons,
@@ -1389,6 +1425,7 @@ def _build_pair_rows(
         "share_alpha_exits": None,
         "avg_hold_days": _safe_float(_value_from_row(frame, "trade_hold_days")),
         "trades_closed": int(metrics.trades_closed),
+        "trades_per_day": trades_per_day,
         "unfilled_entry_rate": _safe_float(metrics.unfilled_entry_rate),
         "forced_exit_rate": _safe_float(metrics.forced_exit_rate),
         "avg_entry_wait_min_closed": _safe_float(metrics.avg_entry_wait_min_closed),
@@ -1699,34 +1736,42 @@ def persist_snapshot_to_csv_with_meta(
     *,
     engine_tag: str = "unified",
 ) -> dict[str, Any]:
+    def _write_projection_csvs(target_dir: Path) -> dict[str, dict[str, Any]]:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        meta: dict[str, dict[str, Any]] = {}
+        for dataset_name, frame in datasets.items():
+            csv_name = f"{dataset_name}.csv"
+            target = target_dir / csv_name
+            rows = int(len(frame))
+            if rows > 0:
+                frame.to_csv(target, index=False)
+                exists = True
+            else:
+                if target.exists():
+                    target.unlink()
+                exists = False
+            meta[dataset_name] = {
+                "path": csv_name,
+                "rows": rows,
+                "exists": exists,
+                "sha256": _dataframe_sha256(frame),
+            }
+        return meta
+
     output_root = data_dir / "output"
     engine_value = str(engine_tag or "unified").strip().lower() or "unified"
     output = output_root / engine_value
-    output.mkdir(parents=True, exist_ok=True)
 
     datasets = {
         "top_pairs": snapshot.top_pairs,
         "signals": snapshot.signals,
         "backtest_summary": snapshot.backtests,
     }
-    dataset_meta: dict[str, dict[str, Any]] = {}
-    for dataset_name, frame in datasets.items():
-        csv_name = f"{dataset_name}.csv"
-        target = output / csv_name
-        rows = int(len(frame))
-        if rows > 0:
-            frame.to_csv(target, index=False)
-            exists = True
-        else:
-            if target.exists():
-                target.unlink()
-            exists = False
-        dataset_meta[dataset_name] = {
-            "path": csv_name,
-            "rows": rows,
-            "exists": exists,
-            "sha256": _dataframe_sha256(frame),
-        }
+    dataset_meta = _write_projection_csvs(output)
+    root_alias_meta: dict[str, dict[str, Any]] | None = None
+    if engine_value == "unified":
+        # Keep legacy output files in sync with unified projections to avoid stale manual reads.
+        root_alias_meta = _write_projection_csvs(output_root)
 
     created_at = snapshot.created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     metadata = {
@@ -1734,6 +1779,8 @@ def persist_snapshot_to_csv_with_meta(
         "generated_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "snapshot_created_at_utc": created_at,
         "datasets": dataset_meta,
+        "root_alias_published": bool(root_alias_meta is not None),
+        "root_alias_datasets": root_alias_meta,
         "warnings_total": int(len(snapshot.warnings)),
         "errors_total": int(len(snapshot.errors)),
     }

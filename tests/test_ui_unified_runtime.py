@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pandas as pd
 
 from moex_carry.config import AppSettings, DataConfig, SpreadCarryAlphaConfig, UiConfig
+from moex_carry.signal_replay.core import ReplayMetrics, ReplayResult
+from moex_carry.signal_replay.incremental import ReplayMutation
 from moex_carry.ui.app import create_app
 import moex_carry.unified_runtime as core_unified_runtime
 import moex_carry.ui.unified_runtime as unified_runtime
@@ -310,6 +312,206 @@ def test_unified_spread_series_and_api_endpoints(tmp_path):
     assert "signal_reasons" in history_data[0]
     assert "signal_metrics" in history_data[0]
     assert "trades_closed" in history_data[0]
+
+
+def test_pair_replay_cache_reuses_single_slot_per_pair_window(tmp_path, monkeypatch):
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+    settings.ui.unified_pair_replay_cache_max = 64
+    pair = core_unified_runtime._UniversePair(
+        stock="AAA",
+        stock_name="Alpha",
+        future="AAH6",
+        expiry=date(2026, 3, 19),
+        lot_size=1.0,
+        multiplier=1.0,
+        tick_size=0.01,
+    )
+
+    call_counter = {"count": 0}
+
+    def _fake_compute_pair_replay(**_kwargs):
+        call_counter["count"] += 1
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": "2026-02-12",
+                    "exec_ts": f"2026-02-12 10:0{call_counter['count']}:00",
+                    "spot_mid": 100.0,
+                    "future_mid": 101.0,
+                    "spread_mid": -1.0,
+                    "spread_pct": -0.01,
+                    "signal_action": "hold",
+                }
+            ]
+        )
+        metrics = ReplayMetrics(
+            rows=1,
+            days=1,
+            entry_signals=0,
+            exit_signals=0,
+            trades_closed=0,
+            avg_trade_return_annual_fill_to_fill_last5=None,
+            avg_trade_return_annual_operational_last5=None,
+            share_target_pass=None,
+            unfilled_entry_rate=None,
+            unfilled_exit_rate=None,
+            forced_exit_rate=None,
+            avg_entry_wait_min_closed=None,
+            avg_exit_wait_min_closed=None,
+        )
+        return core_unified_runtime._PairReplayFetch(
+            replay_result=ReplayResult(replay=frame, metrics=metrics, cutoff_minutes=0),
+            source="test",
+            error=None,
+            cache_hit=False,
+            skip_reason=None,
+            fallback_reason=None,
+            replay_mode="full",
+        )
+
+    monkeypatch.setattr(core_unified_runtime, "_compute_pair_replay", _fake_compute_pair_replay)
+
+    with core_unified_runtime._PAIR_REPLAY_CACHE_LOCK:
+        core_unified_runtime._PAIR_REPLAY_CACHE.clear()
+
+    changed_w1 = ReplayMutation(
+        changed=True,
+        append_only=True,
+        earliest_changed_exec_ts=None,
+        watermark_before=None,
+        watermark_after="w1",
+    )
+    changed_w2 = ReplayMutation(
+        changed=True,
+        append_only=True,
+        earliest_changed_exec_ts=None,
+        watermark_before="w1",
+        watermark_after="w2",
+    )
+    unchanged_w2 = ReplayMutation(
+        changed=False,
+        append_only=True,
+        earliest_changed_exec_ts=None,
+        watermark_before="w2",
+        watermark_after="w2",
+    )
+
+    first = core_unified_runtime.get_pair_replay(
+        settings=settings,
+        data_dir=tmp_path,
+        pair=pair,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 12),
+        key_rates=[],
+        force=False,
+        ttl_sec=120,
+        data_watermark="w1",
+        mutation=changed_w1,
+    )
+    assert first.cache_hit is False
+
+    second = core_unified_runtime.get_pair_replay(
+        settings=settings,
+        data_dir=tmp_path,
+        pair=pair,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 12),
+        key_rates=[],
+        force=False,
+        ttl_sec=120,
+        data_watermark="w2",
+        mutation=changed_w2,
+    )
+    assert second.cache_hit is False
+
+    with core_unified_runtime._PAIR_REPLAY_CACHE_LOCK:
+        cache_size = len(core_unified_runtime._PAIR_REPLAY_CACHE)
+        cached_items = list(core_unified_runtime._PAIR_REPLAY_CACHE.values())
+    assert cache_size == 1
+    assert cached_items[0].data_watermark == "w2"
+
+    third = core_unified_runtime.get_pair_replay(
+        settings=settings,
+        data_dir=tmp_path,
+        pair=pair,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 12),
+        key_rates=[],
+        force=False,
+        ttl_sec=120,
+        data_watermark="w2",
+        mutation=unchanged_w2,
+    )
+    assert third.cache_hit is True
+    assert call_counter["count"] == 2
+
+    with core_unified_runtime._PAIR_REPLAY_CACHE_LOCK:
+        core_unified_runtime._PAIR_REPLAY_CACHE.clear()
+
+
+def test_pair_rows_apply_turnover_gate_and_alpha_cap(tmp_path):
+    settings = _settings(tmp_path, allow_legacy_fallback=False)
+    pair = core_unified_runtime._UniversePair(
+        stock="AAA",
+        stock_name="Alpha",
+        future="AAH6",
+        expiry=date(2026, 3, 19),
+        lot_size=1.0,
+        multiplier=1.0,
+        tick_size=0.01,
+    )
+    frame = pd.DataFrame(
+        [
+            {
+                "date": f"2026-02-{10 + idx:02d}",
+                "exec_ts": f"2026-02-{10 + idx:02d} 10:00:00",
+                "spot_mid": 100.0,
+                "future_mid": 101.0,
+                "spread_mid": -1.0,
+                "spread_pct": -0.01 + idx * 0.0005,
+                "signal_action": "hold",
+                "rtc_pct": 0.0003,
+                "floor_rate_annual": 0.2,
+                "entry_spread_pct_exec": -0.01,
+                "tp_net": 0.01,
+                "sl_net": 0.01,
+            }
+            for idx in range(6)
+        ]
+    )
+    metrics = ReplayMetrics(
+        rows=len(frame),
+        days=40,
+        entry_signals=250,
+        exit_signals=200,
+        trades_closed=200,  # 5/day > max turnover gate (2/day)
+        avg_trade_return_annual_fill_to_fill_last5=120.0,
+        avg_trade_return_annual_operational_last5=120.0,
+        share_target_pass=0.8,
+        unfilled_entry_rate=0.0,
+        unfilled_exit_rate=0.0,
+        forced_exit_rate=0.0,
+        avg_entry_wait_min_closed=2.0,
+        avg_exit_wait_min_closed=5.0,
+    )
+    replay = ReplayResult(replay=frame, metrics=metrics, cutoff_minutes=0)
+
+    top_row, signal_row, _ = core_unified_runtime._build_pair_rows(
+        pair=pair,
+        replay=replay,
+        source="test",
+        settings=settings,
+        key_rates=[],
+    )
+
+    assert signal_row["score_alpha_raw"] == 120.0
+    assert signal_row["score_alpha"] == 2.0
+    assert signal_row["score_gate_pass"] is False
+    assert signal_row["trades_per_day"] == 5.0
+    assert signal_row["score_gate_max_trades_per_day"] == 2.0
+    assert "excessive_turnover" in signal_row["signal_reasons"]
+    assert "score_alpha_capped" in signal_row["signal_reasons"]
+    assert top_row["score_gate_pass"] is False
 
 
 def test_manual_refresh_defaults_to_incremental_and_supports_force_full(tmp_path, monkeypatch):

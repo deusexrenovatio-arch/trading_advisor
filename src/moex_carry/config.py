@@ -188,6 +188,7 @@ class UiConfig(BaseModel):
     unified_allow_legacy_fallback: bool = True
     unified_snapshot_ttl_sec: int = 120
     unified_pair_workers: int | None = None
+    unified_pair_replay_cache_max: int = 64
     unified_front_only: bool = True
     unified_front_roll_days: int = 7
     require_score_gate_by_default: bool = True

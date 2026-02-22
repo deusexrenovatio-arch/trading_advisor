@@ -1,5 +1,33 @@
 # Release Notes
 
+## 2026-02-20 - PR-only main hardening and emergency override contract
+
+Summary
+- Hardened merge policy to enforce `main` updates through PR flow by default.
+- Replaced permissive main-push override with explicit emergency contract requiring reason.
+- Added machine validation so policy drift fails governance gates.
+
+Changed
+- Pre-push policy:
+  - `.githooks/pre-push` now blocks direct `main` push unless both are set:
+    - `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1`
+    - `MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'`
+  - legacy `MOEX_CARRY_ALLOW_MAIN_PUSH` override is rejected.
+- New governance validator:
+  - `scripts/validate_pr_only_policy.py`
+  - wired into `scripts/run_lean_gate.py` and `tests/architecture/test_governance_policies.py`.
+- Governance docs aligned:
+  - `AGENTS.md`
+  - `docs/DEV_WORKFLOW.md`
+  - `README.md`
+  - `docs/runbooks/governance-remediation.md`
+  - `harness-guideline.md`
+
+Verification
+- `python scripts/validate_pr_only_policy.py`
+- `python scripts/run_lean_gate.py`
+- `pytest tests/architecture/test_governance_policies.py -q`
+
 ## 2026-02-17 - Minute portfolio HPO parity + execution quality projection
 
 Summary

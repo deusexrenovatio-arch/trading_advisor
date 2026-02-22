@@ -37,6 +37,7 @@ def main() -> int:
         [py, "scripts/validate_agent_memory.py"],
         [py, "scripts/validate_session_handoff.py"],
         [py, "scripts/validate_harness_guideline.py"],
+        [py, "scripts/validate_pr_only_policy.py"],
         [py, "scripts/validate_architecture_policy.py"],
         [py, "scripts/validate_test_cases.py"],
         [py, "scripts/validate_user_needs_catalog.py"],

@@ -151,6 +151,7 @@ ui:
   unified_allow_legacy_fallback: true
   unified_snapshot_ttl_sec: 120
   unified_pair_workers: null
+  unified_pair_replay_cache_max: 64
   unified_front_only: true
   unified_front_roll_days: 7
   require_score_gate_by_default: true

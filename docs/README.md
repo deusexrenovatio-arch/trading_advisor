@@ -30,12 +30,14 @@ This directory is the repository knowledge system for agent-first engineering.
 - `docs/workflows/context-budget.md`
 - `docs/workflows/worktree-governance.md`
 - `docs/runbooks/governance-remediation.md`
+- `docs/runbooks/signal-agent-continuity.md`
 - `docs/runbooks/self-heal-escalation.md`
 - `docs/runbooks/flaky-tests-policy.md`
 
 ## Validation Commands
 - `python scripts/run_lean_gate.py`
 - `python scripts/validate_session_handoff.py`
+- `python scripts/validate_pr_only_policy.py`
 - `python scripts/validate_quality_scorecards.py`
 - `python scripts/validate_python_style.py`
 - `python scripts/validate_structured_logging.py`
