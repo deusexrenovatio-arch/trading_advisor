@@ -2378,15 +2378,57 @@ def create_app(settings: AppSettings) -> Dash:
         else:
             logger.info("Signal refresh scheduler enabled (interval=%ss)", refresh_interval)
 
+    api_request_id_key = "_api_v2_request_id"
+    max_api_payload_bytes = int(getattr(settings.ui, "max_api_payload_bytes", 262144) or 262144)
+    if max_api_payload_bytes <= 0:
+        max_api_payload_bytes = 262144
+
+    def _resolve_api_request_id() -> str:
+        candidate = (
+            request.headers.get("X-Request-Id")
+            or request.headers.get("X-Request-ID")
+            or request.headers.get("X-Correlation-Id")
+            or request.headers.get("X-Correlation-ID")
+        )
+        normalized = str(candidate or "").strip()
+        if normalized:
+            return normalized
+        return f"req-{uuid.uuid4().hex[:20]}"
+
     @server.before_request
-    def _capture_request_started_at() -> None:
+    def _capture_request_started_at():
         request.environ[request_started_at_key] = datetime.now(timezone.utc).timestamp()
+        if not request.path.startswith("/api/v2/"):
+            return None
+
+        request_id = _resolve_api_request_id()
+        request.environ[api_request_id_key] = request_id
+        if request.method in {"POST", "PUT", "PATCH"}:
+            content_length = request.content_length
+            if content_length is not None and int(content_length) > max_api_payload_bytes:
+                response = jsonify(
+                    {
+                        "error": "payload_too_large",
+                        "message": (
+                            "request payload exceeds max_api_payload_bytes "
+                            f"({int(content_length)} > {max_api_payload_bytes})"
+                        ),
+                        "max_api_payload_bytes": max_api_payload_bytes,
+                    }
+                )
+                response.status_code = 413
+                response.headers["X-Request-Id"] = request_id
+                return response
+        return None
 
     @server.after_request
     def _cors_headers(response):
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, X-Request-Id, X-Request-ID, X-Correlation-Id, X-Correlation-ID"
+        )
+        response.headers["Access-Control-Expose-Headers"] = "X-Request-Id"
 
         successor = _deprecated_v1_successor_path(request.path)
         if successor is not None:
@@ -2406,6 +2448,8 @@ def create_app(settings: AppSettings) -> Dash:
             )
 
         if request.path.startswith("/api/v2/"):
+            request_id = str(request.environ.get(api_request_id_key) or _resolve_api_request_id())
+            response.headers["X-Request-Id"] = request_id
             try:
                 started_value = request.environ.get(request_started_at_key)
                 duration_ms = 0.0
@@ -2414,13 +2458,6 @@ def create_app(settings: AppSettings) -> Dash:
                         (datetime.now(timezone.utc).timestamp() - float(started_value)) * 1000.0,
                         0.0,
                     )
-                request_id = (
-                    request.headers.get("X-Request-Id")
-                    or request.headers.get("X-Request-ID")
-                    or request.headers.get("X-Correlation-Id")
-                    or request.headers.get("X-Correlation-ID")
-                    or "missing"
-                )
                 emit_api_log(
                     logger,
                     component="api-v2",

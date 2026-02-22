@@ -194,6 +194,7 @@ class UiConfig(BaseModel):
     require_score_gate_by_default: bool = True
     require_score_gate_top_pairs_by_default: bool = False
     signal_entry_intent_ttl_hours: int = 72
+    max_api_payload_bytes: int = 262144
 
 
 class TelegramConfig(BaseModel):

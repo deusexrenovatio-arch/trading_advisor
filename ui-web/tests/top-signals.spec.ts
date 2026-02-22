@@ -138,10 +138,16 @@ const activeSignalsBlockedPretrade = [
   },
 ]
 
+const isoDaysAgo = (daysAgo: number) => {
+  const value = new Date()
+  value.setUTCDate(value.getUTCDate() - daysAgo)
+  return value.toISOString()
+}
+
 const historyAll = [
   {
     run_id: 'run-1',
-    timestamp: '2026-02-16T10:00:00Z',
+    timestamp: isoDaysAgo(2),
     stock: 'SBER',
     future: 'SRH6',
     signal_action: 'enter',
@@ -150,7 +156,7 @@ const historyAll = [
   },
   {
     run_id: 'run-1',
-    timestamp: '2026-02-16T11:00:00Z',
+    timestamp: isoDaysAgo(1),
     stock: 'GAZP',
     future: 'GZH6',
     signal_action: 'exit',

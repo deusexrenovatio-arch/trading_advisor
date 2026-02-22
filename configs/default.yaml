@@ -156,6 +156,7 @@ ui:
   unified_front_roll_days: 7
   require_score_gate_by_default: true
   require_score_gate_top_pairs_by_default: false
+  max_api_payload_bytes: 262144
 
 telegram:
   enabled: false
