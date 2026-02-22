@@ -23,6 +23,7 @@ def _build_settings(
     ff_db_projection_source: bool = False,
     ff_fail_closed_execution: bool = False,
     auto_unwind_timeout_sec: int = 600,
+    max_api_payload_bytes: int = 262144,
 ):
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path)),
@@ -31,6 +32,7 @@ def _build_settings(
             ff_db_projection_source=ff_db_projection_source,
             ff_fail_closed_execution=ff_fail_closed_execution,
             auto_unwind_timeout_sec=auto_unwind_timeout_sec,
+            max_api_payload_bytes=max_api_payload_bytes,
         ),
     )
 
@@ -76,6 +78,7 @@ def test_v2_signals_active_and_actions_idempotency(tmp_path):
 
     active_response = client.get("/api/v2/signals/active")
     assert active_response.status_code == 200
+    assert active_response.headers.get("X-Request-Id")
     rows = active_response.get_json()
     assert isinstance(rows, list)
     assert len(rows) == 1
@@ -121,8 +124,12 @@ def test_v2_signals_active_and_actions_idempotency(tmp_path):
     assert execution_rows[0]["stock"] == "AAA"
     assert execution_rows[0]["future"] == "AAH6"
 
-    top_pairs_response = client.get("/api/v2/top-pairs?limit=5")
+    top_pairs_response = client.get(
+        "/api/v2/top-pairs?limit=5",
+        headers={"X-Request-Id": "req-fixed-1"},
+    )
     assert top_pairs_response.status_code == 200
+    assert top_pairs_response.headers.get("X-Request-Id") == "req-fixed-1"
     assert isinstance(top_pairs_response.get_json(), list)
 
 
@@ -1279,3 +1286,23 @@ def test_v2_pretrade_check_post(tmp_path, monkeypatch):
     assert data["ready_to_place"] is True
     assert data["pretrade_status"] == "pass"
     assert data["params"]["snapshots"] == 3
+
+
+def test_v2_rejects_oversized_payload_and_preserves_request_id(tmp_path):
+    settings = _build_settings(tmp_path, max_api_payload_bytes=256)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.post(
+        "/api/v2/decisions/missing/actions",
+        headers={"X-Request-Id": "req-large-1"},
+        json={
+            "action": "execute",
+            "comment": "x" * 2048,
+        },
+    )
+    assert response.status_code == 413
+    assert response.headers.get("X-Request-Id") == "req-large-1"
+    payload = response.get_json()
+    assert payload["error"] == "payload_too_large"
+    assert payload["max_api_payload_bytes"] == 256

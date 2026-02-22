@@ -1,19 +1,21 @@
 # Session Handoff
-Updated: 2026-02-20 00:00 UTC
+Updated: 2026-02-22 12:30 UTC
 
 ## Goal
 - Keep team communication compact while preserving deterministic delivery checks.
 
 ## Current Delta
-- Added a machine-checked context budget validator for session handoff hygiene.
-- Added workflow documentation that standardizes short delta-first updates.
-- Wired the new validator into the default lean gate.
+- Added quality-scorecards trajectory dimension with blocking checks for two API v2 critical paths.
+- Added quality-scorecards context-budget dimension using `scripts/validate_session_handoff.py`.
+- Added API v2 request-id propagation into response headers and structured logging path.
+- Added API v2 payload-size guard (`ui.max_api_payload_bytes`) returning `413 payload_too_large`.
+- Added regression tests for request-id propagation and payload-size rejection.
 
 ## Blockers
 - None.
 
 ## Next Step
-- Update this file at the end of each meaningful patch or stream handover.
+- Keep trajectory checks aligned with the highest-risk user flows as new endpoints are added.
 - Keep `## Current Delta` within eight bullets and avoid long transcript copies.
 
 ## Validation

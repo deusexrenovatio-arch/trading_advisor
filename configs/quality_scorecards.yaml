@@ -8,6 +8,34 @@ dimensions:
       - id: plans-schema
         command: ["{python}", "scripts/validate_plans.py"]
 
+  - id: trajectory
+    threshold: 1.0
+    checks:
+      - id: v2-signals-idempotency
+        command:
+          [
+            "{python}",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_api_v2.py::test_v2_signals_active_and_actions_idempotency",
+          ]
+      - id: v2-decision-actions
+        command:
+          [
+            "{python}",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_api_v2.py::test_v2_decision_actions_and_v1_adapter",
+          ]
+
+  - id: context-budget
+    threshold: 1.0
+    checks:
+      - id: handoff-budget
+        command: ["{python}", "scripts/validate_session_handoff.py"]
+
   - id: security
     threshold: 1.0
     checks:
