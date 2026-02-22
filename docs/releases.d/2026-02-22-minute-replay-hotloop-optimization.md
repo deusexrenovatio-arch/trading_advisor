@@ -1,0 +1,2 @@
+- Optimized minute replay hot loop by replacing per-row key-rate scan with a precomputed day-to-rate cache.
+- Reduced per-iteration DataFrame overhead by pre-parsing `date`/`exec_ts` and reading hot columns from pre-extracted arrays.
