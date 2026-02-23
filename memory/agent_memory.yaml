@@ -156,6 +156,16 @@ decisions:
       - scripts/skill_precommit_gate.py
       - docs/workflows/skill-governance-sync.md
       - AGENTS.md
+  - id: ADM-2026-02-23-016
+    date: 2026-02-23
+    title: Route AI work by bounded ownership contexts and surface route at task start
+    context: Project scope growth increased agent context size and cross-module edit risk.
+    decision: Add a CTX-based context map plus a deterministic file router and invoke it automatically from worktree_guard check.
+    impact: Start-of-task flow now shows patch scope and risk early, reducing unnecessary file loading and mixed-concern edits.
+    links:
+      - docs/agent-contexts/README.md
+      - scripts/context_router.py
+      - scripts/worktree_guard.ps1
 
 incidents:
   - id: AMI-2026-02-20-001
