@@ -1,4 +1,4 @@
----
+﻿---
 name: ui-decision-log
 description: UI projection and deterministic checks for mapping decision_log into decision_view. Use when changing projection fields, filters, or decision contracts. Co-use with trading-ui-dashboard for implementation and frontend-behavior-check for recheck/pre-push validation.
 ---
@@ -12,6 +12,11 @@ Create a UI-friendly `decision_view` from canonical `decision_log` with strict f
 - Build phase: pair with `trading-ui-dashboard` for table/filter/drill-down behavior.
 - Recheck phase: run `frontend-behavior-check` for API + proxy + UI expectations.
 - Pre-push phase: ensure `docs/DEV_WORKFLOW.md` required checks pass after projection updates.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Required inputs
 - `decision_log` (validated against `contracts/decision-log.schema.json`)
@@ -61,3 +66,7 @@ Create a UI-friendly `decision_view` from canonical `decision_log` with strict f
   }
 }
 ```
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.

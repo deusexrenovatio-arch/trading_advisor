@@ -1,4 +1,4 @@
----
+﻿---
 name: intraday-futures-trading-advisor
 description: Provides intraday futures strategy guidance focused on commissions, taxes, risk controls, and portfolio risk allocation. Use when requests mention intraday trading, futures strategy, cost accounting, or risk budgeting. Co-use with moex-instruments-costs, risk-profile-gates, and news-geopolitics-filter for deterministic checks; add spread-arbitrage for pair-spread setups.
 ---
@@ -20,6 +20,11 @@ When asked for intraday futures strategy advice, follow this workflow:
 - Event-risk phase: run `news-geopolitics-filter` when macro/news conditions can block or reduce exposure.
 - Spread phase: run `spread-arbitrage` for two-leg spread plans.
 - Recheck/pre-push phase: rerun deterministic gates above and ensure required checks from `docs/DEV_WORKFLOW.md` pass.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Guardrails
 - Provide educational guidance only; avoid certainty and personalized recommendations.
@@ -113,3 +118,7 @@ Use this template:
 - Express conditions as explicit if-then rules with numeric thresholds and units.
 - Provide parameters as key-value pairs where possible.
 - Avoid ambiguous language.
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.

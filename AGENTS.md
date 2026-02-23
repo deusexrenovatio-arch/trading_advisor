@@ -9,6 +9,7 @@
   - `docs/README.md`
   - `docs/DEV_WORKFLOW.md`
   - `docs/workflows/context-budget.md`
+  - `docs/workflows/skill-governance-sync.md`
   - `docs/session_handoff.md`
   - `harness-guideline.md`
   - `plans/PLANS.yaml`
@@ -37,21 +38,66 @@
 
 ## Skills
 ### Available skills
-- commodity-news-linking: Deterministic news-to-entity linking workflow. (file: .cursor/skills/commodity-news-linking/SKILL.md)
-- frontend-behavior-check: UI smoke checks for API/proxy/chart/table behavior. (file: .cursor/skills/frontend-behavior-check/SKILL.md)
-- intraday-futures-trading-advisor: Intraday futures strategy guidance and risk/cost framing. (file: .cursor/skills/intraday-futures-trading-advisor/SKILL.md)
-- minute-candle-performance: High-load minute-candle performance workflow. (file: .cursor/skills/minute-candle-performance/SKILL.md)
-- ml-backtest-hpo-lab: End-to-end backtest/HPO experiment workflow. (file: .cursor/skills/ml-backtest-hpo-lab/SKILL.md)
-- moex-instruments-costs: MOEX futures cost model and break-even checks. (file: .cursor/skills/moex-instruments-costs/SKILL.md)
-- news-geopolitics-filter: Deterministic high-impact event risk gate. (file: .cursor/skills/news-geopolitics-filter/SKILL.md)
-- news-impact-backtest-lab: News-impact model evaluation workflow. (file: .cursor/skills/news-impact-backtest-lab/SKILL.md)
-- parallel-worktree-flow: Multi-worktree bootstrap and sync routine. (file: .cursor/skills/parallel-worktree-flow/SKILL.md)
-- risk-profile-gates: Deterministic intraday risk profile gates. (file: .cursor/skills/risk-profile-gates/SKILL.md)
-- signals-news-bridge-v2: Bridge for news-impact and signal lifecycle APIs. (file: .cursor/skills/signals-news-bridge-v2/SKILL.md)
-- spread-arbitrage: Deterministic pair-spread checklist/template. (file: .cursor/skills/spread-arbitrage/SKILL.md)
-- trading-ui-dashboard: Production UI workflow for trading dashboard. (file: .cursor/skills/trading-ui-dashboard/SKILL.md)
-- ui-decision-log: Decision log/view projection workflow and checks. (file: .cursor/skills/ui-decision-log/SKILL.md)
-
+- ai-agent-architect: Repository skill. (file: .cursor/skills/ai-agent-architect/SKILL.md)
+- ai-change-explainer: Repository skill. (file: .cursor/skills/ai-change-explainer/SKILL.md)
+- archctl-policy-authoring: Repository skill. (file: .cursor/skills/archctl-policy-authoring/SKILL.md)
+- architecture-review: Repository skill. (file: .cursor/skills/architecture-review/SKILL.md)
+- business-analyst: Repository skill. (file: .cursor/skills/business-analyst/SKILL.md)
+- ci-bootstrap: Repository skill. (file: .cursor/skills/ci-bootstrap/SKILL.md)
+- codeowners-from-registry: Repository skill. (file: .cursor/skills/codeowners-from-registry/SKILL.md)
+- commit-and-pr-hygiene: Repository skill. (file: .cursor/skills/commit-and-pr-hygiene/SKILL.md)
+- commodity-news-linking: Repository skill. (file: .cursor/skills/commodity-news-linking/SKILL.md)
+- composition-contracts: Repository skill. (file: .cursor/skills/composition-contracts/SKILL.md)
+- computer-vision-expert: Repository skill. (file: .cursor/skills/computer-vision-expert/SKILL.md)
+- contract-first-graphql: Repository skill. (file: .cursor/skills/contract-first-graphql/SKILL.md)
+- data-lineage: Repository skill. (file: .cursor/skills/data-lineage/SKILL.md)
+- data-quality-gates: Repository skill. (file: .cursor/skills/data-quality-gates/SKILL.md)
+- dependency-and-license-audit: Repository skill. (file: .cursor/skills/dependency-and-license-audit/SKILL.md)
+- docs-sync: Repository skill. (file: .cursor/skills/docs-sync/SKILL.md)
+- event-contracts: Repository skill. (file: .cursor/skills/event-contracts/SKILL.md)
+- frontend-behavior-check: Repository skill. (file: .cursor/skills/frontend-behavior-check/SKILL.md)
+- gis-data-layer-react-query: Repository skill. (file: .cursor/skills/gis-data-layer-react-query/SKILL.md)
+- golden-tests-and-fixtures: Repository skill. (file: .cursor/skills/golden-tests-and-fixtures/SKILL.md)
+- incident-runbook: Repository skill. (file: .cursor/skills/incident-runbook/SKILL.md)
+- index-vector: Repository skill. (file: .cursor/skills/index-vector/SKILL.md)
+- ingest-postgres: Repository skill. (file: .cursor/skills/ingest-postgres/SKILL.md)
+- integration-connector: Repository skill. (file: .cursor/skills/integration-connector/SKILL.md)
+- intraday-futures-trading-advisor: Repository skill. (file: .cursor/skills/intraday-futures-trading-advisor/SKILL.md)
+- layer-diagnostics-debug: Repository skill. (file: .cursor/skills/layer-diagnostics-debug/SKILL.md)
+- minute-candle-performance: Repository skill. (file: .cursor/skills/minute-candle-performance/SKILL.md)
+- ml-backtest-hpo-lab: Repository skill. (file: .cursor/skills/ml-backtest-hpo-lab/SKILL.md)
+- module-scaffold: Repository skill. (file: .cursor/skills/module-scaffold/SKILL.md)
+- moex-instruments-costs: Repository skill. (file: .cursor/skills/moex-instruments-costs/SKILL.md)
+- neo4j-migrations-and-constraints: Repository skill. (file: .cursor/skills/neo4j-migrations-and-constraints/SKILL.md)
+- news-geopolitics-filter: Repository skill. (file: .cursor/skills/news-geopolitics-filter/SKILL.md)
+- news-impact-backtest-lab: Repository skill. (file: .cursor/skills/news-impact-backtest-lab/SKILL.md)
+- observability-slo: Repository skill. (file: .cursor/skills/observability-slo/SKILL.md)
+- openai-ocr-cost-and-reliability-guardrails: Repository skill. (file: .cursor/skills/openai-ocr-cost-and-reliability-guardrails/SKILL.md)
+- parallel-worktree-flow: Repository skill. (file: .cursor/skills/parallel-worktree-flow/SKILL.md)
+- patch-series-splitter: Repository skill. (file: .cursor/skills/patch-series-splitter/SKILL.md)
+- preferences-presets-migrations: Repository skill. (file: .cursor/skills/preferences-presets-migrations/SKILL.md)
+- product-owner: Repository skill. (file: .cursor/skills/product-owner/SKILL.md)
+- qa-test-engineer: Repository skill. (file: .cursor/skills/qa-test-engineer/SKILL.md)
+- rbac-layer-gating: Repository skill. (file: .cursor/skills/rbac-layer-gating/SKILL.md)
+- registry-first: Repository skill. (file: .cursor/skills/registry-first/SKILL.md)
+- release-notes: Repository skill. (file: .cursor/skills/release-notes/SKILL.md)
+- release-notes-and-changelog: Repository skill. (file: .cursor/skills/release-notes-and-changelog/SKILL.md)
+- repeated-issue-review: Repository skill. (file: .cursor/skills/repeated-issue-review/SKILL.md)
+- risk-profile-gates: Repository skill. (file: .cursor/skills/risk-profile-gates/SKILL.md)
+- schema-migrations-postgres: Repository skill. (file: .cursor/skills/schema-migrations-postgres/SKILL.md)
+- secrets-and-config-hardening: Repository skill. (file: .cursor/skills/secrets-and-config-hardening/SKILL.md)
+- security-compliance: Repository skill. (file: .cursor/skills/security-compliance/SKILL.md)
+- signals-news-bridge-v2: Repository skill. (file: .cursor/skills/signals-news-bridge-v2/SKILL.md)
+- skill-creator: Repository skill. (file: .cursor/skills/skill-creator/SKILL.md)
+- skill-installer: Repository skill. (file: .cursor/skills/skill-installer/SKILL.md)
+- source-onboarding: Repository skill. (file: .cursor/skills/source-onboarding/SKILL.md)
+- spread-arbitrage: Repository skill. (file: .cursor/skills/spread-arbitrage/SKILL.md)
+- testing-suite: Repository skill. (file: .cursor/skills/testing-suite/SKILL.md)
+- trading-ui-dashboard: Repository skill. (file: .cursor/skills/trading-ui-dashboard/SKILL.md)
+- tz-oss-scout: Repository skill. (file: .cursor/skills/tz-oss-scout/SKILL.md)
+- ui-decision-log: Repository skill. (file: .cursor/skills/ui-decision-log/SKILL.md)
+- update-neo4j: Repository skill. (file: .cursor/skills/update-neo4j/SKILL.md)
+- validate-crosslayer: Repository skill. (file: .cursor/skills/validate-crosslayer/SKILL.md)
 ### Flow Order (mandatory)
 - Start: `parallel-worktree-flow`.
 - UI: `trading-ui-dashboard` -> `ui-decision-log` -> `frontend-behavior-check`.
@@ -66,6 +112,13 @@
 ### Skill Usage Rules
 - If user names a skill (or task clearly matches), use that skill in the same turn.
 - Do not carry skills across turns unless re-mentioned.
+- Use local `.cursor/skills` as the primary catalog for this repository (including mirrored global skills).
+- When global skill content changes, mirror updates via `docs/workflows/skill-governance-sync.md` and re-run `python scripts/validate_skills.py`.
+- Before modifying skills, run intent routing:
+  - `python scripts/skill_update_decision.py --from-git --request "intent"` to choose between `UPDATE_EXISTING` and `ADD_NEW`.
+- When committing skill-related edits, pre-commit guard runs `python scripts/skill_precommit_gate.py` and fails `NO_CHANGE` decisions.
+  - Use `SKILL_UPDATE_INTENT="<intent>" git commit ...` for explicit routing.
+  - Use `SKILL_DECISION_GATE=0` to bypass during emergency local commits.
 - Read skills with progressive disclosure:
   1) open `SKILL.md`;
   2) load only required references;

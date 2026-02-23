@@ -1,4 +1,4 @@
----
+﻿---
 name: spread-arbitrage
 description: Deterministic spread arbitrage checklist and JSON plan template. Use for pair-spread strategy design, rechecks, and pre-push validation when spread logic changes. Co-use with moex-instruments-costs, risk-profile-gates, and news-geopolitics-filter.
 ---
@@ -13,6 +13,11 @@ Audit spread arbitrage prototypes for data integrity, liquidity, and risk constr
 - Risk phase: run `risk-profile-gates` for portfolio and execution constraints.
 - Event-risk phase: run `news-geopolitics-filter` when market/event risk can invalidate spread entries.
 - Recheck/pre-push phase: rerun spread audit whenever hedge ratio, thresholds, or holding constraints change.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Required inputs
 - `leg_a` (`instrument`, `tick_size`, `tick_value`, `liquidity`)
@@ -58,3 +63,7 @@ Audit spread arbitrage prototypes for data integrity, liquidity, and risk constr
   }
 }
 ```
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.

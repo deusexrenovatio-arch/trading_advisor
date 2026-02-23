@@ -1,4 +1,4 @@
----
+﻿---
 name: ml-backtest-hpo-lab
 description: "End-to-end research workflow for this MOEX carry repository: Backtest v2, forward checks, HPO runs, leakage-safe walk-forward validation, objective sanity checks, stress tests, and experiment reporting. Use when requests mention backtest, forward test, walk-forward, CV folds, embargo, HPO, overfitting, leakage, or model/strategy comparison. Use for regression rechecks and pre-push quality gates on research changes."
 ---
@@ -13,6 +13,11 @@ Use this skill to run reproducible strategy research cycles and prioritize trust
 - Runtime/performance phase: add `minute-candle-performance` when minute/high-load compute behavior changes.
 - Recheck phase: rerun this skill before closing any research bug or tuning task.
 - Pre-push phase: ensure required checks from `docs/DEV_WORKFLOW.md` and research validation commands pass.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Repository anchors
 - `docs/hpo-howto.md` for project-specific HPO flow and payload examples.
@@ -109,3 +114,7 @@ pytest -q tests/hpo tests/backtest_v2 tests/test_backtest_forward_api.py tests/t
 - Why:
 - Risks and follow-ups:
 ```
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.

@@ -45,6 +45,18 @@ Policy:
 - For production gate decisions, require at least `medium` confidence or explicit user override.
 
 ## Skill invocation gates (mandatory)
+- Combined catalog handling for this repository:
+  - Use local `.cursor/skills` as the primary runtime catalog (including mirrored global skills).
+  - Mirror global updates from `$CODEX_HOME/skills` into `.cursor/skills` using `docs/workflows/skill-governance-sync.md`.
+  - Always apply repository governance baseline from `AGENTS.md` and `docs/workflows/skill-governance-sync.md`.
+  - Only local `.cursor/skills` are CI-gated by `python scripts/validate_skills.py`.
+- Before editing a skill, run deterministic intent routing:
+  - `python scripts/skill_update_decision.py --from-git --request "short reason/intent"`.
+  - If the command returns `UPDATE_EXISTING`, patch existing skill(s); if `ADD_NEW`, follow new-skill onboarding via `C:/New Project/.cursor/skills/skill-creator/SKILL.md` and `D:/New Project/.cursor/skills/skill-installer/SKILL.md` when needed.
+- Commit-time enforcement:
+  - `.githooks/pre-commit` runs `python scripts/skill_precommit_gate.py` for staged skill/governance files.
+  - Commit is blocked when decision is `NO_CHANGE`.
+  - Use `SKILL_UPDATE_INTENT="<intent>"` for explicit routing and `SKILL_DECISION_STRICT=1` to also fail `ADD_NEW`.
 - Start of any new development stream:
   - Run `D:/New Project/.cursor/skills/parallel-worktree-flow/SKILL.md`.
 - UI stream (`ui-web`, API projection, dashboard behavior):

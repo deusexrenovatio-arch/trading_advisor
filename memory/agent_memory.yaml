@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-02-22
+updated_at: 2026-02-23
 
 decisions:
   - id: ADM-2026-02-20-001
@@ -102,6 +102,60 @@ decisions:
       - configs/quality_scorecards.yaml
       - src/moex_carry/ui/app.py
       - tests/test_api_v2.py
+  - id: ADM-2026-02-23-011
+    date: 2026-02-23
+    title: Treat local and global skills as one catalog with repository governance precedence
+    context: Team workflows use many global skills, while repository gates only validated local `.cursor/skills` and drift appeared in governance instructions.
+    decision: Add explicit combined-catalog workflow, sync all local skills to one governance baseline block, and enforce markers in `scripts/validate_skills.py`.
+    impact: Skill selection now remains broad while repository guardrails stay deterministic and machine-checked for every local skill update.
+    links:
+      - docs/workflows/skill-governance-sync.md
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+      - scripts/validate_skills.py
+  - id: ADM-2026-02-23-012
+    date: 2026-02-23
+    title: Mirror global skill catalog into repository-local `.cursor/skills`
+    context: Team requested always accounting for global and local skills together while keeping repository validation deterministic.
+    decision: Copy global skills into `.cursor/skills`, normalize lifecycle and governance baseline markers, and refresh `AGENTS.md` from local skill metadata.
+    impact: Skill discovery no longer depends on external home directory state; repository-local catalog is complete and machine-validated.
+    links:
+      - .cursor/skills
+      - AGENTS.md
+      - docs/workflows/skill-governance-sync.md
+      - scripts/validate_skills.py
+  - id: ADM-2026-02-23-013
+    date: 2026-02-23
+    title: Centralize skill governance details to control context size
+    context: Mirroring all skills locally increased repetitive governance text and AGENTS payload size.
+    decision: Replace per-skill command catalogs with a short baseline reference to docs/workflows/skill-governance-sync.md and keep AGENTS skill entries compact.
+    impact: Lower per-turn prompt overhead while preserving deterministic governance checks through centralized docs and validator rules.
+    links:
+      - docs/workflows/skill-governance-sync.md
+      - scripts/validate_skills.py
+      - AGENTS.md
+  - id: ADM-2026-02-23-014
+    date: 2026-02-23
+    title: Automate skill scope decision
+    context: Repeated questions appeared about whether repeated problems require updating existing skills or adding a new one.
+    decision: Add `scripts/skill_update_decision.py` and wire it into skill governance workflow, AGENTS, and DEV workflow as a pre-edit decision gate.
+    impact: Routing between existing-skill updates and new skill creation became machine-supported and repeatable.
+    links:
+      - scripts/skill_update_decision.py
+      - docs/workflows/skill-governance-sync.md
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+  - id: ADM-2026-02-23-015
+    date: 2026-02-23
+    title: Enforce skill decision on commit
+    context: Even after pre-edit routing, commits with skill edits could bypass decision checks.
+    decision: Add `scripts/skill_precommit_gate.py` and `.githooks/pre-commit` to run `skill_update_decision` for staged skill/governance files.
+    impact: Introduced a commit-time guard that blocks `NO_CHANGE` ambiguous edits unless explicitly scoped.
+    links:
+      - .githooks/pre-commit
+      - scripts/skill_precommit_gate.py
+      - docs/workflows/skill-governance-sync.md
+      - AGENTS.md
 
 incidents:
   - id: AMI-2026-02-20-001
@@ -153,6 +207,16 @@ incidents:
     links:
       - docs/runbooks/signal-agent-continuity.md
       - docs/session_handoff.md
+  - id: AMI-2026-02-23-006
+    date: 2026-02-23
+    title: Telegram worker cycle spammed errors on transient long-poll disconnects
+    symptom: "Worker logged Telegram worker cycle failed stack traces when Telegram closed getUpdates connections without response."
+    root_cause: "_fetch_updates treated transient transport and retryable HTTP failures as fatal instead of bounded-retry/no-op cycles."
+    remediation: "Add one bounded retry for getUpdates, degrade to empty update batch on repeated transient failure, and lock behavior with tests."
+    remediation_type: capability
+    links:
+      - src/moex_carry/integrations/telegram_worker.py
+      - tests/test_telegram_worker.py
 
 patterns:
   - id: AMP-2026-02-20-001
@@ -220,3 +284,30 @@ patterns:
       - configs/quality_scorecards.yaml
       - scripts/validate_quality_scorecards.py
       - tests/test_api_v2.py
+  - id: AMP-2026-02-23-009
+    date: 2026-02-23
+    title: Two-tier skill governance with local hard gates
+    pattern: Use local and global skills together, but always apply repository baseline and validate local skills with machine checks before push.
+    when_to_use: Any task where global skill guidance overlaps with repository-specific delivery workflow.
+    links:
+      - docs/workflows/skill-governance-sync.md
+      - .cursor/skills
+      - scripts/validate_skills.py
+  - id: AMP-2026-02-23-010
+    date: 2026-02-23
+    title: Rebuild AGENTS skill map from local frontmatter after catalog sync
+    pattern: After mirroring or adding skills, regenerate the `AGENTS.md` available-skill mapping from local `SKILL.md` frontmatter and re-run skill validation.
+    when_to_use: Any `.cursor/skills` catalog update that changes skill count, names, or paths.
+    links:
+      - AGENTS.md
+      - .cursor/skills
+      - scripts/validate_skills.py
+  - id: AMP-2026-02-23-011
+    date: 2026-02-23
+    title: Reference-over-duplication for governance text
+    pattern: Keep skill files domain-focused and reference one centralized governance workflow instead of repeating full command lists in every skill.
+    when_to_use: Any large skill-catalog update where context budget can regress due to repeated lifecycle instructions.
+    links:
+      - docs/workflows/skill-governance-sync.md
+      - .cursor/skills
+      - docs/workflows/context-budget.md

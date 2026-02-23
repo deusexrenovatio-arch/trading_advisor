@@ -1,27 +1,27 @@
 # Session Handoff
-Updated: 2026-02-22 09:47 UTC
+Updated: 2026-02-23 20:30 UTC
 
 ## Goal
-- Keep signal troubleshooting deterministic across worktrees, runtime processes, and data layers.
+- Keep local skills deterministically governable with automatic pre-edit and pre-commit routing.
 
 ## Current Delta
-- Added `docs/runbooks/signal-agent-continuity.md` with repeated-issue RCA and operational contracts.
-- Documented canonical source order for signal verification: worktree -> process source -> unified projection -> root aliases -> DB.
-- Explicitly separated replay sample metrics (`trades_closed` and related) from real executions (`signal_executions`).
-- Added mandatory signal verification checklist to prevent stale-file and wrong-runtime conclusions.
-- Added quality-scorecards trajectory dimension with blocking checks for two API v2 critical paths.
-- Added quality-scorecards context-budget dimension using `scripts/validate_session_handoff.py`.
-- Added API v2 request-id propagation into response headers and payload-size guard (`ui.max_api_payload_bytes`) returning `413 payload_too_large`.
-- Added regression tests for request-id propagation/payload-size rejection and stabilized Playwright history fixture dates for the default 7-day window.
+- Kept local mirrored catalog (`.cursor/skills`: 60 skills) and centralized recurring governance details in `docs/workflows/skill-governance-sync.md`.
+- Added `scripts/skill_update_decision.py` to score intent + changed files and return explicit action (`UPDATE_EXISTING`, `ADD_NEW`, `NO_CHANGE`) with gate reasons.
+- Updated automation flow in `AGENTS.md` and `docs/DEV_WORKFLOW.md` to require intent routing before skill edits.
+- Linked the new decision workflow into `docs/workflows/skill-governance-sync.md` with gate definitions and thresholds.
+- Added traceable records: plan `P1-SKILL-DECISION-017` and memory entry `ADM-2026-02-23-014`.
+- Added `scripts/skill_precommit_gate.py` and `.githooks/pre-commit` to enforce decision routing on commit for skill/governance file edits.
+- Added record: plan `P1-SKILL-DECISION-018`, memory entry `ADM-2026-02-23-015`.
+- Improved decision determinism: unknown direct skill paths map to `ADD_NEW` and now suggest onboarding flow.
 
 ## Blockers
 - None.
 
 ## Next Step
-- Keep trajectory checks aligned with the highest-risk user flows as new endpoints are added.
-- Apply the runbook in the next signal change cycle and verify no cross-worktree source drift.
-- Keep `## Current Delta` within eight bullets and avoid long transcript copies.
+- Keep this automation active in future commits by using explicit `SKILL_UPDATE_INTENT` for staging decisions.
+- Re-run `python scripts/validate_skills.py`, `python scripts/validate_session_handoff.py`, and `python scripts/run_lean_gate.py` after finalizing workflow changes.
 
 ## Validation
-- Run `python scripts/validate_session_handoff.py` for handoff contract checks.
-- Run `python scripts/run_lean_gate.py` before and after meaningful patches.
+- `python scripts/validate_skills.py`
+- `python scripts/validate_session_handoff.py`
+- `python scripts/run_lean_gate.py`

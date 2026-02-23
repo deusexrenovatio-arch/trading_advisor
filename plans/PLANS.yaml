@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-02-20
+updated_at: 2026-02-23
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -283,3 +283,119 @@ items:
       - P1-HE-PARTIAL-CLOSURE-009
     started_at: 2026-02-20
     completed_at: 2026-02-20
+
+  - id: P1-SKILL-GOV-014
+    title: Align local skills with governance baseline and define combined-catalog workflow
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - all local `.cursor/skills` include repository governance baseline markers
+      - combined local plus global skill handling and precedence are documented
+      - skill validation fails when mandatory governance markers are missing
+    checks:
+      - python scripts/validate_skills.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/workflows/skill-governance-sync.md
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+      - docs/README.md
+      - scripts/validate_skills.py
+    dependencies:
+      - P1-CONTEXT-BUDGET-012
+      - P1-PR-ONLY-013
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-SKILL-MIRROR-015
+    title: Mirror global skills into local catalog and keep repository gating deterministic
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - all global skills are mirrored into .cursor/skills for repository-local usage
+      - AGENTS.md skill mapping reflects the full local catalog
+      - local skill validation remains green after mirror update
+    checks:
+      - python scripts/validate_skills.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+      - docs/workflows/skill-governance-sync.md
+    dependencies:
+      - P1-SKILL-GOV-014
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-SKILL-CONTEXT-016
+    title: Reduce skill context footprint via centralized governance reference
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - skill governance details are centralized in docs/workflows/skill-governance-sync.md
+      - local SKILL.md files use short governance references instead of duplicated command catalogs
+      - AGENTS.md skill list is compact while path mapping remains machine-parseable
+    checks:
+      - python scripts/validate_skills.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - AGENTS.md
+      - docs/workflows/skill-governance-sync.md
+      - scripts/validate_skills.py
+    dependencies:
+      - P1-SKILL-MIRROR-015
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-SKILL-DECISION-017
+    title: Add machine decision gate for skill update vs new-skill creation
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - deterministic decision script exists and reports UPDATE_EXISTING/ADD_NEW/NO_CHANGE
+      - decision gates are documented in skill governance workflow
+      - update command is linked from AGENTS and DEV workflow
+    checks:
+      - python scripts/skill_update_decision.py --request "skill update decision smoke" --json
+    docs:
+      - docs/workflows/skill-governance-sync.md
+      - docs/DEV_WORKFLOW.md
+      - AGENTS.md
+      - scripts/skill_update_decision.py
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-SKILL-CONTEXT-016
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-SKILL-DECISION-018
+    title: Add commit-time enforcement for skill decision routing
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - pre-commit gate executes decision helper for staged skill/governance edits
+      - commit is blocked for NO_CHANGE decisions unless user provides explicit intent
+      - strict mode supports blocking ADD_NEW when explicitly enabled
+      - hooks behavior documented in workflow and AGENTS
+    checks:
+      - python scripts/skill_precommit_gate.py
+    docs:
+      - .githooks/pre-commit
+      - docs/workflows/skill-governance-sync.md
+      - AGENTS.md
+      - docs/DEV_WORKFLOW.md
+      - scripts/skill_precommit_gate.py
+    dependencies:
+      - P1-SKILL-DECISION-017
+    started_at: 2026-02-23
+    completed_at: 2026-02-23

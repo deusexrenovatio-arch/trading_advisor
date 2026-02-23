@@ -1,4 +1,4 @@
----
+﻿---
 name: minute-candle-performance
 description: "Performance engineering workflow for high-volume minute-candle workloads in this repository: stack policy, replay acceleration, cache design, chunking, and deterministic parallelization. Use when requests mention optimization, runtime scaling, bottlenecks, minute replay, heavy backtest batches, or parallel execution. Use during performance rechecks and before push for minute/high-load changes."
 ---
@@ -13,6 +13,11 @@ Use this skill to make minute-candle workloads fast and deterministic: profile f
 - Architecture phase: run `architecture-review` first when boundaries/dependencies or ownership change.
 - Research quality phase: run `ml-backtest-hpo-lab` for OOS and stress validation after performance changes.
 - Recheck/pre-push phase: rerun parity/performance checks and required checks from `docs/DEV_WORKFLOW.md`.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Coordination with architecture-review
 - Apply in order:
@@ -120,3 +125,7 @@ pytest -q tests/test_execution_replay.py tests/test_signal_replay_core.py tests/
 - Keep / rollback / iterate:
 - Next bottleneck:
 ```
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.
