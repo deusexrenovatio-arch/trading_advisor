@@ -1,4 +1,4 @@
----
+﻿---
 name: news-geopolitics-filter
 description: Deterministic gate for high-impact news and geopolitics events. Use when event risk can block/reduce trading actions and during strategy rechecks before push. Co-use with intraday-futures-trading-advisor and risk-profile-gates.
 ---
@@ -12,6 +12,11 @@ Protect strategy decisions during high-impact events with deterministic gating r
 - Planning phase: use with `intraday-futures-trading-advisor` for strategy context.
 - Risk phase: pair with `risk-profile-gates` to keep event and risk controls consistent.
 - Recheck/pre-push phase: rerun this gate when event feed logic, severity mapping, or blocking thresholds change.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Required inputs
 - `news_items` (`id`, `timestamp`, `source`, `title`, `severity`, `impact_score`)
@@ -51,3 +56,7 @@ Protect strategy decisions during high-impact events with deterministic gating r
   }
 }
 ```
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.

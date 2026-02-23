@@ -1,4 +1,4 @@
----
+﻿---
 name: moex-instruments-costs
 description: Deterministic cost model template and break-even checks for MOEX futures instruments. Use when cost/tax assumptions are added or changed, and during strategy rechecks before push. Co-use with intraday-futures-trading-advisor, risk-profile-gates, and spread-arbitrage.
 ---
@@ -13,6 +13,11 @@ Provide a deterministic cost model used by strategy evaluation, risk checks, and
 - Risk validation phase: pair with `risk-profile-gates`.
 - Spread strategy phase: add `spread-arbitrage` for two-leg checks.
 - Recheck/pre-push phase: rerun cost calculations when any fee/slippage/tax parameter changes.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Required inputs
 - `instrument_code`
@@ -65,3 +70,7 @@ Provide a deterministic cost model used by strategy evaluation, risk checks, and
 - `round_trip_cost = round_trip_fee + slippage_cost`
 - `break_even_ticks = round_trip_cost / tick_value`
 - `break_even_points = break_even_ticks * tick_size`
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.

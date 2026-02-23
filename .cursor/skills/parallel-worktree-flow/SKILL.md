@@ -1,4 +1,4 @@
----
+﻿---
 name: parallel-worktree-flow
 description: "Baseline multi-stream development workflow for this repository using git worktree: clean bootstrap from main, branch-per-worktree isolation, daily rebase routine, integration branch checks, merge ordering, and pre-push gates. Use at the start of new development, during stream synchronization, and before merge/push."
 ---
@@ -13,6 +13,11 @@ Use this skill to run parallel implementation streams on one machine without bra
 - Domain phase: after bootstrap, invoke domain skill(s) for the stream (`trading-ui-dashboard`, `ml-backtest-hpo-lab`, or strategy gates).
 - Recheck phase: ensure daily rebase + integration sync before rerunning domain verification.
 - Pre-push phase: run mandatory checks from `docs/DEV_WORKFLOW.md` and stream-specific validations.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Default topology
 - Keep one task per branch and one branch per worktree.
@@ -94,7 +99,7 @@ If conflicts appear, resolve in integration branch, then backport minimal fixes 
 3. `feat/bot-integration`
 4. docs/release-only follow-ups
 
-## Mandatory pre-push gate
+## Mandatory pre-push guidance
 Run before push/PR finalization:
 ```bash
 python -m pip install -e ".[dev]"
@@ -111,3 +116,4 @@ npm --prefix ui-web run build
 - Required pre-push gate commands pass.
 - Stream-specific checks and smoke checks pass.
 - PRs are atomic and reviewable.
+

@@ -16,6 +16,11 @@ Use this for model quality decisions, not for runtime signal routing.
 - Recheck phase: rerun this workflow after label, split, or metric changes.
 - Pre-push phase: run required checks from `docs/DEV_WORKFLOW.md`; treat failures as blockers.
 
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
+
 ## Required inputs
 - Linked dataset: news item, mapped commodity or instrument, publication timestamp.
 - Price series: aligned candles for chosen horizons.

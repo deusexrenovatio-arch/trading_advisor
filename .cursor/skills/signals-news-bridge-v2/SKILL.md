@@ -16,6 +16,11 @@ Use this skill for online signal explainability and audit linkage, not just offl
 - API phase: update contracts first, then implementation and tests.
 - Pre-push phase: run required checks from `docs/DEV_WORKFLOW.md`; treat failures as blockers.
 
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
+
 ## Non-goals
 - Do not tune NLP models here.
 - Do not replace backtest labeling workflows. Use `news-impact-backtest-lab` for that.

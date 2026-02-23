@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+if [ "${SKILL_DECISION_GATE:-1}" = "0" ]; then
+  exit 0
+fi
+
+python scripts/skill_precommit_gate.py

@@ -28,6 +28,7 @@ This directory is the repository knowledge system for agent-first engineering.
 - `docs/checklists/first-time-right-gate.md`
 - `docs/planning/plans-registry.md`
 - `docs/workflows/context-budget.md`
+- `docs/workflows/skill-governance-sync.md`
 - `docs/workflows/worktree-governance.md`
 - `docs/runbooks/governance-remediation.md`
 - `docs/runbooks/signal-agent-continuity.md`

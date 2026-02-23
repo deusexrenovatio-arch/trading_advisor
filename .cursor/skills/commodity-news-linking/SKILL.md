@@ -16,6 +16,11 @@ Use this before impact scoring, news gates, and signal enrichment.
 - Evaluation phase: co-use with `news-impact-backtest-lab` for leakage-safe validation.
 - Pre-push phase: run required checks from `docs/DEV_WORKFLOW.md`; treat failures as blockers.
 
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
+
 ## Required inputs
 - News payload: `title`, `content` or `summary`, `source`, `published_at`, `language`.
 - Canonical dictionaries: commodity codes, ticker aliases, issuer aliases, tag taxonomy.

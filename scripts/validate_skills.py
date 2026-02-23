@@ -15,6 +15,8 @@ AGENTS_SKILL_PATTERN = re.compile(
     r"^- (?P<name>[a-z0-9-]+): .*?\(file:\s*(?P<path>[^)]+)\)\s*$"
 )
 REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
+GOVERNANCE_SECTION = "## Repository governance baseline (mandatory)"
+GOVERNANCE_REFERENCE = "docs/workflows/skill-governance-sync.md"
 
 
 def _resolve_skill_path(path_text: str, repo_root: Path) -> Path:
@@ -36,11 +38,11 @@ def _resolve_skill_path(path_text: str, repo_root: Path) -> Path:
 
 
 def _load_yaml_frontmatter(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
+    text = path.read_text(encoding="utf-8-sig").lstrip("\ufeff")
+    if not text.startswith("---"):
         return {}
     try:
-        _, body = text.split("---\n", 1)
+        _, body = text.split("---", 1)
         fm_raw, _ = body.split("\n---", 1)
     except ValueError:
         return {}
@@ -82,7 +84,10 @@ def _validate_skill_file(skill_dir: Path, errors: list[str]) -> None:
         )
 
     text = skill_md.read_text(encoding="utf-8")
-    if "## Skill dependencies and lifecycle gates" not in text and skill_dir.name != "intraday-futures-trading-advisor":
+    if (
+        "## Skill dependencies and lifecycle gates" not in text
+        and skill_dir.name != "intraday-futures-trading-advisor"
+    ):
         errors.append(f"missing lifecycle section: {skill_md.as_posix()}")
 
     if skill_dir.name == "intraday-futures-trading-advisor":
@@ -92,6 +97,14 @@ def _validate_skill_file(skill_dir: Path, errors: list[str]) -> None:
 
     if "pre-push" not in text.lower():
         errors.append(f"missing pre-push guidance: {skill_md.as_posix()}")
+
+    if GOVERNANCE_SECTION not in text:
+        errors.append(f"missing governance baseline section: {skill_md.as_posix()}")
+    elif GOVERNANCE_REFERENCE not in text:
+        errors.append(
+            "missing governance baseline reference "
+            f"'{GOVERNANCE_REFERENCE}': {skill_md.as_posix()}"
+        )
 
 
 def run(skills_root: Path, agents_file: Path) -> int:

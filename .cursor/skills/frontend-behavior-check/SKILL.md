@@ -1,4 +1,4 @@
----
+﻿---
 name: frontend-behavior-check
 description: Verifies trading UI behavior via API smoke checks, Vite proxy validation, chart data checks, and table expectations. Use after frontend/UI/React/Vite/MUI changes, during regression rechecks, and as a pre-push gate for UI branches. Use together with trading-ui-dashboard and ui-decision-log when UI contracts or projections are touched.
 ---
@@ -13,6 +13,11 @@ Quickly validate that UI behavior and API contracts stay correct after frontend 
 - Build/change phase: use with `trading-ui-dashboard`; add `ui-decision-log` if projection fields change.
 - Recheck phase: rerun this skill after UI bug fixes and before closing regression tasks.
 - Pre-push phase: do not mark UI work complete until required checks from `docs/DEV_WORKFLOW.md` pass.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Checklist
 
@@ -77,3 +82,7 @@ Quickly validate that UI behavior and API contracts stay correct after frontend 
 ## Notes
 - If any endpoint returns HTML, backend process or routing is stale. Restart backend.
 - If arrays are empty due missing data, explicitly state whether pipeline recompute is required.
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.

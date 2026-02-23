@@ -1,4 +1,4 @@
----
+﻿---
 name: risk-profile-gates
 description: Deterministic risk profile gates for intraday futures decisions. Use for risk-limit validation, strategy rechecks, and mandatory pre-push gates on trading decision logic. Co-use with intraday-futures-trading-advisor and moex-instruments-costs.
 ---
@@ -13,6 +13,11 @@ Define fixed risk limits that must be satisfied before any decision is approved.
 - Cost consistency phase: pair with `moex-instruments-costs`.
 - Event-risk phase: add `news-geopolitics-filter` when external volatility risk is material.
 - Recheck/pre-push phase: rerun this gate whenever risk limits or execution constraints change.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Required inputs
 - `account_equity`
@@ -72,3 +77,7 @@ Define fixed risk limits that must be satisfied before any decision is approved.
   }
 }
 ```
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.

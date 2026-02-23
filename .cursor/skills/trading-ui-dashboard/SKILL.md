@@ -1,4 +1,4 @@
----
+﻿---
 name: trading-ui-dashboard
 description: Build production-grade trading advisor UI with React/Vite/TypeScript, MUI, and AG Grid. Use when improving dashboard readability, decision tables, filters, drill-down, or API-backed UI behavior. Co-use with ui-decision-log for projection changes and frontend-behavior-check for recheck/pre-push validation.
 ---
@@ -15,6 +15,11 @@ description: Build production-grade trading advisor UI with React/Vite/TypeScrip
 - Projection phase: run `ui-decision-log` when `decision_log` -> `decision_view` mapping changes.
 - Recheck phase: run `frontend-behavior-check` after each UI fix/refactor.
 - Pre-push phase: run required checks from `docs/DEV_WORKFLOW.md` plus UI behavior checks.
+
+
+## Repository governance baseline (mandatory)
+- Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
+- Keep this skill focused on domain workflow; do not duplicate repository governance details here.
 
 ## Core requirements
 1) Table readability
@@ -93,3 +98,7 @@ const columnDefs = [
 ## Avoid
 - Do not compute trading decision logic in UI.
 - Do not mutate `decision_log` or `decision_view` in client code.
+## Mandatory pre-push guidance
+- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
+- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
+- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.
