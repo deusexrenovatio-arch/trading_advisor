@@ -39,7 +39,8 @@ Use this guide when a governance gate fails.
 - Use naming pattern `NNNN-short-kebab-title.md`.
 
 ## `python scripts/validate_taste_invariants.py`
-- Keep file sizes within configured limits (`configs/taste_invariants.yaml`).
+- Keep file sizes within hard limits from `configs/taste_invariants.yaml` (`max_lines_default` + `allowed_large_files`).
+- Treat `target_lines_default` + `target_large_files` as non-blocking decomposition targets and ratchet them down after each split.
 - Avoid wildcard imports and keep module naming conventions.
 - Keep structured logging default format intact.
 

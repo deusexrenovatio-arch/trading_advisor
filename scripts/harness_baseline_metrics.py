@@ -199,8 +199,10 @@ def _extract_contract_ops(contract_file: Path) -> set[tuple[str, str]]:
     return operations
 
 
-def _count_spec_drift(app_file: Path, contract_file: Path) -> int:
-    app_ops = _extract_app_ops(app_file, "/api/v2/")
+def _count_spec_drift(app_files: list[Path], contract_file: Path) -> int:
+    app_ops: set[tuple[str, str]] = set()
+    for app_file in app_files:
+        app_ops.update(_extract_app_ops(app_file, "/api/v2/"))
     contract_ops = _extract_contract_ops(contract_file)
     return len(app_ops.difference(contract_ops)) + len(contract_ops.difference(app_ops))
 
@@ -228,14 +230,19 @@ def main() -> int:
     parser.add_argument("--acceptance", default="configs/acceptance_scenarios.yaml")
     parser.add_argument("--test-cases", default="docs/test-cases.md")
     parser.add_argument("--src-root", default="src/moex_carry")
-    parser.add_argument("--app-file", default="src/moex_carry/ui/app.py")
+    parser.add_argument("--app-file", action="append", dest="app_files")
     parser.add_argument("--contract-file", default="docs/contracts/api-v2.yaml")
     parser.add_argument("--summary-file", default=None)
     args = parser.parse_args()
 
     try:
+        if args.app_files:
+            app_files = [Path(item) for item in args.app_files]
+        else:
+            ui_root = Path(args.src_root) / "ui"
+            app_files = sorted(path for path in ui_root.rglob("*.py") if path.is_file())
         metrics = {
-            "spec_drift_count": _count_spec_drift(Path(args.app_file), Path(args.contract_file)),
+            "spec_drift_count": _count_spec_drift(app_files, Path(args.contract_file)),
             "boundary_violations": _count_boundary_violations(Path(args.src_root)),
             "manual_scenarios_count": _count_manual_scenarios(Path(args.acceptance)),
             "unlinked_test_cases_count": _count_unlinked_test_cases(

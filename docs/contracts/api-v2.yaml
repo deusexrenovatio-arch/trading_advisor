@@ -869,7 +869,7 @@ components:
           additionalProperties: true
     EntitySignalActionRequestV2:
       type: object
-      required: [action, source]
+      required: [action, source, idempotency_key]
       properties:
         action:
           type: string
@@ -1279,7 +1279,7 @@ components:
           $ref: '#/components/schemas/ExecutionRefV2'
     SignalActionRequestV2:
       type: object
-      required: [action]
+      required: [action, idempotency_key]
       properties:
         action:
           type: string
@@ -1423,7 +1423,7 @@ components:
             additionalProperties: true
     DecisionActionRequestV2:
       type: object
-      required: [action]
+      required: [action, idempotency_key]
       properties:
         action:
           type: string

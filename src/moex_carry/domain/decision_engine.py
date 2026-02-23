@@ -92,6 +92,8 @@ class DecisionActionRequest:
 
 def parse_decision_action_request(
     payload: Mapping[str, Any],
+    *,
+    require_idempotency: bool = True,
 ) -> tuple[DecisionActionRequest | None, str | None]:
     action_raw = str(payload.get("action") or "").strip().upper()
     action = _DECISION_ACTION_ALIASES.get(action_raw)
@@ -124,6 +126,8 @@ def parse_decision_action_request(
     )
     if idempotency_key == "":
         idempotency_key = None
+    if require_idempotency and idempotency_key is None:
+        return None, "idempotency_key is required"
 
     return (
         DecisionActionRequest(

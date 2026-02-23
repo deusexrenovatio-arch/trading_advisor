@@ -133,6 +133,37 @@ def test_v2_signals_active_and_actions_idempotency(tmp_path):
     assert isinstance(top_pairs_response.get_json(), list)
 
 
+def test_v2_signals_actions_require_idempotency_key(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-idem-required")
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    active_response = client.get("/api/v2/signals/active")
+    assert active_response.status_code == 200
+    rows = active_response.get_json()
+    assert isinstance(rows, list)
+    assert rows
+    signal_id = rows[0]["signal_id"]
+
+    response = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "ack",
+            "source": "ui",
+            "actor_id": "tester",
+        },
+    )
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["error"] == "invalid_request"
+    assert payload["message"] == "idempotency_key is required"
+
+
 def test_v2_signals_actionability_exposes_axes_and_policy_trace(tmp_path):
     settings = _build_settings(tmp_path)
     engine = create_engine_from_settings(settings)
@@ -1249,6 +1280,40 @@ def test_v2_decision_actions_and_v1_adapter(tmp_path):
     assert dec_row["decision_ref"]["decision_id"] == "dec-9"
     assert dec_row["decision_ref"]["latest_action"] in {"approve", "execute"}
     assert dec_row["execution_ref"]["status"] is not None
+
+
+def test_v2_decision_actions_require_idempotency_key(tmp_path):
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    decisions_dir = tmp_path / "decisions"
+    _write_jsonl(
+        decisions_dir / "decision_view.jsonl",
+        [
+            {
+                "decision_id": "dec-required-idem",
+                "created_at": "2025-01-01T10:00:00Z",
+                "strategy_type": "arbitrage",
+                "primary_instrument": "SBER",
+                "action": "hold",
+                "risk_state": "green",
+                "news_severity": "low",
+            }
+        ],
+    )
+
+    response = client.post(
+        "/api/v2/decisions/dec-required-idem/actions",
+        json={
+            "action": "EXECUTE",
+            "actor_id": "tester",
+        },
+    )
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["error"] == "invalid_request"
+    assert payload["message"] == "idempotency_key is required"
 
 
 def test_v2_pretrade_check_post(tmp_path, monkeypatch):

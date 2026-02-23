@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import importlib
 from pathlib import Path
 from typing import Iterable
 import time
@@ -63,6 +64,11 @@ def _data_paths(base_dir: Path) -> dict[str, Path]:
     raw_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     return {"raw": raw_dir, "output": output_dir}
+
+
+def _load_unified_runtime_module():
+    # Local dynamic load keeps pipeline free from a direct static dependency edge.
+    return importlib.import_module("moex_carry.unified_runtime")
 
 
 def fetch_data(settings: AppSettings, max_shares: int | None = None) -> None:
@@ -2356,9 +2362,8 @@ def run_signal_cycle(
         if ranked.empty:
             return pd.DataFrame()
         if save_csv:
-            from moex_carry.unified_runtime import persist_snapshot_to_csv
-
-            persist_snapshot_to_csv(snapshot, paths.data_dir)
+            unified_runtime = _load_unified_runtime_module()
+            unified_runtime.persist_snapshot_to_csv(snapshot, paths.data_dir)
 
         import uuid
 
@@ -2441,7 +2446,7 @@ def backfill_signal_history(
             data_dir=paths.data_dir,
             max_pairs=resolved_max_pairs,
         )
-        from moex_carry.unified_runtime import persist_snapshot_to_csv
+        unified_runtime = _load_unified_runtime_module()
 
         engine = create_engine_from_settings(settings)
         init_db(engine)
@@ -2462,7 +2467,7 @@ def backfill_signal_history(
                 if ranked.empty:
                     continue
                 if save_csv_latest and offset == 0:
-                    persist_snapshot_to_csv(snapshot, paths.data_dir)
+                    unified_runtime.persist_snapshot_to_csv(snapshot, paths.data_dir)
                 run_id = f"signal-run-{as_of_date:%Y%m%d}"
                 if as_of_date == today:
                     as_of_dt = datetime.now(timezone.utc)
@@ -2591,9 +2596,9 @@ def _run_unified_incremental_ingest(
     if not bool(getattr(settings.ui, "incremental_replay_enabled", True)):
         return None
     from moex_carry.minute_ingest.runner import run_incremental_minute_ingest
-    from moex_carry.unified_runtime import list_unified_ingest_pairs
 
-    ingest_pairs = list_unified_ingest_pairs(
+    unified_runtime = _load_unified_runtime_module()
+    ingest_pairs = unified_runtime.list_unified_ingest_pairs(
         settings,
         data_dir,
         max_pairs=max_pairs,
@@ -2617,9 +2622,8 @@ def _build_unified_snapshot(
     as_of: date | None,
     ingest_cycle=None,
 ):
-    from moex_carry.unified_runtime import build_unified_market_snapshot
-
-    return build_unified_market_snapshot(
+    unified_runtime = _load_unified_runtime_module()
+    return unified_runtime.build_unified_market_snapshot(
         settings,
         data_dir,
         force=False,

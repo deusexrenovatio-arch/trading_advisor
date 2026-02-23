@@ -166,6 +166,75 @@ decisions:
       - docs/agent-contexts/README.md
       - scripts/context_router.py
       - scripts/worktree_guard.ps1
+  - id: ADM-2026-02-23-017
+    date: 2026-02-23
+    title: Require idempotency keys and scheduler lease for action/execution stability
+    context: Architecture review identified duplicate action risk and multi-worker scheduler races in API runtime.
+    decision: Make idempotency_key mandatory for write actions, enforce pair+idempotency uniqueness in signal execution storage, and gate refresh scheduler with a runtime lease singleton.
+    impact: Lower duplicate execution risk under retries/concurrency; predictable refresh behavior in multi-worker deployment.
+    links:
+      - docs/contracts/api-v2.yaml
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/storage/db.py
+      - src/moex_carry/storage/repositories.py
+  - id: ADM-2026-02-23-018
+    date: 2026-02-23
+    title: Split UI composition by extracting scheduler and decision-action service
+    context: "`ui/app.py` concentrated routing, background scheduler loop, and decision-action write logic in one file."
+    decision: "Extract scheduler lease loop to `ui/refresh_scheduler.py` and decision action handling to `ui/decision_actions.py`, keeping `app.py` as composition root."
+    impact: Lower blast radius for route/scheduler changes and cleaner ownership boundaries inside the UI backend package.
+    links:
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/ui/refresh_scheduler.py
+      - src/moex_carry/ui/decision_actions.py
+      - docs/architecture/modules/backend-core.md
+  - id: ADM-2026-02-23-019
+    date: 2026-02-23
+    title: Separate hard and target file-size budgets for agent-friendly decomposition
+    context: A single hard line-limit either forced many exceptions or blocked incremental decomposition of large legacy modules.
+    decision: Keep hard gate at `max_lines_default=800` with focused `allowed_large_files`, and add non-blocking `target_lines_default` plus `target_large_files` advisory budgets.
+    impact: Exception list stays small for true outliers, while teams get an explicit ratchet target without breaking delivery flow.
+    links:
+      - configs/taste_invariants.yaml
+      - scripts/validate_taste_invariants.py
+      - docs/runbooks/governance-remediation.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-02-23-020
+    date: 2026-02-23
+    title: Decompose UI API by route-group registrars while preserving monkeypatch seams
+    context: "`ui/app.py` still contained large operational and pretrade route groups, and existing tests monkeypatch symbols on `ui.app`."
+    decision: "Move ops and pretrade endpoints into `ui/routes_ops.py` and `ui/routes_pretrade.py`, but keep `MoexIssClient` and `run_delay_gate` resolved from `ui.app` via accessor hooks."
+    impact: Reduced app composition size and improved route ownership boundaries without breaking testability or endpoint behavior contracts.
+    links:
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/ui/routes_ops.py
+      - src/moex_carry/ui/routes_pretrade.py
+      - tests/test_api_v2.py
+      - tests/test_ui_api.py
+  - id: ADM-2026-02-23-021
+    date: 2026-02-23
+    title: Group read-heavy market and portfolio routes under dedicated registrar
+    context: "`ui/app.py` still carried signal history/execution read APIs, spread-series, and portfolio rebalance endpoints in one large block."
+    decision: "Extract these endpoints to `ui/routes_market_data.py` and wire from composition root, preserving `ui.app.build_spread_series` seam via accessor callback."
+    impact: Further reduced UI composition root size and isolated read/preview API behavior into a focused module without changing route contracts.
+    links:
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/ui/routes_market_data.py
+      - scripts/validate_api_v2_contract_parity.py
+      - scripts/harness_baseline_metrics.py
+      - tests/test_signal_api.py
+      - tests/test_ui_api.py
+  - id: ADM-2026-02-23-022
+    date: 2026-02-23
+    title: Extract v2 research wrappers while preserving ui.app monkeypatch points
+    context: "`ui/app.py` still included `/api/v2/research/*` wrappers and kept growing despite earlier route-group decomposition."
+    decision: "Move research wrappers to `ui/routes_research.py`, register from composition root, and resolve runtime backtest/HPO callables through `moex_carry.ui.app` for test seam compatibility."
+    impact: Reduced app composition size and unblocked next extraction of action/actionability routes without regressing research endpoint behavior.
+    links:
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/ui/routes_research.py
+      - tests/test_api_v2.py
+      - docs/architecture/modules/backend-core.md
 
 incidents:
   - id: AMI-2026-02-20-001
@@ -227,6 +296,16 @@ incidents:
     links:
       - src/moex_carry/integrations/telegram_worker.py
       - tests/test_telegram_worker.py
+  - id: AMI-2026-02-23-007
+    date: 2026-02-23
+    title: Editable package path drifted to another worktree during architecture patch validation
+    symptom: Pytest in a new worktree imported moex_carry from a different checkout path and missed new repository symbols.
+    root_cause: Local editable install still pointed to previous worktree after branch/worktree switch.
+    remediation: Reinstall editable package from active worktree before running tests.
+    remediation_type: workflow
+    links:
+      - pyproject.toml
+      - docs/DEV_WORKFLOW.md
 
 patterns:
   - id: AMP-2026-02-20-001
@@ -321,3 +400,58 @@ patterns:
       - docs/workflows/skill-governance-sync.md
       - .cursor/skills
       - docs/workflows/context-budget.md
+  - id: AMP-2026-02-23-012
+    date: 2026-02-23
+    title: API idempotency must be backed by storage uniqueness
+    pattern: For any write action endpoint, require client idempotency key in contract and enforce a matching unique key at storage level.
+    when_to_use: Action/execution APIs where retries, network duplicates, or multi-worker races are expected.
+    links:
+      - docs/contracts/api-v2.yaml
+      - src/moex_carry/storage/models.py
+      - src/moex_carry/storage/db.py
+  - id: AMP-2026-02-23-013
+    date: 2026-02-23
+    title: Keep app as composition root, move behavior into focused UI services
+    pattern: When API entrypoint grows, extract long-running loops and domain write flows into dedicated modules and leave route wiring in app root.
+    when_to_use: Backend UI module exceeds reviewable size or combines scheduler, persistence, and route concerns in one function.
+    links:
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/ui/refresh_scheduler.py
+      - src/moex_carry/ui/decision_actions.py
+  - id: AMP-2026-02-23-014
+    date: 2026-02-23
+    title: Use hard gate plus soft target to ratchet structural debt
+    pattern: Enforce one stable hard boundary for blocking checks, then track lower advisory targets and reduce overruns in small steps.
+    when_to_use: Repository has legacy large modules and needs continuous multi-agent delivery without frequent exception churn.
+    links:
+      - configs/taste_invariants.yaml
+      - scripts/validate_taste_invariants.py
+      - plans/PLANS.yaml
+  - id: AMP-2026-02-23-015
+    date: 2026-02-23
+    title: Preserve monkeypatch seams during module extraction
+    pattern: When extracting logic from a large module, keep backward-compatible runtime seam points (via accessors or module-level exports) until tests and integrations migrate.
+    when_to_use: Route/service decomposition where existing tests patch module globals or dynamic imports rely on legacy symbols.
+    links:
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/ui/routes_pretrade.py
+      - tests/test_api_v2.py
+      - tests/test_ui_api.py
+  - id: AMP-2026-02-23-016
+    date: 2026-02-23
+    title: Keep route-parity and baseline scanners aligned with multi-file route extraction
+    pattern: Any time API routes are moved out of `ui/app.py`, update parity and baseline metric scanners to aggregate all UI route modules.
+    when_to_use: Incremental decomposition of Flask route groups into registrar modules.
+    links:
+      - scripts/validate_api_v2_contract_parity.py
+      - scripts/harness_baseline_metrics.py
+      - src/moex_carry/ui/routes_market_data.py
+  - id: AMP-2026-02-23-017
+    date: 2026-02-23
+    title: Reuse legacy module runtime callables during registrar extraction
+    pattern: Keep extracted route modules pure on wiring, but resolve runtime callables through the legacy module when tests monkeypatch that module directly.
+    when_to_use: Flask route decomposition where regression tests patch `ui.app` symbols such as backtest/HPO runtime entrypoints.
+    links:
+      - src/moex_carry/ui/routes_research.py
+      - src/moex_carry/ui/app.py
+      - tests/test_api_v2.py

@@ -4,6 +4,7 @@ import json
 import hashlib
 import logging
 import math
+import os
 from pathlib import Path
 import threading
 import uuid
@@ -16,6 +17,7 @@ from dash import Dash, Input, Output, State, dash_table, dcc, html
 from dash.dash_table.Format import Format, Scheme, Trim
 from flask import Flask, jsonify, request
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from moex_carry.config import AppSettings, resolve_paths
 from moex_carry.contracts.strategy_test import BacktestRequest, ForwardTestRequest, HpoRequest
@@ -23,19 +25,12 @@ from moex_carry.backtest_v2.runtime import run_backtest_v2_cached, serialize_bac
 from moex_carry.data.moex_iss import MoexIssClient
 from moex_carry.decision_log import load_jsonl
 from moex_carry.domain.decision_engine import (
-    build_decision_action_entries,
     build_signal_gate_results,
     derive_signal_lifecycle_state,
-    parse_decision_action_request,
 )
 from moex_carry.domain.execution_policy import (
     evaluate_fail_closed_entry,
     select_auto_unwind_candidates,
-)
-from moex_carry.domain.pretrade_service import (
-    PretradeRuntimeParams,
-    enrich_pretrade_result,
-    normalize_pretrade_direction,
 )
 from moex_carry.forward.runtime import load_forward_status, start_forward_run
 from moex_carry.hpo.runtime import load_hpo_status, start_hpo_run
@@ -49,15 +44,19 @@ from moex_carry.signals_ack import build_signal_fingerprint, parse_ack_note
 from moex_carry.signals_delivery import parse_iso_utc, signal_delivery_state
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
+    load_signal_execution_by_idempotency,
     load_decision_view_projection,
     load_active_signals,
     load_latest_signal_run,
     load_open_executions,
     load_signal_executions,
+    release_runtime_lease,
+    renew_runtime_lease,
     load_signal_history,
     store_signal_history,
     store_signal_execution,
     store_signal_run,
+    try_acquire_runtime_lease,
 )
 from moex_carry.ui.data import (
     load_backtest_summary,
@@ -70,6 +69,12 @@ from moex_carry.ui.data import (
     load_top_pairs,
     load_top_pairs_with_source,
 )
+from moex_carry.ui.decision_actions import DecisionActionService
+from moex_carry.ui.refresh_scheduler import SignalRefreshScheduler
+from moex_carry.ui.routes_market_data import register_market_data_routes
+from moex_carry.ui.routes_ops import register_ops_routes
+from moex_carry.ui.routes_pretrade import register_pretrade_routes
+from moex_carry.ui.routes_research import register_research_routes
 from moex_carry.unified_runtime import (
     UnifiedMarketSnapshot,
     build_unified_market_snapshot,
@@ -1594,17 +1599,6 @@ def _parse_ack_note_from_execution_note(note: object) -> dict[str, object] | Non
     return parse_ack_note(nested_note)
 
 
-def _extract_idempotency_key(note: object) -> str | None:
-    payload = _parse_signal_action_note(note)
-    if payload is None:
-        return None
-    raw = payload.get("idempotency_key")
-    if raw is None:
-        return None
-    value = str(raw).strip()
-    return value or None
-
-
 def _deprecated_v1_successor_path(request_path: str) -> str | None:
     if request_path == "/api/top-pairs":
         return "/api/v2/top-pairs"
@@ -2064,6 +2058,14 @@ def create_app(settings: AppSettings) -> Dash:
     refresh_daily_time = _parse_daily_time(settings.ui.signal_refresh_daily_time)
     refresh_tz = _resolve_tz(settings.ui.signal_refresh_timezone, settings.environment.timezone)
     refresh_mode = "daily" if refresh_daily_time else "interval"
+    refresh_singleton = bool(getattr(settings.ui, "signal_refresh_singleton", True))
+    refresh_lease_sec = max(int(getattr(settings.ui, "signal_refresh_lease_sec", 180) or 0), 30)
+    refresh_lease_renew_sec = max(
+        int(getattr(settings.ui, "signal_refresh_lease_renew_sec", 30) or 0),
+        5,
+    )
+    refresh_lease_name = "signal_refresh_scheduler"
+    refresh_scheduler_owner_id = f"pid-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     incremental_enabled = bool(getattr(settings.ui, "incremental_replay_enabled", True))
     refresh_durations_ms: list[float] = []
     refresh_state = {
@@ -2091,9 +2093,42 @@ def create_app(settings: AppSettings) -> Dash:
         "last_success_at": None,
         "last_error": None,
         "next_run_at": None,
+        "scheduler_singleton": refresh_singleton,
+        "scheduler_role": "follower" if refresh_singleton else "leader",
+        "scheduler_owner_id": refresh_scheduler_owner_id,
     }
     refresh_lock = threading.Lock()
     refresh_stop = threading.Event()
+
+    def _acquire_refresh_scheduler_lease() -> bool:
+        with session_factory() as session:
+            return bool(
+                try_acquire_runtime_lease(
+                    session,
+                    lease_name=refresh_lease_name,
+                    owner_id=refresh_scheduler_owner_id,
+                    ttl_sec=refresh_lease_sec,
+                )
+            )
+
+    def _renew_refresh_scheduler_lease() -> bool:
+        with session_factory() as session:
+            return bool(
+                renew_runtime_lease(
+                    session,
+                    lease_name=refresh_lease_name,
+                    owner_id=refresh_scheduler_owner_id,
+                    ttl_sec=refresh_lease_sec,
+                )
+            )
+
+    def _release_refresh_scheduler_lease() -> None:
+        with session_factory() as session:
+            release_runtime_lease(
+                session,
+                lease_name=refresh_lease_name,
+                owner_id=refresh_scheduler_owner_id,
+            )
 
     def _unified_ttl_sec() -> int:
         return max(int(getattr(settings.ui, "unified_snapshot_ttl_sec", 120) or 0), 1)
@@ -2347,36 +2382,25 @@ def create_app(settings: AppSettings) -> Dash:
                     refresh_state["staleness_age_sec"] = 0.0
         return True
 
-    def _refresh_loop() -> None:
-        if refresh_daily_time is None and refresh_interval <= 0:
-            return
-        while not refresh_stop.is_set():
-            if refresh_daily_time is not None:
-                next_run = _next_daily_run(datetime.now(timezone.utc), refresh_daily_time, refresh_tz)
-                refresh_state["next_run_at"] = next_run.isoformat().replace("+00:00", "Z")
-                wait_seconds = max((next_run - datetime.now(timezone.utc)).total_seconds(), 0)
-                if refresh_stop.wait(wait_seconds):
-                    break
-                _run_signal_refresh("daily")
-            else:
-                _run_signal_refresh("interval")
-                refresh_state["next_run_at"] = (
-                    datetime.now(timezone.utc) + timedelta(seconds=refresh_interval)
-                ).isoformat().replace("+00:00", "Z")
-                refresh_stop.wait(refresh_interval)
-
-    if refresh_enabled and (refresh_daily_time is not None or refresh_interval > 0):
-        refresh_state["status"] = "scheduled"
-        thread = threading.Thread(
-            target=_refresh_loop,
-            name="signal-refresh",
-            daemon=True,
-        )
-        thread.start()
-        if refresh_daily_time is not None:
-            logger.info("Signal refresh scheduler enabled (daily=%s)", settings.ui.signal_refresh_daily_time)
-        else:
-            logger.info("Signal refresh scheduler enabled (interval=%ss)", refresh_interval)
+    refresh_scheduler = SignalRefreshScheduler(
+        enabled=refresh_enabled,
+        refresh_interval_sec=refresh_interval,
+        refresh_daily_time=refresh_daily_time,
+        refresh_tz=refresh_tz,
+        refresh_singleton=refresh_singleton,
+        refresh_lease_sec=refresh_lease_sec,
+        refresh_lease_renew_sec=refresh_lease_renew_sec,
+        refresh_state=refresh_state,
+        refresh_stop=refresh_stop,
+        run_signal_refresh=_run_signal_refresh,
+        acquire_lease=_acquire_refresh_scheduler_lease,
+        renew_lease=_renew_refresh_scheduler_lease,
+        release_lease=_release_refresh_scheduler_lease,
+        next_daily_run=_next_daily_run,
+        logger=logger,
+        daily_time_label=settings.ui.signal_refresh_daily_time,
+    )
+    refresh_scheduler.start()
 
     api_request_id_key = "_api_v2_request_id"
     max_api_payload_bytes = int(getattr(settings.ui, "max_api_payload_bytes", 262144) or 262144)
@@ -2481,143 +2505,31 @@ def create_app(settings: AppSettings) -> Dash:
         view_records = load_jsonl(view_path) if view_path.exists() else []
         return any(str(record.get("decision_id") or "") == decision_id for record in view_records)
 
+    decision_action_service = DecisionActionService(
+        actions_path=actions_path,
+        executions_path=executions_path,
+        decision_exists=_decision_exists,
+        bad_request=_bad_request,
+        stable_id=_stable_id,
+        iso_now=_iso_now,
+        append_jsonl=_append_jsonl,
+        json_response=jsonify,
+    )
+
     def _record_decision_action(
         decision_id: str,
         payload: dict[str, object],
         *,
         source_default: str,
         allowed_actions: set[str] | None = None,
+        require_idempotency: bool = True,
     ):
-        if not _decision_exists(decision_id):
-            return jsonify({"error": "not_found"}), 404
-        command, error = parse_decision_action_request(payload)
-        if error is not None or command is None:
-            return _bad_request(error or "invalid_action")
-        if allowed_actions is not None and command.action not in allowed_actions:
-            allowed = ", ".join(sorted(allowed_actions))
-            return _bad_request(f"action must be one of: {allowed}")
-
-        if not command.source:
-            command.source = source_default
-        idempotency_key = command.idempotency_key or f"idem-{uuid.uuid4().hex[:12]}"
-
-        action_records = load_jsonl(actions_path) if actions_path.exists() else []
-        execution_records = load_jsonl(executions_path) if executions_path.exists() else []
-        for item in action_records:
-            if str(item.get("decision_id") or "") != decision_id:
-                continue
-            existing_key = str(item.get("idempotency_key") or "").strip()
-            if existing_key and existing_key == idempotency_key:
-                execution_match = None
-                for execution_item in execution_records:
-                    if not isinstance(execution_item, dict):
-                        continue
-                    if str(execution_item.get("decision_id") or "") != decision_id:
-                        continue
-                    execution_key = str(execution_item.get("idempotency_key") or "").strip()
-                    if execution_key and execution_key == idempotency_key:
-                        execution_match = execution_item
-                        break
-                decision_ref = {
-                    "decision_id": decision_id,
-                    "action_id": item.get("action_id"),
-                    "latest_action": item.get("action"),
-                    "latest_status": item.get("status"),
-                    "actor_id": item.get("actor"),
-                    "source": item.get("source"),
-                    "idempotency_key": item.get("idempotency_key"),
-                    "updated_at": item.get("created_at"),
-                }
-                execution_ref = {
-                    "request_id": execution_match.get("request_id")
-                    if isinstance(execution_match, dict)
-                    else None,
-                    "action": execution_match.get("action")
-                    if isinstance(execution_match, dict)
-                    else None,
-                    "status": execution_match.get("status")
-                    if isinstance(execution_match, dict)
-                    else None,
-                    "requested_at": execution_match.get("requested_at")
-                    if isinstance(execution_match, dict)
-                    else None,
-                    "executed_at": execution_match.get("executed_at")
-                    if isinstance(execution_match, dict)
-                    else None,
-                    "actor_id": execution_match.get("actor")
-                    if isinstance(execution_match, dict)
-                    else None,
-                    "source": execution_match.get("source")
-                    if isinstance(execution_match, dict)
-                    else None,
-                    "reason_code": execution_match.get("reason_code")
-                    if isinstance(execution_match, dict)
-                    else None,
-                    "idempotency_key": execution_match.get("idempotency_key")
-                    if isinstance(execution_match, dict)
-                    else None,
-                }
-                return jsonify(
-                    {
-                        "status": "duplicate",
-                        "decision_id": decision_id,
-                        "action_id": item.get("action_id"),
-                        "idempotency_key": idempotency_key,
-                        "operator_action": item,
-                        "execution_status": execution_match or {},
-                        "decision_ref": decision_ref,
-                        "execution_ref": execution_ref,
-                    }
-                )
-
-        created_at = _iso_now()
-        action_id = _stable_id(
-            "dact", decision_id, command.action, idempotency_key, created_at, length=20
-        )
-        request_id = _stable_id(
-            "dreq", decision_id, command.action, idempotency_key, created_at, length=20
-        )
-        action_entry, execution_entry = build_decision_action_entries(
-            decision_id=decision_id,
-            action_id=action_id,
-            request_id=request_id,
-            created_at=created_at,
-            command=command,
-            idempotency_key=idempotency_key,
-        )
-        _append_jsonl(actions_path, action_entry)
-        _append_jsonl(executions_path, execution_entry)
-
-        return jsonify(
-            {
-                "status": "ok",
-                "decision_id": decision_id,
-                "action_id": action_id,
-                "idempotency_key": idempotency_key,
-                "operator_action": action_entry,
-                "execution_status": execution_entry,
-                "decision_ref": {
-                    "decision_id": decision_id,
-                    "action_id": action_entry.get("action_id"),
-                    "latest_action": action_entry.get("action"),
-                    "latest_status": action_entry.get("status"),
-                    "actor_id": action_entry.get("actor"),
-                    "source": action_entry.get("source"),
-                    "idempotency_key": action_entry.get("idempotency_key"),
-                    "updated_at": action_entry.get("created_at"),
-                },
-                "execution_ref": {
-                    "request_id": execution_entry.get("request_id"),
-                    "action": execution_entry.get("action"),
-                    "status": execution_entry.get("status"),
-                    "requested_at": execution_entry.get("requested_at"),
-                    "executed_at": execution_entry.get("executed_at"),
-                    "actor_id": execution_entry.get("actor"),
-                    "source": execution_entry.get("source"),
-                    "reason_code": execution_entry.get("reason_code"),
-                    "idempotency_key": execution_entry.get("idempotency_key"),
-                },
-            }
+        return decision_action_service.record(
+            decision_id,
+            payload,
+            source_default=source_default,
+            allowed_actions=allowed_actions,
+            require_idempotency=require_idempotency,
         )
 
     @server.route("/api/signals/refresh-status", methods=["GET"])
@@ -2900,6 +2812,7 @@ def create_app(settings: AppSettings) -> Dash:
             adapter_payload,
             source_default="v1_adapter",
             allowed_actions={"APPROVE", "REJECT"},
+            require_idempotency=False,
         )
 
     @server.route("/api/v2/decisions/<decision_id>/actions", methods=["POST"])
@@ -2914,6 +2827,7 @@ def create_app(settings: AppSettings) -> Dash:
             dict(payload),
             source_default="ui",
             allowed_actions={"APPROVE", "HOLD", "REJECT", "EXECUTE", "CLOSE"},
+            require_idempotency=True,
         )
 
     @server.route("/api/params/specs", methods=["GET"])
@@ -3048,150 +2962,6 @@ def create_app(settings: AppSettings) -> Dash:
             logger.exception("HPO status failed")
             return jsonify({"error": "server_error", "message": str(exc)}), 500
         return jsonify(status)
-
-    @server.route("/api/v2/research/backtests/run", methods=["POST"])
-    def backtest_run_v2_api():
-        payload = request.get_json(silent=True)
-        if payload is None or not isinstance(payload, dict):
-            return _bad_request("invalid_json")
-        experiment_id = str(payload.get("experiment_id") or f"exp-{uuid.uuid4().hex[:12]}")
-        precompute = _parse_bool(payload.get("precompute"))
-        compute_fill_quality = _parse_bool(payload.get("compute_fill_quality"))
-        if precompute is None:
-            precompute = True
-        if compute_fill_quality is None:
-            compute_fill_quality = True
-        request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else payload
-        if not isinstance(request_payload, dict):
-            return _bad_request("missing_request")
-        request_payload = {
-            key: value
-            for key, value in request_payload.items()
-            if key not in {"precompute", "compute_fill_quality"}
-        }
-        try:
-            backtest_request = BacktestRequest.model_validate(request_payload)
-        except ValidationError as exc:
-            return _bad_request("validation_error", details=exc.errors())
-        try:
-            report = run_backtest_v2_cached(
-                backtest_request,
-                paths.data_dir,
-                precompute=precompute,
-                compute_fill_quality=compute_fill_quality,
-            )
-        except ValueError as exc:
-            return _bad_request(str(exc))
-        except Exception as exc:
-            logger.exception("Backtest v2 failed")
-            return jsonify({"error": "server_error", "message": str(exc)}), 500
-
-        request_hash = hashlib.sha1(
-            json.dumps(request_payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
-        return jsonify(
-            {
-                "experiment_id": experiment_id,
-                "run_id": f"bt-{uuid.uuid4().hex[:12]}",
-                "request_hash": request_hash,
-                "status": "completed",
-                "report": serialize_backtest_report(report),
-            }
-        )
-
-    @server.route("/api/v2/research/hpo/run", methods=["POST"])
-    def hpo_run_v2_api():
-        payload = request.get_json(silent=True) or {}
-        if not isinstance(payload, dict):
-            return _bad_request("invalid_json")
-        experiment_id = str(payload.get("experiment_id") or f"exp-{uuid.uuid4().hex[:12]}")
-        precompute = _parse_bool(payload.get("precompute"))
-        if precompute is None:
-            precompute = True
-        request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else payload
-        if not isinstance(request_payload, dict):
-            return _bad_request("missing_request")
-        request_payload = {key: value for key, value in request_payload.items() if key != "precompute"}
-        optimization = request_payload.get("optimization") if isinstance(request_payload, dict) else None
-        max_trials_override = None
-        if not (isinstance(optimization, dict) and "max_trials" in optimization):
-            max_trials_override = 10
-        try:
-            hpo_request = HpoRequest.model_validate(request_payload)
-        except ValidationError as exc:
-            return _bad_request("validation_error", details=exc.errors())
-        try:
-            run_info = start_hpo_run(
-                hpo_request,
-                paths.data_dir,
-                precompute=precompute,
-                max_trials_override=max_trials_override,
-            )
-        except ValueError as exc:
-            return _bad_request(str(exc))
-        except Exception as exc:
-            logger.exception("HPO run failed")
-            return jsonify({"error": "server_error", "message": str(exc)}), 500
-
-        request_hash = hashlib.sha1(
-            json.dumps(request_payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
-        return jsonify(
-            {
-                **run_info,
-                "experiment_id": experiment_id,
-                "request_hash": request_hash,
-            }
-        )
-
-    @server.route("/api/v2/research/hpo/status", methods=["GET"])
-    def hpo_status_v2_api():
-        run_id = request.args.get("run_id")
-        try:
-            status = load_hpo_status(paths.data_dir, run_id=run_id)
-        except ValueError as exc:
-            return _bad_request(str(exc))
-        except Exception as exc:
-            logger.exception("HPO status failed")
-            return jsonify({"error": "server_error", "message": str(exc)}), 500
-
-        payload = dict(status) if isinstance(status, dict) else {"status": "unknown"}
-        run_state = str(payload.get("status") or "").lower()
-        result = payload.get("result")
-        leaderboard = []
-        quality_review = None
-        if isinstance(result, dict):
-            raw = result.get("leaderboard")
-            if isinstance(raw, list):
-                leaderboard = raw
-            quality_candidate = result.get("quality_review")
-            if isinstance(quality_candidate, dict):
-                quality_review = quality_candidate
-        if not leaderboard and isinstance(payload.get("leaderboard"), list):
-            leaderboard = payload.get("leaderboard")
-
-        quality_checks: list[str] = []
-        if isinstance(quality_review, dict) and not bool(quality_review.get("skipped")):
-            pass_count = int(quality_review.get("quality_gate_pass_count") or 0)
-            if pass_count > 0:
-                quality_checks.append("quality_gate_pass")
-            else:
-                quality_checks.append("quality_gate_fail")
-
-        if run_state == "completed" and leaderboard and ("quality_gate_fail" not in quality_checks):
-            promotion_gate = {"status": "pass", "checks": ["leaderboard_present", "completed"]}
-            if quality_checks:
-                promotion_gate["checks"].extend(quality_checks)
-        elif run_state == "completed" and "quality_gate_fail" in quality_checks:
-            promotion_gate = {"status": "fail", "checks": ["quality_gate_fail", "leaderboard_present"]}
-        elif run_state == "completed":
-            promotion_gate = {"status": "fail", "checks": ["leaderboard_missing"]}
-        elif run_state == "failed":
-            promotion_gate = {"status": "fail", "checks": ["run_failed"]}
-        else:
-            promotion_gate = {"status": "pending", "checks": ["run_in_progress"]}
-        payload["promotion_gate"] = promotion_gate
-        return jsonify(payload)
 
     @server.route("/api/v2/top-pairs", methods=["GET"])
     @server.route("/api/top-pairs", methods=["GET"])
@@ -4348,7 +4118,7 @@ def create_app(settings: AppSettings) -> Dash:
             override_reason = None
         idempotency_key = str(payload.get("idempotency_key") or "").strip()
         if not idempotency_key:
-            idempotency_key = f"idem-{uuid.uuid4().hex[:12]}"
+            return _bad_request("idempotency_key is required")
 
         signal_row = None
         active_rows_cache: list[dict[str, object]] | None = None
@@ -4491,48 +4261,67 @@ def create_app(settings: AppSettings) -> Dash:
         now = datetime.now(timezone.utc)
         action_id = f"act-{uuid.uuid4().hex[:12]}"
 
+        def _duplicate_signal_action_response(row) -> tuple[object, int] | object:
+            return jsonify(
+                {
+                    "status": "duplicate",
+                    "action_id": f"act-{row.id}",
+                    "signal_id": signal_id_resolved,
+                    "entity_ref": _build_pair_entity_ref(stock, future),
+                    "execution_event_id": f"exec-{row.id}",
+                    "action": requested_action,
+                    "idempotency_key": idempotency_key,
+                    "order_id": row.order_id,
+                    "fail_closed": {
+                        "enabled": bool(settings.ui.ff_fail_closed_execution),
+                        "status": fail_closed.status,
+                        "reason_code": fail_closed.reason_code,
+                    },
+                }
+            )
+
         with session_factory() as session:
-            recent = load_signal_executions(session, stock=stock, future=future, limit=500)
-            for row in recent:
-                existing_key = _extract_idempotency_key(row.note)
-                if existing_key and existing_key == idempotency_key:
-                    return jsonify(
-                        {
-                            "status": "duplicate",
-                            "action_id": f"act-{row.id}",
-                            "signal_id": signal_id_resolved,
-                            "entity_ref": _build_pair_entity_ref(stock, future),
-                            "execution_event_id": f"exec-{row.id}",
-                            "action": requested_action,
-                            "idempotency_key": idempotency_key,
-                            "order_id": row.order_id,
-                            "fail_closed": {
-                                "enabled": bool(settings.ui.ff_fail_closed_execution),
-                                "status": fail_closed.status,
-                                "reason_code": fail_closed.reason_code,
-                            },
-                        }
-                    )
+            existing = load_signal_execution_by_idempotency(
+                session,
+                stock=stock,
+                future=future,
+                idempotency_key=idempotency_key,
+            )
+            if existing is not None:
+                return _duplicate_signal_action_response(existing)
 
             status = payload.get("status")
             if status is None:
                 status = "acknowledged" if requested_action == "ack" else "recorded"
-            store_signal_execution(
-                session,
-                now,
-                {
-                    "stock": stock,
-                    "future": future,
-                    "direction": direction,
-                    "action": execution_action,
-                    "price": payload.get("price"),
-                    "quantity": payload.get("quantity"),
-                    "side": side,
-                    "order_id": order_id,
-                    "status": status,
-                    "note": note,
-                },
-            )
+            try:
+                store_signal_execution(
+                    session,
+                    now,
+                    {
+                        "stock": stock,
+                        "future": future,
+                        "direction": direction,
+                        "action": execution_action,
+                        "price": payload.get("price"),
+                        "quantity": payload.get("quantity"),
+                        "side": side,
+                        "order_id": order_id,
+                        "idempotency_key": idempotency_key,
+                        "status": status,
+                        "note": note,
+                    },
+                )
+            except IntegrityError:
+                session.rollback()
+                existing = load_signal_execution_by_idempotency(
+                    session,
+                    stock=stock,
+                    future=future,
+                    idempotency_key=idempotency_key,
+                )
+                if existing is not None:
+                    return _duplicate_signal_action_response(existing)
+                raise
 
         return jsonify(
             {
@@ -4741,627 +4530,76 @@ def create_app(settings: AppSettings) -> Dash:
             )
         )
 
-    @server.route("/api/v2/ops/health", methods=["GET"])
-    def ops_health_v2_api():
-        started_at = datetime.now(timezone.utc)
-        checks: dict[str, dict[str, object]] = {}
-        db_status = "ok"
-        db_message: str | None = None
-        try:
-            with session_factory() as session:
-                load_latest_signal_run(session)
-        except Exception as exc:
-            db_status = "error"
-            db_message = str(exc)
-            logger.exception("Ops health DB check failed")
-        checks["database"] = {
-            "status": db_status,
-            "message": db_message,
-        }
-        checks["signal_refresh"] = {
-            "status": str(refresh_state.get("status") or "unknown"),
-            "enabled": bool(refresh_state.get("enabled")),
-            "last_success_at": refresh_state.get("last_success_at"),
-            "last_error": refresh_state.get("last_error"),
-        }
-        overall_status = "ok" if db_status == "ok" else "degraded"
-        status_code = 200 if db_status == "ok" else 503
-        result = (
-            jsonify(
-                {
-                    "status": overall_status,
-                    "timestamp": _iso_now(),
-                    "checks": checks,
-                }
-            ),
-            status_code,
-        )
-        return _observe_request("v2_ops_health", started_at, result)
+    register_ops_routes(
+        server,
+        session_factory=session_factory,
+        load_latest_signal_run_fn=load_latest_signal_run,
+        logger=logger,
+        refresh_state=refresh_state,
+        iso_now=_iso_now,
+        observe_request=_observe_request,
+        observability=observability,
+    )
 
-    @server.route("/api/v2/ops/slo", methods=["GET"])
-    def ops_slo_v2_api():
-        started_at = datetime.now(timezone.utc)
-        snapshot = observability.snapshot()
-        endpoints = snapshot.get("endpoints")
-        endpoint_stats = endpoints if isinstance(endpoints, dict) else {}
-        actions_stats = (
-            endpoint_stats.get("v2_signals_actions")
-            if isinstance(endpoint_stats.get("v2_signals_actions"), dict)
-            else {}
-        )
-        pretrade_stats = (
-            endpoint_stats.get("v2_pretrade_check")
-            if isinstance(endpoint_stats.get("v2_pretrade_check"), dict)
-            else {}
-        )
-        auto_unwind_stats = (
-            endpoint_stats.get("v2_auto_unwind_run")
-            if isinstance(endpoint_stats.get("v2_auto_unwind_run"), dict)
-            else {}
-        )
+    register_market_data_routes(
+        server,
+        settings=settings,
+        paths=paths,
+        logger=logger,
+        session_factory=session_factory,
+        cache_version=_CACHE_VERSION,
+        parse_date_bound=_parse_date_bound,
+        merge_signal_metrics=_merge_signal_metrics,
+        bad_request=_bad_request,
+        extract_response_payload=_extract_response_payload,
+        record_signal_action=_record_signal_action,
+        normalize_execution_action=_normalize_execution_action,
+        load_signal_history_fn=load_signal_history,
+        load_signal_executions_fn=load_signal_executions,
+        load_backtest_summary_fn=load_backtest_summary,
+        load_latest_unified_output=_load_latest_unified_output,
+        resolved_unified_max_pairs=_resolved_unified_max_pairs,
+        df_to_records=_df_to_records,
+        parse_int=_parse_int,
+        signals_active_api=signals_active_api,
+        derive_lifecycle_state=_derive_lifecycle_state,
+        build_pair_entity_ref=_build_pair_entity_ref,
+        build_signal_id_from_row=_build_signal_id_from_row,
+        iso_now=_iso_now,
+        append_jsonl=_append_jsonl,
+        stringify_datetime_columns=_stringify_datetime_columns,
+        read_cache=_read_cache,
+        write_cache=_write_cache,
+        unified_ttl_sec=_unified_ttl_sec,
+        build_unified_spread_series_fn=build_unified_spread_series,
+        get_build_spread_series=lambda: build_spread_series,
+    )
 
-        pretrade_failures_15m = observability.count_recent("pretrade_failure", window_sec=900)
-        pretrade_degraded_15m = observability.count_recent("pretrade_degraded", window_sec=900)
-        pretrade_errors_15m = observability.count_recent("pretrade_error", window_sec=900)
-        execution_rejections_15m = observability.count_recent(
-            "execution_rejected_fail_closed", window_sec=900
-        )
-        auto_unwind_triggered_15m = observability.count_recent("auto_unwind_triggered", window_sec=900)
-        auto_unwind_errors_15m = observability.count_recent("auto_unwind_error", window_sec=900)
+    register_pretrade_routes(
+        server,
+        settings=settings,
+        paths=paths,
+        logger=logger,
+        parse_float=_parse_float,
+        parse_int=_parse_int,
+        future_scale_from_raw=_future_scale_from_raw,
+        bad_request=_bad_request,
+        sanitize_value=_sanitize_value,
+        build_pretrade_fail_open_result=_build_pretrade_fail_open_result,
+        is_iss_transport_error=_is_iss_transport_error,
+        get_moex_client_cls=lambda: MoexIssClient,
+        get_run_delay_gate=lambda: run_delay_gate,
+        observe_request=_observe_request,
+        mark_pretrade_events=_mark_pretrade_events,
+    )
 
-        alerts: list[dict[str, object]] = []
-        pretrade_p95 = float(((pretrade_stats.get("latency_ms") or {}).get("p95") or 0.0))
-        action_p95 = float(((actions_stats.get("latency_ms") or {}).get("p95") or 0.0))
-        if pretrade_p95 > 1_500.0:
-            alerts.append(
-                {
-                    "code": "PRETRADE_LATENCY_HIGH",
-                    "severity": "warning",
-                    "message": "Pretrade p95 latency exceeds 1500 ms.",
-                    "value": pretrade_p95,
-                }
-            )
-        if action_p95 > 800.0:
-            alerts.append(
-                {
-                    "code": "ACTION_LATENCY_HIGH",
-                    "severity": "warning",
-                    "message": "Signal action p95 latency exceeds 800 ms.",
-                    "value": action_p95,
-                }
-            )
-        if execution_rejections_15m >= 5:
-            alerts.append(
-                {
-                    "code": "EXECUTION_REJECTION_SPIKE",
-                    "severity": "critical",
-                    "message": "Fail-closed execution rejections in the last 15m reached threshold.",
-                    "value": execution_rejections_15m,
-                }
-            )
-        if pretrade_failures_15m >= 10:
-            alerts.append(
-                {
-                    "code": "PRETRADE_FAILURE_SPIKE",
-                    "severity": "warning",
-                    "message": "Pretrade failures in the last 15m reached threshold.",
-                    "value": pretrade_failures_15m,
-                }
-            )
-        if auto_unwind_errors_15m >= 1:
-            alerts.append(
-                {
-                    "code": "AUTO_UNWIND_ERRORS",
-                    "severity": "critical",
-                    "message": "Auto-unwind errors detected in the last 15m.",
-                    "value": auto_unwind_errors_15m,
-                }
-            )
-
-        result = jsonify(
-            {
-                "generated_at": snapshot.get("generated_at"),
-                "slo_targets": {
-                    "pretrade_p95_ms": 1500.0,
-                    "signals_actions_p95_ms": 800.0,
-                    "execution_rejections_15m": 5,
-                    "pretrade_failures_15m": 10,
-                    "auto_unwind_errors_15m": 1,
-                },
-                "api": {
-                    "v2_signals_actions": actions_stats,
-                    "v2_pretrade_check": pretrade_stats,
-                    "v2_auto_unwind_run": auto_unwind_stats,
-                },
-                "events_15m": {
-                    "pretrade_failures": pretrade_failures_15m,
-                    "pretrade_degraded": pretrade_degraded_15m,
-                    "pretrade_errors": pretrade_errors_15m,
-                    "execution_rejections_fail_closed": execution_rejections_15m,
-                    "auto_unwind_triggered": auto_unwind_triggered_15m,
-                    "auto_unwind_errors": auto_unwind_errors_15m,
-                },
-                "signal_refresh_runtime": {
-                    "status": refresh_state.get("status"),
-                    "duration_ms": {
-                        "p50": float(refresh_state.get("refresh_duration_ms_p50") or 0.0),
-                        "p95": float(refresh_state.get("refresh_duration_ms_p95") or 0.0),
-                    },
-                    "ingest_lag_sec": refresh_state.get("ingest_lag_sec"),
-                    "cache_hit_ratio": float(refresh_state.get("cache_hit_ratio") or 0.0),
-                    "skip_reason": refresh_state.get("skip_reason"),
-                    "fallback_full_replay_count": int(refresh_state.get("fallback_full_replay_count") or 0),
-                },
-                "alerts": alerts,
-            }
-        )
-        return _observe_request("v2_ops_slo", started_at, result)
-
-    @server.route("/api/v2/signals/history", methods=["GET"])
-    @server.route("/api/signals/history", methods=["GET"])
-    def signals_history_api():
-        limit = int(request.args.get("limit", "500"))
-        from_raw = request.args.get("from")
-        to_raw = request.args.get("to")
-        stock = request.args.get("stock")
-        future = request.args.get("future")
-        action = request.args.get("signal_action") or request.args.get("action")
-        stock = stock.strip() if isinstance(stock, str) and stock.strip() else None
-        future = future.strip() if isinstance(future, str) and future.strip() else None
-        action = action.strip() if isinstance(action, str) and action.strip() else None
-        from_ts = _parse_date_bound(from_raw, "start") if from_raw else None
-        to_ts = _parse_date_bound(to_raw, "end") if to_raw else None
-        if from_raw and from_ts is None:
-            return jsonify({"error": "invalid_from"}), 400
-        if to_raw and to_ts is None:
-            return jsonify({"error": "invalid_to"}), 400
-        with session_factory() as session:
-            rows = load_signal_history(
-                session,
-                from_ts=from_ts,
-                to_ts=to_ts,
-                limit=limit,
-                stock=stock,
-                future=future,
-                action=action,
-            )
-            payload = [
-                _merge_signal_metrics(
-                    {
-                        "run_id": row.run_id,
-                        "timestamp": row.timestamp.isoformat(),
-                        "stock": row.stock_secid,
-                        "future": row.future_secid,
-                        "signal_action": row.action,
-                        "signal_direction": row.direction,
-                        "signal_score": row.score,
-                        "signal_reasons": row.reasons,
-                        "signal_metrics": row.metrics,
-                    }
-                )
-                for row in rows
-            ]
-            return jsonify(payload)
-
-    @server.route("/api/signals/execute", methods=["POST"])
-    def signals_execute_api():
-        payload = request.get_json(silent=True)
-        if payload is None or not isinstance(payload, dict):
-            return _bad_request("invalid_json")
-        result = _record_signal_action(
-            signal_id=None,
-            payload=dict(payload),
-            source_default="v1_adapter",
-            legacy_mode=True,
-        )
-        response_payload, status_code = _extract_response_payload(result)
-        if status_code >= 400:
-            return result
-        if not isinstance(response_payload, dict):
-            return result
-        return jsonify(
-            {
-                "status": response_payload.get("status", "ok"),
-                "order_id": response_payload.get("order_id"),
-            }
-        )
-
-    @server.route("/api/v2/signals/executions", methods=["GET"])
-    @server.route("/api/signals/executions", methods=["GET"])
-    def signals_executions_api():
-        limit = int(request.args.get("limit", "200"))
-        stock = request.args.get("stock")
-        future = request.args.get("future")
-        with session_factory() as session:
-            rows = load_signal_executions(session, stock=stock, future=future, limit=limit)
-            return jsonify(
-                [
-                    {
-                        "timestamp": row.timestamp.isoformat(),
-                        "stock": row.stock_secid,
-                        "future": row.future_secid,
-                        "direction": row.direction,
-                        "action": _normalize_execution_action(row.action),
-                        "price": row.price,
-                        "quantity": row.quantity,
-                        "side": row.side,
-                        "order_id": row.order_id,
-                        "status": row.status,
-                        "note": row.note,
-                    }
-                    for row in rows
-                ]
-            )
-
-    @server.route("/api/backtests", methods=["GET"])
-    def backtests_api():
-        df = pd.DataFrame()
-        fresh = request.args.get("fresh", "").lower() in {"1", "true", "yes"}
-        if settings.ui.use_unified_signal_engine:
-            limit = int(request.args.get("limit", "500"))
-            try:
-                _, _, backtests = _load_latest_unified_output(
-                    max_pairs=_resolved_unified_max_pairs(limit),
-                    fresh=fresh,
-                )
-                df = backtests.copy()
-            except Exception:
-                logger.exception("Unified backtests failed")
-                if not settings.ui.unified_allow_legacy_fallback:
-                    return jsonify({"error": "server_error", "message": "unified_backtests_failed"}), 500
-        if df.empty and settings.ui.unified_allow_legacy_fallback:
-            df = load_backtest_summary(paths.data_dir)
-        limit = int(request.args.get("limit", "500"))
-        df = df.head(max(limit, 0)) if limit else df
-        return jsonify(_df_to_records(df))
-
-    @server.route("/api/v2/portfolio/rebalance/preview", methods=["GET"])
-    def rebalance_preview_v2_api():
-        limit = max(_parse_int(request.args.get("limit"), 12), 1)
-        legacy = signals_active_api()
-        rows, status_code = _extract_response_payload(legacy)
-        if status_code >= 400:
-            return legacy
-        if not isinstance(rows, list):
-            rows = []
-
-        candidates: list[dict[str, object]] = []
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            action = str(row.get("signal_action") or "").strip().lower()
-            if action not in {"enter", "hold_open", "exit"}:
-                continue
-            score_raw = row.get("signal_score")
-            try:
-                score = float(score_raw) if score_raw is not None else 0.0
-            except (TypeError, ValueError):
-                score = 0.0
-            candidates.append({**row, "_score": score})
-
-        candidates.sort(key=lambda item: float(item.get("_score") or 0.0), reverse=True)
-        selected = candidates[:limit]
-        active_for_weight = [row for row in selected if str(row.get("signal_action")).lower() in {"enter", "hold_open"}]
-        equal_weight = 1.0 / len(active_for_weight) if active_for_weight else 0.0
-
-        positions: list[dict[str, object]] = []
-        for row in selected:
-            signal_action = str(row.get("signal_action") or "").strip().lower()
-            lifecycle_state = _derive_lifecycle_state(row)
-            target_weight = equal_weight if signal_action in {"enter", "hold_open"} else 0.0
-            positions.append(
-                {
-                    "entity_ref": _build_pair_entity_ref(row.get("stock"), row.get("future")),
-                    "target_weight": target_weight,
-                    "signal_id": _build_signal_id_from_row(row),
-                    "lifecycle_state": lifecycle_state,
-                    "signal_action": signal_action,
-                    "signal_score": row.get("signal_score"),
-                    "reasons": row.get("signal_reasons") or [],
-                }
-            )
-
-        plan_id = f"rebal-{uuid.uuid4().hex[:12]}"
-        max_positions = int(settings.risk_profile.max_positions or 0)
-        risk_checks = [
-            {
-                "check": "max_positions",
-                "passed": len(active_for_weight) <= max_positions if max_positions > 0 else True,
-                "limit": max_positions if max_positions > 0 else None,
-                "value": len(active_for_weight),
-            }
-        ]
-        return jsonify(
-            {
-                "rebalance_plan_id": plan_id,
-                "generated_at": _iso_now(),
-                "positions": positions,
-                "summary": {
-                    "selected": len(selected),
-                    "target_active_positions": len(active_for_weight),
-                    "equal_weight": equal_weight,
-                },
-                "risk_checks": risk_checks,
-            }
-        )
-
-    @server.route("/api/v2/portfolio/rebalance/commit", methods=["POST"])
-    def rebalance_commit_v2_api():
-        payload = request.get_json(silent=True) or {}
-        if not isinstance(payload, dict):
-            return _bad_request("invalid_json")
-        plan_id = str(payload.get("rebalance_plan_id") or "").strip()
-        if not plan_id:
-            return _bad_request("rebalance_plan_id is required")
-        positions = payload.get("positions")
-        if not isinstance(positions, list):
-            return _bad_request("positions must be a list")
-        actor_id = str(payload.get("actor_id") or "operator").strip() or "operator"
-        commit_id = f"rebal-commit-{uuid.uuid4().hex[:12]}"
-        entry = {
-            "commit_id": commit_id,
-            "rebalance_plan_id": plan_id,
-            "actor_id": actor_id,
-            "positions": positions,
-            "committed_at": _iso_now(),
-            "note": payload.get("note"),
-        }
-        commits_path = paths.data_dir / "portfolio" / "rebalance_commits.jsonl"
-        _append_jsonl(commits_path, entry)
-        return jsonify(
-            {
-                "status": "ok",
-                "commit_id": commit_id,
-                "rebalance_plan_id": plan_id,
-                "positions_committed": len(positions),
-                "committed_at": entry["committed_at"],
-            }
-        )
-
-    @server.route("/api/spread-series", methods=["GET"])
-    def spread_series_api():
-        stock = request.args.get("stock")
-        future = request.args.get("future")
-        if not stock or not future:
-            return jsonify({"error": "missing_params"}), 400
-        full_life = request.args.get("full_life", "").lower() in {"1", "true", "yes"}
-        window_raw = request.args.get("window_days", "60")
-        try:
-            window_days = max(int(window_raw), 1)
-        except ValueError:
-            return jsonify({"error": "invalid_window"}), 400
-        window_days = min(window_days, 3650)
-
-        cache_dir = paths.data_dir / "cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_suffix = "full" if full_life else str(window_days)
-        cache_path = cache_dir / f"spread_{stock}_{future}_{cache_suffix}_{_CACHE_VERSION}.json"
-        cached = _read_cache(cache_path, ttl_minutes=60)
-        if cached is not None:
-            return jsonify(cached)
-
-        series_df = pd.DataFrame()
-        if settings.ui.use_unified_signal_engine:
-            try:
-                series_df = build_unified_spread_series(
-                    settings,
-                    paths.data_dir,
-                    stock=stock,
-                    future=future,
-                    window_days=window_days,
-                    full_life=full_life,
-                    ttl_sec=_unified_ttl_sec(),
-                )
-            except Exception:
-                logger.exception("Unified spread-series failed")
-                if not settings.ui.unified_allow_legacy_fallback:
-                    return jsonify({"error": "server_error", "message": "unified_spread_series_failed"}), 500
-        if series_df.empty and settings.ui.unified_allow_legacy_fallback:
-            series_df = build_spread_series(
-                settings, stock, future, window_days=window_days, full_life=full_life
-            )
-        if series_df.empty:
-            return jsonify([])
-        series_df = _stringify_datetime_columns(series_df)
-        records = _df_to_records(series_df)
-        _write_cache(cache_path, records)
-        return jsonify(records)
-
-    def _run_pretrade_check(payload: dict[str, object]):
-        stock = str(payload.get("stock") or "").strip()
-        future = str(payload.get("future") or "").strip()
-        if not stock or not future:
-            return jsonify({"error": "missing_params", "message": "stock and future are required"}), 400
-
-        top_pairs = load_top_pairs(
-            paths.data_dir,
-            preferred_engine=("unified" if settings.ui.use_unified_signal_engine else None),
-        )
-        pair_row = pd.DataFrame()
-        if not top_pairs.empty and {"stock", "future"}.issubset(top_pairs.columns):
-            pair_row = top_pairs[
-                (top_pairs["stock"].astype(str) == stock)
-                & (top_pairs["future"].astype(str) == future)
-            ]
-
-        row = pair_row.iloc[0] if not pair_row.empty else None
-        default_direction = "cash_and_carry"
-        if row is not None and "signal_direction" in row and pd.notna(row.get("signal_direction")):
-            default_direction = str(row.get("signal_direction"))
-        normalized_default_direction = normalize_pretrade_direction(
-            default_direction, default="cash_and_carry"
-        )
-        if normalized_default_direction is None:
-            normalized_default_direction = "cash_and_carry"
-        direction = normalize_pretrade_direction(
-            payload.get("direction"), default=normalized_default_direction
-        )
-        if direction is None:
-            return _bad_request("direction must be cash_and_carry or reverse")
-
-        spot_default = None
-        fut_default = None
-        spread_default = None
-        if row is not None:
-            spot_default = row.get("spot")
-            fut_default = row.get("future_price")
-            spread_default = row.get("spread_mid")
-
-        spot_target = _parse_float(
-            payload.get("spot_target"),
-            float(spot_default) if pd.notna(spot_default) else float("nan"),
-        )
-        future_target = _parse_float(
-            payload.get("future_target"),
-            float(fut_default) if pd.notna(fut_default) else float("nan"),
-        )
-        if math.isnan(spot_target) or math.isnan(future_target):
-            return _bad_request("spot_target and future_target are required if pair is absent in top_pairs")
-
-        spread_fallback = spot_target - future_target
-        spread_target = _parse_float(
-            payload.get("spread_target"),
-            float(spread_default) if pd.notna(spread_default) else spread_fallback,
-        )
-
-        snapshots = max(_parse_int(payload.get("snapshots"), 4), 1)
-        snapshots = min(snapshots, 12)
-        min_hits = max(_parse_int(payload.get("min_hits"), 2), 1)
-        min_hits = min(min_hits, snapshots)
-        alpha_cfg = settings.spread_carry_alpha
-        eps_default = float(
-            getattr(alpha_cfg, "entry_price_tolerance_pct", 0.0015) or 0.0015
-        )
-        stock_eps_default = float(
-            getattr(alpha_cfg, "entry_stock_tolerance_pct", None) or eps_default
-        )
-        future_eps_default = float(
-            getattr(alpha_cfg, "entry_future_tolerance_pct", None) or eps_default
-        )
-        spread_eps_default = float(
-            getattr(alpha_cfg, "entry_spread_tolerance_pct", None) or eps_default
-        )
-        eps = max(_parse_float(payload.get("eps"), eps_default), 0.0001)
-        eps = min(eps, 0.05)
-        stock_eps = max(_parse_float(payload.get("stock_eps"), stock_eps_default), 0.0001)
-        stock_eps = min(stock_eps, 0.05)
-        future_eps = max(_parse_float(payload.get("future_eps"), future_eps_default), 0.0001)
-        future_eps = min(future_eps, 0.05)
-        spread_eps = max(_parse_float(payload.get("spread_eps"), spread_eps_default), 0.0001)
-        spread_eps = min(spread_eps, 0.05)
-        sync_sec = max(_parse_float(payload.get("sync_sec"), 120.0), 1.0)
-        poll_sec = max(_parse_float(payload.get("poll_sec"), 5.0), 0.0)
-        poll_sec = min(poll_sec, 15.0)
-
-        qty_fut_default = float(settings.spread_carry_alpha.max_contracts_per_pair or 1)
-        qty_fut = max(_parse_float(payload.get("qty_fut"), qty_fut_default), 0.0)
-        participation_default = float(settings.spread_carry_alpha.participation_rate or 0.1)
-        participation_rate = max(
-            _parse_float(payload.get("participation_rate"), participation_default),
-            0.000001,
-        )
-        participation_rate = min(participation_rate, 1.0)
-
-        future_scale = _future_scale_from_raw(paths.data_dir / "raw" / "futures.csv", future)
-        client = MoexIssClient(
-            settings.moex.base_url,
-            settings.moex.request_timeout_sec,
-            max_retries=settings.moex.request_max_retries,
-            retry_backoff_sec=settings.moex.request_retry_backoff_sec,
-            retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
-            fallback_ips=settings.moex.fallback_ips,
-            force_fallback=settings.moex.force_fallback,
-        )
-
-        try:
-            result = run_delay_gate(
-                client,
-                stock=stock,
-                future=future,
-                direction=direction,
-                spot_target=spot_target,
-                future_target=future_target,
-                spread_target=spread_target,
-                future_scale=future_scale,
-                qty_fut=qty_fut,
-                participation_rate=participation_rate,
-                snapshots=snapshots,
-                min_hits=min_hits,
-                eps=eps,
-                stock_eps=stock_eps,
-                future_eps=future_eps,
-                spread_eps=spread_eps,
-                sync_sec=sync_sec,
-                poll_sec=poll_sec,
-                stock_engine=settings.moex.engine_shares,
-                stock_market=settings.moex.market_shares,
-                stock_board=settings.moex.shares_board,
-                fut_engine=settings.moex.engine_futures,
-                fut_market=settings.moex.market_futures,
-                fut_board=settings.moex.futures_board,
-            )
-        except Exception as exc:
-            if settings.ui.pretrade_fail_open_on_transport_error and _is_iss_transport_error(exc):
-                logger.warning(
-                    "Pretrade delay gate transport failure; returning fail-open response",
-                    exc_info=True,
-                )
-                result = _build_pretrade_fail_open_result(
-                    stock=stock,
-                    future=future,
-                    direction=direction,
-                    spot_target=spot_target,
-                    future_target=future_target,
-                    spread_target=spread_target,
-                    eps=eps,
-                    stock_eps=stock_eps,
-                    future_eps=future_eps,
-                    spread_eps=spread_eps,
-                    future_scale=future_scale,
-                    qty_fut=qty_fut,
-                    participation_rate=participation_rate,
-                    min_hits=min_hits,
-                    error_text=str(exc),
-                )
-            else:
-                logger.exception("Pretrade delay gate failed")
-                return jsonify({"error": "server_error", "message": str(exc)}), 500
-
-        runtime_params = PretradeRuntimeParams(
-            snapshots=snapshots,
-            min_hits=min_hits,
-            eps=eps,
-            sync_sec=sync_sec,
-            poll_sec=poll_sec,
-            qty_fut=qty_fut,
-            participation_rate=participation_rate,
-            future_scale=future_scale,
-        )
-        enriched = enrich_pretrade_result(result, params=runtime_params)
-        params = enriched.get("params")
-        if isinstance(params, dict):
-            params["stock_eps"] = stock_eps
-            params["future_eps"] = future_eps
-            params["spread_eps"] = spread_eps
-        return jsonify(_sanitize_value(enriched))
-
-    @server.route("/api/pretrade/check", methods=["GET"])
-    def pretrade_check_api():
-        return _run_pretrade_check(dict(request.args.to_dict(flat=True)))
-
-    @server.route("/api/v2/pretrade/check", methods=["POST"])
-    def pretrade_check_v2_api():
-        started_at = datetime.now(timezone.utc)
-        payload = request.get_json(silent=True)
-        if payload is None:
-            return _observe_request("v2_pretrade_check", started_at, _bad_request("invalid_json"))
-        if not isinstance(payload, dict):
-            return _observe_request(
-                "v2_pretrade_check", started_at, _bad_request("payload must be object")
-            )
-        result = _run_pretrade_check(dict(payload))
-        _mark_pretrade_events(result)
-        return _observe_request("v2_pretrade_check", started_at, result)
+    register_research_routes(
+        server=server,
+        paths=paths,
+        logger=logger,
+        bad_request=_bad_request,
+        parse_bool=_parse_bool,
+    )
 
     app = Dash(__name__, server=server, url_base_pathname="/dash/")
     app.layout = html.Div(
