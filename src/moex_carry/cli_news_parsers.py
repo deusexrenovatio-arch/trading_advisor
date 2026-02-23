@@ -334,6 +334,24 @@ def register_news_subcommands(
         type=str,
         default="facebook/bart-large-mnli",
     )
+    news_factor_autolabel_parser.add_argument(
+        "--nli-device",
+        type=str,
+        default="cuda:0",
+        help="NLI inference device: auto, cpu, cuda, or cuda:<index>.",
+    )
+    news_factor_autolabel_parser.add_argument(
+        "--nli-batch-size",
+        type=int,
+        default=64,
+        help="Batch size for NLI batched inference.",
+    )
+    news_factor_autolabel_parser.add_argument(
+        "--nli-max-chars",
+        type=int,
+        default=800,
+        help="Max text chars passed to NLI per event.",
+    )
     news_factor_autolabel_parser.add_argument("--label-version", type=str, default="autolabel-v2")
     news_factor_autolabel_parser.add_argument("--text-max-chars", type=int, default=4000)
     news_factor_autolabel_parser.add_argument("--max-events", type=int, default=0)

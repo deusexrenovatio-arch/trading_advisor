@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 import functools
 import importlib
 import re
@@ -9,6 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from moex_carry.news.factor_rules import COMMODITY_RULES, FactorRule
 from moex_carry.storage.repositories import (
     load_event_target_v2,
     load_news_event_items,
@@ -27,16 +29,6 @@ def _safe_import(name: str):
 
 
 @dataclass(frozen=True)
-class FactorRule:
-    factor: str
-    keywords: tuple[str, ...]
-    prototypes: tuple[str, ...]
-    hypothesis: str
-    prior_bullish_tokens: tuple[str, ...]
-    prior_bearish_tokens: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class FactorAutolabelReport:
     horizon: str
     symbol_filter: str | None
@@ -46,161 +38,13 @@ class FactorAutolabelReport:
     labels_upserted: int
     unknown_primary_count: int
     nli_used: bool
+    nli_events_requested: int = 0
+    nli_events_skipped: int = 0
+    nli_pipeline_calls: int = 0
+    nli_batch_groups: int = 0
 
 
 _WORD_RE = re.compile(r"[a-z0-9_]{2,}")
-
-_COMMODITY_RULES: dict[str, tuple[FactorRule, ...]] = {
-    "BRN": (
-        FactorRule(
-            factor="OPEC_POLICY",
-            keywords=("opec", "opec+", "quota", "production cut", "voluntary cuts", "meeting"),
-            prototypes=(
-                "OPEC announced production cuts and quota changes.",
-                "OPEC policy decision changed expected oil supply.",
-            ),
-            hypothesis="This news is primarily about OPEC production policy.",
-            prior_bullish_tokens=("cut", "cuts", "quota cut", "extend cuts"),
-            prior_bearish_tokens=("raise output", "increase production", "output rise"),
-        ),
-        FactorRule(
-            factor="SUPPLY_DISRUPTION_GEO",
-            keywords=("attack", "missile", "drone", "sanctions", "hormuz", "pipeline explosion", "red sea"),
-            prototypes=(
-                "Geopolitical disruption reduced oil supply and raised risk premium.",
-                "Conflict near shipping routes disrupted crude flows.",
-            ),
-            hypothesis="This news is primarily about geopolitical supply disruption in oil.",
-            prior_bullish_tokens=("disruption", "attack", "sanctions", "outage"),
-            prior_bearish_tokens=("ceasefire", "normalization", "supply restored"),
-        ),
-        FactorRule(
-            factor="INVENTORIES_CRUDE_PRODUCTS",
-            keywords=("eia", "api", "inventories", "crude stocks", "gasoline stocks", "draw", "build"),
-            prototypes=(
-                "EIA crude inventory report surprised the market.",
-                "Oil inventories changed relative to expectations.",
-            ),
-            hypothesis="This news is primarily about oil inventory data.",
-            prior_bullish_tokens=("draw", "withdrawal", "stocks fell"),
-            prior_bearish_tokens=("build", "injection", "stocks rose"),
-        ),
-        FactorRule(
-            factor="SHIPPING_LOGISTICS",
-            keywords=("tanker", "freight", "shipping", "port", "suez", "panama"),
-            prototypes=(
-                "Shipping constraints affected oil transport capacity.",
-                "Port disruptions tightened crude logistics.",
-            ),
-            hypothesis="This news is primarily about shipping and oil logistics.",
-            prior_bullish_tokens=("restriction", "delay", "reroute", "constraint"),
-            prior_bearish_tokens=("normal transit", "capacity increase", "discount"),
-        ),
-    ),
-    "GOLD": (
-        FactorRule(
-            factor="RATES_REALYIELD_FED",
-            keywords=("fed", "fomc", "hawkish", "dovish", "real yield", "treasury yield", "rate cut"),
-            prototypes=(
-                "Federal Reserve rate guidance moved real yields.",
-                "Changes in rate expectations affected gold pricing.",
-            ),
-            hypothesis="This news is primarily about rates and real yields for gold.",
-            prior_bullish_tokens=("dovish", "rate cut", "yields fell"),
-            prior_bearish_tokens=("hawkish", "yields rose", "rate hike"),
-        ),
-        FactorRule(
-            factor="USD",
-            keywords=("dollar", "dxy", "greenback"),
-            prototypes=(
-                "US dollar move influenced gold prices.",
-                "Dollar strength/weakness drove precious metals.",
-            ),
-            hypothesis="This news is primarily about USD impact on gold.",
-            prior_bullish_tokens=("dollar fell", "weaker dollar"),
-            prior_bearish_tokens=("dollar rose", "stronger dollar"),
-        ),
-        FactorRule(
-            factor="RISK_GEO_SAFEHAVEN",
-            keywords=("safe haven", "geopolitical", "conflict", "war", "risk-off"),
-            prototypes=(
-                "Geopolitical risk increased safe-haven demand for gold.",
-                "Risk-off positioning supported gold demand.",
-            ),
-            hypothesis="This news is primarily about safe-haven demand for gold.",
-            prior_bullish_tokens=("safe haven", "risk-off", "escalation"),
-            prior_bearish_tokens=("de-escalation", "risk-on"),
-        ),
-        FactorRule(
-            factor="CENTRAL_BANK_FLOWS",
-            keywords=("central bank buying", "reserves", "pboc", "cb purchases"),
-            prototypes=(
-                "Central bank reserve allocation changed gold demand.",
-                "Official sector buying supported bullion.",
-            ),
-            hypothesis="This news is primarily about central bank gold flows.",
-            prior_bullish_tokens=("buying", "inflows", "reserve increase"),
-            prior_bearish_tokens=("selling", "outflows", "reserve decrease"),
-        ),
-    ),
-    "NG_US": (
-        FactorRule(
-            factor="WEATHER_HDD_CDD",
-            keywords=("cold", "heat", "hdd", "cdd", "degree days", "polar vortex", "forecast"),
-            prototypes=(
-                "Weather forecast changed natural gas demand through HDD/CDD.",
-                "Extreme cold or heat shifted gas demand expectations.",
-            ),
-            hypothesis="This news is primarily about weather-driven demand for US natural gas.",
-            prior_bullish_tokens=("colder", "cold", "hdd up", "heat wave", "hotter"),
-            prior_bearish_tokens=("warmer", "mild weather", "hdd down", "cooler"),
-        ),
-        FactorRule(
-            factor="EIA_STORAGE",
-            keywords=("eia", "storage", "injection", "withdrawal", "build", "draw"),
-            prototypes=(
-                "EIA natural gas storage release surprised the market.",
-                "US natural gas inventory change affected prompt price.",
-            ),
-            hypothesis="This news is primarily about EIA natural gas storage.",
-            prior_bullish_tokens=("draw", "withdrawal", "storage fell"),
-            prior_bearish_tokens=("build", "injection", "storage rose"),
-        ),
-        FactorRule(
-            factor="LNG_EXPORTS_TERMINALS",
-            keywords=("lng", "freeport", "sabine", "terminal", "feedgas", "export outage"),
-            prototypes=(
-                "LNG terminal utilization changed US feedgas demand.",
-                "LNG export outage shifted domestic gas balance.",
-            ),
-            hypothesis="This news is primarily about LNG exports and terminals.",
-            prior_bullish_tokens=("feedgas up", "exports rose", "terminal restart"),
-            prior_bearish_tokens=("outage", "maintenance", "feedgas down"),
-        ),
-        FactorRule(
-            factor="PRODUCTION_FREEZE_OFF",
-            keywords=("production", "output", "freeze-off", "rig count", "shale"),
-            prototypes=(
-                "US gas production changed due to operational conditions.",
-                "Freeze-offs reduced near-term gas output.",
-            ),
-            hypothesis="This news is primarily about US gas production changes.",
-            prior_bullish_tokens=("production down", "freeze-off", "output fell"),
-            prior_bearish_tokens=("production up", "output rose", "recovery"),
-        ),
-        FactorRule(
-            factor="PIPELINE_CONSTRAINTS",
-            keywords=("pipeline", "constraint", "capacity", "force majeure", "maintenance"),
-            prototypes=(
-                "Pipeline constraint changed regional gas flow balance.",
-                "Infrastructure outage altered gas transport capacity.",
-            ),
-            hypothesis="This news is primarily about gas pipeline constraints.",
-            prior_bullish_tokens=("constraint", "force majeure", "capacity down"),
-            prior_bearish_tokens=("constraint eased", "capacity up", "restart"),
-        ),
-    ),
-}
 
 
 def _tokenize(text: str) -> set[str]:
@@ -252,15 +96,43 @@ def _infer_prior(text: str, rule: FactorRule) -> tuple[int, float]:
     return 0, 0.30
 
 
-@functools.lru_cache(maxsize=2)
-def _get_nli_pipeline(model_name: str):
+@functools.lru_cache(maxsize=8)
+def _get_nli_pipeline(model_name: str, nli_device: str = "auto"):
     transformers = _safe_import("transformers")
     if transformers is None:
         return None
+    torch_mod = _safe_import("torch")
+    normalized_device = str(nli_device or "auto").strip().lower()
+    device_id = -1
+    if normalized_device in {"auto", "cuda", "gpu"}:
+        if torch_mod is not None and bool(getattr(getattr(torch_mod, "cuda", None), "is_available", lambda: False)()):
+            device_id = 0
+    elif normalized_device.startswith("cuda:"):
+        if torch_mod is not None and bool(getattr(getattr(torch_mod, "cuda", None), "is_available", lambda: False)()):
+            try:
+                parsed = int(normalized_device.split(":", 1)[1].strip())
+                device_id = max(parsed, 0)
+            except Exception:
+                device_id = 0
+    elif normalized_device not in {"cpu", "-1"}:
+        try:
+            device_id = int(normalized_device)
+        except Exception:
+            device_id = -1
     try:
-        return transformers.pipeline("zero-shot-classification", model=model_name)
+        if device_id >= 0 and torch_mod is not None and hasattr(torch_mod, "float16"):
+            return transformers.pipeline(
+                "zero-shot-classification",
+                model=model_name,
+                device=device_id,
+                dtype=torch_mod.float16,
+            )
+        return transformers.pipeline("zero-shot-classification", model=model_name, device=device_id)
     except Exception:
-        return None
+        try:
+            return transformers.pipeline("zero-shot-classification", model=model_name)
+        except Exception:
+            return None
 
 
 def _nli_scores(
@@ -268,19 +140,31 @@ def _nli_scores(
     text: str,
     rules: list[FactorRule],
     model_name: str,
+    batch_size: int = 16,
+    nli_device: str = "auto",
 ) -> dict[str, float]:
     if not rules:
         return {}
-    pipeline = _get_nli_pipeline(model_name)
+    pipeline = _get_nli_pipeline(model_name, nli_device)
     if pipeline is None:
         return {}
     hypotheses = [item.hypothesis for item in rules]
     try:
-        result = pipeline(text, candidate_labels=hypotheses, multi_label=True)
+        result = pipeline(
+            text,
+            candidate_labels=hypotheses,
+            multi_label=True,
+            batch_size=max(int(batch_size), 1),
+            truncation=True,
+        )
     except Exception:
         return {}
-    labels = list(result.get("labels") or [])
-    scores = list(result.get("scores") or [])
+    return _map_nli_result(result, rules)
+
+
+def _map_nli_result(result: Any, rules: list[FactorRule]) -> dict[str, float]:
+    labels = list((result or {}).get("labels") or [])
+    scores = list((result or {}).get("scores") or [])
     hypothesis_to_factor = {item.hypothesis: item.factor for item in rules}
     mapped: dict[str, float] = {}
     for label, score in zip(labels, scores):
@@ -289,6 +173,151 @@ def _nli_scores(
             continue
         mapped[factor] = max(mapped.get(factor, 0.0), float(score))
     return mapped
+
+
+def _nli_scores_batch(
+    *,
+    texts: list[str],
+    rules: list[FactorRule],
+    model_name: str,
+    batch_size: int,
+    nli_device: str = "auto",
+) -> tuple[list[dict[str, float]], int]:
+    normalized = [str(item or "").strip() for item in texts if str(item or "").strip()]
+    if not normalized or not rules:
+        return [], 0
+    if len(normalized) == 1:
+        return [
+            _nli_scores(
+                text=normalized[0],
+                rules=rules,
+                model_name=model_name,
+                batch_size=batch_size,
+                nli_device=nli_device,
+            )
+        ], 1
+    pipeline = _get_nli_pipeline(model_name, nli_device)
+    if pipeline is None:
+        return [{} for _ in normalized], 0
+    hypotheses = [item.hypothesis for item in rules]
+    mapped_results: list[dict[str, float]] = []
+    calls = 0
+    step = max(int(batch_size), 1)
+    for offset in range(0, len(normalized), step):
+        chunk = normalized[offset : offset + step]
+        try:
+            result = pipeline(
+                chunk,
+                candidate_labels=hypotheses,
+                multi_label=True,
+                batch_size=step,
+                truncation=True,
+            )
+            calls += 1
+        except Exception:
+            mapped_results.extend({} for _ in chunk)
+            continue
+        rows = result if isinstance(result, list) else [result]
+        if len(rows) != len(chunk):
+            # Defensive fallback in case pipeline returns an unexpected shape.
+            rows = [rows[0] if rows else {} for _ in chunk]
+        for row in rows:
+            mapped_results.append(_map_nli_result(row, rules))
+    return mapped_results, calls
+
+
+def _build_pre_scores(text: str, rules: tuple[FactorRule, ...]) -> list[dict[str, Any]]:
+    raw_scores: list[dict[str, Any]] = []
+    max_keyword = 0.0
+    max_proto = 0.0
+    for rule in rules:
+        keyword_score, matched_terms = _keyword_score(text, rule)
+        prototype_score = _prototype_score(text, rule)
+        max_keyword = max(max_keyword, keyword_score)
+        max_proto = max(max_proto, prototype_score)
+        raw_scores.append(
+            {
+                "factor_name": rule.factor,
+                "keyword_score": keyword_score,
+                "prototype_score": prototype_score,
+                "matched_terms": matched_terms,
+                "rule": rule,
+            }
+        )
+    for item in raw_scores:
+        item["keyword_norm"] = float(item["keyword_score"] / max(max_keyword, 1.0))
+        item["prototype_norm"] = float(item["prototype_score"] / max(max_proto, 1.0))
+        item["pre_score"] = 0.7 * item["keyword_norm"] + 0.3 * item["prototype_norm"]
+    return raw_scores
+
+
+def _select_nli_input_rules(
+    raw_scores: list[dict[str, Any]],
+    *,
+    top_k: int,
+    skip_top_score: float = 0.90,
+    skip_margin: float = 0.20,
+) -> tuple[list[FactorRule], bool]:
+    if not raw_scores:
+        return [], False
+    ranked = sorted(raw_scores, key=lambda row: float(row.get("pre_score") or 0.0), reverse=True)
+    candidates = ranked[: max(int(top_k), 3)]
+    top_pre = float(candidates[0].get("pre_score") or 0.0) if candidates else 0.0
+    second_pre = float(candidates[1].get("pre_score") or 0.0) if len(candidates) > 1 else 0.0
+    should_run_nli = not (top_pre >= float(skip_top_score) and (top_pre - second_pre) >= float(skip_margin))
+    selected = [item["rule"] for item in candidates if isinstance(item.get("rule"), FactorRule)]
+    return selected, bool(should_run_nli and selected)
+
+
+def _batch_nli_scores_by_candidates(
+    *,
+    requests: list[dict[str, Any]],
+    model_name: str,
+    batch_size: int = 16,
+    nli_device: str = "auto",
+) -> tuple[dict[str, dict[str, float]], int, int]:
+    if not requests:
+        return {}, 0, 0
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = defaultdict(list)
+    for item in requests:
+        event_id = str(item.get("event_id") or "").strip()
+        text = str(item.get("text") or "").strip()
+        rules = item.get("rules")
+        if not event_id or not text or not isinstance(rules, list) or not rules:
+            continue
+        key = tuple(str(rule.hypothesis) for rule in rules if isinstance(rule, FactorRule))
+        if not key:
+            continue
+        groups[key].append({"event_id": event_id, "text": text, "rules": rules})
+    if not groups:
+        return {}, 0, 0
+
+    score_map_by_event: dict[str, dict[str, float]] = {}
+    total_calls = 0
+    for group_rows in groups.values():
+        rules = group_rows[0]["rules"]
+        dedup_text_to_event_ids: dict[str, list[str]] = defaultdict(list)
+        for row in group_rows:
+            event_id = str(row.get("event_id") or "").strip()
+            text = str(row.get("text") or "").strip()
+            if not event_id or not text:
+                continue
+            dedup_text_to_event_ids[text].append(event_id)
+        texts = list(dedup_text_to_event_ids.keys())
+        if not texts:
+            continue
+        scores, calls = _nli_scores_batch(
+            texts=texts,
+            rules=rules,
+            model_name=model_name,
+            batch_size=max(int(batch_size), 1),
+            nli_device=nli_device,
+        )
+        total_calls += int(calls)
+        for text, score_map in zip(texts, scores):
+            for event_id in dedup_text_to_event_ids.get(text, []):
+                score_map_by_event[event_id] = score_map
+    return score_map_by_event, total_calls, len(groups)
 
 
 def _direction_from_prior(prior: int) -> str:
@@ -353,35 +382,19 @@ def _autolabel_event(
     top_k: int,
     nli_model_name: str,
     nli_enabled: bool,
+    nli_score_map: dict[str, float] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not text or not rules:
         return [], {"factor_primary": "UNKNOWN", "factor_secondary": None, "factor_confidence": 0.0}
 
-    raw_scores: list[dict[str, Any]] = []
-    max_keyword = 0.0
-    max_proto = 0.0
-    for rule in rules:
-        keyword_score, matched_terms = _keyword_score(text, rule)
-        prototype_score = _prototype_score(text, rule)
-        max_keyword = max(max_keyword, keyword_score)
-        max_proto = max(max_proto, prototype_score)
-        raw_scores.append(
-            {
-                "factor_name": rule.factor,
-                "keyword_score": keyword_score,
-                "prototype_score": prototype_score,
-                "matched_terms": matched_terms,
-                "rule": rule,
-            }
-        )
-    for item in raw_scores:
-        item["keyword_norm"] = float(item["keyword_score"] / max(max_keyword, 1.0))
-        item["prototype_norm"] = float(item["prototype_score"] / max(max_proto, 1.0))
-        item["pre_score"] = 0.7 * item["keyword_norm"] + 0.3 * item["prototype_norm"]
+    raw_scores = _build_pre_scores(text, rules)
 
-    candidates = sorted(raw_scores, key=lambda row: row["pre_score"], reverse=True)[: max(int(top_k), 3)]
-    nli_input_rules = [item["rule"] for item in candidates if isinstance(item.get("rule"), FactorRule)]
-    nli_score_map = _nli_scores(text=text, rules=nli_input_rules, model_name=nli_model_name) if nli_enabled else {}
+    if nli_score_map is None:
+        nli_score_map = {}
+        if nli_enabled:
+            nli_input_rules, should_run_nli = _select_nli_input_rules(raw_scores, top_k=top_k)
+            if should_run_nli and nli_input_rules:
+                nli_score_map = _nli_scores(text=text, rules=nli_input_rules, model_name=nli_model_name)
 
     ranked: list[dict[str, Any]] = []
     for item in raw_scores:
@@ -438,6 +451,9 @@ def run_factor_autolabel_v2(
     include_overlapped: bool = False,
     nli_enabled: bool = True,
     nli_model_name: str = "facebook/bart-large-mnli",
+    nli_device: str = "cuda:0",
+    nli_batch_size: int = 64,
+    nli_text_max_chars: int = 800,
     label_version: str = "autolabel-v2",
     text_max_chars: int = 4000,
     max_events: int = 0,
@@ -476,21 +492,78 @@ def run_factor_autolabel_v2(
         ranked_event_rows = ranked_event_rows[: int(max_events)]
     event_ids = [str(item.get("event_id") or "").strip() for item in ranked_event_rows if str(item.get("event_id") or "").strip()]
     event_texts = _build_event_texts(session, event_ids=event_ids, max_chars=max(int(text_max_chars), 0))
+
+    event_payloads: list[dict[str, Any]] = []
+    for event_id in event_ids:
+        row = event_to_row.get(event_id, {})
+        ticker = str(row.get("symbol") or "").strip().upper()
+        if not ticker:
+            continue
+        rules = COMMODITY_RULES.get(ticker)
+        if not rules:
+            continue
+        event_payloads.append(
+            {
+                "event_id": event_id,
+                "row": row,
+                "ticker": ticker,
+                "rules": rules,
+                "text": str(event_texts.get(event_id) or "").strip(),
+            }
+        )
+
+    nli_score_map_by_event: dict[str, dict[str, float]] = {}
+    nli_events_requested = 0
+    nli_events_skipped = 0
+    nli_pipeline_calls = 0
+    nli_batch_groups = 0
+    if bool(nli_enabled):
+        nli_requests: list[dict[str, Any]] = []
+        for payload in event_payloads:
+            event_id = str(payload.get("event_id") or "").strip()
+            text = str(payload.get("text") or "").strip()
+            rules = payload.get("rules")
+            if not event_id or not isinstance(rules, tuple):
+                continue
+            if not text:
+                nli_events_skipped += 1
+                nli_score_map_by_event[event_id] = {}
+                continue
+            nli_text = text[: max(int(nli_text_max_chars), 0)] if int(nli_text_max_chars) > 0 else text
+            if not nli_text:
+                nli_events_skipped += 1
+                nli_score_map_by_event[event_id] = {}
+                continue
+            raw_scores = _build_pre_scores(text, rules)
+            nli_input_rules, should_run_nli = _select_nli_input_rules(raw_scores, top_k=max(int(top_k), 1))
+            if should_run_nli and nli_input_rules:
+                nli_requests.append({"event_id": event_id, "text": nli_text, "rules": nli_input_rules})
+                continue
+            nli_events_skipped += 1
+            nli_score_map_by_event[event_id] = {}
+        nli_events_requested = len(nli_requests)
+        batch_scores, nli_pipeline_calls, nli_batch_groups = _batch_nli_scores_by_candidates(
+            requests=nli_requests,
+            model_name=nli_model_name,
+            batch_size=max(int(nli_batch_size), 1),
+            nli_device=str(nli_device or "auto").strip(),
+        )
+        nli_score_map_by_event.update(batch_scores)
+
     factor_rows: list[dict[str, Any]] = []
     label_rows: list[dict[str, Any]] = []
     unknown_primary = 0
     scored = 0
     now = datetime.utcnow().replace(microsecond=0)
 
-    for event_id in event_ids:
-        row = event_to_row.get(event_id, {})
-        ticker = str(row.get("symbol") or "").strip().upper()
-        if not ticker:
+    for payload in event_payloads:
+        event_id = str(payload.get("event_id") or "").strip()
+        row = payload.get("row") if isinstance(payload.get("row"), dict) else {}
+        ticker = str(payload.get("ticker") or "").strip().upper()
+        rules = payload.get("rules")
+        text = str(payload.get("text") or "").strip()
+        if not event_id or not ticker or not isinstance(rules, tuple):
             continue
-        rules = _COMMODITY_RULES.get(ticker)
-        if not rules:
-            continue
-        text = str(event_texts.get(event_id) or "").strip()
         scored_rows, summary = _autolabel_event(
             text=text,
             rules=rules,
@@ -498,6 +571,7 @@ def run_factor_autolabel_v2(
             top_k=max(int(top_k), 1),
             nli_model_name=nli_model_name,
             nli_enabled=bool(nli_enabled),
+            nli_score_map=nli_score_map_by_event.get(event_id, {}),
         )
         if not scored_rows:
             continue
@@ -574,4 +648,8 @@ def run_factor_autolabel_v2(
         labels_upserted=labels_upserted,
         unknown_primary_count=unknown_primary,
         nli_used=bool(nli_enabled),
+        nli_events_requested=nli_events_requested,
+        nli_events_skipped=nli_events_skipped,
+        nli_pipeline_calls=nli_pipeline_calls,
+        nli_batch_groups=nli_batch_groups,
     )

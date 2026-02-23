@@ -4,7 +4,6 @@ import bisect
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from statistics import mean, median
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -220,12 +219,55 @@ def _compute_returns(ts_list: list[datetime], px_list: list[float], start_idx: i
     return values
 
 
+def _precompute_forward_returns(
+    *,
+    ts_list: list[datetime],
+    px_list: list[float],
+    delta: timedelta,
+    horizon: str,
+) -> tuple[list[int], list[float | None], list[int]]:
+    count = len(ts_list)
+    end_idx: list[int] = [-1] * count
+    returns: list[float | None] = [None] * count
+    bucket_keys: list[int] = [0] * count
+    for idx, ts in enumerate(ts_list):
+        bucket_keys[idx] = _bucket_key(ts, horizon)
+        idx_end = bisect.bisect_left(ts_list, ts + delta)
+        end_idx[idx] = idx_end
+        if idx_end <= idx or idx_end >= count:
+            continue
+        p0 = px_list[idx]
+        p1 = px_list[idx_end]
+        if p0 <= 0.0 or p1 <= 0.0:
+            continue
+        returns[idx] = math.log(p1 / p0)
+    return end_idx, returns, bucket_keys
+
+
+def _fast_mean(values: list[float]) -> float:
+    count = len(values)
+    if count <= 0:
+        return 0.0
+    return float(sum(values) / float(count))
+
+
+def _fast_median(values: list[float]) -> float:
+    count = len(values)
+    if count <= 0:
+        return 0.0
+    ordered = sorted(values)
+    mid = count // 2
+    if count % 2 == 1:
+        return float(ordered[mid])
+    return float((ordered[mid - 1] + ordered[mid]) / 2.0)
+
+
 def _mad_sigma(returns: list[float]) -> float:
     if len(returns) < 2:
         return 0.0
-    med = median(returns)
+    med = _fast_median(returns)
     deviations = [abs(value - med) for value in returns]
-    mad = median(deviations)
+    mad = _fast_median(deviations)
     return float(1.4826 * mad)
 
 
@@ -260,9 +302,11 @@ def _safe_quantile(values: list[float], q: float) -> float:
 def _expected_return_by_bucket(
     *,
     ts_list: list[datetime],
-    px_list: list[float],
     idx0: int,
     spec: TargetV2HorizonSpec,
+    end_idx: list[int],
+    forward_returns: list[float | None],
+    bucket_keys: list[int],
 ) -> tuple[float, int, float | None, float | None]:
     if idx0 <= 0:
         return 0.0, 0, None, None
@@ -275,25 +319,20 @@ def _expected_return_by_bucket(
     bucket_returns: list[float] = []
     all_returns: list[float] = []
     for idx in range(left, idx0):
-        t_start = ts_list[idx]
-        idx_end = bisect.bisect_left(ts_list, t_start + spec.delta)
-        if idx_end <= idx or idx_end >= len(ts_list):
+        idx_end_value = end_idx[idx]
+        if idx_end_value <= idx or idx_end_value >= idx0:
             continue
-        # Avoid leaking with history that completes after event start.
-        if ts_list[idx_end] >= t0:
+        ret = forward_returns[idx]
+        if ret is None:
             continue
-        p0 = px_list[idx]
-        p1 = px_list[idx_end]
-        if p0 <= 0.0 or p1 <= 0.0:
-            continue
-        ret = math.log(p1 / p0)
         all_returns.append(ret)
-        if _bucket_key(t_start, spec.horizon) == key:
+        if bucket_keys[idx] == key:
             bucket_returns.append(ret)
     selected = bucket_returns if len(bucket_returns) >= spec.min_bucket_count else all_returns
     if not selected:
         return 0.0, 0, None, None
-    return float(mean(selected)), len(selected), float(mean(selected)), float(median(selected))
+    selected_mean = _fast_mean(selected)
+    return selected_mean, len(selected), selected_mean, _fast_median(selected)
 
 
 def _build_event_context(
@@ -431,6 +470,7 @@ def rebuild_event_target_v2(
         tickers = [ticker for ticker in tickers if ticker == normalized_symbol]
 
     quote_cache: dict[str, tuple[list[datetime], list[float], str]] = {}
+    forward_cache: dict[str, tuple[list[int], list[float | None], list[int]]] = {}
     for ticker in tickers:
         quote_cache[ticker] = _load_quote_series(
             session,
@@ -438,6 +478,13 @@ def rebuild_event_target_v2(
             start_ts=global_start,
             end_ts=global_end,
             use_midpoint=use_midpoint,
+        )
+        ts_list, px_list, _ = quote_cache[ticker]
+        forward_cache[ticker] = _precompute_forward_returns(
+            ts_list=ts_list,
+            px_list=px_list,
+            delta=spec.delta,
+            horizon=spec.horizon,
         )
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -525,9 +572,11 @@ def rebuild_event_target_v2(
 
             exp_return, bucket_count, bucket_mean, bucket_median = _expected_return_by_bucket(
                 ts_list=ts_list,
-                px_list=px_list,
                 idx0=idx0,
                 spec=spec,
+                end_idx=forward_cache[ticker][0],
+                forward_returns=forward_cache[ticker][1],
+                bucket_keys=forward_cache[ticker][2],
             )
             ar = raw_return - exp_return
 

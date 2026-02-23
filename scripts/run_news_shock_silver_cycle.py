@@ -320,6 +320,9 @@ def run_cycle(args: argparse.Namespace) -> int:
                 include_overlapped=bool(args.include_overlap),
                 nli_enabled=not bool(args.factor_disable_nli),
                 nli_model_name=str(args.factor_nli_model_name or "facebook/bart-large-mnli").strip(),
+                nli_device=str(args.factor_nli_device or "auto").strip(),
+                nli_batch_size=max(int(args.factor_nli_batch_size), 1),
+                nli_text_max_chars=max(int(args.factor_nli_max_chars), 0),
                 label_version=str(args.factor_label_version or "autolabel-v2").strip(),
                 text_max_chars=max(int(args.factor_text_max_chars), 0),
                 max_events=max(int(args.factor_max_events), 0),
@@ -390,6 +393,10 @@ def run_cycle(args: argparse.Namespace) -> int:
                         "labels_upserted": factor_report.labels_upserted,
                         "unknown_primary_count": factor_report.unknown_primary_count,
                         "nli_used": factor_report.nli_used,
+                        "nli_events_requested": factor_report.nli_events_requested,
+                        "nli_events_skipped": factor_report.nli_events_skipped,
+                        "nli_pipeline_calls": factor_report.nli_pipeline_calls,
+                        "nli_batch_groups": factor_report.nli_batch_groups,
                     },
                     "silver_report": {
                         "scanned": silver_report.scanned,
@@ -530,6 +537,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--factor-top-k", type=int, default=3)
     parser.add_argument("--factor-disable-nli", action="store_true")
     parser.add_argument("--factor-nli-model-name", type=str, default="facebook/bart-large-mnli")
+    parser.add_argument("--factor-nli-device", type=str, default="cuda:0")
+    parser.add_argument("--factor-nli-batch-size", type=int, default=64)
+    parser.add_argument("--factor-nli-max-chars", type=int, default=800)
     parser.add_argument("--factor-label-version", type=str, default="autolabel-v2")
     parser.add_argument("--factor-text-max-chars", type=int, default=4000)
     parser.add_argument("--factor-max-events", type=int, default=0)
