@@ -17,6 +17,7 @@ This directory is the repository knowledge system for agent-first engineering.
 - `docs/architecture/entities-v2.md`
 - `docs/architecture/architecture-map-v2.md`
 - `docs/architecture/modules/`
+- `docs/agent-contexts/README.md`
 
 ## Contracts
 - `docs/contracts/api-v2.yaml`

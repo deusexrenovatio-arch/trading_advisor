@@ -399,3 +399,27 @@ items:
       - P1-SKILL-DECISION-017
     started_at: 2026-02-23
     completed_at: 2026-02-23
+
+  - id: P1-AGENT-CONTEXT-019
+    title: Add AI context routing map and start-of-work auto hint
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - agent context ownership map exists under docs/agent-contexts with bounded scopes and checks
+      - scripts/context_router.py routes changed files to CTX-* and reports risk and recommendations
+      - worktree_guard check emits context router hint at task start without breaking guard behavior
+      - docs index references the new context map entry point
+    checks:
+      - python scripts/context_router.py --from-git --format text
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/agent-contexts/README.md
+      - docs/README.md
+      - scripts/context_router.py
+      - scripts/worktree_guard.ps1
+    dependencies:
+      - P1-CONTEXT-BUDGET-012
+    started_at: 2026-02-23
+    completed_at: 2026-02-23

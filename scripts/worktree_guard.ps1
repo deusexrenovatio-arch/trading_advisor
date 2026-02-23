@@ -51,6 +51,59 @@ function Get-CurrentBranch {
     return $name.Trim()
 }
 
+function Invoke-ContextRouterHint {
+    param(
+        [string]$RepoRootPath,
+        [switch]$QuietMode
+    )
+    if ($QuietMode) {
+        return
+    }
+    if ($env:MOEX_CARRY_SKIP_CONTEXT_ROUTER -eq "1") {
+        return
+    }
+
+    $routerPath = Join-Path $RepoRootPath "scripts/context_router.py"
+    if (-not (Test-Path -LiteralPath $routerPath)) {
+        return
+    }
+
+    $pythonExe = "python"
+    if (-not [string]::IsNullOrWhiteSpace($env:PYTHON)) {
+        $pythonExe = $env:PYTHON.Trim()
+    }
+
+    try {
+        $routerOutput = & $pythonExe $routerPath --from-git --format text 2>$null
+        $routerExitCode = $LASTEXITCODE
+        if ($routerExitCode -ne 0) {
+            Write-Host "context_router: skipped (exit_code=$routerExitCode)"
+            return
+        }
+        if ($null -eq $routerOutput) {
+            return
+        }
+
+        $lines = @()
+        foreach ($line in $routerOutput) {
+            $text = [string]$line
+            if (-not [string]::IsNullOrWhiteSpace($text)) {
+                $lines += $text
+            }
+        }
+        if ($lines.Count -eq 0) {
+            return
+        }
+
+        Write-Host "context_router: start-of-work context"
+        foreach ($textLine in $lines) {
+            Write-Host "  $textLine"
+        }
+    } catch {
+        Write-Host "context_router: skipped (python/context_router unavailable)"
+    }
+}
+
 function Read-Context {
     param([string]$PathValue)
     if (-not (Test-Path -LiteralPath $PathValue)) {
@@ -177,6 +230,7 @@ switch ($Action) {
                 Write-Host "  worktree: $currentWorktree"
                 Write-Host "  branch: $currentBranch"
             }
+            Invoke-ContextRouterHint -RepoRootPath $repoRoot -QuietMode:$Quiet
             exit 0
         }
 
