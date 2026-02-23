@@ -168,6 +168,23 @@ def _resolve_db_path(config_path: str | None, db_path_arg: str | None) -> Path:
     return resolve_paths(settings).data_dir / "moex_carry.db"
 
 
+def _ensure_runtime_indexes(*, conn: sqlite3.Connection) -> None:
+    # Speed up hot queries on primary-event joins for large windows.
+    conn.execute(
+        """
+        create index if not exists ix_news_event_items_role_event_added_news
+        on news_event_items(link_role, event_id, added_at, news_id)
+        """
+    )
+    conn.execute(
+        """
+        create index if not exists ix_news_events_pub_event
+        on news_events(event_first_published_at_utc, event_id)
+        """
+    )
+    conn.commit()
+
+
 def _fetch_quote_points(
     *,
     conn: sqlite3.Connection,
@@ -195,19 +212,88 @@ def _fetch_quote_points(
     return by_symbol
 
 
+def _fetch_primary_news_map(
+    *,
+    conn: sqlite3.Connection,
+    event_ids: list[str] | None = None,
+) -> dict[str, tuple[str | None, str | None]]:
+    # Load canonical primary headline/url only for relevant events in the current run.
+    normalized_ids = sorted({str(item).strip() for item in (event_ids or []) if str(item).strip()})
+    if not normalized_ids:
+        return {}
+
+    mapping: dict[str, tuple[str | None, str | None]] = {}
+    chunk_size = 800
+    for offset in range(0, len(normalized_ids), chunk_size):
+        chunk = normalized_ids[offset : offset + chunk_size]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            with first_added as (
+                select event_id, min(coalesce(added_at, '9999-12-31 23:59:59.999999')) as min_added
+                from news_event_items
+                where link_role = 'primary'
+                  and event_id in ({placeholders})
+                group by event_id
+            )
+            select ei.event_id, ei.news_id, i.title, i.url
+            from news_event_items ei
+            join first_added fa
+              on fa.event_id = ei.event_id
+             and fa.min_added = coalesce(ei.added_at, '9999-12-31 23:59:59.999999')
+            left join news_items i
+              on i.news_id = ei.news_id
+            where ei.link_role = 'primary'
+              and ei.event_id in ({placeholders})
+            order by ei.event_id asc, ei.news_id asc
+            """,
+            [*chunk, *chunk],
+        ).fetchall()
+        for event_id, _news_id, title, url in rows:
+            key = str(event_id)
+            if key in mapping:
+                continue
+            mapping[key] = (
+                str(title) if title is not None else None,
+                str(url) if url is not None else None,
+            )
+    return mapping
+
+
+def _enrich_event_refs(
+    refs: list[EventRef],
+    primary_news: dict[str, tuple[str | None, str | None]],
+) -> list[EventRef]:
+    if not refs or not primary_news:
+        return refs
+    enriched: list[EventRef] = []
+    for ref in refs:
+        title, url = primary_news.get(ref.event_id, (ref.title, ref.url))
+        if title == ref.title and url == ref.url:
+            enriched.append(ref)
+            continue
+        enriched.append(
+            EventRef(
+                event_id=ref.event_id,
+                event_ts=ref.event_ts,
+                title=title,
+                url=url,
+                source=ref.source,
+            )
+        )
+    return enriched
+
+
 def _fetch_broad_events(
     *,
     conn: sqlite3.Connection,
     period_from: datetime,
     period_to: datetime,
+    primary_news: dict[str, tuple[str | None, str | None]],
 ) -> tuple[list[datetime], list[EventRef]]:
     query = """
-        select e.event_id, e.event_first_published_at_utc, i.title, i.url
+        select e.event_id, e.event_first_published_at_utc
         from news_events e
-        left join news_event_items ei
-          on ei.event_id = e.event_id and ei.link_role = 'primary'
-        left join news_items i
-          on i.news_id = ei.news_id
         where e.event_first_published_at_utc is not null
           and e.event_first_published_at_utc >= ?
           and e.event_first_published_at_utc <= ?
@@ -222,7 +308,8 @@ def _fetch_broad_events(
     ).fetchall()
     ts_list: list[datetime] = []
     refs: list[EventRef] = []
-    for event_id, ts_raw, title, url in rows:
+    for event_id, ts_raw in rows:
+        title, url = primary_news.get(str(event_id), (None, None))
         ts = _parse_datetime(ts_raw)
         ts_list.append(ts)
         refs.append(
@@ -243,15 +330,12 @@ def _fetch_v2_clean_events_by_symbol(
     symbols: list[str],
     period_from: datetime,
     period_to: datetime,
+    primary_news: dict[str, tuple[str | None, str | None]],
 ) -> dict[str, tuple[list[datetime], list[EventRef]]]:
     result: dict[str, tuple[list[datetime], list[EventRef]]] = {}
     query = """
-        select distinct t.event_id, t.t0, i.title, i.url
+        select t.event_id, t.t0
         from event_target_v2 t
-        left join news_event_items ei
-          on ei.event_id = t.event_id and ei.link_role = 'primary'
-        left join news_items i
-          on i.news_id = ei.news_id
         where t.symbol = ?
           and t.horizon = '1h'
           and t.t0 is not null
@@ -273,7 +357,8 @@ def _fetch_v2_clean_events_by_symbol(
         ).fetchall()
         ts_list: list[datetime] = []
         refs: list[EventRef] = []
-        for event_id, ts_raw, title, url in rows:
+        for event_id, ts_raw in rows:
+            title, url = primary_news.get(str(event_id), (None, None))
             ts = _parse_datetime(ts_raw)
             ts_list.append(ts)
             refs.append(
@@ -346,6 +431,7 @@ def run_export(args: argparse.Namespace) -> int:
 
     conn = sqlite3.connect(str(db_path))
     try:
+        _ensure_runtime_indexes(conn=conn)
         placeholders = ",".join("?" for _ in symbols)
         max_ts_row = conn.execute(
             f"select max(timestamp) from quotes where secid in ({placeholders})",
@@ -362,13 +448,30 @@ def run_export(args: argparse.Namespace) -> int:
             period_from=period_from,
             period_to=period_to,
         )
-        broad_ts, broad_refs = _fetch_broad_events(conn=conn, period_from=period_from, period_to=period_to)
+        broad_ts, broad_refs = _fetch_broad_events(
+            conn=conn,
+            period_from=period_from,
+            period_to=period_to,
+            primary_news={},
+        )
         v2_map = _fetch_v2_clean_events_by_symbol(
             conn=conn,
             symbols=symbols,
             period_from=period_from,
             period_to=period_to,
+            primary_news={},
         )
+        candidate_event_ids = {ref.event_id for ref in broad_refs if ref.event_id}
+        for _symbol, (_ts_values, refs) in v2_map.items():
+            for ref in refs:
+                if ref.event_id:
+                    candidate_event_ids.add(ref.event_id)
+        primary_news = _fetch_primary_news_map(conn=conn, event_ids=sorted(candidate_event_ids))
+        broad_refs = _enrich_event_refs(broad_refs, primary_news)
+        v2_map = {
+            key: (ts_values, _enrich_event_refs(refs, primary_news))
+            for key, (ts_values, refs) in v2_map.items()
+        }
         labels_by_event = _load_label_summary_by_event(conn=conn)
     finally:
         conn.close()
