@@ -161,8 +161,14 @@ but the API endpoints remain the primary backend interface for the React app.
 ### `ui/`
 - Responsibilities: Flask API endpoints for the React UI (Dash UI deprecated).
 - Key files:
-  - `app.py`: API routes (Dash layout still present but not used in production).
+  - `app.py`: API composition root and route wiring (Dash layout still present but not used in production).
   - `data.py`: loaders for CSV/JSONL artifacts.
+  - `decision_actions.py`: decision action service (`/api/v2/decisions/*/actions`) and idempotent JSONL projection writes.
+  - `refresh_scheduler.py`: background refresh loop with multi-worker singleton lease behavior.
+  - `routes_market_data.py`: signal history/executions, backtests, portfolio rebalance, and spread-series route group.
+  - `routes_ops.py`: operational health/SLO endpoints (`/api/v2/ops/health`, `/api/v2/ops/slo`).
+  - `routes_pretrade.py`: pretrade check endpoints (`/api/pretrade/check`, `/api/v2/pretrade/check`).
+  - `routes_research.py`: research wrappers (`/api/v2/research/backtests/run`, `/api/v2/research/hpo/run`, `/api/v2/research/hpo/status`).
   - Signal refresh scheduler (configurable in `ui.signal_refresh_*` and incremental settings).
   - Scheduled refresh uses non-force incremental path.
   - Manual refresh endpoint uses forced full path.

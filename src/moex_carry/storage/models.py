@@ -116,8 +116,18 @@ class SignalExecutionModel(Base):
     quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     side: Mapped[str | None] = mapped_column(String, nullable=True)
     order_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     status: Mapped[str | None] = mapped_column(String, nullable=True)
     note: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class RuntimeLeaseModel(Base):
+    __tablename__ = "runtime_leases"
+
+    lease_name: Mapped[str] = mapped_column(String, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String, index=True)
+    acquired_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    lease_until: Mapped[DateTime] = mapped_column(DateTime, index=True)
 
 
 class TradeModel(Base):

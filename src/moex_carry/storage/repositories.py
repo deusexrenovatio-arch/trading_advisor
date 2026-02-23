@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from moex_carry.domain import models as domain
@@ -162,6 +163,7 @@ def store_signal_execution(
             quantity=payload.get("quantity"),
             side=payload.get("side"),
             order_id=payload.get("order_id"),
+            idempotency_key=payload.get("idempotency_key"),
             status=payload.get("status"),
             note=payload.get("note"),
         )
@@ -226,6 +228,115 @@ def load_signal_executions(
     if limit is not None and limit > 0:
         query = query.limit(limit)
     return session.execute(query).scalars().all()
+
+
+def load_signal_execution_by_idempotency(
+    session: Session,
+    *,
+    stock: str,
+    future: str,
+    idempotency_key: str,
+):
+    normalized_key = str(idempotency_key or "").strip()
+    if not normalized_key:
+        return None
+    query = (
+        select(db.SignalExecutionModel)
+        .where(db.SignalExecutionModel.stock_secid == stock)
+        .where(db.SignalExecutionModel.future_secid == future)
+        .where(db.SignalExecutionModel.idempotency_key == normalized_key)
+        .order_by(db.SignalExecutionModel.timestamp.desc(), db.SignalExecutionModel.id.desc())
+        .limit(1)
+    )
+    return session.execute(query).scalars().first()
+
+
+def try_acquire_runtime_lease(
+    session: Session,
+    *,
+    lease_name: str,
+    owner_id: str,
+    ttl_sec: int,
+    now: datetime | None = None,
+) -> bool:
+    normalized_name = str(lease_name or "").strip()
+    normalized_owner = str(owner_id or "").strip()
+    if not normalized_name or not normalized_owner:
+        return False
+    now_dt = _as_utc_naive(now)
+    lease_until = now_dt + timedelta(seconds=max(int(ttl_sec), 1))
+
+    row = session.get(db.RuntimeLeaseModel, normalized_name)
+    if row is None:
+        session.add(
+            db.RuntimeLeaseModel(
+                lease_name=normalized_name,
+                owner_id=normalized_owner,
+                acquired_at=now_dt,
+                lease_until=lease_until,
+            )
+        )
+        try:
+            session.commit()
+            return True
+        except IntegrityError:
+            session.rollback()
+            row = session.get(db.RuntimeLeaseModel, normalized_name)
+
+    if row is None:
+        return False
+
+    if row.owner_id == normalized_owner or row.lease_until <= now_dt:
+        row.owner_id = normalized_owner
+        row.acquired_at = now_dt
+        row.lease_until = lease_until
+        session.commit()
+        return True
+
+    return False
+
+
+def renew_runtime_lease(
+    session: Session,
+    *,
+    lease_name: str,
+    owner_id: str,
+    ttl_sec: int,
+    now: datetime | None = None,
+) -> bool:
+    normalized_name = str(lease_name or "").strip()
+    normalized_owner = str(owner_id or "").strip()
+    if not normalized_name or not normalized_owner:
+        return False
+    now_dt = _as_utc_naive(now)
+    row = session.get(db.RuntimeLeaseModel, normalized_name)
+    if row is None:
+        return False
+    if row.owner_id != normalized_owner:
+        return False
+    if row.lease_until <= now_dt:
+        return False
+    row.lease_until = now_dt + timedelta(seconds=max(int(ttl_sec), 1))
+    session.commit()
+    return True
+
+
+def release_runtime_lease(
+    session: Session,
+    *,
+    lease_name: str,
+    owner_id: str,
+) -> bool:
+    normalized_name = str(lease_name or "").strip()
+    normalized_owner = str(owner_id or "").strip()
+    if not normalized_name or not normalized_owner:
+        return False
+    row = session.get(db.RuntimeLeaseModel, normalized_name)
+    if row is None or row.owner_id != normalized_owner:
+        return False
+    session.delete(row)
+    session.commit()
+    return True
 
 
 def upsert_decision_view_projection(
@@ -328,3 +439,11 @@ def _parse_datetime_value(value: object) -> datetime | None:
     if parsed.tzinfo is not None:
         return parsed.astimezone(timezone.utc).replace(tzinfo=None)
     return parsed
+
+
+def _as_utc_naive(value: datetime | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value

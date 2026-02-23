@@ -423,3 +423,152 @@ items:
       - P1-CONTEXT-BUDGET-012
     started_at: 2026-02-23
     completed_at: 2026-02-23
+
+  - id: P1-ARCH-HARDEN-020
+    title: Enforce action idempotency and multi-worker refresh scheduler lease
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: backend-platform
+    acceptance:
+      - v2 write contracts require idempotency_key for signal and decision actions
+      - signal execution storage enforces pair plus idempotency uniqueness
+      - refresh scheduler supports singleton lease mode for multi-worker API deployment
+      - direct static import cycle between pipeline and unified runtime is removed
+    checks:
+      - python scripts/validate_architecture_policy.py
+      - pytest tests/test_storage_db.py tests/test_signal_api.py tests/test_api_v2.py -q
+      - pytest tests/test_signal_replay_incremental.py tests/test_signal_replay_core.py tests/test_signal_replay_minute_loader.py -q
+    docs:
+      - docs/contracts/api-v2.yaml
+      - docs/architecture/modules/contracts-configs.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P0-ARCH-POLICY-002
+      - P1-AGENT-CONTEXT-019
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-API-DECOMPOSE-021
+    title: Decompose ui app composition by extracting scheduler and decision-action services
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: backend-platform
+    acceptance:
+      - refresh loop singleton lease logic moved from `ui/app.py` into dedicated scheduler module
+      - decision action write flow extracted into dedicated service module and wired back into API routes
+      - backend architecture docs mention extracted UI modules and responsibilities
+      - architecture and API regression tests stay green
+    checks:
+      - pytest tests/test_api_v2.py::test_v2_decision_actions_and_v1_adapter tests/test_api_v2.py::test_v2_signals_active_and_actions_idempotency tests/test_signal_api.py::test_signals_execute_endpoint_v1_adapter_idempotency tests/architecture/test_import_boundaries.py -q
+      - python scripts/validate_architecture_policy.py
+    docs:
+      - docs/architecture/modules/backend-core.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-ARCH-HARDEN-020
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-TASTE-TARGET-022
+    title: Add soft target file-size budgets and trim stale large-file exceptions
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - taste invariants config separates hard limits from non-blocking target budgets
+      - validator reports target budget overruns without failing the gate
+      - allowlist entries for mid-size legacy modules are tightened to explicit caps
+    checks:
+      - python scripts/validate_taste_invariants.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - configs/taste_invariants.yaml
+      - scripts/validate_taste_invariants.py
+      - docs/runbooks/governance-remediation.md
+      - docs/session_handoff.md
+    dependencies:
+      - P1-API-DECOMPOSE-021
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-API-DECOMPOSE-023
+    title: Extract ops and pretrade route groups from UI app composition
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: backend-platform
+    acceptance:
+      - ops routes moved from `ui/app.py` into dedicated module and wired through composition root
+      - pretrade routes moved from `ui/app.py` into dedicated module while keeping test monkeypatch seams
+      - API endpoint behavior and existing regression tests remain green
+    checks:
+      - pytest tests/test_api_v2.py::test_v2_ops_health_and_slo_observability tests/test_api_v2.py::test_v2_pretrade_check_post tests/test_ui_api.py::test_pretrade_check_endpoint_returns_price_bands_and_volume_gate tests/test_ui_api.py::test_pretrade_check_endpoint_fail_opens_on_iss_transport_error -q
+      - python scripts/validate_architecture_policy.py
+    docs:
+      - src/moex_carry/ui/routes_ops.py
+      - src/moex_carry/ui/routes_pretrade.py
+      - docs/architecture/modules/backend-core.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-API-DECOMPOSE-021
+      - P1-TASTE-TARGET-022
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-API-DECOMPOSE-024
+    title: Extract market-data route group from UI app composition
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: backend-platform
+    acceptance:
+      - signal history/executions and v1 execute adapter routes moved from `ui/app.py` into dedicated registrar module
+      - backtests, rebalance preview/commit, and spread-series routes moved to the same registrar without API behavior drift
+      - existing monkeypatch seam for `build_spread_series` remains available from `ui.app`
+      - parity and baseline metrics scanners account for multi-file UI route registrations
+    checks:
+      - pytest tests/test_signal_api.py::test_signals_history_endpoint_returns_rows tests/test_signal_api.py::test_signals_executions_endpoint_returns_rows tests/test_ui_api.py::test_spread_series_endpoint_uses_builder tests/test_api_v2.py::test_v2_portfolio_rebalance_preview_and_commit -q
+      - python scripts/validate_api_v2_contract_parity.py
+      - python scripts/harness_baseline_metrics.py
+    docs:
+      - src/moex_carry/ui/routes_market_data.py
+      - docs/architecture/modules/backend-core.md
+      - scripts/validate_api_v2_contract_parity.py
+      - scripts/harness_baseline_metrics.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-API-DECOMPOSE-023
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P1-API-DECOMPOSE-025
+    title: Extract v2 research route group from UI app composition
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: backend-platform
+    acceptance:
+      - v2 research wrappers moved from `ui/app.py` into dedicated `ui/routes_research.py` registrar
+      - research runtime monkeypatch seams remain compatible through `moex_carry.ui.app` call resolution
+      - route parity and baseline metrics remain green under multi-file UI route layout
+    checks:
+      - pytest tests/test_api_v2.py::test_v2_research_wrappers tests/test_api_v2.py::test_v2_hpo_status_fails_on_quality_gate -q
+      - python scripts/validate_api_v2_contract_parity.py
+      - python scripts/harness_baseline_metrics.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/ui/routes_research.py
+      - docs/architecture/modules/backend-core.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-API-DECOMPOSE-024
+    started_at: 2026-02-23
+    completed_at: 2026-02-23

@@ -172,6 +172,9 @@ class UiConfig(BaseModel):
     port: int = 8050
     signal_refresh_enabled: bool = False
     signal_refresh_interval_sec: int = 60
+    signal_refresh_singleton: bool = True
+    signal_refresh_lease_sec: int = 180
+    signal_refresh_lease_renew_sec: int = 30
     signal_refresh_daily_time: Optional[str] = None
     signal_refresh_timezone: Optional[str] = None
     signal_refresh_max_pairs: Optional[int] = None

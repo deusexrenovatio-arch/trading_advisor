@@ -46,6 +46,9 @@ pipeline, UI, and decision logging rely on.
 UI refresh keys:
 - `signal_refresh_enabled`: enables backend scheduler for signal refresh.
 - `signal_refresh_interval_sec`: interval in seconds between scheduled refresh runs (default `60`).
+- `signal_refresh_singleton`: enforce single scheduler leader across multi-worker API processes.
+- `signal_refresh_lease_sec`: lease TTL used by scheduler leader election.
+- `signal_refresh_lease_renew_sec`: heartbeat interval for scheduler lease renewal.
 - `signal_refresh_daily_time`: optional local time (`HH:MM` or `HH:MM:SS`) for daily refresh; default is `null` (disabled).
 - `signal_refresh_timezone`: optional IANA timezone for daily scheduling (defaults to `environment.timezone`).
 - `signal_refresh_max_pairs`: optional max pairs override for refresh.
@@ -128,6 +131,8 @@ Defaults:
   - `news/feed`
   - `research/backtests/run`, `research/hpo/run`, `research/hpo/status`
   - `portfolio/rebalance/preview`, `portfolio/rebalance/commit`
+- Write endpoints require `idempotency_key` (`signals/*/actions`, `decisions/*/actions`)
+  to enforce at-most-once execution semantics.
 
 ## Compatibility rules
 - Contracts are the source of truth for decision outputs and UI projections.

@@ -52,14 +52,21 @@ def run(config_path: Path, src_root: Path, logging_module: Path) -> int:
         logging_cfg = {}
 
     max_lines_default = int(py_cfg.get("max_lines_default", 800))
+    target_lines_default = int(py_cfg.get("target_lines_default", max_lines_default))
     allowed_large_files = py_cfg.get("allowed_large_files") or {}
     if not isinstance(allowed_large_files, dict):
         allowed_large_files = {}
     allowed_map = {str(key).replace("\\", "/"): int(value) for key, value in allowed_large_files.items()}
+    target_large_files = py_cfg.get("target_large_files") or {}
+    if not isinstance(target_large_files, dict):
+        target_large_files = {}
+    target_map = {str(key).replace("\\", "/"): int(value) for key, value in target_large_files.items()}
+    target_report_limit = int(py_cfg.get("target_report_limit", 20))
 
     module_name_pattern = str(py_cfg.get("module_name_regex", r"^[a-z0-9_]+\.py$"))
     module_name_regex = re.compile(module_name_pattern)
     forbid_wildcard_imports = bool(py_cfg.get("forbid_wildcard_imports", True))
+    target_budget_overruns: list[tuple[str, int, int]] = []
 
     for path in _iter_python_files(src_root):
         rel = _as_posix(path)
@@ -72,6 +79,9 @@ def run(config_path: Path, src_root: Path, logging_module: Path) -> int:
         line_count = _count_lines(path)
         if line_count > max_lines:
             errors.append(f"file too large: {rel} ({line_count} lines > {max_lines})")
+        target_lines = target_map.get(rel, target_lines_default)
+        if line_count > target_lines:
+            target_budget_overruns.append((rel, line_count, target_lines))
 
         if forbid_wildcard_imports:
             text = path.read_text(encoding="utf-8-sig", errors="ignore")
@@ -97,9 +107,21 @@ def run(config_path: Path, src_root: Path, logging_module: Path) -> int:
         print("remediation: see docs/runbooks/governance-remediation.md")
         return 1
 
+    if target_budget_overruns:
+        target_budget_overruns.sort(key=lambda item: (item[1] - item[2], item[1]), reverse=True)
+        print("taste invariants advisory: target line budget exceeded:")
+        for rel, line_count, target_lines in target_budget_overruns[:target_report_limit]:
+            print(f"- target budget exceeded: {rel} ({line_count} lines > target {target_lines})")
+        omitted = len(target_budget_overruns) - min(len(target_budget_overruns), target_report_limit)
+        if omitted > 0:
+            print(f"- ... and {omitted} additional file(s)")
+
     print(
         "taste invariants validation: OK "
-        f"(files={len(_iter_python_files(src_root))} default_max_lines={max_lines_default})"
+        f"(files={len(_iter_python_files(src_root))} "
+        f"default_max_lines={max_lines_default} "
+        f"target_default_lines={target_lines_default} "
+        f"target_overruns={len(target_budget_overruns)})"
     )
     return 0
 

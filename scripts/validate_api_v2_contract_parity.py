@@ -37,7 +37,7 @@ def _extract_route_methods(node: ast.Call) -> set[str]:
 
 
 def _extract_app_operations(app_file: Path, api_prefix: str) -> tuple[set[tuple[str, str]], list[str]]:
-    source = app_file.read_text(encoding="utf-8")
+    source = app_file.read_text(encoding="utf-8-sig")
     tree = ast.parse(source, filename=str(app_file))
     operations: set[tuple[str, str]] = set()
     warnings: list[str] = []
@@ -141,8 +141,13 @@ def _print_missing(label: str, items: list[tuple[str, str]]) -> None:
         print(f"- {method} {path}")
 
 
-def run(*, app_file: Path, contract_file: Path, api_prefix: str) -> int:
-    app_operations, warnings = _extract_app_operations(app_file, api_prefix)
+def run(*, app_files: list[Path], contract_file: Path, api_prefix: str) -> int:
+    app_operations: set[tuple[str, str]] = set()
+    warnings: list[str] = []
+    for app_file in app_files:
+        operations, file_warnings = _extract_app_operations(app_file, api_prefix)
+        app_operations.update(operations)
+        warnings.extend(file_warnings)
     contract_operations, server_prefix = _extract_contract_operations(contract_file)
 
     only_in_app = sorted(app_operations.difference(contract_operations))
@@ -168,20 +173,29 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate parity between Flask /api/v2 routes and docs/contracts/api-v2.yaml"
     )
-    parser.add_argument("--app-file", default="src/moex_carry/ui/app.py")
+    parser.add_argument("--app-file", action="append", dest="app_files")
     parser.add_argument("--contract-file", default="docs/contracts/api-v2.yaml")
     parser.add_argument("--api-prefix", default="/api/v2/")
     args = parser.parse_args()
 
-    app_file = Path(args.app_file)
+    app_files: list[Path]
+    if args.app_files:
+        app_files = [Path(item) for item in args.app_files]
+    else:
+        ui_root = Path("src/moex_carry/ui")
+        app_files = sorted(path for path in ui_root.rglob("*.py") if path.is_file())
     contract_file = Path(args.contract_file)
-    if not app_file.exists():
-        print(f"ERROR: app file not found: {app_file}", file=sys.stderr)
+    missing = [path for path in app_files if not path.exists()]
+    if missing:
+        print(f"ERROR: app file not found: {missing[0]}", file=sys.stderr)
+        return 2
+    if not app_files:
+        print("ERROR: no app files found for route parity scan", file=sys.stderr)
         return 2
     if not contract_file.exists():
         print(f"ERROR: contract file not found: {contract_file}", file=sys.stderr)
         return 2
-    return run(app_file=app_file, contract_file=contract_file, api_prefix=str(args.api_prefix))
+    return run(app_files=app_files, contract_file=contract_file, api_prefix=str(args.api_prefix))
 
 
 if __name__ == "__main__":
