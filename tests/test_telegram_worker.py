@@ -24,8 +24,14 @@ class _FakeResponse:
 
 
 class _FakeTelegramSession:
-    def __init__(self, updates_batches: list[list[dict[str, object]]] | None = None):
+    def __init__(
+        self,
+        updates_batches: list[list[dict[str, object]]] | None = None,
+        *,
+        get_updates_failures: int = 0,
+    ):
         self._updates_batches = list(updates_batches or [])
+        self._get_updates_failures = max(int(get_updates_failures), 0)
         self.sent_messages: list[dict[str, object]] = []
         self.answered_callbacks: list[dict[str, object]] = []
         self.calls: list[tuple[str, dict[str, object]]] = []
@@ -34,6 +40,9 @@ class _FakeTelegramSession:
         method = url.rstrip("/").rsplit("/", 1)[-1]
         self.calls.append((method, json))
         if method == "getUpdates":
+            if self._get_updates_failures > 0:
+                self._get_updates_failures -= 1
+                raise requests.ConnectionError("telegram-connection-dropped")
             batch = self._updates_batches.pop(0) if self._updates_batches else []
             return _FakeResponse({"ok": True, "result": batch})
         if method == "sendMessage":
@@ -159,6 +168,58 @@ def test_worker_registers_only_whitelisted_users(tmp_path):
     assert worker._state["registered_chats"] == {"111": 111}
     assert worker._state["last_update_id"] == 2
     assert [payload["chat_id"] for payload in telegram_session.sent_messages] == [222, 111]
+
+
+def test_worker_retries_get_updates_after_connection_drop(tmp_path):
+    settings = _build_settings(tmp_path, allowed_user_ids=[111])
+    telegram_session = _FakeTelegramSession(
+        updates_batches=[
+            [
+                {
+                    "update_id": 1,
+                    "message": {
+                        "text": "/start",
+                        "from": {"id": 111},
+                        "chat": {"id": 111},
+                    },
+                }
+            ]
+        ],
+        get_updates_failures=1,
+    )
+    backend_session = _FakeBackendSession()
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+        sleep_fn=lambda _seconds: None,
+    )
+
+    worker._process_updates()
+
+    get_updates_calls = [method for method, _payload in telegram_session.calls if method == "getUpdates"]
+    assert len(get_updates_calls) == 2
+    assert worker._state["last_update_id"] == 1
+    assert worker._state["registered_chats"] == {"111": 111}
+
+
+def test_worker_fetch_updates_returns_empty_after_repeated_connection_drop(tmp_path):
+    settings = _build_settings(tmp_path, allowed_user_ids=[111])
+    telegram_session = _FakeTelegramSession(get_updates_failures=2)
+    backend_session = _FakeBackendSession()
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+        sleep_fn=lambda _seconds: None,
+    )
+
+    worker._process_updates()
+
+    get_updates_calls = [method for method, _payload in telegram_session.calls if method == "getUpdates"]
+    assert len(get_updates_calls) == 2
+    assert worker._state["last_update_id"] == 0
+    assert worker._state["registered_chats"] == {}
 
 
 def test_worker_deduplicates_messages_and_limits_hold_open_per_day(tmp_path):

@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 _SIGNAL_ACTIONS = set(DELIVERY_ACTIONS)
 _SENT_FINGERPRINT_TTL_HOURS = 168
+_TELEGRAM_RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+_TELEGRAM_GET_UPDATES_MAX_ATTEMPTS = 2
+_TELEGRAM_GET_UPDATES_RETRY_SLEEP_SEC = 0.25
 
 
 def _iso_now() -> str:
@@ -111,6 +114,13 @@ class TelegramWorker:
         except ZoneInfoNotFoundError:
             logger.warning("Unknown timezone '%s', fallback to UTC.", name)
             return timezone.utc
+
+    @staticmethod
+    def _is_retryable_telegram_http_error(exc: requests.HTTPError) -> bool:
+        response = exc.response
+        if response is None:
+            return False
+        return int(response.status_code) in _TELEGRAM_RETRYABLE_HTTP_STATUSES
 
     @staticmethod
     def _empty_state() -> dict[str, object]:
@@ -241,15 +251,49 @@ class TelegramWorker:
         )
     def _fetch_updates(self) -> list[dict[str, object]]:
         offset = int(self._state.get("last_update_id") or 0) + 1
-        result = self._telegram_api(
-            "getUpdates",
-            {
-                "offset": offset,
-                "timeout": max(int(self.cfg.poll_timeout_sec), 0),
-                "allowed_updates": ["message", "callback_query"],
-            },
-            timeout=max(int(self.cfg.poll_timeout_sec), 0) + 10,
-        )
+        payload = {
+            "offset": offset,
+            "timeout": max(int(self.cfg.poll_timeout_sec), 0),
+            "allowed_updates": ["message", "callback_query"],
+        }
+        timeout = max(int(self.cfg.poll_timeout_sec), 0) + 10
+        result: object = []
+        for attempt in range(1, _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS + 1):
+            try:
+                result = self._telegram_api("getUpdates", payload, timeout=timeout)
+                break
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+                if attempt >= _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS:
+                    logger.warning(
+                        "Telegram getUpdates transport failed after %d attempts: %s",
+                        _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS,
+                        exc,
+                    )
+                    return []
+                logger.warning(
+                    "Telegram getUpdates transport error (attempt %d/%d), retrying once: %s",
+                    attempt,
+                    _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS,
+                    exc,
+                )
+            except requests.HTTPError as exc:
+                if not self._is_retryable_telegram_http_error(exc):
+                    raise
+                status_code = int(exc.response.status_code) if exc.response is not None else "unknown"
+                if attempt >= _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS:
+                    logger.warning(
+                        "Telegram getUpdates failed with HTTP %s after %d attempts.",
+                        status_code,
+                        _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS,
+                    )
+                    return []
+                logger.warning(
+                    "Telegram getUpdates retryable HTTP %s (attempt %d/%d), retrying once.",
+                    status_code,
+                    attempt,
+                    _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS,
+                )
+            self._sleep_fn(_TELEGRAM_GET_UPDATES_RETRY_SLEEP_SEC)
         if not isinstance(result, list):
             return []
         return [item for item in result if isinstance(item, dict)]
