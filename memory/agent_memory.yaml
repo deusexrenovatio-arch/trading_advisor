@@ -188,6 +188,40 @@ decisions:
       - src/moex_carry/pipeline.py
       - configs/default.yaml
       - src/moex_carry/config.py
+  - id: ADM-2026-03-02-019
+    date: 2026-03-02
+    title: Standardize runtime-adapter rollout via explicit config override profiles
+    context: Runtime adapter integration is complete, but activation policy must remain conservative and reproducible across environments.
+    decision: "Keep `configs/default.yaml` fail-closed (`enabled: false`) and introduce two explicit override profiles: shadow (`override_signal_fields: false`) and actionable (`override_signal_fields: true`)."
+    impact: Rollout sequencing is deterministic, reversible, and script-friendly through existing `--config` flow.
+    links:
+      - configs/default.yaml
+      - configs/overrides/runtime_adapter_shadow.yaml
+      - configs/overrides/runtime_adapter_actionable.yaml
+      - docs/architecture/modules/signal-engine-spec-addendum-v1.1.md
+  - id: ADM-2026-03-02-020
+    date: 2026-03-02
+    title: Treat action parity as rollout gate and score remap as separate compatibility concern
+    context: Shadow vs actionable dry-cycle on 10 pairs produced no action/direction deltas but changed score on all pairs due two-layer confidence semantics.
+    decision: Keep rollout gate focused on action/direction parity first; handle score compatibility through explicit UI/contract field strategy.
+    impact: Reduces rollout risk by separating execution behavior parity from score presentation differences.
+    links:
+      - docs/session_handoff.md
+      - src/moex_carry/strategy/two_layer_adapter.py
+      - tests/test_signal_cycle.py
+  - id: ADM-2026-03-02-021
+    date: 2026-03-02
+    title: Introduce morning-plan pipeline as a separate futures-first bounded context inside signal_engine
+    context: New main TZ requires D1/H1/M5 morning planning with calendar-aware level setups, while existing backtest_v2 flow is pair-centric and not futures-only.
+    decision: Implement a dedicated morning-plan stack (`core/calendar`, `regime`, `levels`, `execution`, `setups`, `plan`) under signal_engine and keep it isolated from legacy spread-carry/backtest_v2 orchestration.
+    impact: Futures intraday planning can evolve without breaking current strategy contracts; deterministic tests and config contracts now guard this new path.
+    links:
+      - src/moex_carry/signal_engine/plan/builder.py
+      - src/moex_carry/signal_engine/regime/engine.py
+      - src/moex_carry/signal_engine/levels/engine.py
+      - src/moex_carry/signal_engine/execution/engine.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - tests/test_signal_engine_morning_plan.py
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20

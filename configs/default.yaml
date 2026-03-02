@@ -292,3 +292,78 @@ signal_engine:
     enabled: false
     override_signal_fields: true
     synthetic_history_cap: 2000
+  morning_plan:
+    timezone: "Europe/Moscow"
+    calendar:
+      sessions:
+        - {start: "10:00", end: "14:00"}
+        - {start: "14:05", end: "18:50"}
+        - {start: "19:05", end: "23:50"}
+      clearing_windows:
+        - {start: "14:00", end: "14:05"}
+        - {start: "18:50", end: "19:05"}
+      forbid_new_positions_margin_min: 5
+      entry_expiry_policy: "EOD_BEFORE_EVENING_CLEARING"
+    data:
+      d1_limit: 200
+      h1_limit: 300
+      m5_limit: 300
+    regime:
+      d1:
+        ema_fast: 20
+        ema_slow: 50
+        adx_period: 14
+        er_period: 20
+        dir_band_atr_mult: 0.25
+        adx_trend_min: 25
+        adx_range_max: 18
+        er_trend_min: 0.30
+        er_range_max: 0.20
+        atr_period: 14
+        atr_rank_lookback: 60
+        vol_high_pct: 0.70
+        vol_low_pct: 0.30
+      h1:
+        ema_fast: 20
+        ema_slow: 50
+        atr_period: 14
+        dir_band_atr_mult: 0.20
+      liquidity:
+        use_orderbook_if_available: true
+        spread_thin_ticks: 2
+        spread_vacuum_ticks: 4
+        depth_thin_lots: 50
+        depth_vacuum_lots: 20
+    levels:
+      merge_distance_ticks: 2
+      d1:
+        donchian_period: 20
+        pivots: true
+      h1:
+        swing_k: 2
+        max_swings_each_side: 8
+        box_hours: 6
+        box_range_atr_mult: 1.2
+        include_ema20_level: true
+    execution:
+      m5_atr_period: 14
+      buffer_atr_mult: 0.10
+      buffer_min_ticks: 1
+      limit_slip_ticks: 2
+      noise_warn_high: 2.5
+      noise_warn_low: 0.4
+      swing_k: 2
+    setups:
+      mode: "trend_first"
+      max_setups_per_instrument: 2
+      require_vol_not_low: true
+      pullback_max_dist_atr_mult: 1.0
+      rr_default: 1.6
+      min_target_ticks: 3
+      max_risk_atr_mult: 1.2
+      sl_atr_mult: 0.8
+      qty_lots: 1
+      horizon: "EOD"
+      entry_tif: "GTT"
+      entry_expiry_policy: "EOD_BEFORE_EVENING_CLEARING"
+      entry_zone_offset_ticks: 0

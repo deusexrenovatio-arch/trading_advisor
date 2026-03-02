@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-02-23
+updated_at: 2026-03-02
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -447,3 +447,25 @@ items:
       - P1-AGENT-CONTEXT-019
     started_at: 2026-02-23
     completed_at: 2026-02-23
+
+  - id: P2-SIGNAL-MORNING-021
+    title: Implement multi-timeframe morning plan pipeline for futures level-set-and-wait execution
+    lane: strategy
+    status: active
+    execution_mode: autonomous
+    owner: backend-strategy
+    acceptance:
+      - MarketCalendar, RegimeEngine, LevelEngine, ExecutionEngine, SetupGenerator, and MorningPlanBuilder are implemented in signal_engine
+      - morning-plan config contracts are available under signal_engine.morning_plan and loaded via AppSettings
+      - deterministic tests cover regime, levels, execution, setup gating, and morning plan builder
+      - setup output is bounded to actionable bracket intents with expiry policy and regime-driven gating
+    checks:
+      - pytest tests/test_signal_engine_regime.py tests/test_signal_engine_levels.py tests/test_signal_engine_execution.py tests/test_signal_engine_setups.py tests/test_signal_engine_morning_plan.py -q
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - configs/default.yaml
+    dependencies:
+      - P2-SIGNAL-ENGINE-020
+    started_at: 2026-03-02

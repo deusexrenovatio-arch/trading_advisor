@@ -1,27 +1,25 @@
 # Session Handoff
-Updated: 2026-03-02 19:20 UTC
+Updated: 2026-03-02 22:35 UTC
 
 ## Goal
-- Integrate the two-layer intraday signal-engine specification into the existing backend strategy architecture without breaking current contracts.
+- Implement the new main TZ as a futures-first morning planning pipeline (`D1/H1/M5 -> regime -> levels -> execution -> setups`) inside existing `signal_engine` architecture.
 
 ## Current Delta
-- Added layered signal engine modules under `src/moex_carry/signal_engine/`.
-- Added proposal->forecast->cost->gate orchestration in `src/moex_carry/signal_engine/engine.py`.
-- Added adapters in `src/moex_carry/signal_engine/adapter.py` and `src/moex_carry/strategy/two_layer_adapter.py`.
-- Added typed `signal_engine` config and defaults, including `runtime_adapter` feature flag.
-- Wired runtime adapter into `compute_pairs`, `run_signal_cycle`, and unified snapshot/backfill flows.
-- Runtime adapter keeps legacy fields in `signal_*_legacy` and writes two-layer data to `signal_metrics.two_layer`.
-- Added deterministic unit tests for signal engine math and runtime wiring.
-- Updated architecture docs in `docs/architecture/modules/backend-core.md` and `docs/architecture/modules/strategy-signal-interface.md`.
+- Added morning-plan core contracts in `src/moex_carry/signal_engine/core/types.py` (TF/regime/level/order/setup/plan dataclasses and enums).
+- Added config-driven `MarketCalendar` in `src/moex_carry/signal_engine/core/calendar.py` (sessions, clearing, forbid windows, expiry policy).
+- Added OHLCV utility layer in `src/moex_carry/signal_engine/core/ohlcv.py` (`resample_ohlcv`, EMA/ATR/ADX/ER/percentile).
+- Added data-provider layer in `src/moex_carry/signal_engine/data/` (`DataProvider`, ISS provider, in-memory provider).
+- Added engines: `RegimeEngine`, `LevelEngine`, `ExecutionEngine`, `SetupGenerator`, `MorningPlanBuilder`.
+- Extended settings contracts in `src/moex_carry/config.py` and defaults in `configs/default.yaml` with `signal_engine.morning_plan`.
+- Added deterministic tests for regime/levels/execution/setups/plan + config section coverage.
+- Targeted test suite and lean governance gate pass on current patch set.
 
 ## Blockers
 - None.
 
 ## Next Step
-- Decide rollout mode for `signal_engine.runtime_adapter.enabled` in env-specific overrides (keep `false` by default).
-- Add parity checks for unified `top_pairs`/`signals` action consistency when runtime adapter override is enabled.
+- Wire a runtime entrypoint (CLI/API) for morning plan generation and add JSON contract tests for plan payload shape and determinism across repeated runs.
 
 ## Validation
-- `PYTHONPATH=src pytest tests/test_signal_engine_adapter.py tests/test_signal_engine_cost.py tests/test_signal_engine_gate.py tests/test_signal_engine_orb.py tests/test_signal_engine_probability.py tests/test_signal_engine_triple_barrier.py tests/test_signal_engine_vwap.py tests/test_config_loading.py tests/test_signal_cycle.py::test_run_signal_cycle_two_layer_runtime_adapter_overrides_legacy_fields -q`
+- `PYTHONPATH=src pytest tests/test_signal_engine_regime.py tests/test_signal_engine_levels.py tests/test_signal_engine_execution.py tests/test_signal_engine_setups.py tests/test_signal_engine_morning_plan.py tests/test_config_loading.py -q`
 - `python scripts/run_lean_gate.py`
-- `python scripts/validate_quality_scorecards.py`

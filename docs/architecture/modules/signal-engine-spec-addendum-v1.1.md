@@ -84,6 +84,12 @@ The base requirement remains unchanged:
 - `runtime_adapter` rollout must be environment-scoped and documented:
   - `dev` -> `stage` -> `prod`.
 - Default config remains conservative (`enabled: false`) until explicit promotion criteria are met.
+- Recommended override profiles:
+  - Shadow mode: `configs/overrides/runtime_adapter_shadow.yaml` (`enabled: true`, `override_signal_fields: false`).
+  - Actionable mode: `configs/overrides/runtime_adapter_actionable.yaml` (`enabled: true`, `override_signal_fields: true`).
+- Launch examples:
+  - `python -m moex_carry.cli signals --config configs/overrides/runtime_adapter_shadow.yaml`
+  - `python -m moex_carry.cli signals --config configs/overrides/runtime_adapter_actionable.yaml`
 
 ### 12) Legacy strategy migration protocol
 - Migration of legacy strategies to two-layer runtime must use a staged parity process:

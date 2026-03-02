@@ -85,3 +85,55 @@ signal_engine:
     assert settings.signal_engine.gate.min_expected_return_ticks == 1.5
     assert settings.signal_engine.probability.tier_thresholds.mid == 120
     assert settings.signal_engine.probability.tier_thresholds.high == 600
+
+
+def test_load_settings_merges_runtime_adapter_override_file(tmp_path, monkeypatch):
+    default_path = tmp_path / "default.yaml"
+    override_path = tmp_path / "override.yaml"
+    _write_yaml(
+        default_path,
+        """
+signal_engine:
+  runtime_adapter:
+    enabled: false
+    override_signal_fields: true
+""".strip(),
+    )
+    _write_yaml(
+        override_path,
+        """
+signal_engine:
+  runtime_adapter:
+    enabled: true
+    override_signal_fields: false
+""".strip(),
+    )
+    monkeypatch.setattr(config_module, "_default_config_path", lambda: default_path)
+
+    settings = load_settings(str(override_path))
+
+    assert settings.signal_engine.runtime_adapter.enabled is True
+    assert settings.signal_engine.runtime_adapter.override_signal_fields is False
+
+
+def test_load_settings_supports_signal_engine_morning_plan_section(tmp_path, monkeypatch):
+    default_path = tmp_path / "default.yaml"
+    _write_yaml(
+        default_path,
+        """
+signal_engine:
+  morning_plan:
+    calendar:
+      forbid_new_positions_margin_min: 7
+    setups:
+      max_setups_per_instrument: 1
+      rr_default: 2.0
+""".strip(),
+    )
+    monkeypatch.setattr(config_module, "_default_config_path", lambda: default_path)
+
+    settings = load_settings()
+
+    assert settings.signal_engine.morning_plan.calendar.forbid_new_positions_margin_min == 7
+    assert settings.signal_engine.morning_plan.setups.max_setups_per_instrument == 1
+    assert settings.signal_engine.morning_plan.setups.rr_default == 2.0
