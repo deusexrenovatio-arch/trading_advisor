@@ -233,6 +233,16 @@ decisions:
       - docs/contracts/api-v2.yaml
       - tests/test_api_v2.py
       - tests/test_signal_engine_data_provider.py
+  - id: ADM-2026-03-03-023
+    date: 2026-03-03
+    title: Standardize morning-plan historical validation through causal walk-forward runner
+    context: Need a reproducible historical test for commodity futures with strict no-look-ahead tuning/evaluation boundaries.
+    decision: Add `scripts/run_morning_plan_walk_forward.py` with train->test fold tuning grid, D1/H1/M1 preload from ISS, causal M1->M5 resampling, and deterministic setup execution simulation (worst-case same-bar TP/SL).
+    impact: Commodity futures morning-plan validation is now replayable from CLI with explicit tuning/comparison points and fold-level evidence.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - data/output/research/morning_walk_forward_20260115_20260228.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
