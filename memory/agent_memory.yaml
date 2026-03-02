@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-02-23
+updated_at: 2026-03-02
 
 decisions:
   - id: ADM-2026-02-20-001
@@ -167,6 +167,27 @@ decisions:
       - scripts/context_router.py
       - scripts/worktree_guard.ps1
 
+  - id: ADM-2026-02-23-017
+    date: 2026-02-23
+    title: Keep new two-layer signal engine isolated and bridge via adapter into existing strategy contract
+    context: The repository already uses `strategy/strategy_signal.py` as aggregation contract while new intraday proposal-probability-gate flow requires different action semantics.
+    decision: Implement `src/moex_carry/signal_engine` as an isolated layer stack and integrate through `src/moex_carry/strategy/two_layer_adapter.py` plus `signal_engine/adapter.py`.
+    impact: Added two-layer extensibility without breaking existing spread-carry strategy modules or API v2 flows.
+    links:
+      - src/moex_carry/signal_engine/engine.py
+      - src/moex_carry/signal_engine/adapter.py
+      - src/moex_carry/strategy/two_layer_adapter.py
+  - id: ADM-2026-03-02-018
+    date: 2026-03-02
+    title: Keep runtime two-layer wiring in strategy adapter layer, not in pipeline module
+    context: Feature-flagged runtime wiring added significant helper logic and exceeded taste-invariant file size limit in `pipeline.py`.
+    decision: Move runtime proposal/history synthesis and DataFrame adaptation into `strategy/two_layer_adapter.py` behind `apply_runtime_adapter_to_frame`.
+    impact: Preserved architecture boundaries, passed taste invariants, and kept signal-cycle integration configurable via `signal_engine.runtime_adapter`.
+    links:
+      - src/moex_carry/strategy/two_layer_adapter.py
+      - src/moex_carry/pipeline.py
+      - configs/default.yaml
+      - src/moex_carry/config.py
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
@@ -228,6 +249,16 @@ incidents:
       - src/moex_carry/integrations/telegram_worker.py
       - tests/test_telegram_worker.py
 
+  - id: AMI-2026-02-23-007
+    date: 2026-02-23
+    title: Patch tool targeted primary worktree instead of active feature worktree
+    symptom: "New signal-engine files were created under D:/New Project even though active branch work happened in D:/worktrees/wt-signal-engine."
+    root_cause: "apply_patch target path remained bound to primary workspace while feature work moved to another worktree."
+    remediation: "Move edits to feature worktree, clean accidental files from primary tree, and use explicit workdir shell writes for multi-worktree edits."
+    remediation_type: workflow
+    links:
+      - scripts/worktree_guard.ps1
+      - docs/workflows/context-budget.md
 patterns:
   - id: AMP-2026-02-20-001
     date: 2026-02-20
@@ -321,3 +352,5 @@ patterns:
       - docs/workflows/skill-governance-sync.md
       - .cursor/skills
       - docs/workflows/context-budget.md
+
+

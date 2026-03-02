@@ -423,3 +423,27 @@ items:
       - P1-CONTEXT-BUDGET-012
     started_at: 2026-02-23
     completed_at: 2026-02-23
+
+  - id: P2-SIGNAL-ENGINE-020
+    title: Introduce two-layer intraday signal engine with probabilistic gating and strategy-contract adapter
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: backend-strategy
+    acceptance:
+      - candidate generation layer emits AlphaProposal for ORB, VWAP-MR, and micro-momentum
+      - probability layer provides calibrated TP/SL/EXIT probabilities with forecast_n_effective and source metadata
+      - gate layer enforces low-tier advisory, expected-return-after-cost threshold, and clearing/liquidity blocks
+      - adapter bridges engine actions to existing strategy StrategySignal contract without breaking current modules
+      - deterministic unit tests cover triple-barrier, probability normalization, n_effective, expected return, and gate behavior
+    checks:
+      - pytest tests/test_signal_engine_adapter.py tests/test_signal_engine_cost.py tests/test_signal_engine_gate.py tests/test_signal_engine_orb.py tests/test_signal_engine_probability.py tests/test_signal_engine_triple_barrier.py tests/test_signal_engine_vwap.py -q
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - docs/architecture/modules/backend-core.md
+      - docs/architecture/modules/strategy-signal-interface.md
+    dependencies:
+      - P1-AGENT-CONTEXT-019
+    started_at: 2026-02-23
+    completed_at: 2026-02-23

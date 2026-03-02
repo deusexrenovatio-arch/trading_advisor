@@ -7,6 +7,7 @@ import moex_carry.pipeline as pipeline
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory
 from moex_carry.storage.repositories import load_latest_signal_run, load_signal_history
+from moex_carry.strategy.strategy_signal import StrategySignal
 
 
 def test_run_signal_cycle_persists_history(tmp_path, monkeypatch):
@@ -49,6 +50,86 @@ def test_run_signal_cycle_persists_history(tmp_path, monkeypatch):
         rows = load_signal_history(session, limit=10)
         assert len(rows) == 1
         assert rows[0].stock_secid == "AAA"
+
+
+def test_run_signal_cycle_two_layer_runtime_adapter_overrides_legacy_fields(tmp_path, monkeypatch):
+    sample = pd.DataFrame(
+        [
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "signal_action": "hold",
+                "signal_direction": "cash_and_carry",
+                "signal_score": 0.12,
+                "signal_reasons": ["legacy_hold"],
+                "signal_metrics": {"legacy": True},
+                "forecast_tp_probability": 0.6,
+                "forecast_sl_probability": 0.2,
+                "forecast_no_exit_probability": 0.2,
+                "forecast_n_effective": 120.0,
+                "tp_net": 0.01,
+                "sl_net": 0.01,
+            }
+        ]
+    )
+    calls: list[dict[str, object]] = []
+
+    def fake_fetch_data(*_args, **_kwargs):
+        return None
+
+    def fake_compute_pairs(*_args, **_kwargs):
+        return sample.copy()
+
+    def fake_evaluate(**kwargs):
+        calls.append(kwargs)
+        strategy_signal = StrategySignal(
+            strategy_id="spread_carry_runtime_v1_two_layer",
+            strategy_type="speculative",
+            cadence="intraday",
+            horizon="60m",
+            action="enter",
+            confidence=0.74,
+            expected_return=2.4,
+            risk_estimate=1.0,
+            warnings=["runtime_adapter_applied"],
+            metadata={"engine_action": "BUY"},
+        )
+        evaluation = SimpleNamespace(
+            forecast=SimpleNamespace(
+                p_tp=0.6,
+                p_sl=0.2,
+                p_exit=0.2,
+                n_effective=120.0,
+                probability_source="dirichlet_decay_v1",
+            ),
+            cost_ticks=1.5,
+            expected_return_ticks=2.4,
+        )
+        return strategy_signal, evaluation
+
+    monkeypatch.setattr(pipeline, "fetch_data", fake_fetch_data)
+    monkeypatch.setattr(pipeline, "compute_pairs", fake_compute_pairs)
+    monkeypatch.setattr(pipeline, "evaluate_proposal_to_strategy_signal", fake_evaluate)
+
+    settings = AppSettings(
+        data=DataConfig(data_dir=str(tmp_path)),
+        database=DatabaseConfig(url=f"sqlite:///{tmp_path}/signals.db"),
+    )
+    settings.ui.use_unified_signal_engine = False
+    settings.signal_engine.runtime_adapter.enabled = True
+    settings.signal_engine.runtime_adapter.override_signal_fields = True
+
+    result = pipeline.run_signal_cycle(settings, max_pairs=1, save_csv=False)
+    assert not result.empty
+    assert len(calls) == 1
+    assert len(calls[0]["historical_outcomes"]) == 120
+    row = result.iloc[0]
+    assert row["signal_action_legacy"] == "hold"
+    assert row["signal_action_two_layer"] == "enter"
+    assert row["signal_action"] == "enter"
+    assert row["signal_direction"] == "cash_and_carry"
+    assert isinstance(row["signal_metrics"], dict)
+    assert "two_layer" in row["signal_metrics"]
 
 
 def test_backfill_signal_history_persists_days(tmp_path, monkeypatch):

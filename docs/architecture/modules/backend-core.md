@@ -192,3 +192,15 @@ but the API endpoints remain the primary backend interface for the React app.
 - Schemas: `contracts/decision-log.schema.json`,
   `contracts/decision-view.schema.json`.
 - Config defaults: `configs/default.yaml`, loaded by `config.py`.
+
+### `signal_engine/`
+- Responsibilities: two-layer signal flow for intraday tactical modules (`proposal -> probability -> gate`).
+- Key files:
+  - `core/types.py`: canonical `AlphaProposal`, `OutcomeForecast`, tick-safe signal payloads.
+  - `strategies/*`: candidate generators (`orb`, `vwap_mr`, `micro_momo`) that only emit proposals.
+  - `labeling/triple_barrier.py`: conservative TP/SL/EXIT labeling semantics.
+  - `prob/*`: Dirichlet+decay baseline probabilities with optional post-hoc calibration.
+  - `cost/model_ticks.py`: tick-based costs + liquidity penalty.
+  - `gate/gate.py`: tier, expected-return, clearing/vacuum/spread gating.
+  - `adapter.py`: bridge from engine action model to `strategy/strategy_signal.py` contract.
+- Outputs: `StrategySignal`-compatible intents without bypassing existing risk/news gates.
