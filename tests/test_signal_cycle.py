@@ -279,3 +279,128 @@ def test_backfill_signal_history_unified_uses_incremental_ingest(tmp_path, monke
     with session_factory() as session:
         rows = load_signal_history(session, limit=10)
         assert len(rows) == 2
+
+
+def test_run_signal_cycle_unified_runtime_adapter_keeps_top_pairs_and_signals_in_sync(
+    tmp_path, monkeypatch
+):
+    top_pairs = pd.DataFrame(
+        [
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "signal_action": "hold",
+                "signal_direction": None,
+                "signal_score": 0.11,
+                "signal_reasons": ["legacy_hold_top_pairs"],
+                "signal_metrics": {"legacy": "top_pairs"},
+                "forecast_tp_probability": 0.55,
+                "forecast_sl_probability": 0.25,
+                "forecast_no_exit_probability": 0.20,
+                "forecast_n_effective": 140.0,
+                "tp_net": 0.01,
+                "sl_net": 0.01,
+            }
+        ]
+    )
+    signals = pd.DataFrame(
+        [
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "signal_action": "enter",
+                "signal_direction": "cash_and_carry",
+                "signal_score": 0.45,
+                "signal_reasons": ["legacy_enter_signals"],
+                "signal_metrics": {"legacy": "signals"},
+                "forecast_tp_probability": 0.50,
+                "forecast_sl_probability": 0.30,
+                "forecast_no_exit_probability": 0.20,
+                "forecast_n_effective": 160.0,
+                "tp_net": 0.01,
+                "sl_net": 0.01,
+            }
+        ]
+    )
+
+    persisted_snapshots: list[SimpleNamespace] = []
+
+    def fake_build_snapshot(*_args, **_kwargs):
+        return SimpleNamespace(
+            created_at=None,
+            top_pairs=top_pairs.copy(),
+            signals=signals.copy(),
+            backtests=pd.DataFrame(),
+            warnings=[],
+            errors=[],
+        )
+
+    def fake_ingest(*_args, **_kwargs):
+        return SimpleNamespace(
+            degraded=False,
+            global_watermark_before="before",
+            global_watermark_after="after",
+        )
+
+    def fake_persist(snapshot, _data_dir):
+        persisted_snapshots.append(
+            SimpleNamespace(
+                top_pairs=snapshot.top_pairs.copy(),
+                signals=snapshot.signals.copy(),
+            )
+        )
+
+    def fake_evaluate(**_kwargs):
+        strategy_signal = StrategySignal(
+            strategy_id="spread_carry_runtime_v1_two_layer",
+            strategy_type="speculative",
+            cadence="intraday",
+            horizon="60m",
+            action="enter",
+            confidence=0.81,
+            expected_return=2.7,
+            risk_estimate=1.1,
+            warnings=[],
+            metadata={"engine_action": "BUY"},
+        )
+        evaluation = SimpleNamespace(
+            forecast=SimpleNamespace(
+                p_tp=0.55,
+                p_sl=0.25,
+                p_exit=0.20,
+                n_effective=150.0,
+                probability_source="dirichlet_decay_v1",
+            ),
+            cost_ticks=1.4,
+            expected_return_ticks=2.7,
+        )
+        return strategy_signal, evaluation
+
+    monkeypatch.setattr(pipeline, "_ensure_reference_data", lambda *_a, **_k: None)
+    monkeypatch.setattr(pipeline, "_run_unified_incremental_ingest", fake_ingest)
+    monkeypatch.setattr(pipeline, "_build_unified_snapshot", fake_build_snapshot)
+    monkeypatch.setattr(pipeline, "evaluate_proposal_to_strategy_signal", fake_evaluate)
+    monkeypatch.setattr("moex_carry.unified_runtime.persist_snapshot_to_csv", fake_persist)
+
+    settings = AppSettings(
+        data=DataConfig(data_dir=str(tmp_path)),
+        database=DatabaseConfig(url=f"sqlite:///{tmp_path}/signals.db"),
+    )
+    settings.ui.use_unified_signal_engine = True
+    settings.signal_engine.runtime_adapter.enabled = True
+    settings.signal_engine.runtime_adapter.override_signal_fields = True
+
+    result = pipeline.run_signal_cycle(settings, max_pairs=1, save_csv=True)
+    assert not result.empty
+    assert len(persisted_snapshots) == 1
+
+    persisted = persisted_snapshots[0]
+    merged = persisted.top_pairs.merge(
+        persisted.signals,
+        on=["stock", "future"],
+        suffixes=("_top", "_sig"),
+    )
+    assert not merged.empty
+    row = merged.iloc[0]
+    assert row["signal_action_top"] == row["signal_action_sig"] == "enter"
+    assert row["signal_direction_top"] == row["signal_direction_sig"] == "cash_and_carry"
