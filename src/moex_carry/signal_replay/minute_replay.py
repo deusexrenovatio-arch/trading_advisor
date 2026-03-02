@@ -199,6 +199,48 @@ def _apply_spread_carry_signals(
     if force_exit_policy not in {"next_anchor", "market_worse"}:
         force_exit_policy = "next_anchor"
     entry_tolerance = max(float(getattr(alpha_cfg, "entry_price_tolerance_pct", 0.0015) or 0.0015), 0.0)
+    entry_stock_tolerance_raw = getattr(alpha_cfg, "entry_stock_tolerance_pct", None)
+    entry_future_tolerance_raw = getattr(alpha_cfg, "entry_future_tolerance_pct", None)
+    entry_stock_tolerance = max(
+        float(entry_stock_tolerance_raw if entry_stock_tolerance_raw is not None else entry_tolerance),
+        0.0,
+    )
+    entry_future_tolerance = max(
+        float(entry_future_tolerance_raw if entry_future_tolerance_raw is not None else entry_tolerance),
+        0.0,
+    )
+    sequential_entry_enabled = bool(getattr(alpha_cfg, "sequential_entry_enabled", False))
+    sequential_entry_first_leg_raw = str(getattr(alpha_cfg, "sequential_entry_first_leg", "future") or "future")
+    sequential_entry_first_leg = (
+        sequential_entry_first_leg_raw.strip().lower()
+        if sequential_entry_first_leg_raw.strip().lower() in {"stock", "future"}
+        else "future"
+    )
+    sequential_entry_second_leg_wait = max(
+        int(getattr(alpha_cfg, "sequential_entry_second_leg_max_wait_minutes", 5) or 0),
+        0,
+    )
+    sequential_entry_unwind_penalty_bps = max(
+        float(getattr(alpha_cfg, "sequential_entry_unwind_penalty_bps", 0.0) or 0.0),
+        0.0,
+    )
+    sequential_exit_enabled = bool(getattr(alpha_cfg, "sequential_exit_enabled", False))
+    sequential_exit_first_leg_raw = str(getattr(alpha_cfg, "sequential_exit_first_leg", "future") or "future")
+    sequential_exit_first_leg = (
+        sequential_exit_first_leg_raw.strip().lower()
+        if sequential_exit_first_leg_raw.strip().lower() in {"stock", "future"}
+        else "future"
+    )
+    sequential_exit_second_leg_wait = max(
+        int(getattr(alpha_cfg, "sequential_exit_second_leg_max_wait_minutes", 5) or 0),
+        0,
+    )
+    sequential_exit_force_penalty_raw = getattr(alpha_cfg, "sequential_exit_force_penalty_bps", None)
+    sequential_exit_force_penalty_bps = (
+        force_exit_penalty_bps
+        if sequential_exit_force_penalty_raw is None
+        else max(float(sequential_exit_force_penalty_raw or 0.0), 0.0)
+    )
     year_basis = _day_count_basis(alpha_cfg.day_count)
     annual_target_override_raw = getattr(alpha_cfg, "annual_target_threshold", None)
     try:
@@ -209,6 +251,84 @@ def _apply_spread_carry_signals(
         )
     except (TypeError, ValueError):
         annual_target_override = None
+
+    def _opposite_leg(leg: str) -> str:
+        return "stock" if leg == "future" else "future"
+
+    def _leg_tolerance(leg: str) -> float:
+        return entry_stock_tolerance if leg == "stock" else entry_future_tolerance
+
+    def _leg_band_ok(
+        *,
+        leg: str,
+        target_spot: float,
+        target_future: float,
+        spot_now: float,
+        future_now: float,
+    ) -> bool:
+        if leg == "stock":
+            if target_spot <= 0:
+                return False
+            band = target_spot * _leg_tolerance("stock")
+            return abs(spot_now - target_spot) <= band
+        if target_future <= 0:
+            return False
+        band = target_future * _leg_tolerance("future")
+        return abs(future_now - target_future) <= band
+
+    def _entry_leg_exec(*, direction: str, leg: str, exec_prices: object) -> float:
+        if leg == "stock":
+            return (
+                float(exec_prices.stock_sell)
+                if direction == "reverse"
+                else float(exec_prices.stock_buy)
+            )
+        return (
+            float(exec_prices.fut_buy)
+            if direction == "reverse"
+            else float(exec_prices.fut_sell)
+        )
+
+    def _entry_unwind_leg_exec(
+        *,
+        direction: str,
+        leg: str,
+        exec_prices: object,
+        penalty: float,
+    ) -> float:
+        if leg == "stock":
+            return (
+                float(exec_prices.stock_buy) * (1.0 + penalty)
+                if direction == "reverse"
+                else float(exec_prices.stock_sell) * (1.0 - penalty)
+            )
+        return (
+            float(exec_prices.fut_sell) * (1.0 - penalty)
+            if direction == "reverse"
+            else float(exec_prices.fut_buy) * (1.0 + penalty)
+        )
+
+    def _exit_leg_exec(
+        *,
+        direction: str,
+        leg: str,
+        exec_prices: object,
+        penalty: float,
+    ) -> float:
+        if leg == "stock":
+            return (
+                float(exec_prices.stock_buy) * (1.0 + penalty)
+                if direction == "reverse"
+                else float(exec_prices.stock_sell) * (1.0 - penalty)
+            )
+        return (
+            float(exec_prices.fut_sell) * (1.0 - penalty)
+            if direction == "reverse"
+            else float(exec_prices.fut_buy) * (1.0 + penalty)
+        )
+
+    def _leg_fee(*, leg: str, stock_fee: float, fut_fee: float) -> float:
+        return float(stock_fee) if leg == "stock" else float(fut_fee)
 
     parsed_dates = pd.to_datetime(series_df["date"], errors="coerce")
     if parsed_dates.isna().any():
@@ -416,93 +536,335 @@ def _apply_spread_carry_signals(
             submit_ts = pending_entry["submit_ts"]
             deadline_ts = pending_entry["deadline_ts"]
             if isinstance(submit_ts, datetime) and isinstance(deadline_ts, datetime):
-                if row_ts > deadline_ts:
-                    entry_fill_statuses[signal_idx] = "entry_unfilled"
-                    unfilled_reasons[signal_idx] = "entry_timeout"
-                    pending_entry = None
-                elif row_ts >= submit_ts and _execution_band_ok(
-                    target_spot=float(pending_entry["target_spot"]),
-                    target_future=float(pending_entry["target_future"]),
-                    target_spread=float(pending_entry["target_spread"]),
-                    spot_now=spot_mid,
-                    future_now=future_mid,
-                    spread_now=spread_mid_value,
-                    tolerance=entry_tolerance,
-                ):
-                    direction = str(pending_entry.get("direction", "cash_and_carry"))
-                    if direction == "reverse":
-                        entry_spot_exec = float(exec_prices.stock_sell)
-                        entry_fut_exec = float(exec_prices.fut_buy)
-                        entry_spread_value = spread_pct_exit_exec
-                    else:
-                        entry_spot_exec = float(exec_prices.stock_buy)
-                        entry_fut_exec = float(exec_prices.fut_sell)
-                        entry_spread_value = spread_pct_entry_exec
-                    wait_mins = max((row_ts - submit_ts).total_seconds() / 60.0, 0.0)
-                    current_cycle += 1
-                    open_position = {
-                        "cycle_id": current_cycle,
-                        "direction": direction,
-                        "entry_signal_day": pending_entry["signal_day"],
-                        "entry_signal_ts": pending_entry["signal_ts"],
-                        "entry_submit_ts": submit_ts,
-                        "entry_fill_ts": row_ts,
-                        "entry_wait_minutes": wait_mins,
-                        "entry_spot_exec": entry_spot_exec,
-                        "entry_fut_exec": entry_fut_exec,
-                        "entry_spread_pct_exec": entry_spread_value,
-                        "entry_stock_fee": float(stock_fee),
-                        "entry_fut_fee": float(fut_fee),
-                        "r_fund_entry": float(pending_entry["r_fund_entry"]),
-                        "annual_target_threshold": (
-                            annual_target_override
-                            if annual_target_override is not None
-                            else float(pending_entry["r_cb_entry"])
-                        ),
-                    }
-                    entry_flags[idx] = True
-                    trade_cycles[idx] = current_cycle
-                    entry_spread_pcts[idx] = entry_spread_value
-                    for target_idx in {signal_idx, idx}:
-                        entry_signal_days[target_idx] = str(pending_entry["signal_day"])
-                        entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
-                        entry_fill_tss[target_idx] = _iso_or_none(row_ts)
-                        entry_wait_minutes[target_idx] = wait_mins
-                        entry_fill_statuses[target_idx] = "filled"
-                    pending_entry = None
+                target_spot = float(pending_entry["target_spot"])
+                target_future = float(pending_entry["target_future"])
+                target_spread = float(pending_entry["target_spread"])
+                direction = str(pending_entry.get("direction", "cash_and_carry"))
+                sequential_entry = bool(pending_entry.get("sequential_enabled"))
+                if row_ts >= submit_ts and not sequential_entry:
+                    if row_ts > deadline_ts:
+                        entry_fill_statuses[signal_idx] = "entry_unfilled"
+                        unfilled_reasons[signal_idx] = "entry_timeout"
+                        pending_entry = None
+                    elif _execution_band_ok(
+                        target_spot=target_spot,
+                        target_future=target_future,
+                        target_spread=target_spread,
+                        spot_now=spot_mid,
+                        future_now=future_mid,
+                        spread_now=spread_mid_value,
+                        tolerance=entry_tolerance,
+                    ):
+                        if direction == "reverse":
+                            entry_spot_exec = float(exec_prices.stock_sell)
+                            entry_fut_exec = float(exec_prices.fut_buy)
+                            entry_spread_value = spread_pct_exit_exec
+                        else:
+                            entry_spot_exec = float(exec_prices.stock_buy)
+                            entry_fut_exec = float(exec_prices.fut_sell)
+                            entry_spread_value = spread_pct_entry_exec
+                        wait_mins = max((row_ts - submit_ts).total_seconds() / 60.0, 0.0)
+                        current_cycle += 1
+                        open_position = {
+                            "cycle_id": current_cycle,
+                            "direction": direction,
+                            "entry_signal_day": pending_entry["signal_day"],
+                            "entry_signal_ts": pending_entry["signal_ts"],
+                            "entry_submit_ts": submit_ts,
+                            "entry_fill_ts": row_ts,
+                            "entry_wait_minutes": wait_mins,
+                            "entry_spot_exec": entry_spot_exec,
+                            "entry_fut_exec": entry_fut_exec,
+                            "entry_spread_pct_exec": entry_spread_value,
+                            "entry_stock_fee": float(stock_fee),
+                            "entry_fut_fee": float(fut_fee),
+                            "r_fund_entry": float(pending_entry["r_fund_entry"]),
+                            "annual_target_threshold": (
+                                annual_target_override
+                                if annual_target_override is not None
+                                else float(pending_entry["r_cb_entry"])
+                            ),
+                        }
+                        entry_flags[idx] = True
+                        trade_cycles[idx] = current_cycle
+                        entry_spread_pcts[idx] = entry_spread_value
+                        for target_idx in {signal_idx, idx}:
+                            entry_signal_days[target_idx] = str(pending_entry["signal_day"])
+                            entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
+                            entry_fill_tss[target_idx] = _iso_or_none(row_ts)
+                            entry_wait_minutes[target_idx] = wait_mins
+                            entry_fill_statuses[target_idx] = "filled"
+                        pending_entry = None
+                elif row_ts >= submit_ts and sequential_entry:
+                    leg_state = str(pending_entry.get("leg_state") or "waiting_first")
+                    first_leg = str(pending_entry.get("first_leg") or sequential_entry_first_leg).lower()
+                    if first_leg not in {"stock", "future"}:
+                        first_leg = "future"
+                    second_leg = _opposite_leg(first_leg)
+                    if leg_state == "waiting_first":
+                        if row_ts > deadline_ts:
+                            entry_fill_statuses[signal_idx] = "entry_unfilled"
+                            unfilled_reasons[signal_idx] = "entry_timeout"
+                            pending_entry = None
+                        elif _leg_band_ok(
+                            leg=first_leg,
+                            target_spot=target_spot,
+                            target_future=target_future,
+                            spot_now=spot_mid,
+                            future_now=future_mid,
+                        ):
+                            first_exec = _entry_leg_exec(
+                                direction=direction,
+                                leg=first_leg,
+                                exec_prices=exec_prices,
+                            )
+                            first_fee = _leg_fee(
+                                leg=first_leg,
+                                stock_fee=float(stock_fee),
+                                fut_fee=float(fut_fee),
+                            )
+                            second_deadline = min(
+                                deadline_ts,
+                                row_ts + timedelta(minutes=int(pending_entry.get("second_leg_max_wait_minutes") or 0)),
+                            )
+                            pending_entry["leg_state"] = "waiting_second"
+                            pending_entry["first_leg"] = first_leg
+                            pending_entry["first_leg_exec"] = first_exec
+                            pending_entry["first_leg_fee"] = first_fee
+                            pending_entry["first_leg_fill_ts"] = row_ts
+                            pending_entry["second_leg_deadline_ts"] = second_deadline
+                            leg_state = "waiting_second"
+                    if pending_entry is not None and leg_state == "waiting_second":
+                        second_deadline_ts = pending_entry.get("second_leg_deadline_ts")
+                        if not isinstance(second_deadline_ts, datetime):
+                            second_deadline_ts = deadline_ts
+                        if row_ts > second_deadline_ts:
+                            _entry_unwind_leg_exec(
+                                direction=direction,
+                                leg=first_leg,
+                                exec_prices=exec_prices,
+                                penalty=sequential_entry_unwind_penalty_bps / 10000.0,
+                            )
+                            entry_fill_statuses[signal_idx] = "entry_unfilled"
+                            unfilled_reasons[signal_idx] = "entry_second_leg_timeout_unwound"
+                            pending_entry = None
+                        elif _leg_band_ok(
+                            leg=second_leg,
+                            target_spot=target_spot,
+                            target_future=target_future,
+                            spot_now=spot_mid,
+                            future_now=future_mid,
+                        ):
+                            second_exec = _entry_leg_exec(
+                                direction=direction,
+                                leg=second_leg,
+                                exec_prices=exec_prices,
+                            )
+                            second_fee = _leg_fee(
+                                leg=second_leg,
+                                stock_fee=float(stock_fee),
+                                fut_fee=float(fut_fee),
+                            )
+                            first_exec = float(pending_entry.get("first_leg_exec") or 0.0)
+                            first_fee = float(pending_entry.get("first_leg_fee") or 0.0)
+                            if first_leg == "stock":
+                                entry_spot_exec = first_exec
+                                entry_fut_exec = second_exec
+                                entry_stock_fee = first_fee
+                                entry_fut_fee = second_fee
+                            else:
+                                entry_spot_exec = second_exec
+                                entry_fut_exec = first_exec
+                                entry_stock_fee = second_fee
+                                entry_fut_fee = first_fee
+                            entry_spread_value = (
+                                spread_pct_exit_exec if direction == "reverse" else spread_pct_entry_exec
+                            )
+                            wait_mins = max((row_ts - submit_ts).total_seconds() / 60.0, 0.0)
+                            current_cycle += 1
+                            open_position = {
+                                "cycle_id": current_cycle,
+                                "direction": direction,
+                                "entry_signal_day": pending_entry["signal_day"],
+                                "entry_signal_ts": pending_entry["signal_ts"],
+                                "entry_submit_ts": submit_ts,
+                                "entry_fill_ts": row_ts,
+                                "entry_wait_minutes": wait_mins,
+                                "entry_spot_exec": entry_spot_exec,
+                                "entry_fut_exec": entry_fut_exec,
+                                "entry_spread_pct_exec": entry_spread_value,
+                                "entry_stock_fee": entry_stock_fee,
+                                "entry_fut_fee": entry_fut_fee,
+                                "r_fund_entry": float(pending_entry["r_fund_entry"]),
+                                "annual_target_threshold": (
+                                    annual_target_override
+                                    if annual_target_override is not None
+                                    else float(pending_entry["r_cb_entry"])
+                                ),
+                            }
+                            entry_flags[idx] = True
+                            trade_cycles[idx] = current_cycle
+                            entry_spread_pcts[idx] = entry_spread_value
+                            for target_idx in {signal_idx, idx}:
+                                entry_signal_days[target_idx] = str(pending_entry["signal_day"])
+                                entry_submit_tss[target_idx] = _iso_or_none(submit_ts)
+                                entry_fill_tss[target_idx] = _iso_or_none(row_ts)
+                                entry_wait_minutes[target_idx] = wait_mins
+                                entry_fill_statuses[target_idx] = "filled"
+                            pending_entry = None
 
         if pending_exit is not None and open_position is not None:
             signal_idx = int(pending_exit["signal_index"])
             submit_ts = pending_exit["submit_ts"]
             deadline_ts = pending_exit["deadline_ts"]
             if isinstance(submit_ts, datetime) and isinstance(deadline_ts, datetime) and row_ts >= submit_ts:
-                timed_out = row_ts > deadline_ts
-                band_ok = _execution_band_ok(
-                    target_spot=float(pending_exit["target_spot"]),
-                    target_future=float(pending_exit["target_future"]),
-                    target_spread=float(pending_exit["target_spread"]),
-                    spot_now=spot_mid,
-                    future_now=future_mid,
-                    spread_now=spread_mid_value,
-                    tolerance=entry_tolerance,
-                )
-                if band_ok or timed_out:
-                    forced = timed_out
-                    penalty = (
-                        force_exit_penalty_bps / 10000.0
-                        if forced and force_exit_policy == "market_worse"
-                        else 0.0
-                    )
-                    direction = str(open_position.get("direction", "cash_and_carry"))
-                    if direction == "reverse":
-                        exit_spot_exec = float(exec_prices.stock_buy) * (1.0 + penalty)
-                        exit_fut_exec = float(exec_prices.fut_sell) * (1.0 - penalty)
-                        exit_spread_value = spread_pct_entry_exec
-                    else:
-                        exit_spot_exec = float(exec_prices.stock_sell) * (1.0 - penalty)
-                        exit_fut_exec = float(exec_prices.fut_buy) * (1.0 + penalty)
-                        exit_spread_value = spread_pct_exit_exec
+                target_spot = float(pending_exit["target_spot"])
+                target_future = float(pending_exit["target_future"])
+                target_spread = float(pending_exit["target_spread"])
+                direction = str(open_position.get("direction", "cash_and_carry"))
+                sequential_exit = bool(pending_exit.get("sequential_enabled"))
+                close_now = False
+                forced = False
+                forced_reason = "exit_timeout_forced"
+                exit_spot_exec = 0.0
+                exit_fut_exec = 0.0
+                exit_stock_fee = float(stock_fee)
+                exit_fut_fee = float(fut_fee)
 
+                if not sequential_exit:
+                    timed_out = row_ts > deadline_ts
+                    band_ok = _execution_band_ok(
+                        target_spot=target_spot,
+                        target_future=target_future,
+                        target_spread=target_spread,
+                        spot_now=spot_mid,
+                        future_now=future_mid,
+                        spread_now=spread_mid_value,
+                        tolerance=entry_tolerance,
+                    )
+                    if band_ok or timed_out:
+                        forced = timed_out
+                        penalty = (
+                            force_exit_penalty_bps / 10000.0
+                            if forced and force_exit_policy == "market_worse"
+                            else 0.0
+                        )
+                        exit_spot_exec = _exit_leg_exec(
+                            direction=direction,
+                            leg="stock",
+                            exec_prices=exec_prices,
+                            penalty=penalty,
+                        )
+                        exit_fut_exec = _exit_leg_exec(
+                            direction=direction,
+                            leg="future",
+                            exec_prices=exec_prices,
+                            penalty=penalty,
+                        )
+                        close_now = True
+                else:
+                    leg_state = str(pending_exit.get("leg_state") or "waiting_first")
+                    first_leg = str(pending_exit.get("first_leg") or sequential_exit_first_leg).lower()
+                    if first_leg not in {"stock", "future"}:
+                        first_leg = "future"
+                    second_leg = _opposite_leg(first_leg)
+                    if leg_state == "waiting_first":
+                        if row_ts > deadline_ts:
+                            forced = True
+                            penalty = (
+                                sequential_exit_force_penalty_bps / 10000.0
+                                if force_exit_policy == "market_worse"
+                                else 0.0
+                            )
+                            exit_spot_exec = _exit_leg_exec(
+                                direction=direction,
+                                leg="stock",
+                                exec_prices=exec_prices,
+                                penalty=penalty,
+                            )
+                            exit_fut_exec = _exit_leg_exec(
+                                direction=direction,
+                                leg="future",
+                                exec_prices=exec_prices,
+                                penalty=penalty,
+                            )
+                            close_now = True
+                        elif _leg_band_ok(
+                            leg=first_leg,
+                            target_spot=target_spot,
+                            target_future=target_future,
+                            spot_now=spot_mid,
+                            future_now=future_mid,
+                        ):
+                            first_exec = _exit_leg_exec(
+                                direction=direction,
+                                leg=first_leg,
+                                exec_prices=exec_prices,
+                                penalty=0.0,
+                            )
+                            first_fee = _leg_fee(
+                                leg=first_leg,
+                                stock_fee=float(stock_fee),
+                                fut_fee=float(fut_fee),
+                            )
+                            second_deadline = min(
+                                deadline_ts,
+                                row_ts + timedelta(minutes=int(pending_exit.get("second_leg_max_wait_minutes") or 0)),
+                            )
+                            pending_exit["leg_state"] = "waiting_second"
+                            pending_exit["first_leg"] = first_leg
+                            pending_exit["first_leg_exec"] = first_exec
+                            pending_exit["first_leg_fee"] = first_fee
+                            pending_exit["first_leg_fill_ts"] = row_ts
+                            pending_exit["second_leg_deadline_ts"] = second_deadline
+                            leg_state = "waiting_second"
+                    if pending_exit is not None and leg_state == "waiting_second":
+                        second_deadline_ts = pending_exit.get("second_leg_deadline_ts")
+                        if not isinstance(second_deadline_ts, datetime):
+                            second_deadline_ts = deadline_ts
+                        second_forced = row_ts > second_deadline_ts
+                        if second_forced or _leg_band_ok(
+                            leg=second_leg,
+                            target_spot=target_spot,
+                            target_future=target_future,
+                            spot_now=spot_mid,
+                            future_now=future_mid,
+                        ):
+                            forced = bool(second_forced)
+                            if forced:
+                                forced_reason = "exit_second_leg_timeout_forced"
+                            penalty = (
+                                sequential_exit_force_penalty_bps / 10000.0
+                                if forced and force_exit_policy == "market_worse"
+                                else 0.0
+                            )
+                            second_exec = _exit_leg_exec(
+                                direction=direction,
+                                leg=second_leg,
+                                exec_prices=exec_prices,
+                                penalty=penalty,
+                            )
+                            second_fee = _leg_fee(
+                                leg=second_leg,
+                                stock_fee=float(stock_fee),
+                                fut_fee=float(fut_fee),
+                            )
+                            first_exec = float(pending_exit.get("first_leg_exec") or 0.0)
+                            first_fee = float(pending_exit.get("first_leg_fee") or 0.0)
+                            if first_leg == "stock":
+                                exit_spot_exec = first_exec
+                                exit_fut_exec = second_exec
+                                exit_stock_fee = first_fee
+                                exit_fut_fee = second_fee
+                            else:
+                                exit_spot_exec = second_exec
+                                exit_fut_exec = first_exec
+                                exit_stock_fee = second_fee
+                                exit_fut_fee = first_fee
+                            close_now = True
+
+                if close_now:
+                    exit_spread_value = spread_pct_entry_exec if direction == "reverse" else spread_pct_exit_exec
                     entry_fill_ts = open_position["entry_fill_ts"]
                     entry_signal_day = open_position["entry_signal_day"]
                     if isinstance(entry_fill_ts, datetime) and isinstance(entry_signal_day, date):
@@ -530,8 +892,8 @@ def _apply_spread_carry_signals(
                         fees_total = (
                             float(open_position["entry_stock_fee"])
                             + float(open_position["entry_fut_fee"])
-                            + float(stock_fee)
-                            + float(fut_fee)
+                            + float(exit_stock_fee)
+                            + float(exit_fut_fee)
                         )
                         trade_pnl = stock_leg + fut_leg + dividend_cash - funding_cost - fees_total
                         base_spot = abs(float(open_position["entry_spot_exec"]))
@@ -600,8 +962,8 @@ def _apply_spread_carry_signals(
                             exit_fill_statuses[target_idx] = "forced" if forced else "filled"
                             exit_forced_flags[target_idx] = forced
                         if forced:
-                            unfilled_reasons[signal_idx] = "exit_timeout_forced"
-                            unfilled_reasons[idx] = "exit_timeout_forced"
+                            unfilled_reasons[signal_idx] = forced_reason
+                            unfilled_reasons[idx] = forced_reason
 
                     pending_exit = None
                     open_position = None
@@ -633,6 +995,10 @@ def _apply_spread_carry_signals(
                         "target_spread": spread_mid_value,
                         "r_fund_entry": r_fund,
                         "r_cb_entry": r_cb,
+                        "sequential_enabled": sequential_entry_enabled,
+                        "first_leg": sequential_entry_first_leg,
+                        "second_leg_max_wait_minutes": sequential_entry_second_leg_wait,
+                        "leg_state": "waiting_first",
                     }
                     entry_submit_tss[idx] = _iso_or_none(submit_ts)
                     entry_fill_statuses[idx] = "pending"
@@ -677,6 +1043,10 @@ def _apply_spread_carry_signals(
                         "target_future": future_mid,
                         "target_spread": spread_mid_value,
                         "reason": exit_reason,
+                        "sequential_enabled": sequential_exit_enabled,
+                        "first_leg": sequential_exit_first_leg,
+                        "second_leg_max_wait_minutes": sequential_exit_second_leg_wait,
+                        "leg_state": "waiting_first",
                     }
                     exit_submit_tss[idx] = _iso_or_none(submit_ts)
                     exit_fill_statuses[idx] = "pending"

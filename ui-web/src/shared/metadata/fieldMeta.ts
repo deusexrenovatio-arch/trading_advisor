@@ -1137,6 +1137,52 @@ export const fieldMeta: Record<string, FieldMeta> = {
       'Интерпретация: количество флагов качества данных.',
     digits: 0,
   },
+  entry_execution_protocol: {
+    label: 'Entry protocol',
+    tooltip: 'Execution mode for entry: atomic or sequential staged.',
+  },
+  sequential_entry_enabled: {
+    label: 'Sequential entry enabled',
+    tooltip: 'If true, entry is executed in two legs with a time gap constraint.',
+  },
+  sequential_entry_first_leg: {
+    label: 'Entry first leg',
+    tooltip: 'Which leg is sent first for staged entry (stock or future).',
+  },
+  sequential_entry_second_leg_max_wait_minutes: {
+    label: 'Entry max leg gap, min',
+    tooltip: 'Maximum wait for the second leg before entry unwind logic is applied.',
+    digits: 0,
+  },
+  sequential_entry_unwind_penalty_bps: {
+    label: 'Entry unwind penalty, bps',
+    tooltip: 'Penalty applied when second entry leg does not fill and first leg is unwound.',
+    format: 'bps',
+    digits: 2,
+  },
+  exit_execution_protocol: {
+    label: 'Exit protocol',
+    tooltip: 'Execution mode for exit: atomic or sequential staged.',
+  },
+  sequential_exit_enabled: {
+    label: 'Sequential exit enabled',
+    tooltip: 'If true, exit is executed in two legs with a time gap constraint.',
+  },
+  sequential_exit_first_leg: {
+    label: 'Exit first leg',
+    tooltip: 'Which leg is sent first for staged exit (stock or future).',
+  },
+  sequential_exit_second_leg_max_wait_minutes: {
+    label: 'Exit max leg gap, min',
+    tooltip: 'Maximum wait for the second leg before forced close logic is applied.',
+    digits: 0,
+  },
+  sequential_exit_force_penalty_bps: {
+    label: 'Exit force-close penalty, bps',
+    tooltip: 'Penalty applied on forced close when second exit leg does not fill in time.',
+    format: 'bps',
+    digits: 2,
+  },
   entry_price_tolerance_pct: {
     label: 'Допуск входа, %',
     tooltip:

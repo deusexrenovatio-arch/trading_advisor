@@ -55,11 +55,11 @@ spread_carry_alpha:
   execution_max_wait_minutes: 360
   force_exit_policy: "next_anchor"
   force_exit_penalty_bps: 0.0
-  sequential_entry_enabled: false
+  sequential_entry_enabled: true
   sequential_entry_first_leg: "future"
   sequential_entry_second_leg_max_wait_minutes: 5
   sequential_entry_unwind_penalty_bps: 0.0
-  sequential_exit_enabled: false
+  sequential_exit_enabled: true
   sequential_exit_first_leg: "future"
   sequential_exit_second_leg_max_wait_minutes: 5
   sequential_exit_force_penalty_bps: null

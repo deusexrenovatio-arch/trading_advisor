@@ -76,6 +76,14 @@ class SpreadCarryAlphaConfig(BaseModel):
     execution_max_wait_minutes: int = 1440
     force_exit_policy: str = "next_anchor"
     force_exit_penalty_bps: float = 0.0
+    sequential_entry_enabled: bool = False
+    sequential_entry_first_leg: str = "future"
+    sequential_entry_second_leg_max_wait_minutes: int = 5
+    sequential_entry_unwind_penalty_bps: float = 0.0
+    sequential_exit_enabled: bool = False
+    sequential_exit_first_leg: str = "future"
+    sequential_exit_second_leg_max_wait_minutes: int = 5
+    sequential_exit_force_penalty_bps: Optional[float] = None
     annual_target_threshold: Optional[float] = None
 
     r_cb_annual: Optional[float] = None

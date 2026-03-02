@@ -1,28 +1,28 @@
 # Session Handoff
-Updated: 2026-03-02 12:41 UTC
+Updated: 2026-03-02 13:09 UTC
 
 ## Goal
-- Move all in-flight edits to a dedicated worktree and finish implementation of high-priority product review gaps.
+- Align staged execution behavior with manual two-leg trading flow and rerun comparable base vs staged metrics.
 
 ## Current Delta
-- Created isolated worktree `d:\worktrees\wt-component-fresh-pass` on branch `feat/component-fresh-pass` and moved all prior docs/code diffs there.
-- Added deterministic UI idempotency-key generator and wired it into Signals and Decisions write actions.
-- Added server-side `max_positions` risk gate enforcement for `POST /api/v2/portfolio/rebalance/commit`.
-- Added Forward workspace operator start flow (`POST /api/forward/start`) with optional request JSON and immediate status refresh.
-- Added API test coverage for blocked rebalance commit when risk gate fails.
-- Updated product docs to mark resolved vs open gaps after implementation.
-- Synced governance artifacts (`plans/PLANS.yaml`, `memory/agent_memory.yaml`) for this implementation cycle.
+- Added sequential two-leg protocol fields (`sequential_entry_*`, `sequential_exit_*`) in config, contracts, replay settings, and resolver validation.
+- Implemented staged leg-by-leg execution state machines in `src/moex_carry/signal_replay/minute_replay.py` and `src/moex_carry/pipeline.py`.
+- Added second-leg timeout handling: `entry_second_leg_timeout_unwound` for entry and `exit_second_leg_timeout_forced` for exit.
+- Published protocol details into `signal_metrics` in both unified and legacy signal pipelines.
+- Updated Telegram signal message formatting to show staged entry/exit order, leg gap limits, and fallback penalties.
+- Added tests for defaults and staged behavior in `tests/test_execution_replay.py`, `tests/test_backtest_defaults.py`, and `tests/test_telegram_worker.py`.
+- Recomputed base vs staged comparison on 55 cached pairs (`2025-08-27..2026-02-23`) and saved reports under `data/reports/sequential_compare_*_20260302.*`.
 
 ## Blockers
 - None.
 
 ## Next Step
-- Prepare commit/PR from `feat/component-fresh-pass` with this patch set.
+- Tune staged leg gap / first-leg choice per pair cluster and rerun comparison with the same scenario frame.
 
 ## Validation
-- `pytest tests/test_api_v2.py -k "rebalance or decision_actions_require_idempotency_key or signals_actions_require_idempotency_key" -q`
-- `npm --prefix ui-web run lint`
-- `npm --prefix ui-web run build`
+- `pytest tests/test_execution_replay.py tests/test_backtest_defaults.py tests/test_signal_replay_core.py tests/test_telegram_worker.py -q`
+- `pytest tests/test_config_resolver.py tests/test_signal_api.py -q`
+- `python scripts/intraday_period_pnl_eval.py --config configs/default.yaml --pairs "$(Get-Content data/reports/pairs_55_20260223.txt)" --from-date 2025-08-27 --till-date 2026-02-23 --signal-exec-lag-days 0 --scenario-specs "30,720,0.01,0.0125,0.015,0" --pair-workers 8 --preload-workers 8 --minute-chunk-days 21 --preload-cache-mode readonly --preload-cache-dir data/output/intraday_preload_cache_entry_exit_55 --out-pairs-csv data/reports/sequential_compare_base_pairs_20260302.csv --out-summary-csv data/reports/sequential_compare_base_summary_20260302.csv --out-summary-json data/reports/sequential_compare_base_summary_20260302.json`
+- `python scripts/intraday_period_pnl_eval.py --config configs/default.sequential_staged.yaml --pairs "$(Get-Content data/reports/pairs_55_20260223.txt)" --from-date 2025-08-27 --till-date 2026-02-23 --signal-exec-lag-days 0 --scenario-specs "30,720,0.01,0.0125,0.015,0" --pair-workers 8 --preload-workers 8 --minute-chunk-days 21 --preload-cache-mode readonly --preload-cache-dir data/output/intraday_preload_cache_entry_exit_55 --out-pairs-csv data/reports/sequential_compare_staged_pairs_20260302.csv --out-summary-csv data/reports/sequential_compare_staged_summary_20260302.csv --out-summary-json data/reports/sequential_compare_staged_summary_20260302.json`
 - `python scripts/run_lean_gate.py`
 - `python scripts/validate_session_handoff.py`
-- `python scripts/validate_quality_scorecards.py`

@@ -78,6 +78,22 @@ export const valueLabels: Record<string, Record<string, string>> = {
     reverse: 'Реверс',
     neutral: 'Нейтрально',
   },
+  entry_execution_protocol: {
+    atomic: 'Atomic (both legs at once)',
+    sequential: 'Staged (leg by leg)',
+  },
+  exit_execution_protocol: {
+    atomic: 'Atomic (both legs at once)',
+    sequential: 'Staged (leg by leg)',
+  },
+  sequential_entry_first_leg: {
+    stock: 'Stock',
+    future: 'Future',
+  },
+  sequential_exit_first_leg: {
+    stock: 'Stock',
+    future: 'Future',
+  },
   forecast_model: {
     half_life_capped: 'Half-life (ограничен H)',
     h_max_days: 'H_max_days (time-stop)',
