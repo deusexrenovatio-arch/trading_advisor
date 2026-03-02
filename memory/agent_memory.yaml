@@ -243,6 +243,17 @@ decisions:
       - scripts/run_morning_plan_walk_forward.py
       - tests/test_morning_plan_walk_forward.py
       - data/output/research/morning_walk_forward_20260115_20260228.json
+  - id: ADM-2026-03-03-024
+    date: 2026-03-03
+    title: Switch morning-plan walk-forward to offline-first SQLite candle cache
+    context: Repeated parameter sweeps were network-bound because ISS candles were refetched on each run.
+    decision: Add SQLite candle cache to walk-forward runner with one-time prefetch mode and strict offline rerun mode.
+    impact: Historical tuning loops are now reproducible and faster; ISS is needed only for initial cache warm-up or explicit refresh.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - data/output/research/morning_prefetch_20260210_20260220.json
+      - data/output/research/morning_offline_wf_20260210_20260220.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
