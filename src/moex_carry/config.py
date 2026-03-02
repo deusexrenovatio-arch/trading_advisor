@@ -195,6 +195,7 @@ class UiConfig(BaseModel):
     ff_db_projection_source: bool = False
     ff_fail_closed_execution: bool = False
     ff_news_bridge_enabled: bool = False
+    ff_news_bridge_persist_links_on_read: bool = False
     ff_news_model_advisory_enabled: bool = False
     ff_news_model_decision_weight_enabled: bool = False
     auto_unwind_timeout_sec: int = 600
@@ -273,6 +274,7 @@ class NewsFilterConfig(BaseModel):
     block_severity_threshold: str = "high"
     reduce_severity_threshold: str = "medium"
     sources: list[str] = []
+    enforce_source_allowlist: bool = False
 
 
 class NewsIngestConfig(BaseModel):

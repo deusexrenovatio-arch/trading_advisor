@@ -19,7 +19,12 @@ from moex_carry.storage.repositories_helpers import (
     _to_iso_z,
 )
 
-def upsert_event_market_reactions(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_event_market_reactions(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -68,7 +73,8 @@ def upsert_event_market_reactions(session: Session, rows: Iterable[dict[str, obj
             existing.quality_flags_json = row.get("quality_flags_json")
             existing.computed_at = _parse_datetime_value(row.get("computed_at")) or now
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -115,7 +121,12 @@ def load_event_market_reactions(
     ]
 
 
-def upsert_news_annotations(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_annotations(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -149,7 +160,8 @@ def upsert_news_annotations(session: Session, rows: Iterable[dict[str, object]])
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -187,7 +199,12 @@ def load_news_annotations(
     ]
 
 
-def upsert_news_event_updates(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_event_updates(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -218,7 +235,8 @@ def upsert_news_event_updates(session: Session, rows: Iterable[dict[str, object]
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -260,7 +278,12 @@ def load_news_event_updates(
     ]
 
 
-def upsert_news_event_links(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_event_links(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -286,7 +309,8 @@ def upsert_news_event_links(session: Session, rows: Iterable[dict[str, object]])
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -323,7 +347,12 @@ def load_news_event_links(
     ]
 
 
-def upsert_news_gold_labels(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_gold_labels(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -357,7 +386,8 @@ def upsert_news_gold_labels(session: Session, rows: Iterable[dict[str, object]])
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -405,7 +435,12 @@ def load_news_gold_labels(
     ]
 
 
-def upsert_news_unmatched_gold(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_unmatched_gold(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -433,7 +468,8 @@ def upsert_news_unmatched_gold(session: Session, rows: Iterable[dict[str, object
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -479,7 +515,12 @@ def load_news_unmatched_gold(
     ]
 
 
-def upsert_news_model_eval_record(session: Session, row: dict[str, object]) -> str | None:
+def upsert_news_model_eval_record(
+    session: Session,
+    row: dict[str, object],
+    *,
+    commit: bool = True,
+) -> str | None:
     run_id = _str_or_none(row.get("run_id"))
     model_version = _str_or_none(row.get("model_version"))
     if run_id is None or model_version is None:
@@ -500,7 +541,8 @@ def upsert_news_model_eval_record(session: Session, row: dict[str, object]) -> s
             created_at=_parse_datetime_value(row.get("created_at")) or now,
         )
     )
-    session.commit()
+    if commit:
+        session.commit()
     return run_id
 
 

@@ -174,6 +174,7 @@ def seed_canonical_scheduled_events(
     period_to: datetime,
     cluster_version: str = "anchor-scheduled-v1",
     padding_days: int = 2,
+    commit: bool = True,
 ) -> AnchorSeedReport:
     start = period_from - timedelta(days=max(int(padding_days), 0))
     end = period_to + timedelta(days=max(int(padding_days), 0))
@@ -231,8 +232,8 @@ def seed_canonical_scheduled_events(
                 }
             )
 
-    events_stored = upsert_news_events(session, event_rows) if event_rows else 0
-    labels_stored = upsert_news_labels(session, label_rows) if label_rows else 0
+    events_stored = upsert_news_events(session, event_rows, commit=commit) if event_rows else 0
+    labels_stored = upsert_news_labels(session, label_rows, commit=commit) if label_rows else 0
     return AnchorSeedReport(
         period_from=_to_iso_z(period_from) or "",
         period_to=_to_iso_z(period_to) or "",
@@ -309,6 +310,7 @@ def seed_episodic_anchor_events(
     fred_release_url: str = "https://api.stlouisfed.org/fred/release/dates",
     fred_release_ids: Iterable[int] = (),
     fred_api_key_env: str = "FRED_API_KEY",
+    commit: bool = True,
 ) -> EpisodicAnchorSeedReport:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     requested = [str(item or "").strip().lower() for item in sources if str(item or "").strip()]
@@ -493,9 +495,9 @@ def seed_episodic_anchor_events(
             }
         )
 
-    events_stored = upsert_news_events(session, event_rows) if event_rows else 0
-    labels_stored = upsert_news_labels(session, label_rows) if label_rows else 0
-    updates_stored = upsert_news_event_updates(session, update_rows) if update_rows else 0
+    events_stored = upsert_news_events(session, event_rows, commit=commit) if event_rows else 0
+    labels_stored = upsert_news_labels(session, label_rows, commit=commit) if label_rows else 0
+    updates_stored = upsert_news_event_updates(session, update_rows, commit=commit) if update_rows else 0
     return EpisodicAnchorSeedReport(
         sources_requested=requested,
         sources_completed=completed,
@@ -517,6 +519,7 @@ def link_news_to_scheduled_anchors(
     window_minutes: int = 90,
     link_role: str = "scheduled_anchor",
     link_type: str = "scheduled_anchor",
+    commit: bool = True,
 ) -> AnchorLinkReport:
     normalized_news: list[dict[str, object]] = []
     for row in news_rows:
@@ -616,7 +619,7 @@ def link_news_to_scheduled_anchors(
             }
         )
 
-    event_item_links = upsert_news_event_items(session, event_item_rows) if event_item_rows else 0
+    event_item_links = upsert_news_event_items(session, event_item_rows, commit=commit) if event_item_rows else 0
     existing_items = load_news_event_items(session, news_ids=news_ids, limit=max(len(news_ids) * 8, 500))
     event_ids_by_news: dict[str, set[str]] = {}
     for row in existing_items:
@@ -644,7 +647,7 @@ def link_news_to_scheduled_anchors(
                 }
             )
 
-    event_cross_links = upsert_news_event_links(session, cross_rows) if cross_rows else 0
+    event_cross_links = upsert_news_event_links(session, cross_rows, commit=commit) if cross_rows else 0
     return AnchorLinkReport(
         linked_news=len(matched_anchor_by_news),
         event_item_links=event_item_links,

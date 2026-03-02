@@ -15,7 +15,12 @@ from moex_carry.storage.repositories_helpers import (
     _str_or_none,
 )
 
-def upsert_news_items(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_items(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -79,7 +84,8 @@ def upsert_news_items(session: Session, rows: Iterable[dict[str, object]]) -> in
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -120,7 +126,12 @@ def load_news_items_by_ids(session: Session, news_ids: Iterable[str]) -> list[di
     return [_news_item_to_dict(row) for row in rows]
 
 
-def upsert_news_entity_links(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_entity_links(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     for row in rows:
         news_id = _str_or_none(row.get("news_id"))
@@ -158,7 +169,8 @@ def upsert_news_entity_links(session: Session, rows: Iterable[dict[str, object]]
         else:
             existing.link_confidence = confidence
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -196,7 +208,12 @@ def load_news_entity_links(
     ]
 
 
-def upsert_news_tags(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_tags(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     for row in rows:
         tag_code = _str_or_none(row.get("tag_code"))
@@ -211,7 +228,8 @@ def upsert_news_tags(session: Session, rows: Iterable[dict[str, object]]) -> int
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -227,7 +245,12 @@ def load_news_tags(session: Session) -> list[dict[str, object]]:
     ]
 
 
-def upsert_news_item_tags(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_item_tags(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     for row in rows:
         news_id = _str_or_none(row.get("news_id"))
@@ -243,7 +266,8 @@ def upsert_news_item_tags(session: Session, rows: Iterable[dict[str, object]]) -
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -272,17 +296,31 @@ def load_news_item_tags(
     ]
 
 
-def upsert_news_impact_scores(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_impact_scores(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
         target_level = _str_or_none(row.get("target_level"))
         target_id = _str_or_none(row.get("target_id"))
-        news_id = _str_or_none(row.get("news_id")) or (target_id if target_level and target_id else None)
+        news_id = _str_or_none(row.get("news_id"))
+        if target_level is None or target_id is None:
+            if news_id is None:
+                continue
+            target_level = "news"
+            target_id = news_id
+        if news_id is None and target_level == "news":
+            news_id = target_id
         model_id = _str_or_none(row.get("model_id"))
         model_version = _str_or_none(row.get("model_version")) or "unknown"
         direction = _str_or_none(row.get("direction")) or "neutral"
-        if news_id is None or model_id is None:
+        if model_id is None:
+            continue
+        if target_level == "news" and news_id is None:
             continue
         prob_up = float(row.get("prob_up") or 0.0)
         prob_down = float(row.get("prob_down") or 0.0)
@@ -290,21 +328,20 @@ def upsert_news_impact_scores(session: Session, rows: Iterable[dict[str, object]
         impact_score = float(row.get("impact_score") or 0.0)
         calibrated = bool(row.get("calibrated"))
         inference_ts = _parse_datetime_value(row.get("inference_ts")) or now
-        existing = None
-        if target_level is not None and target_id is not None:
-            existing = (
-                session.execute(
-                    select(db.NewsImpactScoreModel).where(
-                        db.NewsImpactScoreModel.model_id == model_id,
-                        db.NewsImpactScoreModel.model_version == model_version,
-                        db.NewsImpactScoreModel.target_level == target_level,
-                        db.NewsImpactScoreModel.target_id == target_id,
-                    )
+        existing = (
+            session.execute(
+                select(db.NewsImpactScoreModel).where(
+                    db.NewsImpactScoreModel.model_id == model_id,
+                    db.NewsImpactScoreModel.model_version == model_version,
+                    db.NewsImpactScoreModel.target_level == target_level,
+                    db.NewsImpactScoreModel.target_id == target_id,
                 )
-                .scalars()
-                .first()
             )
-        if existing is None:
+            .scalars()
+            .first()
+        )
+        if existing is None and news_id is not None:
+            # Backward-compat lookup for rows written before target-level normalization.
             existing = (
                 session.execute(
                     select(db.NewsImpactScoreModel).where(
@@ -345,7 +382,8 @@ def upsert_news_impact_scores(session: Session, rows: Iterable[dict[str, object]
             existing.calibrated = calibrated
             existing.inference_ts = inference_ts
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -430,7 +468,12 @@ def load_primary_news_scores(
     return selected
 
 
-def upsert_news_signal_links(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_signal_links(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -468,7 +511,8 @@ def upsert_news_signal_links(session: Session, rows: Iterable[dict[str, object]]
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -518,7 +562,12 @@ def load_news_signal_links(
     ]
 
 
-def upsert_news_backtest_report(session: Session, row: dict[str, object]) -> str | None:
+def upsert_news_backtest_report(
+    session: Session,
+    row: dict[str, object],
+    *,
+    commit: bool = True,
+) -> str | None:
     run_id = _str_or_none(row.get("run_id"))
     if run_id is None:
         return None
@@ -543,7 +592,8 @@ def upsert_news_backtest_report(session: Session, row: dict[str, object]) -> str
             created_at=_parse_datetime_value(row.get("created_at")) or now,
         )
     )
-    session.commit()
+    if commit:
+        session.commit()
     return run_id
 
 

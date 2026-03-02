@@ -13,6 +13,7 @@ from moex_carry.storage.repositories import (
     upsert_news_item_tags,
     upsert_news_items,
     upsert_news_tags,
+    upsert_news_gold_labels,
     load_signal_executions,
     load_news_signal_links,
     store_signal_execution,
@@ -30,6 +31,7 @@ def _build_settings(
     ff_db_projection_source: bool = False,
     ff_fail_closed_execution: bool = False,
     ff_news_bridge_enabled: bool = False,
+    ff_news_bridge_persist_links_on_read: bool = False,
     auto_unwind_timeout_sec: int = 600,
 ):
     return AppSettings(
@@ -40,6 +42,7 @@ def _build_settings(
             ff_fail_closed_execution=ff_fail_closed_execution,
             ff_news_bridge_enabled=ff_news_bridge_enabled,
             ff_news_model_advisory_enabled=ff_news_bridge_enabled,
+            ff_news_bridge_persist_links_on_read=ff_news_bridge_persist_links_on_read,
             auto_unwind_timeout_sec=auto_unwind_timeout_sec,
         ),
     )
@@ -1142,11 +1145,52 @@ def test_v2_news_feed_and_signals_active_sql_bridge(tmp_path):
     assert row["news_gate_action"] in {"allow", "reduce", "block"}
     assert isinstance(row["matched_news_event_ids"], list)
     assert len(row["matched_news_event_ids"]) >= 1
+    assert isinstance(row.get("news_score"), dict)
+    assert row["news_score"]["direction"] in {"up", "down", "neutral"}
+    assert float(row["news_score"]["p_up"]) >= 0.0
+    assert float(row["news_score"]["p_down"]) >= 0.0
+    assert float(row["news_score"]["p_neutral"]) >= 0.0
+    assert float(row["news_score"]["p_move"]) >= 0.0
+    assert int(row["news_score"]["matched_news_count"]) >= 1
+    assert int(row["news_score"]["scored_news_count"]) >= 1
+    assert isinstance(row.get("silver_explain"), dict)
+    assert int(row["silver_explain"]["matched_event_count"]) >= 1
+    assert row["silver_explain"]["dominant_silver_direction"] in {"up", "down", "hold", "unknown"}
+    assert row["silver_explain"]["live_direction"] in {"up", "down", "neutral"}
+    assert isinstance(row["silver_explain"]["events"], list)
+
+    with session_factory() as session:
+        upsert_news_gold_labels(
+            session,
+            [
+                {
+                    "target_type": "event",
+                    "target_id": row["matched_news_event_ids"][0],
+                    "event_family": "SUPPLY_DISRUPTION_GEO",
+                    "direction_label": "UP",
+                    "quality": "silver",
+                    "source": "auto_target_v2",
+                    "label_schema_version": "v2",
+                    "confidence": 0.91,
+                }
+            ],
+        )
+
+    active_response_after = client.get("/api/v2/signals/active")
+    assert active_response_after.status_code == 200
+    row_after = active_response_after.get_json()[0]
+    assert int(row_after["silver_explain"]["silver_event_count"]) >= 1
+    assert row_after["silver_explain"]["dominant_silver_direction"] == "up"
+    assert row_after["silver_explain"]["agreement_with_live"] is True
 
 
 
 def test_v2_signals_active_news_links_replay_is_idempotent(tmp_path):
-    settings = _build_settings(tmp_path, ff_news_bridge_enabled=True)
+    settings = _build_settings(
+        tmp_path,
+        ff_news_bridge_enabled=True,
+        ff_news_bridge_persist_links_on_read=True,
+    )
     engine = create_engine_from_settings(settings)
     init_db(engine)
     session_factory = create_session_factory(engine)
@@ -1183,6 +1227,39 @@ def test_v2_signals_active_news_links_replay_is_idempotent(tmp_path):
     assert links[0]["signal_id"] == signal_id
     assert links[0]["link_type"] == "used_in_decision"
     assert links[0]["gate_action"] in {"allow", "reduce", "block"}
+
+
+def test_v2_signals_active_does_not_persist_links_without_persist_flag(tmp_path):
+    settings = _build_settings(tmp_path, ff_news_bridge_enabled=True)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_signal_history(session, "run-v2-news-no-persist")
+        _seed_news_runtime(session)
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    first_active = client.get("/api/v2/signals/active")
+    assert first_active.status_code == 200
+    first_rows = first_active.get_json()
+    assert isinstance(first_rows, list)
+    assert len(first_rows) == 1
+    signal_id = first_rows[0]["signal_id"]
+
+    second_active = client.get("/api/v2/signals/active")
+    assert second_active.status_code == 200
+
+    with session_factory() as session:
+        links = load_news_signal_links(
+            session,
+            signal_ids=[signal_id],
+            news_ids=["news-1"],
+            limit=20,
+        )
+    assert links == []
+
 
 def test_v2_news_research_backtest_and_compare_endpoints(tmp_path):
     settings = _build_settings(tmp_path, ff_news_bridge_enabled=True)

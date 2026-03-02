@@ -106,7 +106,7 @@ def sync_news_runtime(
     gate_enabled: bool | None = None,
     recent_limit: int | None = None,
 ) -> NewsSyncSnapshot:
-    upsert_news_tags(session, default_tag_rows())
+    upsert_news_tags(session, default_tag_rows(), commit=False)
 
     ingested_count = 0
     rss_urls = _collect_rss_urls(settings)
@@ -116,7 +116,7 @@ def sync_news_runtime(
             max_items=settings.news_ingest.max_items_per_run,
         )
         if ingested_rows:
-            ingested_count = upsert_news_items(session, ingested_rows)
+            ingested_count = upsert_news_items(session, ingested_rows, commit=False)
 
     effective_limit = _resolve_recent_limit(settings, recent_limit)
     recent_news_rows = load_news_items(session, limit=effective_limit)
@@ -208,9 +208,9 @@ def sync_news_runtime(
             )
         )
 
-    entity_link_count = upsert_news_entity_links(session, entity_rows) if entity_rows else 0
-    tag_link_count = upsert_news_item_tags(session, tag_rows) if tag_rows else 0
-    score_count = upsert_news_impact_scores(session, score_rows) if score_rows else 0
+    entity_link_count = upsert_news_entity_links(session, entity_rows, commit=False) if entity_rows else 0
+    tag_link_count = upsert_news_item_tags(session, tag_rows, commit=False) if tag_rows else 0
+    score_count = upsert_news_impact_scores(session, score_rows, commit=False) if score_rows else 0
     if settings.news_events.enabled:
         event_report = cluster_news_events(
             session,
@@ -219,6 +219,7 @@ def sync_news_runtime(
             similarity_threshold=settings.news_events.similarity_threshold,
             resolve_after_hours=settings.news_events.resolve_after_hours,
             cluster_version=settings.news_events.cluster_version,
+            commit=False,
         )
         published_values = [
             _parse_published_dt(row.get("published_at"))
@@ -232,6 +233,7 @@ def sync_news_runtime(
                 period_to=max(published_values),
                 cluster_version=settings.news_events.anchor_cluster_version,
                 padding_days=settings.news_events.anchor_seed_padding_days,
+                commit=False,
             )
         if recent_news_rows and settings.news_events.anchor_link_enabled:
             link_news_to_scheduled_anchors(
@@ -239,6 +241,7 @@ def sync_news_runtime(
                 news_rows=recent_news_rows,
                 cluster_version=settings.news_events.anchor_cluster_version,
                 window_minutes=settings.news_events.anchor_match_window_minutes,
+                commit=False,
             )
         if settings.news_events.anchor_episode_seed_enabled:
             seed_episodic_anchor_events(
@@ -256,6 +259,7 @@ def sync_news_runtime(
                 fred_release_url=settings.news_events.anchor_fred_release_url,
                 fred_release_ids=settings.news_events.anchor_fred_release_ids,
                 fred_api_key_env=settings.news_events.anchor_fred_api_key_env,
+                commit=False,
             )
         if recent_news_rows and settings.news_events.anchor_link_enabled:
             link_news_to_scheduled_anchors(
@@ -265,6 +269,7 @@ def sync_news_runtime(
                 window_minutes=settings.news_events.anchor_episode_match_window_minutes,
                 link_role="episodic_anchor",
                 link_type="episodic_anchor",
+                commit=False,
             )
     else:
         event_report = EventClusteringReport(
@@ -286,6 +291,7 @@ def sync_news_runtime(
             session,
             settings,
             max_items=settings.news_llm.max_items_per_run,
+            commit=False,
         )
     else:
         llm_report = NewsLlmPassReport(
@@ -312,12 +318,16 @@ def sync_news_runtime(
         lookback_minutes=settings.news_filter.lookback_minutes,
         block_severity_threshold=settings.news_filter.block_severity_threshold,
         reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
+        allowed_sources=settings.news_filter.sources,
+        enforce_source_allowlist=settings.news_filter.enforce_source_allowlist,
     )
     matched_score_rows = [
         score_by_news[item.item_id]
         for item in news_gate.matched_items
         if item.item_id in score_by_news
     ]
+
+    session.commit()
 
     return NewsSyncSnapshot(
         ingested_count=ingested_count,

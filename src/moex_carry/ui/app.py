@@ -64,6 +64,7 @@ from moex_carry.storage.repositories import (
     load_news_impact_scores,
     load_news_items_by_ids,
     load_news_labels,
+    load_news_gold_labels,
     load_news_llm_runs,
     load_news_model_eval_records,
     load_news_signal_links,
@@ -140,6 +141,7 @@ from moex_carry.ui.app_helpers_feed import (
     _apply_query_filters,
     DECISION_STYLE,
 )
+from moex_carry.ui.app_helpers_news_bridge import build_silver_explain_payload
 from moex_carry.ui.data import (
     load_backtest_summary,
     load_backtest_summary_with_source,
@@ -3708,6 +3710,130 @@ def create_app(settings: AppSettings) -> Dash:
                     events_by_ticker.setdefault(ticker, []).append(event)
         payload: list[dict[str, object]] = []
         bridge_links_to_store: list[dict[str, object]] = []
+        silver_label_cache: dict[str, dict[str, object] | None] = {}
+
+        def _build_news_score_payload(events: list[dict[str, object]]) -> dict[str, object]:
+            if not events:
+                return {
+                    "direction": "neutral",
+                    "direction_score": 0.0,
+                    "p_move": 0.0,
+                    "p_up": 0.0,
+                    "p_down": 0.0,
+                    "p_neutral": 1.0,
+                    "p_up_given_move": 0.5,
+                    "confidence": 0.0,
+                    "matched_news_count": 0,
+                    "scored_news_count": 0,
+                }
+
+            weighted_up = 0.0
+            weighted_down = 0.0
+            weighted_neutral = 0.0
+            total_weight = 0.0
+            scored_news_count = 0
+
+            for event in events:
+                news_id = str(event.get("news_id") or "").strip()
+                if not news_id:
+                    continue
+                score_row = score_by_news.get(news_id)
+                if not isinstance(score_row, dict):
+                    continue
+                prob_up = max(0.0, min(1.0, float(score_row.get("prob_up") or 0.0)))
+                prob_down = max(0.0, min(1.0, float(score_row.get("prob_down") or 0.0)))
+                prob_neutral = max(0.0, min(1.0, float(score_row.get("prob_neutral") or 0.0)))
+                prob_total = prob_up + prob_down + prob_neutral
+                if prob_total <= 0.0:
+                    continue
+                prob_up /= prob_total
+                prob_down /= prob_total
+                prob_neutral /= prob_total
+                impact_score = max(0.0, float(score_row.get("impact_score") or 0.0))
+                weight = max(impact_score, 0.05)
+                weighted_up += prob_up * weight
+                weighted_down += prob_down * weight
+                weighted_neutral += prob_neutral * weight
+                total_weight += weight
+                scored_news_count += 1
+
+            if total_weight <= 0.0:
+                return {
+                    "direction": "neutral",
+                    "direction_score": 0.0,
+                    "p_move": 0.0,
+                    "p_up": 0.0,
+                    "p_down": 0.0,
+                    "p_neutral": 1.0,
+                    "p_up_given_move": 0.5,
+                    "confidence": 0.0,
+                    "matched_news_count": len(events),
+                    "scored_news_count": 0,
+                }
+
+            p_up = max(0.0, min(1.0, weighted_up / total_weight))
+            p_down = max(0.0, min(1.0, weighted_down / total_weight))
+            p_neutral = max(0.0, min(1.0, weighted_neutral / total_weight))
+            prob_total = p_up + p_down + p_neutral
+            if prob_total > 0.0:
+                p_up /= prob_total
+                p_down /= prob_total
+                p_neutral /= prob_total
+
+            p_move = max(0.0, min(1.0, 1.0 - p_neutral))
+            directional_mass = p_up + p_down
+            p_up_given_move = p_up / directional_mass if directional_mass > 0.0 else 0.5
+            confidence = p_move * max(p_up_given_move, 1.0 - p_up_given_move)
+            direction_score = p_up - p_down
+            if p_move < 0.5:
+                direction = "neutral"
+            elif p_up > p_down:
+                direction = "up"
+            elif p_down > p_up:
+                direction = "down"
+            else:
+                direction = "neutral"
+
+            return {
+                "direction": direction,
+                "direction_score": round(direction_score, 6),
+                "p_move": round(p_move, 6),
+                "p_up": round(p_up, 6),
+                "p_down": round(p_down, 6),
+                "p_neutral": round(p_neutral, 6),
+                "p_up_given_move": round(p_up_given_move, 6),
+                "confidence": round(confidence, 6),
+                "matched_news_count": len(events),
+                "scored_news_count": scored_news_count,
+            }
+
+        def _load_silver_labels(event_ids: list[str]) -> dict[str, dict[str, object] | None]:
+            normalized_ids = [str(item or "").strip() for item in event_ids if str(item or "").strip()]
+            if not normalized_ids:
+                return {}
+            missing_ids = [event_id for event_id in normalized_ids if event_id not in silver_label_cache]
+            if missing_ids:
+                with session_factory() as session:
+                    rows = load_news_gold_labels(
+                        session,
+                        target_type="event",
+                        target_ids=missing_ids,
+                        source="auto_target_v2",
+                        quality="silver",
+                        limit=max(len(missing_ids) * 5, 500),
+                    )
+                latest_by_event: dict[str, dict[str, object]] = {}
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    event_id = str(row.get("target_id") or "").strip()
+                    if not event_id or event_id in latest_by_event:
+                        continue
+                    latest_by_event[event_id] = row
+                for event_id in missing_ids:
+                    silver_label_cache[event_id] = latest_by_event.get(event_id)
+            return {event_id: silver_label_cache.get(event_id) for event_id in normalized_ids}
+
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -3775,19 +3901,52 @@ def create_app(settings: AppSettings) -> Dash:
                 lookback_minutes=settings.news_filter.lookback_minutes,
                 block_severity_threshold=settings.news_filter.block_severity_threshold,
                 reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
+                allowed_sources=settings.news_filter.sources,
+                enforce_source_allowlist=settings.news_filter.enforce_source_allowlist,
             )
+            gate_matched_news_ids = {
+                str(item.item_id or "").strip()
+                for item in gate_result.matched_items
+                if str(item.item_id or "").strip()
+            }
+            gate_matched_events = [
+                event
+                for event in matched_events
+                if str(event.get("news_id") or "").strip() in gate_matched_news_ids
+            ]
             matched_event_ids = [
                 str(event.get("news_event_id") or "").strip()
-                for event in matched_events
+                for event in gate_matched_events
                 if str(event.get("news_event_id") or "").strip()
             ]
-            latest_published_at = str(matched_events[0].get("published_at") or "") if matched_events else None
-            if settings.ui.ff_news_bridge_enabled and matched_events:
+            latest_published_at = (
+                str(gate_matched_events[0].get("published_at") or "")
+                if gate_matched_events
+                else None
+            )
+            news_score = _build_news_score_payload(gate_matched_events)
+            silver_explain = build_silver_explain_payload(
+                gate_matched_events,
+                news_score,
+                _load_silver_labels(matched_event_ids),
+                preview_limit=10,
+            )
+            if (
+                settings.ui.ff_news_bridge_enabled
+                and settings.ui.ff_news_bridge_persist_links_on_read
+                and gate_matched_events
+            ):
                 bridge_links_to_store.extend(
                     build_signal_news_links(
                         signal_id=signal_id,
                         decision_id=None,
-                        matched_news_ids=[str(event.get("news_id") or "") for event in matched_events],
+                        matched_news_refs=[
+                            {
+                                "news_id": str(event.get("news_id") or "").strip(),
+                                "event_id": str(event.get("news_event_id") or "").strip(),
+                            }
+                            for event in gate_matched_events
+                        ],
                         gate_action=gate_result.action,
                         link_type="used_in_decision",
                         lookback_minutes=settings.news_filter.lookback_minutes,
@@ -3802,13 +3961,15 @@ def create_app(settings: AppSettings) -> Dash:
                     "lifecycle_state": lifecycle_state,
                     "signal_action_effective": signal_action_effective,
                     "news_ref": {
-                        "total_events": len(matched_events),
+                        "total_events": len(gate_matched_events),
                         "latest_published_at": latest_published_at,
                     },
-                    "news_gate_action": gate_result.action if matched_events else "allow",
+                    "news_gate_action": gate_result.action if gate_matched_events else "allow",
                     "matched_news_event_ids": matched_event_ids,
                     "event_ids_used": matched_event_ids,
-                    "news_severity": gate_result.highest_severity if matched_events else "low",
+                    "news_severity": gate_result.highest_severity if gate_matched_events else "low",
+                    "news_score": news_score,
+                    "silver_explain": silver_explain,
                     "gate_results": gate_results,
                     "decision_ref": {"decision_id": None},
                     "execution_ref": execution_ref,
@@ -3827,6 +3988,7 @@ def create_app(settings: AppSettings) -> Dash:
                 key = "|".join(
                     [
                         str(row.get("news_id") or ""),
+                        str(row.get("event_id") or ""),
                         str(row.get("signal_id") or ""),
                         str(row.get("link_type") or ""),
                         str(row.get("window_start") or ""),
