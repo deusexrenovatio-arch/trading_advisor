@@ -222,6 +222,17 @@ decisions:
       - src/moex_carry/signal_engine/execution/engine.py
       - src/moex_carry/signal_engine/setups/generator.py
       - tests/test_signal_engine_morning_plan.py
+  - id: ADM-2026-03-02-022
+    date: 2026-03-02
+    title: Expose morning-plan via API v2 research surface with contract parity
+    context: Morning-plan engines were implemented but lacked runtime integration point for deterministic external invocation and smoke coverage.
+    decision: Add `POST /api/v2/research/morning-plan` in `ui/app.py` wired to `MarketCalendar` + `IssCandleProvider` + `MorningPlanBuilder` using futures ISS defaults, and register the route in `docs/contracts/api-v2.yaml`.
+    impact: Morning planning is callable through existing API v2 research envelope; parity and regression gates now cover this path.
+    links:
+      - src/moex_carry/ui/app.py
+      - docs/contracts/api-v2.yaml
+      - tests/test_api_v2.py
+      - tests/test_signal_engine_data_provider.py
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
