@@ -596,6 +596,7 @@ def run_news_llm_full_pass(
     settings: AppSettings,
     *,
     max_items: int | None = None,
+    commit: bool = True,
 ) -> NewsLlmPassReport:
     llm_settings = settings.news_llm
     provider = str(llm_settings.provider or "openai").strip() or "openai"
@@ -721,6 +722,7 @@ def run_news_llm_full_pass(
                     "created_at": datetime.utcnow().isoformat() + "Z",
                 }
             ],
+            commit=False,
         )
 
         if normalized_label is not None and run_status == "done":
@@ -738,6 +740,7 @@ def run_news_llm_full_pass(
                         "created_at": datetime.utcnow().isoformat() + "Z",
                     }
                 ],
+                commit=False,
             )
             labeled += 1
             completed += 1
@@ -746,6 +749,9 @@ def run_news_llm_full_pass(
         else:
             failed += 1
         processed += 1
+
+    if commit:
+        session.commit()
 
     return NewsLlmPassReport(
         processed_count=processed,

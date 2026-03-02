@@ -53,6 +53,8 @@ def run_news_gate(
     lookback_minutes: int,
     block_severity_threshold: str,
     reduce_severity_threshold: str,
+    allowed_sources: Iterable[str] | None = None,
+    enforce_source_allowlist: bool = False,
 ) -> NewsGateResult:
     items = build_news_items_for_gate(rows, score_by_news=score_by_news)
     return apply_news_filter(
@@ -60,14 +62,17 @@ def run_news_gate(
         lookback_minutes=lookback_minutes,
         block_severity_threshold=block_severity_threshold,
         reduce_severity_threshold=reduce_severity_threshold,
+        allowed_sources=allowed_sources,
+        enforce_source_allowlist=enforce_source_allowlist,
     )
 
 
 def build_signal_news_links(
     *,
-    signal_id: str,
+    signal_id: str | None,
     decision_id: str | None,
-    matched_news_ids: Iterable[str],
+    matched_news_ids: Iterable[str] | None = None,
+    matched_news_refs: Iterable[dict[str, object]] | None = None,
     gate_action: str,
     link_type: str,
     lookback_minutes: int,
@@ -76,13 +81,30 @@ def build_signal_news_links(
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(minutes=max(int(lookback_minutes), 1))
     links: list[dict[str, object]] = []
-    for news_id in matched_news_ids:
+    refs: list[tuple[str, str | None]] = []
+    for news_id in matched_news_ids or []:
         normalized_news_id = str(news_id or "").strip()
         if not normalized_news_id:
             continue
+        refs.append((normalized_news_id, None))
+    for row in matched_news_refs or []:
+        if not isinstance(row, dict):
+            continue
+        normalized_news_id = str(row.get("news_id") or "").strip()
+        if not normalized_news_id:
+            continue
+        event_id = str(row.get("event_id") or "").strip() or None
+        refs.append((normalized_news_id, event_id))
+
+    deduped: dict[tuple[str, str | None], None] = {}
+    for item in refs:
+        deduped[item] = None
+
+    for normalized_news_id, event_id in deduped:
         links.append(
             {
                 "news_id": normalized_news_id,
+                "event_id": event_id,
                 "signal_id": signal_id,
                 "decision_id": decision_id,
                 "link_type": link_type,

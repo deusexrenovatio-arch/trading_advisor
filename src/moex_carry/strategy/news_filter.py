@@ -27,6 +27,9 @@ def apply_news_filter(
     lookback_minutes: int,
     block_severity_threshold: str,
     reduce_severity_threshold: str,
+    *,
+    allowed_sources: Iterable[str] | None = None,
+    enforce_source_allowlist: bool = False,
 ) -> NewsGateResult:
     errors: list[str] = []
     block_value = _severity_value(block_severity_threshold)
@@ -36,10 +39,19 @@ def apply_news_filter(
 
     now = datetime.now(timezone.utc)
     lookback_cutoff = now - timedelta(minutes=lookback_minutes)
+    normalized_allowed_sources = {
+        str(source).strip().lower()
+        for source in (allowed_sources or [])
+        if str(source).strip()
+    }
+    source_filter_enabled = bool(enforce_source_allowlist and normalized_allowed_sources)
     matched: list[NewsItem] = []
     highest = "low"
 
     for item in news_items:
+        source_name = str(item.source or "").strip().lower()
+        if source_filter_enabled and source_name not in normalized_allowed_sources:
+            continue
         severity_value = _severity_value(item.severity)
         if severity_value < 0:
             errors.append(f"invalid_severity:{item.item_id}")

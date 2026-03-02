@@ -348,6 +348,8 @@ def run_cycle(args: argparse.Namespace) -> int:
                 min_abs_z_post=max(float(args.v2_min_abs_z), 0.0),
                 min_abs_ar=max(float(args.v2_min_abs_ar), 0.0),
                 allow_target_only_fallback=bool(args.allow_target_only_fallback),
+                require_primary_news_relevance=not bool(args.disable_primary_news_relevance),
+                require_ticker_text_support=not bool(args.disable_ticker_text_support),
             )
             silver_after = _count_silver_labels(
                 session,
@@ -550,6 +552,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--allow-no-model-scores", action="store_true")
     parser.add_argument("--allow-target-only-fallback", action="store_true")
     parser.add_argument("--include-overlap", action="store_true")
+    parser.add_argument(
+        "--disable-primary-news-relevance",
+        action="store_true",
+        help="Do not require primary news language/source/text quality relevance checks when building silver labels.",
+    )
+    parser.add_argument(
+        "--disable-ticker-text-support",
+        action="store_true",
+        help="Do not require ticker text mention in primary news relevance checks.",
+    )
     parser.add_argument("--v2-selector", type=str, default="impact", choices=["hi_conf", "impact", "hybrid"])
     parser.add_argument("--v2-min-target-confidence", type=float, default=0.35)
     parser.add_argument("--v2-min-impact-bin", type=int, default=1)

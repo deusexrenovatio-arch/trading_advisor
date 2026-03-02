@@ -26,7 +26,7 @@ def _settings(tmp_path):
     )
 
 
-def _seed_event_runtime(session):
+def _seed_event_runtime(session, *, score_target_level: str = "event"):
     ts = datetime(2026, 1, 15, 9, 0, 0)
     upsert_news_items(
         session,
@@ -103,13 +103,15 @@ def _seed_event_runtime(session):
             }
         ],
     )
+    target_level = score_target_level.strip().lower()
+    score_target_id = "evt-1" if target_level == "event" else "news-evt-1"
     upsert_news_impact_scores(
         session,
         [
             {
                 "news_id": "news-evt-1",
-                "target_level": "event",
-                "target_id": "evt-1",
+                "target_level": target_level,
+                "target_id": score_target_id,
                 "model_id": "finbert",
                 "model_version": "v1",
                 "direction": "up",
@@ -259,3 +261,31 @@ def test_stage_a_news_api_endpoints(tmp_path):
     study_payload = event_study_resp.get_json()
     assert study_payload["sample_count"] >= 1
     assert "car_summary_by_direction" in study_payload
+
+
+def test_stage_a_news_feed_derives_event_scores_from_news_level(tmp_path):
+    settings = _settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        _seed_event_runtime(session, score_target_level="news")
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    feed_resp = client.get("/api/v2/news/feed?limit=5")
+    assert feed_resp.status_code == 200
+    feed_rows = feed_resp.get_json()
+    assert isinstance(feed_rows, list)
+    assert len(feed_rows) >= 1
+
+    first = feed_rows[0]
+    assert first["news_event_id"] == "evt-1"
+    model_scores = first["model_scores"]
+    assert isinstance(model_scores, list)
+    assert len(model_scores) >= 1
+    primary = model_scores[0]
+    assert primary["target_level"] == "event"
+    assert primary["target_id"] == "evt-1"
+    assert primary["derived_from"] == "news_items"
+    assert primary["direction"] in {"up", "down", "neutral"}

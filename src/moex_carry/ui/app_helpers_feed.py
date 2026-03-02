@@ -309,6 +309,96 @@ def _select_primary_model_score(
     return next((score for score in model_scores if isinstance(score, dict)), None)
 
 
+def _as_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _derive_event_model_scores_from_news(
+    *,
+    event_id: str,
+    news_rows: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    grouped: dict[str, dict[str, object]] = {}
+    for row in news_rows:
+        if not isinstance(row, dict):
+            continue
+        model_id = str(row.get("model_id") or "").strip()
+        if not model_id:
+            continue
+        bucket = grouped.setdefault(
+            model_id,
+            {
+                "count": 0,
+                "sum_up": 0.0,
+                "sum_down": 0.0,
+                "sum_neutral": 0.0,
+                "sum_impact": 0.0,
+                "calibrated": False,
+                "latest_ts": None,
+                "latest_version": None,
+                "news_ids": set(),
+            },
+        )
+        bucket["count"] = int(bucket.get("count") or 0) + 1
+        bucket["sum_up"] = _as_float(bucket.get("sum_up")) + _as_float(row.get("prob_up"))
+        bucket["sum_down"] = _as_float(bucket.get("sum_down")) + _as_float(row.get("prob_down"))
+        bucket["sum_neutral"] = _as_float(bucket.get("sum_neutral")) + _as_float(row.get("prob_neutral"))
+        bucket["sum_impact"] = _as_float(bucket.get("sum_impact")) + _as_float(row.get("impact_score"))
+        bucket["calibrated"] = bool(bucket.get("calibrated")) or bool(row.get("calibrated"))
+        news_id = str(row.get("news_id") or "").strip()
+        if news_id:
+            news_ids = bucket.get("news_ids")
+            if isinstance(news_ids, set):
+                news_ids.add(news_id)
+        ts_value = _parse_iso_datetime(row.get("inference_ts"))
+        latest_ts = bucket.get("latest_ts")
+        if ts_value is not None and (latest_ts is None or ts_value > latest_ts):
+            bucket["latest_ts"] = ts_value
+            bucket["latest_version"] = row.get("model_version")
+
+    derived: list[dict[str, object]] = []
+    for model_id, bucket in grouped.items():
+        count = max(int(bucket.get("count") or 0), 1)
+        prob_up = _as_float(bucket.get("sum_up")) / count
+        prob_down = _as_float(bucket.get("sum_down")) / count
+        prob_neutral = _as_float(bucket.get("sum_neutral")) / count
+        total_prob = prob_up + prob_down + prob_neutral
+        if total_prob > 0.0:
+            prob_up = prob_up / total_prob
+            prob_down = prob_down / total_prob
+            prob_neutral = prob_neutral / total_prob
+        impact_score = _as_float(bucket.get("sum_impact")) / count
+        direction = "neutral"
+        if prob_up >= prob_down and prob_up >= prob_neutral:
+            direction = "up"
+        elif prob_down >= prob_up and prob_down >= prob_neutral:
+            direction = "down"
+        latest_ts = bucket.get("latest_ts")
+        derived.append(
+            {
+                "news_id": None,
+                "target_level": "event",
+                "target_id": event_id,
+                "model_id": model_id,
+                "model_version": bucket.get("latest_version"),
+                "direction": direction,
+                "prob_up": prob_up,
+                "prob_down": prob_down,
+                "prob_neutral": prob_neutral,
+                "impact_score": impact_score,
+                "calibrated": bool(bucket.get("calibrated")),
+                "inference_ts": _isoformat_utc(latest_ts) if isinstance(latest_ts, datetime) else None,
+                "derived_from": "news_items",
+                "source_news_count": len(bucket.get("news_ids")) if isinstance(bucket.get("news_ids"), set) else 0,
+            }
+        )
+    derived.sort(key=lambda row: _as_float(row.get("impact_score")), reverse=True)
+    return derived
+
+
 def _build_news_feed_events_from_event_layer(
     session,
     *,
@@ -373,6 +463,12 @@ def _build_news_feed_events_from_event_layer(
         target_ids=event_ids,
         limit=max(len(event_ids) * 10, 1000),
     )
+    news_score_rows = load_news_impact_scores(
+        session,
+        news_ids=news_ids,
+        target_level="news",
+        limit=max(len(news_ids) * 20, 2000),
+    )
     labels = load_news_labels(session, target_level="event", target_ids=event_ids, limit=max(len(event_ids) * 5, 500))
     llm_rows = load_news_llm_runs(session, target_level="event", limit=max(len(event_ids) * 10, 1000))
 
@@ -397,6 +493,12 @@ def _build_news_feed_events_from_event_layer(
         if not event_id:
             continue
         scores_by_event.setdefault(event_id, []).append(row)
+    news_scores_by_news_id: dict[str, list[dict[str, object]]] = {}
+    for row in news_score_rows:
+        news_id = str(row.get("news_id") or "").strip()
+        if not news_id:
+            continue
+        news_scores_by_news_id.setdefault(news_id, []).append(row)
 
     signal_refs_by_event: dict[str, list[dict[str, object]]] = {}
     for row in signal_links:
@@ -471,6 +573,15 @@ def _build_news_feed_events_from_event_layer(
                 continue
 
         model_scores = scores_by_event.get(event_id, [])
+        if not model_scores:
+            source_rows: list[dict[str, object]] = []
+            for news_id in linked_news_ids:
+                source_rows.extend(news_scores_by_news_id.get(news_id, []))
+            if source_rows:
+                model_scores = _derive_event_model_scores_from_news(
+                    event_id=event_id,
+                    news_rows=source_rows,
+                )
         primary_score = _select_primary_model_score(model_scores, preferred_models)
         impact_score = float(primary_score.get("impact_score") or 0.0) if isinstance(primary_score, dict) else 0.0
         severity = impact_to_severity(impact_score)

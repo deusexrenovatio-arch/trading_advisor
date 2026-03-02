@@ -248,6 +248,7 @@ def cluster_news_events(
     similarity_threshold: float = 0.35,
     resolve_after_hours: int = 72,
     cluster_version: str = "det-v1",
+    commit: bool = True,
 ) -> EventClusteringReport:
     normalized_news: list[dict[str, object]] = []
     for row in news_rows:
@@ -571,9 +572,9 @@ def cluster_news_events(
         resolved_events += 1
 
     if upsert_events:
-        upsert_news_events(session, upsert_events.values())
+        upsert_news_events(session, upsert_events.values(), commit=commit)
     if upsert_event_items:
-        upsert_news_event_items(session, upsert_event_items)
+        upsert_news_event_items(session, upsert_event_items, commit=commit)
 
     return EventClusteringReport(
         processed_news=len(normalized_news),

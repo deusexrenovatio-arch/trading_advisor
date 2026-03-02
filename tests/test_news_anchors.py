@@ -263,7 +263,7 @@ def test_seed_episodic_anchors_and_link_news(tmp_path, monkeypatch):
             return _Response(status_code=200, text=suez_html)
         return _Response(status_code=404)
 
-    monkeypatch.setattr("moex_carry.news.anchors.requests.get", _mock_get)
+    monkeypatch.setattr("moex_carry.news.anchors_sources.requests.get", _mock_get)
 
     with session_factory() as session:
         seed_report = seed_episodic_anchor_events(

@@ -147,6 +147,7 @@ ui:
   ff_db_projection_source: false
   ff_fail_closed_execution: false
   ff_news_bridge_enabled: false
+  ff_news_bridge_persist_links_on_read: false
   ff_news_model_advisory_enabled: false
   ff_news_model_decision_weight_enabled: false
   auto_unwind_timeout_sec: 600
@@ -204,6 +205,7 @@ news_filter:
   reduce_severity_threshold: "medium"
   sources:
     - "trusted-feed"
+  enforce_source_allowlist: false
 
 news_ingest:
   enabled: false

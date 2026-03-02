@@ -18,7 +18,12 @@ from moex_carry.storage.repositories_helpers import (
     _to_iso_z,
 )
 
-def upsert_news_events(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_events(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -48,7 +53,8 @@ def upsert_news_events(session: Session, rows: Iterable[dict[str, object]]) -> i
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -98,7 +104,12 @@ def load_news_events(
     ]
 
 
-def upsert_news_event_items(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_event_items(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -116,7 +127,8 @@ def upsert_news_event_items(session: Session, rows: Iterable[dict[str, object]])
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -152,7 +164,12 @@ def load_news_event_items(
     ]
 
 
-def upsert_news_labels(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_labels(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -197,7 +214,8 @@ def upsert_news_labels(session: Session, rows: Iterable[dict[str, object]]) -> i
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 
@@ -249,7 +267,12 @@ def load_news_labels(
     ]
 
 
-def upsert_news_llm_runs(session: Session, rows: Iterable[dict[str, object]]) -> int:
+def upsert_news_llm_runs(
+    session: Session,
+    rows: Iterable[dict[str, object]],
+    *,
+    commit: bool = True,
+) -> int:
     stored = 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for row in rows:
@@ -292,7 +315,8 @@ def upsert_news_llm_runs(session: Session, rows: Iterable[dict[str, object]]) ->
             )
         )
         stored += 1
-    session.commit()
+    if commit:
+        session.commit()
     return stored
 
 

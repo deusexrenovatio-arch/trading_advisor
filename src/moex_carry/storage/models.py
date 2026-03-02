@@ -232,10 +232,11 @@ class NewsImpactScoreModel(Base):
     __tablename__ = "news_impact_scores"
     __table_args__ = (
         UniqueConstraint(
-            "news_id",
             "model_id",
             "model_version",
-            name="uq_news_impact_score_model",
+            "target_level",
+            "target_id",
+            name="uq_news_impact_score_target_model",
         ),
     )
 
