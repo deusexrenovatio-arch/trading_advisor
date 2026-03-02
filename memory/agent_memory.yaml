@@ -254,6 +254,15 @@ decisions:
       - tests/test_morning_plan_walk_forward.py
       - data/output/research/morning_prefetch_20260210_20260220.json
       - data/output/research/morning_offline_wf_20260210_20260220.json
+  - id: ADM-2026-03-02-025
+    date: 2026-03-02
+    title: Harden walk-forward parameter selection with robust cross-instrument scoring
+    context: Wide-universe runs showed unstable parameter picks when train selection maximized plain expectancy with weak trade coverage requirements.
+    decision: Extend the runner with robust train metrics (`median expectancy - k * MAD`), enforce minimum train trade and instrument coverage thresholds, and persist attribution by instrument for both train and test summaries.
+    impact: Parameter selection is less sensitive to narrow winners, and diagnostics now expose which instruments drive fold-level performance.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20

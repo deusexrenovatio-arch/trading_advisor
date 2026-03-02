@@ -1,25 +1,24 @@
 # Session Handoff
-Updated: 2026-03-03 00:29 UTC
+Updated: 2026-03-02 14:27 UTC
 
 ## Goal
-- Implement the new main TZ as a futures-first morning planning pipeline (`D1/H1/M5 -> regime -> levels -> execution -> setups`) inside existing `signal_engine` architecture.
+- Improve morning-plan profitability robustness on broad commodity futures universe using strictly causal walk-forward.
 
 ## Current Delta
-- Added SQLite candle cache mode to `scripts/run_morning_plan_walk_forward.py` for offline-first reruns.
-- Added cache flags: `--cache-db`, `--offline-only`, `--refresh-cache`, `--prefetch-only`, `--no-cache`.
-- `prefetch-only` now fills cache once; further walk-forward runs can be executed fully offline.
-- Added cache behavior tests in `tests/test_morning_plan_walk_forward.py` (cache hit and offline cache miss).
-- Verified flow on commodity futures (`BRH6`, `NGH6`, `GDH6`): prefetch fetches ISS once, offline rerun works without network.
-- Existing causal fold logic and comparison metrics remain unchanged.
+- Implemented robust train selection in `scripts/run_morning_plan_walk_forward.py` with objective `robust_median_mad` (`median expectancy - k * MAD` across instruments).
+- Added pre-selection threshold `min_train_trades` with new default `80`.
+- Added coverage thresholds: `min_train_instruments_with_trades=8` and `min_trades_per_instrument=3`.
+- Added CLI controls for robust selection: `--selection-objective`, `--min-train-instruments-with-trades`, `--min-trades-per-instrument`, `--robust-mad-penalty`.
+- Extended summaries with instrument-level attribution: `overall_test_summary.by_instrument`.
+- Added per-fold `train_selection_metrics` to expose robust score and coverage used for selected params.
+- Added tests in `tests/test_morning_plan_walk_forward.py` for instrument attribution and robust median/MAD scoring.
 
 ## Blockers
 - None.
 
 ## Next Step
-- Expand universe to next expiries and run longer offline folds with stricter `min_train_trades` threshold.
+- Implement Priority #2: cost-aware pre-trade net-gate in setup generation (`min_reward_net_ticks`, `min_rr_net`, `min_reward_gross_ticks`) and validate on existing offline cache reports.
 
 ## Validation
 - `PYTHONPATH=src pytest tests/test_morning_plan_walk_forward.py -q`
-- `PYTHONPATH=src python scripts/run_morning_plan_walk_forward.py --instrument BRH6 --instrument NGH6 --instrument GDH6 --start-date 2026-02-10 --end-date 2026-02-20 --decision-time 12:00 --train-days 10 --test-days 5 --step-days 5 --min-train-trades 1 --prefetch-only --out-json data/output/research/morning_prefetch_20260210_20260220.json`
-- `PYTHONPATH=src python scripts/run_morning_plan_walk_forward.py --instrument BRH6 --instrument NGH6 --instrument GDH6 --start-date 2026-02-10 --end-date 2026-02-20 --decision-time 12:00 --train-days 10 --test-days 5 --step-days 5 --min-train-trades 1 --offline-only --out-json data/output/research/morning_offline_wf_20260210_20260220.json`
 - `python scripts/run_lean_gate.py`
