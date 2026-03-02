@@ -4,6 +4,7 @@ import argparse
 import copy
 import itertools
 import json
+import sqlite3
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -95,6 +96,179 @@ def _to_local_ts(raw: str, tz: ZoneInfo) -> datetime:
     return parsed.astimezone(tz)
 
 
+def _to_epoch_seconds(ts: datetime) -> int:
+    if ts.tzinfo is None:
+        return int(ts.timestamp())
+    return int(ts.astimezone(ZoneInfo("UTC")).timestamp())
+
+
+def _date_start_epoch(day: date, tz: ZoneInfo) -> int:
+    return _to_epoch_seconds(datetime.combine(day, time(0, 0), tzinfo=tz))
+
+
+def _date_end_epoch(day: date, tz: ZoneInfo) -> int:
+    return _to_epoch_seconds(datetime.combine(day, time(23, 59, 59), tzinfo=tz))
+
+
+def _epoch_to_local_date(epoch_seconds: int, tz: ZoneInfo) -> date:
+    return datetime.fromtimestamp(int(epoch_seconds), tz=ZoneInfo("UTC")).astimezone(tz).date()
+
+
+def _open_cache_db(path: Path) -> sqlite3.Connection:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path))
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS iss_candles_cache (
+            engine TEXT NOT NULL,
+            market TEXT NOT NULL,
+            board TEXT NOT NULL,
+            secid TEXT NOT NULL,
+            interval INTEGER NOT NULL,
+            ts_epoch INTEGER NOT NULL,
+            ts_iso TEXT NOT NULL,
+            open REAL NOT NULL,
+            high REAL NOT NULL,
+            low REAL NOT NULL,
+            close REAL NOT NULL,
+            volume REAL NOT NULL,
+            PRIMARY KEY (engine, market, board, secid, interval, ts_epoch)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_iss_candles_cache_lookup
+        ON iss_candles_cache (engine, market, board, secid, interval, ts_epoch)
+        """
+    )
+    conn.commit()
+    return conn
+
+
+def _cache_key(board: str | None) -> str:
+    return str(board or "")
+
+
+def _cache_range(
+    *,
+    conn: sqlite3.Connection,
+    engine: str,
+    market: str,
+    board: str | None,
+    secid: str,
+    interval: int,
+) -> tuple[int | None, int | None]:
+    row = conn.execute(
+        """
+        SELECT MIN(ts_epoch), MAX(ts_epoch)
+        FROM iss_candles_cache
+        WHERE engine = ? AND market = ? AND board = ? AND secid = ? AND interval = ?
+        """,
+        (engine, market, _cache_key(board), secid, int(interval)),
+    ).fetchone()
+    if row is None:
+        return (None, None)
+    low = None if row[0] is None else int(row[0])
+    high = None if row[1] is None else int(row[1])
+    return (low, high)
+
+
+def _cache_load(
+    *,
+    conn: sqlite3.Connection,
+    engine: str,
+    market: str,
+    board: str | None,
+    secid: str,
+    interval: int,
+    epoch_from: int,
+    epoch_to: int,
+) -> list[Candle]:
+    rows = conn.execute(
+        """
+        SELECT ts_iso, open, high, low, close, volume
+        FROM iss_candles_cache
+        WHERE engine = ? AND market = ? AND board = ? AND secid = ? AND interval = ?
+          AND ts_epoch >= ? AND ts_epoch <= ?
+        ORDER BY ts_epoch ASC
+        """,
+        (
+            engine,
+            market,
+            _cache_key(board),
+            secid,
+            int(interval),
+            int(epoch_from),
+            int(epoch_to),
+        ),
+    ).fetchall()
+    output: list[Candle] = []
+    for ts_iso, open_v, high_v, low_v, close_v, volume_v in rows:
+        ts = datetime.fromisoformat(str(ts_iso))
+        output.append(
+            Candle(
+                ts=ts,
+                open=float(open_v),
+                high=float(high_v),
+                low=float(low_v),
+                close=float(close_v),
+                volume=float(volume_v),
+            )
+        )
+    return output
+
+
+def _cache_upsert(
+    *,
+    conn: sqlite3.Connection,
+    engine: str,
+    market: str,
+    board: str | None,
+    secid: str,
+    interval: int,
+    candles: list[Candle],
+) -> int:
+    if not candles:
+        return 0
+    rows = []
+    for candle in candles:
+        ts_epoch = _to_epoch_seconds(candle.ts)
+        rows.append(
+            (
+                engine,
+                market,
+                _cache_key(board),
+                secid,
+                int(interval),
+                int(ts_epoch),
+                candle.ts.isoformat(),
+                float(candle.open),
+                float(candle.high),
+                float(candle.low),
+                float(candle.close),
+                float(candle.volume),
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO iss_candles_cache (
+            engine, market, board, secid, interval, ts_epoch, ts_iso, open, high, low, close, volume
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(engine, market, board, secid, interval, ts_epoch) DO UPDATE SET
+            ts_iso = excluded.ts_iso,
+            open = excluded.open,
+            high = excluded.high,
+            low = excluded.low,
+            close = excluded.close,
+            volume = excluded.volume
+        """,
+        rows,
+    )
+    conn.commit()
+    return len(rows)
+
+
 def _fetch_candles(
     *,
     client: MoexIssClient,
@@ -134,6 +308,103 @@ def _fetch_candles(
         )
     candles.sort(key=lambda item: item.ts)
     return candles
+
+
+def _fetch_candles_cached(
+    *,
+    conn: sqlite3.Connection,
+    client: MoexIssClient,
+    engine: str,
+    market: str,
+    board: str,
+    secid: str,
+    date_from: date,
+    date_to: date,
+    interval: int,
+    tz: ZoneInfo,
+    offline_only: bool,
+    refresh_cache: bool,
+    stats: dict[str, int],
+) -> list[Candle]:
+    required_from_epoch = _date_start_epoch(date_from, tz)
+    required_to_epoch = _date_end_epoch(date_to, tz)
+
+    min_cached, max_cached = _cache_range(
+        conn=conn,
+        engine=engine,
+        market=market,
+        board=board,
+        secid=secid,
+        interval=interval,
+    )
+    needs_fetch = refresh_cache or min_cached is None or max_cached is None
+    missing_ranges: list[tuple[date, date]] = []
+    if needs_fetch:
+        missing_ranges.append((date_from, date_to))
+    else:
+        min_cached_day = _epoch_to_local_date(min_cached, tz)
+        max_cached_day = _epoch_to_local_date(max_cached, tz)
+        if date_from < min_cached_day:
+            missing_ranges.append((date_from, min_cached_day - timedelta(days=1)))
+        if date_to > max_cached_day:
+            missing_ranges.append((max_cached_day + timedelta(days=1), date_to))
+
+    if missing_ranges:
+        if offline_only:
+            cached = _cache_load(
+                conn=conn,
+                engine=engine,
+                market=market,
+                board=board,
+                secid=secid,
+                interval=interval,
+                epoch_from=required_from_epoch,
+                epoch_to=required_to_epoch,
+            )
+            if cached:
+                stats["cache_rows_loaded"] += len(cached)
+                return cached
+            raise ValueError(
+                f"cache_miss_offline_mode:{secid}:interval={interval}:from={date_from.isoformat()}:to={date_to.isoformat()}"
+            )
+        for fetch_from, fetch_to in missing_ranges:
+            if fetch_to < fetch_from:
+                continue
+            fetched = _fetch_candles(
+                client=client,
+                engine=engine,
+                market=market,
+                board=board,
+                secid=secid,
+                date_from=fetch_from,
+                date_to=fetch_to,
+                interval=interval,
+                tz=tz,
+            )
+            stats["network_fetch_calls"] += 1
+            stats["network_rows"] += len(fetched)
+            stats["cache_rows_written"] += _cache_upsert(
+                conn=conn,
+                engine=engine,
+                market=market,
+                board=board,
+                secid=secid,
+                interval=interval,
+                candles=fetched,
+            )
+
+    cached = _cache_load(
+        conn=conn,
+        engine=engine,
+        market=market,
+        board=board,
+        secid=secid,
+        interval=interval,
+        epoch_from=required_from_epoch,
+        epoch_to=required_to_epoch,
+    )
+    stats["cache_rows_loaded"] += len(cached)
+    return cached
 
 
 def _build_calendar(settings: AppSettings) -> MarketCalendar:
@@ -193,48 +464,69 @@ def _build_inmemory_payload(
     instruments: list[str],
     date_from: date,
     date_to: date,
-) -> dict[tuple[str, TF], list[Candle]]:
+    cache_db_path: Path | None,
+    use_cache: bool,
+    offline_only: bool,
+    refresh_cache: bool,
+) -> tuple[dict[tuple[str, TF], list[Candle]], dict[str, int]]:
     payload: dict[tuple[str, TF], list[Candle]] = {}
+    stats = {
+        "network_fetch_calls": 0,
+        "network_rows": 0,
+        "cache_rows_loaded": 0,
+        "cache_rows_written": 0,
+    }
     tz = ZoneInfo(settings.signal_engine.morning_plan.timezone)
+    conn = _open_cache_db(cache_db_path) if (use_cache and cache_db_path is not None) else None
     for instrument_id in instruments:
-        d1 = _fetch_candles(
-            client=client,
-            engine=settings.moex.engine_futures,
-            market=settings.moex.market_futures,
-            board=settings.moex.futures_board,
-            secid=instrument_id,
-            date_from=date_from,
-            date_to=date_to,
-            interval=24,
-            tz=tz,
-        )
-        h1 = _fetch_candles(
-            client=client,
-            engine=settings.moex.engine_futures,
-            market=settings.moex.market_futures,
-            board=settings.moex.futures_board,
-            secid=instrument_id,
-            date_from=date_from,
-            date_to=date_to,
-            interval=60,
-            tz=tz,
-        )
-        m1 = _fetch_candles(
-            client=client,
-            engine=settings.moex.engine_futures,
-            market=settings.moex.market_futures,
-            board=settings.moex.futures_board,
-            secid=instrument_id,
-            date_from=date_from,
-            date_to=date_to,
-            interval=1,
-            tz=tz,
-        )
+        fetch_args = {
+            "client": client,
+            "engine": settings.moex.engine_futures,
+            "market": settings.moex.market_futures,
+            "board": settings.moex.futures_board,
+            "secid": instrument_id,
+            "date_from": date_from,
+            "date_to": date_to,
+            "tz": tz,
+        }
+        if conn is not None:
+            d1 = _fetch_candles_cached(
+                conn=conn,
+                interval=24,
+                offline_only=offline_only,
+                refresh_cache=refresh_cache,
+                stats=stats,
+                **fetch_args,
+            )
+            h1 = _fetch_candles_cached(
+                conn=conn,
+                interval=60,
+                offline_only=offline_only,
+                refresh_cache=refresh_cache,
+                stats=stats,
+                **fetch_args,
+            )
+            m1 = _fetch_candles_cached(
+                conn=conn,
+                interval=1,
+                offline_only=offline_only,
+                refresh_cache=refresh_cache,
+                stats=stats,
+                **fetch_args,
+            )
+        else:
+            d1 = _fetch_candles(interval=24, **fetch_args)
+            h1 = _fetch_candles(interval=60, **fetch_args)
+            m1 = _fetch_candles(interval=1, **fetch_args)
+            stats["network_fetch_calls"] += 3
+            stats["network_rows"] += len(d1) + len(h1) + len(m1)
         m5 = resample_ohlcv(m1, target_tf=TF.M5, calendar=calendar)
         payload[(instrument_id, TF.D1)] = d1
         payload[(instrument_id, TF.H1)] = h1
         payload[(instrument_id, TF.M5)] = m5
-    return payload
+    if conn is not None:
+        conn.close()
+    return payload, stats
 
 
 def _expand_grid(grid: dict[str, list[float]]) -> list[dict[str, float]]:
@@ -581,18 +873,46 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     if end_date < start_date:
         raise ValueError("end_date_before_start_date")
     decision_time = _parse_hhmm(args.decision_time)
+    use_cache = not bool(args.no_cache)
+    cache_db_path = Path(args.cache_db) if args.cache_db else None
 
     warmup_days = max(int(args.train_days) + 120, 180)
     preload_start = start_date - timedelta(days=warmup_days)
     preload_end = end_date + timedelta(days=2)
-    payload = _build_inmemory_payload(
+    payload, preload_stats = _build_inmemory_payload(
         client=client,
         calendar=calendar,
         settings=settings,
         instruments=instruments,
         date_from=preload_start,
         date_to=preload_end,
+        cache_db_path=cache_db_path,
+        use_cache=use_cache,
+        offline_only=bool(args.offline_only),
+        refresh_cache=bool(args.refresh_cache),
     )
+
+    if bool(args.prefetch_only):
+        return {
+            "generated_at": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
+            "mode": "cache_prefetch_only",
+            "instruments": instruments,
+            "cache": {
+                "enabled": use_cache,
+                "cache_db": (str(cache_db_path) if cache_db_path is not None else None),
+                "offline_only": bool(args.offline_only),
+                "refresh_cache": bool(args.refresh_cache),
+                "stats": preload_stats,
+            },
+            "payload_sizes": {
+                instrument_id: {
+                    "d1": len(payload.get((instrument_id, TF.D1), [])),
+                    "h1": len(payload.get((instrument_id, TF.H1), [])),
+                    "m5": len(payload.get((instrument_id, TF.M5), [])),
+                }
+                for instrument_id in instruments
+            },
+        }
 
     base_cfg = settings.signal_engine.morning_plan.model_dump(mode="python")
     costs = CostAssumptions(
@@ -692,6 +1012,13 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         "mode": "causal_walk_forward",
         "instruments": instruments,
         "tick_sizes": tick_sizes,
+        "cache": {
+            "enabled": use_cache,
+            "cache_db": (str(cache_db_path) if cache_db_path is not None else None),
+            "offline_only": bool(args.offline_only),
+            "refresh_cache": bool(args.refresh_cache),
+            "stats": preload_stats,
+        },
         "period": {
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
@@ -736,6 +1063,32 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--commission-ticks-per-side", type=float, default=0.5)
     parser.add_argument("--slippage-ticks-per-side", type=float, default=1.0)
     parser.add_argument("--spread-half-ticks", type=float, default=1.0)
+    parser.add_argument(
+        "--cache-db",
+        type=str,
+        default="data/cache/morning_plan_candles.sqlite",
+        help="SQLite path for one-time candle ingest and offline reruns.",
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Disable local SQLite cache and fetch directly from ISS.",
+    )
+    parser.add_argument(
+        "--offline-only",
+        action="store_true",
+        help="Disallow network fetches; fail on cache miss.",
+    )
+    parser.add_argument(
+        "--refresh-cache",
+        action="store_true",
+        help="Force refresh for requested date ranges before run.",
+    )
+    parser.add_argument(
+        "--prefetch-only",
+        action="store_true",
+        help="Only load/update cache and output cache stats without walk-forward folds.",
+    )
     parser.add_argument("--out-json", type=str, default=None)
     return parser
 
@@ -745,13 +1098,22 @@ def main() -> int:
     args = parser.parse_args()
     report = run_walk_forward(args)
 
-    folds = report.get("folds", [])
-    overall = report.get("overall_test_summary", {})
-    print("walk_forward_folds", len(folds))
-    print("overall_filled_trades", int(overall.get("filled_trades", 0)))
-    print("overall_fill_rate", round(float(overall.get("fill_rate", 0.0)), 4))
-    print("overall_expectancy_net_ticks", round(float(overall.get("expectancy_net_ticks", 0.0)), 4))
-    print("overall_net_ticks_sum", round(float(overall.get("net_ticks_sum", 0.0)), 4))
+    if str(report.get("mode")) == "cache_prefetch_only":
+        cache = report.get("cache", {})
+        stats = cache.get("stats", {}) if isinstance(cache, dict) else {}
+        print("prefetch_only", True)
+        print("cache_enabled", bool(cache.get("enabled")) if isinstance(cache, dict) else False)
+        print("network_fetch_calls", int(stats.get("network_fetch_calls", 0)))
+        print("network_rows", int(stats.get("network_rows", 0)))
+        print("cache_rows_written", int(stats.get("cache_rows_written", 0)))
+    else:
+        folds = report.get("folds", [])
+        overall = report.get("overall_test_summary", {})
+        print("walk_forward_folds", len(folds))
+        print("overall_filled_trades", int(overall.get("filled_trades", 0)))
+        print("overall_fill_rate", round(float(overall.get("fill_rate", 0.0)), 4))
+        print("overall_expectancy_net_ticks", round(float(overall.get("expectancy_net_ticks", 0.0)), 4))
+        print("overall_net_ticks_sum", round(float(overall.get("net_ticks_sum", 0.0)), 4))
 
     if args.out_json:
         out_path = Path(args.out_json)
