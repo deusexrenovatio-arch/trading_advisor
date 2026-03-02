@@ -367,3 +367,8 @@ signal_engine:
       entry_tif: "GTT"
       entry_expiry_policy: "EOD_BEFORE_EVENING_CLEARING"
       entry_zone_offset_ticks: 0
+      enable_cost_net_gate: true
+      estimated_round_trip_cost_ticks: 5.0
+      min_reward_net_ticks: 2.0
+      min_rr_net: 1.1
+      min_reward_gross_ticks: 10.0

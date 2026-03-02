@@ -263,6 +263,17 @@ decisions:
     links:
       - scripts/run_morning_plan_walk_forward.py
       - tests/test_morning_plan_walk_forward.py
+  - id: ADM-2026-03-02-026
+    date: 2026-03-02
+    title: Add cost-aware net gate to morning setup generation
+    context: Broad-universe walk-forward remained negative after robust parameter selection, with losses concentrated in low net-edge trades.
+    decision: Add pre-trade setup gating in `SetupGenerator` based on estimated round-trip costs and net reward/risk constraints.
+    impact: Reduced weak setup count and materially improved wide-universe net ticks in offline walk-forward while preserving causal evaluation flow.
+    links:
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/config.py
+      - configs/default.yaml
+      - tests/test_signal_engine_setups.py
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
