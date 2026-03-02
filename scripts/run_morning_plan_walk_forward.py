@@ -5,6 +5,7 @@ import copy
 import itertools
 import json
 import sqlite3
+import statistics
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -37,6 +38,15 @@ COMPARISON_POINTS: list[str] = [
     "expectancy_net_ticks",
     "net_ticks_sum",
 ]
+
+
+@dataclass(frozen=True)
+class TrainSelectionMetrics:
+    robust_score: float
+    median_expectancy: float
+    mad_expectancy: float
+    instruments_with_trades: int
+    robust_instruments: int
 
 
 @dataclass(frozen=True)
@@ -743,15 +753,50 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
     expectancy = net_sum / float(filled_count) if filled_count > 0 else 0.0
     fill_rate = float(filled_count / float(setups_total)) if setups_total > 0 else 0.0
     by_kind: dict[str, dict[str, float]] = {}
+    by_instrument: dict[str, dict[str, float]] = {}
     for row in filled:
         slot = by_kind.setdefault(row.setup_kind, {"count": 0.0, "net_ticks_sum": 0.0})
         slot["count"] += 1.0
         slot["net_ticks_sum"] += float(row.net_ticks)
+        inst_slot = by_instrument.setdefault(
+            row.instrument_id,
+            {
+                "count": 0.0,
+                "net_ticks_sum": 0.0,
+                "tp_count": 0.0,
+                "sl_count": 0.0,
+                "exit_count": 0.0,
+                "win_count": 0.0,
+            },
+        )
+        inst_slot["count"] += 1.0
+        inst_slot["net_ticks_sum"] += float(row.net_ticks)
+        if row.outcome == "TP":
+            inst_slot["tp_count"] += 1.0
+        elif row.outcome == "SL":
+            inst_slot["sl_count"] += 1.0
+        elif row.outcome == "EXIT":
+            inst_slot["exit_count"] += 1.0
+        if row.net_ticks > 0.0:
+            inst_slot["win_count"] += 1.0
     for kind, slot in by_kind.items():
         count = slot["count"]
         slot["expectancy_net_ticks"] = float(slot["net_ticks_sum"] / count) if count > 0 else 0.0
         slot["count"] = int(count)
         by_kind[kind] = slot
+    for instrument_id, slot in by_instrument.items():
+        count = slot["count"]
+        slot["expectancy_net_ticks"] = float(slot["net_ticks_sum"] / count) if count > 0 else 0.0
+        slot["tp_rate"] = float(slot["tp_count"] / count) if count > 0 else 0.0
+        slot["sl_rate"] = float(slot["sl_count"] / count) if count > 0 else 0.0
+        slot["exit_rate"] = float(slot["exit_count"] / count) if count > 0 else 0.0
+        slot["win_rate_net"] = float(slot["win_count"] / count) if count > 0 else 0.0
+        slot["count"] = int(count)
+        slot["tp_count"] = int(slot["tp_count"])
+        slot["sl_count"] = int(slot["sl_count"])
+        slot["exit_count"] = int(slot["exit_count"])
+        slot["win_count"] = int(slot["win_count"])
+        by_instrument[instrument_id] = slot
     return {
         "setups_total": int(setups_total),
         "filled_trades": int(filled_count),
@@ -764,7 +809,51 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
         "gross_ticks_sum": float(gross_sum),
         "net_ticks_sum": float(net_sum),
         "by_setup_kind": by_kind,
+        "by_instrument": by_instrument,
     }
+
+
+def _train_selection_metrics(
+    *,
+    summary: dict[str, Any],
+    min_trades_per_instrument: int,
+    mad_penalty: float,
+) -> TrainSelectionMetrics:
+    by_instrument = summary.get("by_instrument")
+    if not isinstance(by_instrument, dict):
+        return TrainSelectionMetrics(
+            robust_score=float("-inf"),
+            median_expectancy=0.0,
+            mad_expectancy=0.0,
+            instruments_with_trades=0,
+            robust_instruments=0,
+        )
+    instrument_rows = [item for item in by_instrument.values() if isinstance(item, dict)]
+    instruments_with_trades = sum(1 for item in instrument_rows if int(item.get("count", 0) or 0) > 0)
+    robust_expectancies = [
+        float(item.get("expectancy_net_ticks", 0.0))
+        for item in instrument_rows
+        if int(item.get("count", 0) or 0) >= max(int(min_trades_per_instrument), 1)
+    ]
+    robust_instruments = len(robust_expectancies)
+    if not robust_expectancies:
+        return TrainSelectionMetrics(
+            robust_score=float("-inf"),
+            median_expectancy=0.0,
+            mad_expectancy=0.0,
+            instruments_with_trades=int(instruments_with_trades),
+            robust_instruments=0,
+        )
+    median_expectancy = float(statistics.median(robust_expectancies))
+    mad_expectancy = float(statistics.median(abs(value - median_expectancy) for value in robust_expectancies))
+    robust_score = float(median_expectancy - max(float(mad_penalty), 0.0) * mad_expectancy)
+    return TrainSelectionMetrics(
+        robust_score=robust_score,
+        median_expectancy=median_expectancy,
+        mad_expectancy=mad_expectancy,
+        instruments_with_trades=int(instruments_with_trades),
+        robust_instruments=int(robust_instruments),
+    )
 
 
 def _evaluate_window(
@@ -935,6 +1024,11 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
 
     folds: list[dict[str, Any]] = []
     aggregate_results: list[SetupResult] = []
+    min_train_trades = max(int(args.min_train_trades), 1)
+    required_instruments = min(max(int(args.min_train_instruments_with_trades), 1), len(instruments))
+    min_trades_per_instrument = max(int(args.min_trades_per_instrument), 1)
+    robust_mad_penalty = max(float(args.robust_mad_penalty), 0.0)
+    objective = str(args.selection_objective).strip().lower()
     for idx, window in enumerate(windows, start=1):
         train_start = window["train_start"]
         train_end = window["train_end"]
@@ -959,22 +1053,44 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 {
                     "params": combo,
                     "summary": train_summary,
+                    "metrics": asdict(
+                        _train_selection_metrics(
+                            summary=train_summary,
+                            min_trades_per_instrument=min_trades_per_instrument,
+                            mad_penalty=robust_mad_penalty,
+                        )
+                    ),
                 }
             )
         eligible = [
             row
             for row in train_scores
-            if int(row["summary"]["filled_trades"]) >= int(args.min_train_trades)
+            if int(row["summary"]["filled_trades"]) >= min_train_trades
+            and int(row["metrics"]["instruments_with_trades"]) >= required_instruments
+            and int(row["metrics"]["robust_instruments"]) >= required_instruments
         ]
-        ranked = sorted(
-            eligible,
-            key=lambda row: (
-                float(row["summary"]["expectancy_net_ticks"]),
-                float(row["summary"]["net_ticks_sum"]),
-                int(row["summary"]["filled_trades"]),
-            ),
-            reverse=True,
-        )
+        if objective == "expectancy_net_ticks":
+            ranked = sorted(
+                eligible,
+                key=lambda row: (
+                    float(row["summary"]["expectancy_net_ticks"]),
+                    float(row["summary"]["net_ticks_sum"]),
+                    int(row["summary"]["filled_trades"]),
+                ),
+                reverse=True,
+            )
+        else:
+            ranked = sorted(
+                eligible,
+                key=lambda row: (
+                    float(row["metrics"]["robust_score"]),
+                    float(row["metrics"]["median_expectancy"]),
+                    float(row["summary"]["expectancy_net_ticks"]),
+                    float(row["summary"]["net_ticks_sum"]),
+                    int(row["summary"]["filled_trades"]),
+                ),
+                reverse=True,
+            )
         selected = ranked[0] if ranked else next(
             (row for row in train_scores if row["params"] == default_combo),
             train_scores[0],
@@ -1002,6 +1118,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "test_end": test_end.isoformat(),
                 "selected_params": selected["params"],
                 "train_summary": selected["summary"],
+                "train_selection_metrics": selected["metrics"],
                 "test_summary": test_summary,
             }
         )
@@ -1027,9 +1144,12 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         },
         "cost_assumptions_ticks": asdict(costs),
         "tuning_points": {
-            "objective": "expectancy_net_ticks",
+            "objective": objective,
             "grid": grid,
-            "min_train_trades": int(args.min_train_trades),
+            "min_train_trades": min_train_trades,
+            "min_train_instruments_with_trades": required_instruments,
+            "min_trades_per_instrument": min_trades_per_instrument,
+            "robust_mad_penalty": robust_mad_penalty,
             "train_days": int(args.train_days),
             "test_days": int(args.test_days),
             "step_days": int(args.step_days),
@@ -1058,7 +1178,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-days", type=int, default=20)
     parser.add_argument("--test-days", type=int, default=5)
     parser.add_argument("--step-days", type=int, default=5)
-    parser.add_argument("--min-train-trades", type=int, default=3)
+    parser.add_argument(
+        "--selection-objective",
+        type=str,
+        default="robust_median_mad",
+        choices=["robust_median_mad", "expectancy_net_ticks"],
+    )
+    parser.add_argument("--min-train-trades", type=int, default=80)
+    parser.add_argument("--min-train-instruments-with-trades", type=int, default=8)
+    parser.add_argument("--min-trades-per-instrument", type=int, default=3)
+    parser.add_argument("--robust-mad-penalty", type=float, default=0.5)
     parser.add_argument("--tick-size", action="append", default=[], help="Optional SECID=tick_size override.")
     parser.add_argument("--commission-ticks-per-side", type=float, default=0.5)
     parser.add_argument("--slippage-ticks-per-side", type=float, default=1.0)
