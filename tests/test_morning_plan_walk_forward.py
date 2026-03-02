@@ -222,3 +222,90 @@ def test_cached_fetch_offline_mode_fails_on_cache_miss(tmp_path):
             stats={"network_fetch_calls": 0, "network_rows": 0, "cache_rows_loaded": 0, "cache_rows_written": 0},
         )
     conn.close()
+
+
+def test_summarize_includes_by_instrument_attribution():
+    mod = _load_module()
+    rows = [
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-02-20",
+            setup_id="S1",
+            setup_kind="BOX_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-02-20T12:00:00+03:00",
+            entry_ts="2026-02-20T12:05:00+03:00",
+            exit_ts="2026-02-20T12:30:00+03:00",
+            filled=True,
+            outcome="TP",
+            gross_ticks=15.0,
+            net_ticks=10.0,
+            cost_ticks=5.0,
+            entry_ticks=100,
+            exit_ticks=115,
+        ),
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-02-21",
+            setup_id="S2",
+            setup_kind="PULLBACK_LIMIT",
+            side="BUY",
+            as_of_ts="2026-02-21T12:00:00+03:00",
+            entry_ts="2026-02-21T12:05:00+03:00",
+            exit_ts="2026-02-21T12:20:00+03:00",
+            filled=True,
+            outcome="SL",
+            gross_ticks=0.0,
+            net_ticks=-5.0,
+            cost_ticks=5.0,
+            entry_ticks=100,
+            exit_ticks=100,
+        ),
+        mod.SetupResult(
+            instrument_id="NGH6",
+            trade_date="2026-02-21",
+            setup_id="S3",
+            setup_kind="PULLBACK_LIMIT",
+            side="SELL",
+            as_of_ts="2026-02-21T12:00:00+03:00",
+            entry_ts="2026-02-21T12:10:00+03:00",
+            exit_ts="2026-02-21T13:00:00+03:00",
+            filled=True,
+            outcome="EXIT",
+            gross_ticks=7.0,
+            net_ticks=2.0,
+            cost_ticks=5.0,
+            entry_ticks=200,
+            exit_ticks=193,
+        ),
+    ]
+    summary = mod._summarize(rows, setups_total=4)
+    assert summary["filled_trades"] == 3
+    assert summary["fill_rate"] == pytest.approx(0.75)
+    assert summary["by_instrument"]["BRH6"]["count"] == 2
+    assert summary["by_instrument"]["BRH6"]["tp_rate"] == pytest.approx(0.5)
+    assert summary["by_instrument"]["BRH6"]["sl_rate"] == pytest.approx(0.5)
+    assert summary["by_instrument"]["BRH6"]["expectancy_net_ticks"] == pytest.approx(2.5)
+    assert summary["by_instrument"]["NGH6"]["count"] == 1
+    assert summary["by_instrument"]["NGH6"]["exit_rate"] == pytest.approx(1.0)
+
+
+def test_train_selection_metrics_uses_median_minus_mad_penalty():
+    mod = _load_module()
+    summary = {
+        "by_instrument": {
+            "A": {"count": 5, "expectancy_net_ticks": 4.0},
+            "B": {"count": 4, "expectancy_net_ticks": 2.0},
+            "C": {"count": 1, "expectancy_net_ticks": 100.0},
+        }
+    }
+    metrics = mod._train_selection_metrics(
+        summary=summary,
+        min_trades_per_instrument=3,
+        mad_penalty=0.5,
+    )
+    assert metrics.instruments_with_trades == 3
+    assert metrics.robust_instruments == 2
+    assert metrics.median_expectancy == pytest.approx(3.0)
+    assert metrics.mad_expectancy == pytest.approx(1.0)
+    assert metrics.robust_score == pytest.approx(2.5)
