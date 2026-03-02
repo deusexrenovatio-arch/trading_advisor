@@ -309,3 +309,15 @@ def test_train_selection_metrics_uses_median_minus_mad_penalty():
     assert metrics.median_expectancy == pytest.approx(3.0)
     assert metrics.mad_expectancy == pytest.approx(1.0)
     assert metrics.robust_score == pytest.approx(2.5)
+
+
+def test_resolve_tuning_grid_profiles():
+    mod = _load_module()
+    baseline = mod._resolve_tuning_grid("baseline_v1")
+    assert "execution.buffer_atr_mult" in baseline
+    assert baseline["execution.buffer_atr_mult"] == [0.08, 0.10, 0.12]
+    cost_aware = mod._resolve_tuning_grid("cost_aware_v2")
+    assert "setups.min_rr_net" in cost_aware
+    assert "setups.sl_atr_mult" in cost_aware
+    with pytest.raises(ValueError, match="unknown_tuning_profile"):
+        mod._resolve_tuning_grid("missing")
