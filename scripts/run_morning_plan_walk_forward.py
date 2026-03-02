@@ -36,6 +36,8 @@ TUNING_GRID_PROFILES: dict[str, dict[str, list[float]]] = {
     },
 }
 
+COST_MODEL_PROFILES: tuple[str, ...] = ("fixed_v1", "train_proxy_v1")
+
 COMPARISON_POINTS: list[str] = [
     "setups_total",
     "filled_trades",
@@ -567,6 +569,93 @@ def _resolve_tuning_grid(profile_name: str) -> dict[str, list[float]]:
     return copy.deepcopy(TUNING_GRID_PROFILES[key])
 
 
+def _resolve_cost_model_profile(profile_name: str) -> str:
+    key = str(profile_name or "fixed_v1").strip()
+    if key not in COST_MODEL_PROFILES:
+        allowed = ",".join(COST_MODEL_PROFILES)
+        raise ValueError(f"unknown_cost_model_profile:{key};allowed={allowed}")
+    return key
+
+
+def _value_rank(value: float, samples: list[float]) -> float:
+    finite = [float(item) for item in samples if float(item) == float(item)]
+    if not finite:
+        return 0.5
+    sorted_values = sorted(finite)
+    count = len(sorted_values)
+    index = 0
+    for idx, item in enumerate(sorted_values):
+        if value <= item:
+            index = idx
+            break
+    else:
+        index = count - 1
+    return float(index / max(count - 1, 1))
+
+
+def _derive_fold_instrument_costs(
+    *,
+    instruments: list[str],
+    payload: dict[tuple[str, TF], list[Candle]],
+    tick_sizes: dict[str, float],
+    train_start: date,
+    train_end: date,
+    base_costs: CostAssumptions,
+    profile: str,
+) -> dict[str, CostAssumptions]:
+    if profile == "fixed_v1":
+        return {instrument_id: base_costs for instrument_id in instruments}
+
+    med_volume_by_instrument: dict[str, float] = {}
+    med_range_ticks_by_instrument: dict[str, float] = {}
+    for instrument_id in instruments:
+        rows = payload.get((instrument_id, TF.M5), [])
+        train_rows = [row for row in rows if train_start <= row.ts.date() <= train_end]
+        if not train_rows:
+            continue
+        volumes = [float(max(row.volume, 0.0)) for row in train_rows]
+        tick_size = float(tick_sizes[instrument_id])
+        ranges_ticks = [
+            float(max(price_to_ticks(float(row.high) - float(row.low), tick_size), 0))
+            for row in train_rows
+        ]
+        if volumes:
+            med_volume_by_instrument[instrument_id] = float(statistics.median(volumes))
+        if ranges_ticks:
+            med_range_ticks_by_instrument[instrument_id] = float(statistics.median(ranges_ticks))
+
+    volume_samples = list(med_volume_by_instrument.values())
+    result: dict[str, CostAssumptions] = {}
+    for instrument_id in instruments:
+        med_volume = med_volume_by_instrument.get(instrument_id)
+        med_range_ticks = med_range_ticks_by_instrument.get(instrument_id)
+        if med_volume is None or med_range_ticks is None:
+            result[instrument_id] = base_costs
+            continue
+        volume_rank = _value_rank(float(med_volume), volume_samples)
+        if volume_rank <= 0.33:
+            spread_half = 1.5
+        elif volume_rank <= 0.66:
+            spread_half = 1.25
+        else:
+            spread_half = 1.0
+
+        slippage = float(base_costs.slippage_ticks_per_side)
+        if med_range_ticks >= 30.0:
+            slippage += 0.5
+        elif med_range_ticks >= 15.0:
+            slippage += 0.25
+        if volume_rank <= 0.33:
+            slippage += 0.25
+        slippage = min(max(slippage, 0.5), 3.0)
+        result[instrument_id] = CostAssumptions(
+            commission_ticks_per_side=float(base_costs.commission_ticks_per_side),
+            slippage_ticks_per_side=float(slippage),
+            spread_half_ticks=float(spread_half),
+        )
+    return result
+
+
 def _apply_overrides(base_cfg: dict[str, Any], overrides: dict[str, float]) -> dict[str, Any]:
     cfg = copy.deepcopy(base_cfg)
     for dotted_path, value in overrides.items():
@@ -885,6 +974,7 @@ def _evaluate_window(
     tick_sizes: dict[str, float],
     calendar: MarketCalendar,
     costs: CostAssumptions,
+    instrument_costs: dict[str, CostAssumptions] | None = None,
 ) -> tuple[list[SetupResult], dict[str, Any]]:
     provider = InMemoryCandleProvider(payload)
     builders = {instrument_id: MorningPlanBuilder(provider, calendar, cfg) for instrument_id in instruments}
@@ -897,6 +987,7 @@ def _evaluate_window(
         for instrument_id in instruments:
             builder = builders[instrument_id]
             tick_size = float(tick_sizes[instrument_id])
+            effective_costs = costs if instrument_costs is None else instrument_costs.get(instrument_id, costs)
             plan = builder.build_plan(as_of_ts=as_of_ts, instrument_id=instrument_id, tick_size=tick_size)
             setups_total += len(plan.setups)
             m5_rows = payload.get((instrument_id, TF.M5), [])
@@ -909,7 +1000,7 @@ def _evaluate_window(
                         m5_rows=m5_rows,
                         tick_size=tick_size,
                         calendar=calendar,
-                        costs=costs,
+                        costs=effective_costs,
                     )
                 )
     summary = _summarize(rows, setups_total=setups_total)
@@ -1028,6 +1119,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     )
     tuning_profile = str(args.tuning_profile).strip()
     grid = _resolve_tuning_grid(tuning_profile)
+    cost_model_profile = _resolve_cost_model_profile(args.cost_model_profile)
     combinations = _expand_grid(grid)
     default_combo = next((item for item in combinations if item == {}), None)
     if default_combo is None:
@@ -1052,6 +1144,15 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         train_end = window["train_end"]
         test_start = window["test_start"]
         test_end = window["test_end"]
+        fold_instrument_costs = _derive_fold_instrument_costs(
+            instruments=instruments,
+            payload=payload,
+            tick_sizes=tick_sizes,
+            train_start=train_start,
+            train_end=train_end,
+            base_costs=costs,
+            profile=cost_model_profile,
+        )
         train_scores: list[dict[str, Any]] = []
         for combo in combinations:
             cfg = _apply_overrides(base_cfg, combo)
@@ -1066,6 +1167,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 tick_sizes=tick_sizes,
                 calendar=calendar,
                 costs=costs,
+                instrument_costs=fold_instrument_costs,
             )
             train_scores.append(
                 {
@@ -1125,8 +1227,14 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             tick_sizes=tick_sizes,
             calendar=calendar,
             costs=costs,
+            instrument_costs=fold_instrument_costs,
         )
         aggregate_results.extend(test_rows)
+        fold_costs_payload = {
+            instrument_id: asdict(fold_instrument_costs[instrument_id])
+            for instrument_id in instruments
+            if instrument_id in fold_instrument_costs
+        }
         folds.append(
             {
                 "fold_id": idx,
@@ -1137,6 +1245,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "selected_params": selected["params"],
                 "train_summary": selected["summary"],
                 "train_selection_metrics": selected["metrics"],
+                "cost_assumptions_by_instrument": fold_costs_payload,
                 "test_summary": test_summary,
             }
         )
@@ -1165,6 +1274,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "objective": objective,
             "profile": tuning_profile,
             "combinations": len(combinations),
+            "cost_model_profile": cost_model_profile,
             "grid": grid,
             "min_train_trades": min_train_trades,
             "min_train_instruments_with_trades": required_instruments,
@@ -1203,6 +1313,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default="baseline_v1",
         choices=sorted(TUNING_GRID_PROFILES.keys()),
+    )
+    parser.add_argument(
+        "--cost-model-profile",
+        type=str,
+        default="fixed_v1",
+        choices=list(COST_MODEL_PROFILES),
     )
     parser.add_argument(
         "--selection-objective",

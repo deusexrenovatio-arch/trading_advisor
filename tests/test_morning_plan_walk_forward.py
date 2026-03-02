@@ -321,3 +321,52 @@ def test_resolve_tuning_grid_profiles():
     assert "setups.sl_atr_mult" in cost_aware
     with pytest.raises(ValueError, match="unknown_tuning_profile"):
         mod._resolve_tuning_grid("missing")
+
+
+def test_resolve_cost_model_profile():
+    mod = _load_module()
+    assert mod._resolve_cost_model_profile("fixed_v1") == "fixed_v1"
+    assert mod._resolve_cost_model_profile("train_proxy_v1") == "train_proxy_v1"
+    with pytest.raises(ValueError, match="unknown_cost_model_profile"):
+        mod._resolve_cost_model_profile("missing")
+
+
+def test_derive_fold_instrument_costs_train_proxy_changes_by_instrument():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    start = datetime(2026, 2, 1, 10, 0, tzinfo=tz)
+    bars_a = [
+        Candle(ts=start + timedelta(minutes=5 * idx), open=100.0, high=101.0, low=99.0, close=100.0, volume=5000.0)
+        for idx in range(20)
+    ]
+    bars_b = [
+        Candle(ts=start + timedelta(minutes=5 * idx), open=100.0, high=112.0, low=88.0, close=100.0, volume=200.0)
+        for idx in range(20)
+    ]
+    payload = {
+        ("A", TF.M5): bars_a,
+        ("B", TF.M5): bars_b,
+    }
+    base = mod.CostAssumptions(commission_ticks_per_side=0.5, slippage_ticks_per_side=1.0, spread_half_ticks=1.0)
+    costs = mod._derive_fold_instrument_costs(
+        instruments=["A", "B"],
+        payload=payload,
+        tick_sizes={"A": 1.0, "B": 1.0},
+        train_start=date(2026, 2, 1),
+        train_end=date(2026, 2, 2),
+        base_costs=base,
+        profile="train_proxy_v1",
+    )
+    assert set(costs.keys()) == {"A", "B"}
+    assert costs["B"].round_trip_ticks > costs["A"].round_trip_ticks
+    fixed = mod._derive_fold_instrument_costs(
+        instruments=["A", "B"],
+        payload=payload,
+        tick_sizes={"A": 1.0, "B": 1.0},
+        train_start=date(2026, 2, 1),
+        train_end=date(2026, 2, 2),
+        base_costs=base,
+        profile="fixed_v1",
+    )
+    assert fixed["A"] == base
+    assert fixed["B"] == base
