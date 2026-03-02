@@ -1068,6 +1068,21 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
     }
 
 
+def _should_probability_gate_fallback(
+    *,
+    probability_gate_enabled: bool,
+    min_filled_trades_per_fold: int,
+    test_summary: dict[str, Any],
+) -> bool:
+    if not bool(probability_gate_enabled):
+        return False
+    threshold = max(int(min_filled_trades_per_fold), 0)
+    if threshold <= 0:
+        return False
+    filled = int(test_summary.get("filled_trades", 0) or 0)
+    return filled < threshold
+
+
 def _train_selection_metrics(
     *,
     summary: dict[str, Any],
@@ -1355,6 +1370,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         dirichlet_alpha=max(float(args.prob_dirichlet_alpha), 1e-9),
         context_mode=str(args.prob_context_mode),
     )
+    min_prob_filled_per_fold = max(int(args.prob_min_filled_trades_per_fold), 0)
     train_probability_gate = ProbabilityGateConfig(
         enabled=False,
         min_n_effective=float(probability_gate.min_n_effective),
@@ -1473,6 +1489,42 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             initial_history=train_history,
             collect_history=True,
         )
+        probability_gate_fallback: dict[str, Any] = {
+            "applied": False,
+            "min_filled_trades_per_fold": int(min_prob_filled_per_fold),
+        }
+        if _should_probability_gate_fallback(
+            probability_gate_enabled=bool(probability_gate.enabled),
+            min_filled_trades_per_fold=min_prob_filled_per_fold,
+            test_summary=test_summary,
+        ):
+            gated_test_summary = {
+                "filled_trades": int(test_summary.get("filled_trades", 0)),
+                "net_ticks_sum": float(test_summary.get("net_ticks_sum", 0.0)),
+                "gated_out": int(test_summary.get("gated_out", 0)),
+            }
+            test_rows, test_summary, _ = _evaluate_window(
+                period_start=test_start,
+                period_end=test_end,
+                instruments=instruments,
+                decision_time=decision_time,
+                tz=tz,
+                cfg=selected_cfg,
+                payload=payload,
+                tick_sizes=tick_sizes,
+                calendar=calendar,
+                costs=costs,
+                instrument_costs=fold_instrument_costs,
+                probability_gate=None,
+                initial_history=None,
+                collect_history=False,
+            )
+            probability_gate_fallback = {
+                "applied": True,
+                "reason": "min_filled_trades_per_fold",
+                "min_filled_trades_per_fold": int(min_prob_filled_per_fold),
+                "gated_test_summary": gated_test_summary,
+            }
         aggregate_results.extend(test_rows)
         fold_costs_payload = {
             instrument_id: asdict(fold_instrument_costs[instrument_id])
@@ -1490,6 +1542,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "train_summary": selected["summary"],
                 "train_selection_metrics": selected["metrics"],
                 "cost_assumptions_by_instrument": fold_costs_payload,
+                "probability_gate_fallback": probability_gate_fallback,
                 "test_summary": test_summary,
             }
         )
@@ -1527,6 +1580,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "half_life_days": float(probability_gate.half_life_days),
                 "dirichlet_alpha": float(probability_gate.dirichlet_alpha),
                 "context_mode": str(probability_gate.context_mode),
+                "min_filled_trades_per_fold": int(min_prob_filled_per_fold),
             },
             "grid": grid,
             "min_train_trades": min_train_trades,
@@ -1578,6 +1632,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prob-min-expected-return-ticks", type=float, default=2.0)
     parser.add_argument("--prob-half-life-days", type=float, default=30.0)
     parser.add_argument("--prob-dirichlet-alpha", type=float, default=1.0)
+    parser.add_argument("--prob-min-filled-trades-per-fold", type=int, default=0)
     parser.add_argument(
         "--prob-context-mode",
         type=str,
