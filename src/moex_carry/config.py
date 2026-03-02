@@ -827,6 +827,11 @@ class SignalEngineMorningSetupsConfig(BaseModel):
     entry_tif: str = "GTT"
     entry_expiry_policy: str = "EOD_BEFORE_EVENING_CLEARING"
     entry_zone_offset_ticks: int = 0
+    enable_cost_net_gate: bool = True
+    estimated_round_trip_cost_ticks: float = 5.0
+    min_reward_net_ticks: float = 2.0
+    min_rr_net: float = 1.1
+    min_reward_gross_ticks: float = 10.0
 
 
 class SignalEngineMorningPlanConfig(BaseModel):
