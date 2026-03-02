@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+import pytest
 
 from moex_carry.signal_engine.core.calendar import MarketCalendar, TimeWindow
 from moex_carry.signal_engine.core.types import Candle, Level, OrderIntent, OrderType, Setup, Side, TF
@@ -139,3 +141,84 @@ def test_simulate_setup_limit_no_fill_until_expiry():
     assert result.filled is False
     assert result.outcome == "NO_FILL"
     assert result.net_ticks == 0.0
+
+
+class _FakeIssClient:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+        self.calls = 0
+
+    def get_candles(self, *_args, **_kwargs):
+        self.calls += 1
+        return list(self.rows)
+
+
+def test_cached_fetch_second_call_uses_sqlite_without_network(tmp_path):
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    rows = [
+        {"begin": "2026-02-20T10:00:00+03:00", "open": 10, "high": 11, "low": 9, "close": 10.5, "volume": 100},
+        {"begin": "2026-02-20T10:01:00+03:00", "open": 10.5, "high": 11, "low": 10, "close": 10.8, "volume": 120},
+    ]
+    client = _FakeIssClient(rows)
+    cache_db = tmp_path / "candles.sqlite"
+    conn = mod._open_cache_db(cache_db)
+    first = mod._fetch_candles_cached(
+        conn=conn,
+        client=client,
+        engine="futures",
+        market="forts",
+        board="RFUD",
+        secid="BRH6",
+        date_from=date(2026, 2, 20),
+        date_to=date(2026, 2, 20),
+        interval=1,
+        tz=tz,
+        offline_only=False,
+        refresh_cache=False,
+        stats={"network_fetch_calls": 0, "network_rows": 0, "cache_rows_loaded": 0, "cache_rows_written": 0},
+    )
+    assert len(first) == 2
+    assert client.calls == 1
+    second = mod._fetch_candles_cached(
+        conn=conn,
+        client=client,
+        engine="futures",
+        market="forts",
+        board="RFUD",
+        secid="BRH6",
+        date_from=date(2026, 2, 20),
+        date_to=date(2026, 2, 20),
+        interval=1,
+        tz=tz,
+        offline_only=True,
+        refresh_cache=False,
+        stats={"network_fetch_calls": 0, "network_rows": 0, "cache_rows_loaded": 0, "cache_rows_written": 0},
+    )
+    conn.close()
+    assert len(second) == 2
+    assert client.calls == 1
+
+
+def test_cached_fetch_offline_mode_fails_on_cache_miss(tmp_path):
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    client = _FakeIssClient([])
+    conn = mod._open_cache_db(tmp_path / "candles.sqlite")
+    with pytest.raises(ValueError, match="cache_miss_offline_mode"):
+        mod._fetch_candles_cached(
+            conn=conn,
+            client=client,
+            engine="futures",
+            market="forts",
+            board="RFUD",
+            secid="NGH6",
+            date_from=date(2026, 2, 20),
+            date_to=date(2026, 2, 20),
+            interval=1,
+            tz=tz,
+            offline_only=True,
+            refresh_cache=False,
+            stats={"network_fetch_calls": 0, "network_rows": 0, "cache_rows_loaded": 0, "cache_rows_written": 0},
+        )
+    conn.close()
