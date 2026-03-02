@@ -122,7 +122,7 @@ spread_carry_alpha:
   min_alpha_score: null
   min_total_score: null
   ranking_primary_metric: "avg_trade_return_annual_operational_recent"
-  allowed_expiry_months: [3, 6, 9, 12]
+  allowed_expiry_months: [3, 6]
   allowed_expiry_years: [2026]
 
 aggregation:
@@ -163,7 +163,7 @@ ui:
   unified_snapshot_ttl_sec: 120
   unified_pair_workers: null
   unified_pair_replay_cache_max: 64
-  unified_front_only: true
+  unified_front_only: false
   unified_front_roll_days: 7
   require_score_gate_by_default: true
   require_score_gate_top_pairs_by_default: false
