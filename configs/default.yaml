@@ -372,3 +372,6 @@ signal_engine:
       min_reward_net_ticks: 2.0
       min_rr_net: 1.1
       min_reward_gross_ticks: 10.0
+      enable_eligibility_filter: true
+      min_atr_h1_cost_mult: 6.0
+      min_atr_d1_cost_mult: 12.0

@@ -274,6 +274,17 @@ decisions:
       - src/moex_carry/config.py
       - configs/default.yaml
       - tests/test_signal_engine_setups.py
+  - id: ADM-2026-03-02-027
+    date: 2026-03-02
+    title: Add ATR-vs-cost eligibility filter before setup generation
+    context: Even after cost-aware reward/risk gating, losses on broad universe were concentrated in low-actionability instruments.
+    decision: Introduce eligibility filtering in `SetupGenerator` requiring minimum `h1_atr_ticks` and `daily_atr_ticks` as multiples of estimated round-trip cost.
+    impact: Further reduced weak setups on broad universe and improved aggregate net ticks with unchanged causal walk-forward protocol.
+    links:
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/config.py
+      - configs/default.yaml
+      - tests/test_signal_engine_setups.py
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20

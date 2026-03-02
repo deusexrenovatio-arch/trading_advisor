@@ -514,6 +514,9 @@ class SignalEngineMorningSetupsConfig(BaseModel):
     min_reward_net_ticks: float = 2.0
     min_rr_net: float = 1.1
     min_reward_gross_ticks: float = 10.0
+    enable_eligibility_filter: bool = True
+    min_atr_h1_cost_mult: float = 6.0
+    min_atr_d1_cost_mult: float = 12.0
 
 
 class SignalEngineMorningPlanConfig(BaseModel):

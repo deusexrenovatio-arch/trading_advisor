@@ -47,6 +47,16 @@ class SetupGenerator:
             return []
         if calendar.forbid_new_position(as_of_ts):
             return []
+        if self._eligibility_filter_enabled():
+            cost_ticks = self._estimated_round_trip_cost_ticks()
+            min_h1_mult = _safe_non_negative_float(self.cfg.get("min_atr_h1_cost_mult"), 6.0)
+            min_d1_mult = _safe_non_negative_float(self.cfg.get("min_atr_d1_cost_mult"), 12.0)
+            min_h1_ticks = max(round_half_away_from_zero(min_h1_mult * cost_ticks), 1)
+            min_d1_ticks = max(round_half_away_from_zero(min_d1_mult * cost_ticks), 1)
+            if int(regime.h1_atr_ticks) < int(min_h1_ticks):
+                return []
+            if int(regime.daily_atr_ticks) < int(min_d1_ticks):
+                return []
 
         setups: list[Setup] = []
         s1 = self._generate_box_breakout(
@@ -120,6 +130,9 @@ class SetupGenerator:
 
     def _cost_gate_enabled(self) -> bool:
         return bool(self.cfg.get("enable_cost_net_gate", True))
+
+    def _eligibility_filter_enabled(self) -> bool:
+        return bool(self.cfg.get("enable_eligibility_filter", True))
 
     def _generate_box_breakout(
         self,
