@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -272,6 +272,169 @@ class NewsFilterConfig(BaseModel):
     sources: list[str] = []
 
 
+class SignalEngineIssRetryConfig(BaseModel):
+    max_attempts: int = 5
+    base_backoff_ms: int = 200
+    max_backoff_ms: int = 5000
+
+
+class SignalEngineIssConfig(BaseModel):
+    page_size: int = 100
+    retry: SignalEngineIssRetryConfig = SignalEngineIssRetryConfig()
+
+
+class SignalEngineDataConfig(BaseModel):
+    bar_interval_sec: int = 60
+    timezone: str = "Europe/Moscow"
+    iss: SignalEngineIssConfig = SignalEngineIssConfig()
+
+
+class SignalEngineAtrConfig(BaseModel):
+    period: int = 14
+    timeframe_sec: int = 300
+
+
+class SignalEngineRealizedVolConfig(BaseModel):
+    window_bars: int = 60
+
+
+class SignalEngineVwapConfig(BaseModel):
+    use_typical_price: bool = True
+    reset: str = "session_start"
+
+
+class SignalEngineWindowConfig(BaseModel):
+    window_bars: int = 60
+
+
+class SignalEngineFeaturesConfig(BaseModel):
+    atr: SignalEngineAtrConfig = SignalEngineAtrConfig()
+    realized_vol: SignalEngineRealizedVolConfig = SignalEngineRealizedVolConfig()
+    vwap: SignalEngineVwapConfig = SignalEngineVwapConfig()
+    zscore: SignalEngineWindowConfig = SignalEngineWindowConfig()
+    rel_volume: SignalEngineWindowConfig = SignalEngineWindowConfig()
+
+
+class SignalEngineVolatilityRegimeConfig(BaseModel):
+    lookback_days: int = 20
+    high_quantile: float = 0.60
+    low_quantile: float = 0.40
+
+
+class SignalEngineVacuumConfig(BaseModel):
+    spread_ticks: int = 4
+    depth_lots: float = 20.0
+
+
+class SignalEngineLiquidityRegimeConfig(BaseModel):
+    max_spread_ticks: int = 2
+    min_depth_lots: float = 50.0
+    vacuum: SignalEngineVacuumConfig = SignalEngineVacuumConfig()
+
+
+class SignalEngineRegimesConfig(BaseModel):
+    volatility: SignalEngineVolatilityRegimeConfig = SignalEngineVolatilityRegimeConfig()
+    liquidity: SignalEngineLiquidityRegimeConfig = SignalEngineLiquidityRegimeConfig()
+
+
+class SignalEngineOrbConfig(BaseModel):
+    opening_range_min: int = 15
+    buffer_atr_mult: float = 0.10
+    buffer_ticks_min: int = 1
+    tp_atr_mult: float = 1.0
+    sl_atr_mult: float = 0.7
+    horizon_min: int = 90
+    require_high_vol: bool = True
+
+
+class SignalEngineVwapMrConfig(BaseModel):
+    z_enter: float = 2.0
+    z_exit: float = 0.5
+    sl_atr_mult: float = 0.8
+    min_tp_ticks: int = 2
+    horizon_min: int = 45
+
+
+class SignalEngineMicroMomoConfig(BaseModel):
+    ema_fast: int = 9
+    ema_slow: int = 21
+    rel_volume_min: float = 1.2
+    tp_atr_mult: float = 0.8
+    sl_atr_mult: float = 0.6
+    horizon_min: int = 60
+
+
+class SignalEngineStrategiesConfig(BaseModel):
+    orb: SignalEngineOrbConfig = SignalEngineOrbConfig()
+    vwap_mr: SignalEngineVwapMrConfig = SignalEngineVwapMrConfig()
+    micro_momo: SignalEngineMicroMomoConfig = SignalEngineMicroMomoConfig()
+
+
+class SignalEngineTripleBarrierConfig(BaseModel):
+    on_same_bar_tp_sl: str = "worst_case"
+    price_source: str = "ohlc"
+
+
+class SignalEngineLabelingConfig(BaseModel):
+    triple_barrier: SignalEngineTripleBarrierConfig = SignalEngineTripleBarrierConfig()
+
+
+class SignalEngineTierThresholdConfig(BaseModel):
+    mid: int = 100
+    high: int = 500
+
+
+class SignalEngineCalibrationConfig(BaseModel):
+    method: str = "binning_ovr_renorm"
+    bins: int = 15
+    min_bin_count: int = 30
+    smoothing_alpha: float = 1.0
+
+
+class SignalEngineProbabilityConfig(BaseModel):
+    method: str = "dirichlet_decay_v1"
+    dirichlet_alpha: list[float] = Field(default_factory=lambda: [1.0, 1.0, 1.0])
+    decay_half_life_days: int = 30
+    tier_thresholds: SignalEngineTierThresholdConfig = SignalEngineTierThresholdConfig()
+    calibration: SignalEngineCalibrationConfig = SignalEngineCalibrationConfig()
+
+
+class SignalEngineLiquidityPenaltyConfig(BaseModel):
+    enable: bool = True
+    depth_ref_lots: float = 100.0
+    max_penalty_ticks: float = 2.0
+
+
+class SignalEngineCostConfig(BaseModel):
+    model: str = "ticks_v1"
+    commission_ticks_per_side: float = 0.5
+    slippage_ticks_per_side: float = 1.0
+    spread_half_ticks_fallback: float = 1.0
+    liquidity_penalty: SignalEngineLiquidityPenaltyConfig = SignalEngineLiquidityPenaltyConfig()
+
+
+class SignalEngineGateConfig(BaseModel):
+    forbid_windows_min: int = 5
+    min_expected_return_ticks: float = 1.0
+
+
+class SignalEngineRuntimeAdapterConfig(BaseModel):
+    enabled: bool = False
+    override_signal_fields: bool = True
+    synthetic_history_cap: int = 2000
+
+
+class SignalEngineConfig(BaseModel):
+    data: SignalEngineDataConfig = SignalEngineDataConfig()
+    features: SignalEngineFeaturesConfig = SignalEngineFeaturesConfig()
+    regimes: SignalEngineRegimesConfig = SignalEngineRegimesConfig()
+    strategies: SignalEngineStrategiesConfig = SignalEngineStrategiesConfig()
+    labeling: SignalEngineLabelingConfig = SignalEngineLabelingConfig()
+    probability: SignalEngineProbabilityConfig = SignalEngineProbabilityConfig()
+    cost: SignalEngineCostConfig = SignalEngineCostConfig()
+    gate: SignalEngineGateConfig = SignalEngineGateConfig()
+    runtime_adapter: SignalEngineRuntimeAdapterConfig = SignalEngineRuntimeAdapterConfig()
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="MOEX_CARRY_",
@@ -293,6 +456,7 @@ class AppSettings(BaseSettings):
     environment: EnvironmentConfig = EnvironmentConfig()
     risk_profile: RiskProfileConfig = RiskProfileConfig()
     news_filter: NewsFilterConfig = NewsFilterConfig()
+    signal_engine: SignalEngineConfig = SignalEngineConfig()
 
 
 def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -382,3 +546,5 @@ def resolve_paths(settings: AppSettings) -> RuntimePaths:
         data_dir = _repo_root() / data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
     return RuntimePaths(data_dir=data_dir)
+
+
