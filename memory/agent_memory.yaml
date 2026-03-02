@@ -315,6 +315,16 @@ decisions:
       - scripts/run_morning_plan_walk_forward.py
       - tests/test_morning_plan_walk_forward.py
       - data/output/research/morning_offline_wf_2026ytd_same_goods_assets_probgate_v3_n1.json
+  - id: ADM-2026-03-02-031
+    date: 2026-03-02
+    title: Add fold trade-floor safeguard for probability-gated walk-forward
+    context: Probability-gated runs showed sparse high-variance behavior where one fold could dominate aggregate net ticks.
+    decision: Add `--prob-min-filled-trades-per-fold`; if a gated test fold is below threshold, rerun that fold ungated and persist fallback metadata.
+    impact: Sparse-gate optimism is now explicitly controlled and observable; broad-universe tests show gate signal quality is not yet stable for default enablement.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - data/output/research/morning_offline_wf_2026ytd_goods32_costawarev2_fixed_probgate_sgs_ne1_er1p0_floor2.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
