@@ -587,6 +587,56 @@ def test_worker_throttles_new_enter_fingerprints_per_pair(tmp_path):
     assert len(telegram_session.sent_messages) == 1
 
 
+def test_worker_message_shows_staged_entry_exit_protocol(tmp_path):
+    settings = _build_settings(tmp_path, allowed_user_ids=[111], callback_ttl_hours=24)
+    rows = [
+        {
+            "run_id": "run-staged-msg",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.2,
+            "signal_fingerprint": "fp-staged-msg-1",
+            "spot_mid": 100.0,
+            "future_mid": 101.0,
+            "entry_stock_min": 99.0,
+            "entry_stock_max": 101.0,
+            "entry_future_min_per_share": 100.0,
+            "entry_future_max_per_share": 102.0,
+            "signal_metrics": {
+                "entry_execution_protocol": "sequential",
+                "sequential_entry_enabled": True,
+                "sequential_entry_first_leg": "future",
+                "sequential_entry_second_leg_max_wait_minutes": 5,
+                "sequential_entry_unwind_penalty_bps": 2.0,
+                "exit_execution_protocol": "sequential",
+                "sequential_exit_enabled": True,
+                "sequential_exit_first_leg": "stock",
+                "sequential_exit_second_leg_max_wait_minutes": 7,
+                "sequential_exit_force_penalty_bps": 3.5,
+            },
+        }
+    ]
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[rows])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker._broadcast_signals()
+
+    assert len(telegram_session.sent_messages) == 1
+    text = str(telegram_session.sent_messages[0]["text"])
+    assert "staged (" in text
+    assert "unwind 1" in text
+    assert "force-close" in text
+
+
 def test_worker_prefers_pair_actionability_endpoint(tmp_path):
     settings = _build_settings(tmp_path, allowed_user_ids=[111], callback_ttl_hours=24)
     rows = [

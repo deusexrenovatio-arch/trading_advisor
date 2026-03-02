@@ -197,3 +197,115 @@ def test_replay_forces_exit_after_timeout_when_policy_enabled():
     assert not forced_rows.empty
     assert bool((forced_rows["exit_forced"] == True).any())  # noqa: E712
     assert bool((forced_rows["exit_flag"] == True).any())  # noqa: E712
+
+
+def test_replay_supports_sequential_entry_by_legs():
+    settings = _base_settings(
+        {
+            "signal_exec_lag_days": 0,
+            "execution_lag_minutes": 0,
+            "execution_max_wait_minutes": 120,
+            "sequential_entry_enabled": True,
+            "sequential_entry_first_leg": "future",
+            "sequential_entry_second_leg_max_wait_minutes": 30,
+            "TP_pct": 1.0,
+        }
+    )
+    df = _series(
+        [
+            ("2026-01-01 10:00:00", 100.0, 101.0),
+            ("2026-01-01 10:05:00", 104.0, 101.0),
+            ("2026-01-01 10:20:00", 100.2, 101.2),
+        ]
+    )
+    result = _apply_spread_carry_signals(
+        df,
+        merged=None,
+        dividends=[],
+        key_rates=_rates(date(2026, 1, 1)),
+        settings=settings,
+        future_spec=_future_spec(),
+        alpha_cfg=settings.spread_carry_alpha,
+    )
+
+    assert result.iloc[0]["signal_action"] == "enter"
+    assert bool(result["entry_flag"].any()) is True
+    filled_row = result[result["entry_flag"] == True].iloc[0]  # noqa: E712
+    assert str(filled_row["entry_fill_ts"]).startswith("2026-01-01T10:20:00")
+    assert float(filled_row["entry_wait_minutes"]) >= 20.0
+    assert filled_row["entry_fill_status"] == "filled"
+
+
+def test_replay_sequential_entry_marks_unfilled_when_second_leg_times_out():
+    settings = _base_settings(
+        {
+            "signal_exec_lag_days": 0,
+            "execution_lag_minutes": 0,
+            "execution_max_wait_minutes": 120,
+            "sequential_entry_enabled": True,
+            "sequential_entry_first_leg": "future",
+            "sequential_entry_second_leg_max_wait_minutes": 5,
+            "TP_pct": 1.0,
+        }
+    )
+    df = _series(
+        [
+            ("2026-01-01 10:00:00", 100.0, 101.0),
+            ("2026-01-01 10:05:00", 104.0, 101.0),
+            ("2026-01-01 10:20:00", 105.0, 101.0),
+        ]
+    )
+    result = _apply_spread_carry_signals(
+        df,
+        merged=None,
+        dividends=[],
+        key_rates=_rates(date(2026, 1, 1)),
+        settings=settings,
+        future_spec=_future_spec(),
+        alpha_cfg=settings.spread_carry_alpha,
+    )
+
+    assert result.iloc[0]["signal_action"] == "enter"
+    assert result.iloc[0]["entry_fill_status"] == "entry_unfilled"
+    assert result.iloc[0]["unfilled_reason"] in {"entry_second_leg_timeout_unwound", "entry_no_fill_in_window"}
+    assert bool(result["entry_flag"].any()) is False
+
+
+def test_replay_sequential_exit_forces_second_leg_after_gap_timeout():
+    settings = _base_settings(
+        {
+            "signal_exec_lag_days": 0,
+            "execution_lag_minutes": 0,
+            "execution_max_wait_minutes": 60,
+            "sequential_exit_enabled": True,
+            "sequential_exit_first_leg": "future",
+            "sequential_exit_second_leg_max_wait_minutes": 5,
+            "force_exit_policy": "market_worse",
+            "force_exit_penalty_bps": 5.0,
+            "TP_pct": 1.0,
+            "SL_pct": 0.001,
+        }
+    )
+    df = _series(
+        [
+            ("2026-01-01 10:00:00", 100.0, 101.0),
+            ("2026-01-01 10:01:00", 100.0, 101.0),
+            ("2026-01-01 10:02:00", 95.0, 105.0),
+            ("2026-01-01 10:03:00", 90.0, 105.0),
+            ("2026-01-01 10:20:00", 90.0, 105.0),
+        ]
+    )
+    result = _apply_spread_carry_signals(
+        df,
+        merged=None,
+        dividends=[],
+        key_rates=_rates(date(2026, 1, 1)),
+        settings=settings,
+        future_spec=_future_spec(),
+        alpha_cfg=settings.spread_carry_alpha,
+    )
+
+    forced_rows = result[result["exit_fill_status"] == "forced"]
+    assert not forced_rows.empty
+    assert bool((forced_rows["exit_forced"] == True).any())  # noqa: E712
+    assert bool((forced_rows["unfilled_reason"] == "exit_second_leg_timeout_forced").any())  # noqa: E712

@@ -13,3 +13,11 @@ def test_minute_strategy_defaults_are_canonical():
     assert strategy.entry_stock_tolerance_pct == 0.02
     assert strategy.entry_future_tolerance_pct == 0.025
     assert strategy.entry_spread_tolerance_pct == 0.03
+    assert strategy.sequential_entry_enabled is False
+    assert strategy.sequential_entry_first_leg == "future"
+    assert strategy.sequential_entry_second_leg_max_wait_minutes == 5
+    assert strategy.sequential_entry_unwind_penalty_bps == 0.0
+    assert strategy.sequential_exit_enabled is False
+    assert strategy.sequential_exit_first_leg == "future"
+    assert strategy.sequential_exit_second_leg_max_wait_minutes == 5
+    assert strategy.sequential_exit_force_penalty_bps is None
