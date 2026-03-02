@@ -466,3 +466,39 @@ def test_summarize_counts_gated_out_rows():
     summary = mod._summarize(rows, setups_total=2)
     assert summary["gated_out"] == 1
     assert summary["filled_trades"] == 1
+
+
+def test_should_probability_gate_fallback_by_fold_trade_floor():
+    mod = _load_module()
+    assert (
+        mod._should_probability_gate_fallback(
+            probability_gate_enabled=True,
+            min_filled_trades_per_fold=2,
+            test_summary={"filled_trades": 1},
+        )
+        is True
+    )
+    assert (
+        mod._should_probability_gate_fallback(
+            probability_gate_enabled=True,
+            min_filled_trades_per_fold=2,
+            test_summary={"filled_trades": 2},
+        )
+        is False
+    )
+    assert (
+        mod._should_probability_gate_fallback(
+            probability_gate_enabled=False,
+            min_filled_trades_per_fold=2,
+            test_summary={"filled_trades": 0},
+        )
+        is False
+    )
+    assert (
+        mod._should_probability_gate_fallback(
+            probability_gate_enabled=True,
+            min_filled_trades_per_fold=0,
+            test_summary={"filled_trades": 0},
+        )
+        is False
+    )
