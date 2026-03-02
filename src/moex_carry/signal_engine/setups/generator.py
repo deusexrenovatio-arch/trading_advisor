@@ -83,6 +83,44 @@ class SetupGenerator:
         )
         return ranked[:max_setups]
 
+    def _cost_gate_metrics(self, *, reward_gross_ticks: int, risk_gross_ticks: int) -> dict[str, float | bool]:
+        cost_ticks = self._estimated_round_trip_cost_ticks()
+        min_reward_net = _safe_non_negative_float(self.cfg.get("min_reward_net_ticks"), 2.0)
+        min_rr_net = _safe_non_negative_float(self.cfg.get("min_rr_net"), 1.1)
+        min_reward_gross_default = max(2.0 * cost_ticks, 0.0)
+        min_reward_gross = _safe_non_negative_float(
+            self.cfg.get("min_reward_gross_ticks"),
+            min_reward_gross_default,
+        )
+        reward_gross = float(max(int(reward_gross_ticks), 0))
+        risk_gross = float(max(int(risk_gross_ticks), 0))
+        reward_net = reward_gross - cost_ticks
+        risk_net = risk_gross + cost_ticks
+        rr_net = reward_net / risk_net if risk_net > 0.0 else 0.0
+        is_pass = bool(
+            reward_gross >= min_reward_gross
+            and reward_net >= min_reward_net
+            and rr_net >= min_rr_net
+        )
+        return {
+            "pass": is_pass,
+            "estimated_round_trip_cost_ticks": float(cost_ticks),
+            "reward_gross_ticks": float(reward_gross),
+            "risk_gross_ticks": float(risk_gross),
+            "reward_net_ticks": float(reward_net),
+            "risk_net_ticks": float(risk_net),
+            "rr_net": float(rr_net),
+            "min_reward_gross_ticks": float(min_reward_gross),
+            "min_reward_net_ticks": float(min_reward_net),
+            "min_rr_net": float(min_rr_net),
+        }
+
+    def _estimated_round_trip_cost_ticks(self) -> float:
+        return _safe_non_negative_float(self.cfg.get("estimated_round_trip_cost_ticks"), 5.0)
+
+    def _cost_gate_enabled(self) -> bool:
+        return bool(self.cfg.get("enable_cost_net_gate", True))
+
     def _generate_box_breakout(
         self,
         *,
@@ -142,6 +180,13 @@ class SetupGenerator:
             delta = max(round_half_away_from_zero(rr_default * float(risk_ticks)), min_target_ticks)
             tp_ticks = entry_stop_ticks + delta if side == Side.BUY else entry_stop_ticks - delta
 
+        cost_gate = self._cost_gate_metrics(
+            reward_gross_ticks=abs(int(tp_ticks) - int(entry_stop_ticks)),
+            risk_gross_ticks=int(risk_ticks),
+        )
+        if self._cost_gate_enabled() and not bool(cost_gate.get("pass")):
+            return None
+
         expiry_policy = str(self.cfg.get("entry_expiry_policy", "EOD_BEFORE_EVENING_CLEARING"))
         expiry_ts = calendar.recommended_entry_expiry(as_of_ts, expiry_policy)
         setup_id = f"{instrument_id}:BOX_BREAKOUT:{side.value}:{entry_stop_ticks}"
@@ -161,7 +206,11 @@ class SetupGenerator:
                 activate_from_ts=None,
                 expire_ts=expiry_ts,
                 link_group=setup_id,
-                meta={"limit_price_ticks": int(limit_ticks), "setup_kind": "BOX_BREAKOUT"},
+                meta={
+                    "limit_price_ticks": int(limit_ticks),
+                    "setup_kind": "BOX_BREAKOUT",
+                    "cost_gate": cost_gate,
+                },
             ),
             sl_order=OrderIntent(
                 order_type=OrderType.STOP,
@@ -249,6 +298,13 @@ class SetupGenerator:
             delta = max(round_half_away_from_zero(rr_default * float(risk_ticks)), min_target_ticks)
             tp_ticks = entry_ticks + delta if side == Side.BUY else entry_ticks - delta
 
+        cost_gate = self._cost_gate_metrics(
+            reward_gross_ticks=abs(int(tp_ticks) - int(entry_ticks)),
+            risk_gross_ticks=int(risk_ticks),
+        )
+        if self._cost_gate_enabled() and not bool(cost_gate.get("pass")):
+            return None
+
         expiry_policy = str(self.cfg.get("entry_expiry_policy", "EOD_BEFORE_EVENING_CLEARING"))
         expiry_ts = calendar.recommended_entry_expiry(as_of_ts, expiry_policy)
         setup_id = f"{instrument_id}:PULLBACK_LIMIT:{side.value}:{entry_ticks}"
@@ -265,7 +321,7 @@ class SetupGenerator:
                 activate_from_ts=None,
                 expire_ts=expiry_ts,
                 link_group=setup_id,
-                meta={"setup_kind": "PULLBACK_LIMIT"},
+                meta={"setup_kind": "PULLBACK_LIMIT", "cost_gate": cost_gate},
             ),
             sl_order=OrderIntent(
                 order_type=OrderType.STOP,
@@ -304,3 +360,13 @@ def _find_level(levels: list[Level], kind: str) -> Level | None:
         if str(level.kind) == str(kind):
             return level
     return None
+
+
+def _safe_non_negative_float(value: object, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = float(default)
+    if parsed < 0.0:
+        return 0.0
+    return float(parsed)
