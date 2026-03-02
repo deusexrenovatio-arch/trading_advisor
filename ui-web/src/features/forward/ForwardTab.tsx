@@ -18,9 +18,16 @@ import KeyValueGrid from '../../shared/ui/KeyValueGrid'
 type Props = {
   forwardRunId: string
   onForwardRunIdChange: (value: string) => void
+  forwardRequestJson: string
+  onForwardRequestJsonChange: (value: string) => void
+  onStartForwardRun: () => void
   onFetchForwardStatus: () => void
   forwardLoading: boolean
+  forwardStartLoading: boolean
   forwardError?: string | null
+  forwardRequestJsonError?: string | null
+  forwardStartError?: string | null
+  forwardStartMessage?: string | null
   forwardStatus: ForwardStatus | null
   formatValue: (value: unknown, column?: string) => string
   renderFieldLabel: (key: string) => ReactNode
@@ -30,9 +37,16 @@ type Props = {
 const ForwardTab = ({
   forwardRunId,
   onForwardRunIdChange,
+  forwardRequestJson,
+  onForwardRequestJsonChange,
+  onStartForwardRun,
   onFetchForwardStatus,
   forwardLoading,
+  forwardStartLoading,
   forwardError,
+  forwardRequestJsonError,
+  forwardStartError,
+  forwardStartMessage,
   forwardStatus,
   formatValue,
   renderFieldLabel,
@@ -40,25 +54,58 @@ const ForwardTab = ({
 }: Props) => (
   <Stack spacing={2}>
     <Paper sx={{ p: 2 }}>
-      <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+      <Stack spacing={1.5}>
+        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+          <TextField
+            label="ID прогона (опционально)"
+            size="small"
+            value={forwardRunId}
+            onChange={(event) => onForwardRunIdChange(event.target.value)}
+            sx={{ minWidth: 220 }}
+          />
+          <Button variant="contained" onClick={onStartForwardRun} disabled={forwardStartLoading}>
+            Запустить forward
+          </Button>
+          <Button variant="outlined" onClick={onFetchForwardStatus} disabled={forwardLoading}>
+            Загрузить статус
+          </Button>
+          {forwardStartLoading ? (
+            <Typography variant="body2" color="text.secondary">
+              Запуск...
+            </Typography>
+          ) : null}
+          {forwardLoading ? (
+            <Typography variant="body2" color="text.secondary">
+              Загрузка статуса...
+            </Typography>
+          ) : null}
+        </Stack>
         <TextField
-          label="ID прогона (опционально)"
+          label="Forward request JSON (опционально)"
           size="small"
-          value={forwardRunId}
-          onChange={(event) => onForwardRunIdChange(event.target.value)}
-          sx={{ minWidth: 220 }}
+          value={forwardRequestJson}
+          onChange={(event) => onForwardRequestJsonChange(event.target.value)}
+          multiline
+          minRows={3}
         />
-        <Button variant="contained" onClick={onFetchForwardStatus} disabled={forwardLoading}>
-          Загрузить статус
-        </Button>
-        {forwardLoading ? (
-          <Typography variant="body2" color="text.secondary">
-            Загрузка статуса...
+        {forwardRequestJsonError ? (
+          <Typography variant="body2" color="error">
+            {forwardRequestJsonError}
+          </Typography>
+        ) : null}
+        {forwardStartError ? (
+          <Typography variant="body2" color="error">
+            {forwardStartError}
           </Typography>
         ) : null}
         {forwardError ? (
           <Typography variant="body2" color="error">
             {forwardError}
+          </Typography>
+        ) : null}
+        {forwardStartMessage ? (
+          <Typography variant="body2" color="success.main">
+            {forwardStartMessage}
           </Typography>
         ) : null}
       </Stack>

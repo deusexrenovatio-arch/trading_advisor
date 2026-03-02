@@ -35,3 +35,25 @@
 - Scope:
   - Commit order: `contracts/config -> backend/domain -> frontend -> tests -> docs`.
   - Patch notes format: `Summary`, `Changed`, `Verification`, `Risk/Rollback`.
+
+## 2026-03-02
+- Decision: run component-first product coverage review as baseline planning artifact.
+- Why: user value and acceptance quality degrade when requirements are tracked only by endpoint groups, not by end-to-end workspace journey.
+- Scope:
+  - Primary component order: `platform -> decisions -> market/signals -> research -> news -> portfolio -> ops/integrations`.
+  - Scenario framing: `primary + edge + negative + interruption` per component.
+
+## 2026-03-02
+- Decision: prioritize idempotent operator action path and risk-gated commit path as P0 documentation outcomes.
+- Why: execution safety and duplicate protection are more business-critical than adding new UI surface area.
+- Scope:
+  - Require explicit idempotency expectations in UI action scenarios.
+  - Require explicit rebalance commit guard expectations when risk checks fail.
+
+## 2026-03-02
+- Decision: close action-safety gaps in implementation immediately after review (not defer to a later sprint).
+- Why: P0 operator safety gaps were contract violations (`idempotency_key` required) and fail-safe violations (commit allowed despite failed risk gate).
+- Scope:
+  - UI write actions now generate/send `idempotency_key` for Signals and Decisions.
+  - Portfolio rebalance commit now blocks on `max_positions` risk-gate failure.
+  - Forward workspace now supports run start from UI via `POST /api/forward/start`.

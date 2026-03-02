@@ -248,9 +248,14 @@ function App() {
     backtestRunError,
     backtestRunParseError,
     forwardRunId,
+    forwardRequestJson,
+    forwardRequestJsonError,
     forwardStatus,
     forwardLoading,
     forwardError,
+    forwardStartLoading,
+    forwardStartError,
+    forwardStartMessage,
     hpoRequestJson,
     hpoRequestJsonError,
     hpoSearchSpace,
@@ -261,6 +266,7 @@ function App() {
     setParamPreset,
     setBacktestPrecompute,
     setForwardRunId,
+    handleForwardRequestJsonChange,
     handleHpoRequestJsonChange,
     setHpoSearchSpace,
     fetchParamSpecs,
@@ -268,6 +274,7 @@ function App() {
     handleParamReset,
     handleBacktestRun,
     fetchForwardStatus,
+    startForwardRun,
     handleHpoRun,
   } = useBacktestForwardHpo({ tab: activeTab, buildParamDefaults, collectParamRequest })
 
@@ -602,9 +609,16 @@ function App() {
             <ForwardTab
               forwardRunId={forwardRunId}
               onForwardRunIdChange={setForwardRunId}
+              forwardRequestJson={forwardRequestJson}
+              onForwardRequestJsonChange={handleForwardRequestJsonChange}
+              onStartForwardRun={startForwardRun}
               onFetchForwardStatus={fetchForwardStatus}
               forwardLoading={forwardLoading}
+              forwardStartLoading={forwardStartLoading}
               forwardError={forwardError}
+              forwardRequestJsonError={forwardRequestJsonError}
+              forwardStartError={forwardStartError}
+              forwardStartMessage={forwardStartMessage}
               forwardStatus={forwardStatus}
               formatValue={formatValue}
               renderFieldLabel={renderFieldLabel}

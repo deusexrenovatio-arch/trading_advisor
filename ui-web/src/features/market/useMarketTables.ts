@@ -22,6 +22,7 @@ import {
 } from '../../shared/api/decisionApi'
 import { ApiError } from '../../shared/api/http'
 import { formatDateInputValue, parseDateInput } from '../../shared/utils/date'
+import { buildIdempotencyKey } from '../../shared/utils/idempotency'
 import { getTableColumns } from '../../shared/utils/tables'
 import {
   PRETRADE_PREFETCH_LIMIT,
@@ -409,6 +410,12 @@ export const useMarketTables = ({ tab, compareValues, onOperatorAction }: Params
         direction: row.signal_direction,
         source: 'ui',
         actor_id: 'operator',
+        idempotency_key: buildIdempotencyKey('signal-action', [
+          signalId,
+          actionKey,
+          normalizedLeg || 'pair',
+          orderId,
+        ]),
         price: executionForm.price ? Number(executionForm.price) : null,
         quantity: executionForm.quantity ? Number(executionForm.quantity) : null,
         side: normalizedLeg || executionForm.side || null,
