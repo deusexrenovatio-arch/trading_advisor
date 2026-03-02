@@ -21,10 +21,19 @@ from moex_carry.signal_engine.core.types import Candle, Setup, Side, TF
 from moex_carry.signal_engine.data.candles import InMemoryCandleProvider
 from moex_carry.signal_engine.plan.builder import MorningPlanBuilder
 
-DEFAULT_TUNING_GRID: dict[str, list[float]] = {
-    "execution.buffer_atr_mult": [0.08, 0.10, 0.12],
-    "setups.rr_default": [1.4, 1.6],
-    "setups.pullback_max_dist_atr_mult": [0.8, 1.0],
+TUNING_GRID_PROFILES: dict[str, dict[str, list[float]]] = {
+    "baseline_v1": {
+        "execution.buffer_atr_mult": [0.08, 0.10, 0.12],
+        "setups.rr_default": [1.4, 1.6],
+        "setups.pullback_max_dist_atr_mult": [0.8, 1.0],
+    },
+    "cost_aware_v2": {
+        "execution.buffer_atr_mult": [0.08, 0.10],
+        "setups.min_rr_net": [1.0, 1.2],
+        "setups.min_reward_net_ticks": [1.0, 2.0],
+        "setups.max_risk_atr_mult": [1.0, 1.2],
+        "setups.sl_atr_mult": [0.7, 0.8],
+    },
 }
 
 COMPARISON_POINTS: list[str] = [
@@ -550,6 +559,14 @@ def _expand_grid(grid: dict[str, list[float]]) -> list[dict[str, float]]:
     return combinations
 
 
+def _resolve_tuning_grid(profile_name: str) -> dict[str, list[float]]:
+    key = str(profile_name or "baseline_v1").strip()
+    if key not in TUNING_GRID_PROFILES:
+        allowed = ",".join(sorted(TUNING_GRID_PROFILES.keys()))
+        raise ValueError(f"unknown_tuning_profile:{key};allowed={allowed}")
+    return copy.deepcopy(TUNING_GRID_PROFILES[key])
+
+
 def _apply_overrides(base_cfg: dict[str, Any], overrides: dict[str, float]) -> dict[str, Any]:
     cfg = copy.deepcopy(base_cfg)
     for dotted_path, value in overrides.items():
@@ -1009,7 +1026,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         slippage_ticks_per_side=float(args.slippage_ticks_per_side),
         spread_half_ticks=float(args.spread_half_ticks),
     )
-    grid = DEFAULT_TUNING_GRID
+    tuning_profile = str(args.tuning_profile).strip()
+    grid = _resolve_tuning_grid(tuning_profile)
     combinations = _expand_grid(grid)
     default_combo = next((item for item in combinations if item == {}), None)
     if default_combo is None:
@@ -1145,6 +1163,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         "cost_assumptions_ticks": asdict(costs),
         "tuning_points": {
             "objective": objective,
+            "profile": tuning_profile,
+            "combinations": len(combinations),
             "grid": grid,
             "min_train_trades": min_train_trades,
             "min_train_instruments_with_trades": required_instruments,
@@ -1178,6 +1198,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-days", type=int, default=20)
     parser.add_argument("--test-days", type=int, default=5)
     parser.add_argument("--step-days", type=int, default=5)
+    parser.add_argument(
+        "--tuning-profile",
+        type=str,
+        default="baseline_v1",
+        choices=sorted(TUNING_GRID_PROFILES.keys()),
+    )
     parser.add_argument(
         "--selection-objective",
         type=str,

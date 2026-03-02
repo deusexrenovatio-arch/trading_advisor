@@ -285,6 +285,16 @@ decisions:
       - src/moex_carry/config.py
       - configs/default.yaml
       - tests/test_signal_engine_setups.py
+  - id: ADM-2026-03-02-028
+    date: 2026-03-02
+    title: Expand walk-forward tuning with cost-aware profile presets
+    context: After setup-level gates, further gains required tuning over net-edge risk controls without exploding default runtime for quick checks.
+    decision: Add CLI-selectable tuning profiles and introduce `cost_aware_v2` grid covering net RR, net reward threshold, risk clamp, stop fallback, and execution buffer.
+    impact: Broad-universe result moved near breakeven in offline causal walk-forward while keeping baseline profile available for quick regression checks.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - data/output/research/morning_offline_wf_2026ytd_same_goods_assets_costawarev2_v1.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
