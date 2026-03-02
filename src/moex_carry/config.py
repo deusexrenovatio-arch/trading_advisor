@@ -424,6 +424,127 @@ class SignalEngineRuntimeAdapterConfig(BaseModel):
     synthetic_history_cap: int = 2000
 
 
+class SignalEngineTimeWindowConfig(BaseModel):
+    start: str
+    end: str
+
+
+class SignalEngineMorningCalendarConfig(BaseModel):
+    sessions: list[SignalEngineTimeWindowConfig] = Field(
+        default_factory=lambda: [
+            SignalEngineTimeWindowConfig(start="10:00", end="14:00"),
+            SignalEngineTimeWindowConfig(start="14:05", end="18:50"),
+            SignalEngineTimeWindowConfig(start="19:05", end="23:50"),
+        ]
+    )
+    clearing_windows: list[SignalEngineTimeWindowConfig] = Field(
+        default_factory=lambda: [
+            SignalEngineTimeWindowConfig(start="14:00", end="14:05"),
+            SignalEngineTimeWindowConfig(start="18:50", end="19:05"),
+        ]
+    )
+    forbid_new_positions_margin_min: int = 5
+    entry_expiry_policy: str = "EOD_BEFORE_EVENING_CLEARING"
+
+
+class SignalEngineMorningDataConfig(BaseModel):
+    d1_limit: int = 200
+    h1_limit: int = 300
+    m5_limit: int = 300
+
+
+class SignalEngineMorningRegimeD1Config(BaseModel):
+    ema_fast: int = 20
+    ema_slow: int = 50
+    adx_period: int = 14
+    er_period: int = 20
+    dir_band_atr_mult: float = 0.25
+    adx_trend_min: float = 25.0
+    adx_range_max: float = 18.0
+    er_trend_min: float = 0.30
+    er_range_max: float = 0.20
+    atr_period: int = 14
+    atr_rank_lookback: int = 60
+    vol_high_pct: float = 0.70
+    vol_low_pct: float = 0.30
+
+
+class SignalEngineMorningRegimeH1Config(BaseModel):
+    ema_fast: int = 20
+    ema_slow: int = 50
+    atr_period: int = 14
+    dir_band_atr_mult: float = 0.20
+
+
+class SignalEngineMorningLiquidityConfig(BaseModel):
+    use_orderbook_if_available: bool = True
+    spread_thin_ticks: int = 2
+    spread_vacuum_ticks: int = 4
+    depth_thin_lots: float = 50.0
+    depth_vacuum_lots: float = 20.0
+
+
+class SignalEngineMorningRegimeConfig(BaseModel):
+    d1: SignalEngineMorningRegimeD1Config = SignalEngineMorningRegimeD1Config()
+    h1: SignalEngineMorningRegimeH1Config = SignalEngineMorningRegimeH1Config()
+    liquidity: SignalEngineMorningLiquidityConfig = SignalEngineMorningLiquidityConfig()
+
+
+class SignalEngineMorningLevelsD1Config(BaseModel):
+    donchian_period: int = 20
+    pivots: bool = True
+
+
+class SignalEngineMorningLevelsH1Config(BaseModel):
+    swing_k: int = 2
+    max_swings_each_side: int = 8
+    box_hours: int = 6
+    box_range_atr_mult: float = 1.2
+    include_ema20_level: bool = True
+
+
+class SignalEngineMorningLevelsConfig(BaseModel):
+    merge_distance_ticks: int = 2
+    d1: SignalEngineMorningLevelsD1Config = SignalEngineMorningLevelsD1Config()
+    h1: SignalEngineMorningLevelsH1Config = SignalEngineMorningLevelsH1Config()
+
+
+class SignalEngineMorningExecutionConfig(BaseModel):
+    m5_atr_period: int = 14
+    buffer_atr_mult: float = 0.10
+    buffer_min_ticks: int = 1
+    limit_slip_ticks: int = 2
+    noise_warn_high: float = 2.5
+    noise_warn_low: float = 0.4
+    swing_k: int = 2
+
+
+class SignalEngineMorningSetupsConfig(BaseModel):
+    mode: str = "trend_first"
+    max_setups_per_instrument: int = 2
+    require_vol_not_low: bool = True
+    pullback_max_dist_atr_mult: float = 1.0
+    rr_default: float = 1.6
+    min_target_ticks: int = 3
+    max_risk_atr_mult: float = 1.2
+    sl_atr_mult: float = 0.8
+    qty_lots: int = 1
+    horizon: str = "EOD"
+    entry_tif: str = "GTT"
+    entry_expiry_policy: str = "EOD_BEFORE_EVENING_CLEARING"
+    entry_zone_offset_ticks: int = 0
+
+
+class SignalEngineMorningPlanConfig(BaseModel):
+    timezone: str = "Europe/Moscow"
+    calendar: SignalEngineMorningCalendarConfig = SignalEngineMorningCalendarConfig()
+    data: SignalEngineMorningDataConfig = SignalEngineMorningDataConfig()
+    regime: SignalEngineMorningRegimeConfig = SignalEngineMorningRegimeConfig()
+    levels: SignalEngineMorningLevelsConfig = SignalEngineMorningLevelsConfig()
+    execution: SignalEngineMorningExecutionConfig = SignalEngineMorningExecutionConfig()
+    setups: SignalEngineMorningSetupsConfig = SignalEngineMorningSetupsConfig()
+
+
 class SignalEngineConfig(BaseModel):
     data: SignalEngineDataConfig = SignalEngineDataConfig()
     features: SignalEngineFeaturesConfig = SignalEngineFeaturesConfig()
@@ -434,6 +555,7 @@ class SignalEngineConfig(BaseModel):
     cost: SignalEngineCostConfig = SignalEngineCostConfig()
     gate: SignalEngineGateConfig = SignalEngineGateConfig()
     runtime_adapter: SignalEngineRuntimeAdapterConfig = SignalEngineRuntimeAdapterConfig()
+    morning_plan: SignalEngineMorningPlanConfig = SignalEngineMorningPlanConfig()
 
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
