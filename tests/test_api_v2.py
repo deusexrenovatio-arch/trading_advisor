@@ -1159,6 +1159,51 @@ def test_v2_research_wrappers(tmp_path, monkeypatch):
     assert hpo_status_data["promotion_gate"]["status"] == "pass"
 
 
+def test_v2_research_morning_plan_wrapper(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    class _FakeMorningPlanBuilder:
+        def __init__(self, _provider, _calendar, _cfg):
+            pass
+
+        def build_plan(self, *, as_of_ts, instrument_id, tick_size):
+            assert instrument_id == "BRK6"
+            assert tick_size == 0.01
+            return {
+                "instrument_id": instrument_id,
+                "tick_size": tick_size,
+                "as_of_ts": as_of_ts,
+                "setups": [{"setup_id": "S1"}],
+                "warnings": ["ok"],
+            }
+
+    monkeypatch.setattr(ui_app, "MorningPlanBuilder", _FakeMorningPlanBuilder)
+
+    response = client.post(
+        "/api/v2/research/morning-plan",
+        json={
+            "instrument_id": "BRK6",
+            "tick_size": 0.01,
+            "as_of_ts": "2026-03-02T07:00:00Z",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["instrument_id"] == "BRK6"
+    assert payload["tick_size"] == 0.01
+    assert payload["as_of_ts"] == "2026-03-02T07:00:00+00:00"
+    assert payload["setups"][0]["setup_id"] == "S1"
+
+    invalid_tick_size = client.post(
+        "/api/v2/research/morning-plan",
+        json={"instrument_id": "BRK6", "tick_size": 0},
+    )
+    assert invalid_tick_size.status_code == 400
+    assert invalid_tick_size.get_json()["message"] == "invalid_tick_size"
+
+
 def test_v2_hpo_status_fails_on_quality_gate(tmp_path, monkeypatch):
     settings = _build_settings(tmp_path)
     app = create_app(settings)
