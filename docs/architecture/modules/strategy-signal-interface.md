@@ -102,3 +102,11 @@ the core spread carry fields used by the floor + alpha logic:
   }
 }
 ```
+
+## Two-layer Signal Engine Mapping
+For `signal_engine` modules, strategy generators emit `AlphaProposal` first, then probability + cost + gate produce an engine action:
+- `BUY|SELL` -> `action=enter`
+- `ADVISORY|NO_TRADE` -> `action=hold`
+
+The bridge lives in `src/moex_carry/signal_engine/adapter.py` and `src/moex_carry/strategy/two_layer_adapter.py`.
+All probabilities in metadata follow `p_tp + p_sl + p_exit = 1` and include `forecast_probability_source` + `forecast_n_effective`.
