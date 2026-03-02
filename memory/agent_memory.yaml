@@ -258,6 +258,19 @@ decisions:
       - ui-web/src/features/decisions/useDecisionView.ts
       - src/moex_carry/ui/routes_market_data.py
       - ui-web/src/features/forward/ForwardTab.tsx
+  - id: ADM-2026-03-02-025
+    date: 2026-03-02
+    title: Reframe staged protocol as true sequential two-leg execution with explicit fallback actions
+    context: Prior staged implementation widened tolerance windows but still executed pair legs atomically, which mismatched manual Telegram workflow assumptions.
+    decision: Add sequential entry/exit protocol controls, execute legs in configured order, unwind or force-close second leg on timeout, and expose protocol details in signal metrics and Telegram messages.
+    impact: Replay/backtest behavior now matches manual staged execution expectations and comparison runs can measure execution-quality deltas for real two-leg handling.
+    links:
+      - src/moex_carry/pipeline.py
+      - src/moex_carry/signal_replay/minute_replay.py
+      - src/moex_carry/integrations/telegram_worker.py
+      - src/moex_carry/contracts/strategy_test.py
+      - data/reports/sequential_compare_base_vs_staged_summary_20260302.csv
+      - data/reports/sequential_protocol_settings_20260302.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
