@@ -295,6 +295,16 @@ decisions:
       - scripts/run_morning_plan_walk_forward.py
       - tests/test_morning_plan_walk_forward.py
       - data/output/research/morning_offline_wf_2026ytd_same_goods_assets_costawarev2_v1.json
+  - id: ADM-2026-03-02-029
+    date: 2026-03-02
+    title: Add train-window instrument-specific cost model as optional walk-forward profile
+    context: Need a causal alternative to fixed round-trip costs that reflects per-instrument liquidity/volatility heterogeneity.
+    decision: Add `--cost-model-profile` with `fixed_v1` and `train_proxy_v1`; derive per-instrument spread/slippage assumptions from train-window M5 proxies only.
+    impact: Enabled causal per-instrument cost stress-testing without changing default fixed-cost benchmark; current proxy profile is more conservative and reduces net results versus fixed baseline.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - data/output/research/morning_offline_wf_2026ytd_same_goods_assets_costawarev2_costproxy_v1.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
