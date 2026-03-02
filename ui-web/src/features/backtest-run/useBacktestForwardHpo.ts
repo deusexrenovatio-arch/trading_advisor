@@ -12,6 +12,7 @@ import {
   fetchParamSpecs as fetchParamSpecsApi,
   runBacktest as runBacktestApi,
   runHpo as runHpoApi,
+  startForwardRun as startForwardRunApi,
 } from '../../shared/api/decisionApi'
 import { getObject } from '../../shared/utils/guards'
 import type { AppTab } from '../market/useMarketTables'
@@ -47,9 +48,14 @@ export const useBacktestForwardHpo = ({
   const [backtestRunError, setBacktestRunError] = useState<string | null>(null)
   const [backtestRunParseError, setBacktestRunParseError] = useState<string | null>(null)
   const [forwardRunId, setForwardRunId] = useState('')
+  const [forwardRequestJson, setForwardRequestJson] = useState('')
+  const [forwardRequestJsonError, setForwardRequestJsonError] = useState<string | null>(null)
   const [forwardStatus, setForwardStatus] = useState<ForwardStatus | null>(null)
   const [forwardLoading, setForwardLoading] = useState(false)
   const [forwardError, setForwardError] = useState<string | null>(null)
+  const [forwardStartLoading, setForwardStartLoading] = useState(false)
+  const [forwardStartError, setForwardStartError] = useState<string | null>(null)
+  const [forwardStartMessage, setForwardStartMessage] = useState<string | null>(null)
   const [hpoRequestJson, setHpoRequestJson] = useState('')
   const [hpoRequestJsonError, setHpoRequestJsonError] = useState<string | null>(
     null,
@@ -161,6 +167,25 @@ export const useBacktestForwardHpo = ({
     [normalizeHpoPayload],
   )
 
+  const handleForwardRequestJsonChange = useCallback((value: string) => {
+    setForwardRequestJson(value)
+    if (!value.trim()) {
+      setForwardRequestJsonError(null)
+      return
+    }
+    try {
+      const parsed = JSON.parse(value)
+      const requestPayload = getObject<Record<string, unknown>>(parsed)
+      if (!requestPayload) {
+        setForwardRequestJsonError('Invalid forward request JSON.')
+        return
+      }
+      setForwardRequestJsonError(null)
+    } catch {
+      setForwardRequestJsonError('Invalid forward request JSON.')
+    }
+  }, [])
+
   const fetchParamSpecs = useCallback(
     async (options?: { resetValues?: boolean }) => {
       setParamSpecsLoading(true)
@@ -226,6 +251,45 @@ export const useBacktestForwardHpo = ({
       setForwardLoading(false)
     }
   }, [forwardRunId])
+
+  const startForwardRun = useCallback(async () => {
+    setForwardStartLoading(true)
+    setForwardStartError(null)
+    setForwardStartMessage(null)
+    try {
+      let payload: { request?: Record<string, unknown> } = {}
+      if (forwardRequestJson.trim()) {
+        try {
+          const parsed = JSON.parse(forwardRequestJson)
+          const requestPayload = getObject<Record<string, unknown>>(parsed)
+          if (!requestPayload) {
+            setForwardStartError('Invalid forward request JSON.')
+            return
+          }
+          payload = { request: requestPayload }
+        } catch {
+          setForwardStartError('Invalid forward request JSON.')
+          return
+        }
+      }
+      const startResponse = await startForwardRunApi(payload)
+      const runId = String(startResponse.run_id ?? '').trim()
+      if (runId) {
+        setForwardRunId(runId)
+      }
+      try {
+        const refreshedStatus = await fetchForwardStatusApi(runId || undefined)
+        setForwardStatus(refreshedStatus)
+      } catch {
+        setForwardStatus(startResponse)
+      }
+      setForwardStartMessage(runId ? `Forward run started: ${runId}` : 'Forward run started')
+    } catch (err) {
+      setForwardStartError(err instanceof Error ? err.message : 'Failed to start forward run')
+    } finally {
+      setForwardStartLoading(false)
+    }
+  }, [forwardRequestJson])
 
   const handleHpoRun = useCallback(async () => {
     setHpoLoading(true)
@@ -342,9 +406,14 @@ export const useBacktestForwardHpo = ({
     backtestRunError,
     backtestRunParseError,
     forwardRunId,
+    forwardRequestJson,
+    forwardRequestJsonError,
     forwardStatus,
     forwardLoading,
     forwardError,
+    forwardStartLoading,
+    forwardStartError,
+    forwardStartMessage,
     hpoRequestJson,
     hpoRequestJsonError,
     hpoSearchSpace,
@@ -356,6 +425,7 @@ export const useBacktestForwardHpo = ({
     setParamPreset,
     setBacktestPrecompute,
     setForwardRunId,
+    handleForwardRequestJsonChange,
     handleHpoRequestJsonChange,
     setHpoSearchSpace,
     fetchParamSpecs,
@@ -363,6 +433,7 @@ export const useBacktestForwardHpo = ({
     handleParamReset,
     handleBacktestRun,
     fetchForwardStatus,
+    startForwardRun,
     handleHpoRun,
   }
 }

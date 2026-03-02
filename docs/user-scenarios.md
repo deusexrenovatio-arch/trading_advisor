@@ -1,7 +1,76 @@
-﻿# User Scenarios
+# User Scenarios
 
 Reference:
 - End-to-end operator flow for `Signals` is documented in `docs/signals-business-process.md`.
+
+## Component-by-component walkthrough (fresh review, 2026-03-02)
+
+### C-01 Platform entry and routing
+Actor: Operator
+Goal: Reach target workspace without losing current task context.
+Primary flow:
+1. Open application root.
+2. Navigate across `Trade Console`, `Research Lab`, `News Intelligence`, `Portfolio Control`.
+3. Return to previous workspace.
+Expected:
+- Route is canonical (`/trade-console/*`, `/research-system/*`, `/news-intelligence`, `/portfolio-control`).
+- Workspace switch does not break filter/action context unexpectedly.
+
+### C-02 Decisions audit
+Actor: Operator
+Goal: Filter decisions and produce a traceable operator verdict.
+Primary flow:
+1. Apply strategy/instrument/risk/news/date filters.
+2. Select decision row.
+3. Submit operator action.
+Expected:
+- Decision details and evidence load from server projection/log.
+- Operator and execution statuses are visible after submission.
+
+### C-03 Signal action loop
+Actor: Operator
+Goal: Move from signal to execution with explicit gate status.
+Primary flow:
+1. Open `Signals`.
+2. Inspect effective action and pre-trade status.
+3. Execute action and verify execution history.
+Expected:
+- Signal status, pre-trade output, and execution audit are coherent.
+- History reflects action without losing pair lifecycle context.
+
+### C-04 Research cycle
+Actor: Research engineer
+Goal: Run backtest/HPO and track forward state in one workspace.
+Primary flow:
+1. Load parameter specs.
+2. Run backtest and inspect report.
+3. Run HPO and follow async status.
+4. Inspect forward status.
+Expected:
+- All runs return structured status/result payloads.
+- Result quality and promotion readiness are visible.
+
+### C-05 News and portfolio operations
+Actor: Operator
+Goal: Combine event context with portfolio controls.
+Primary flow:
+1. Filter news by severity/ticker.
+2. Load rebalance preview.
+3. Validate risk checks before commit.
+Expected:
+- News rows preserve decision/entity references.
+- Rebalance preview/commit stays auditable and risk-aware.
+
+### C-06 Runtime reliability and integrations
+Actor: Operator / Maintainer
+Goal: Keep operational trust during degradation or retries.
+Primary flow:
+1. Check refresh status and ops health/SLO.
+2. Use Telegram ACK bridge for signal confirmation.
+3. Handle stale/ambiguous action flows.
+Expected:
+- Degraded states are explicit, not silent.
+- ACK/action lifecycle remains idempotent and traceable.
 
 ## US-01 Configure the strategy
 Actor: Operator
@@ -103,7 +172,7 @@ Expected:
 Actor: Operator
 Goal: Run the forward paper loop with EOD -> OPEN -> after close persistence.
 Steps:
-1. Initialize the forward run (`POST /api/forward/start` or `moex-carry forward_start`).
+1. Initialize the forward run (`POST /api/forward/start`, `moex-carry forward_start`, or Forward UI tab).
 2. Inspect status (`GET /api/forward/status` or `moex-carry forward_status`) or use the Forward status UI tab.
 3. Run the forward paper engine at EOD to create next-open orders.
 4. Run the OPEN phase to simulate fills and persist trades.
@@ -250,4 +319,62 @@ Expected:
 - Open position is shown as `hold_open` overlay from position facts.
 - Fresh entry intent remains visible/actionable if policy and range permit.
 - Entry suppression happens only after explicit usage for that intent.
+
+## US-21 Idempotent UI action submission
+Actor: Operator
+Goal: Safely retry action submissions without duplicate execution side effects.
+Status: Implemented in UI/backend on 2026-03-02.
+Steps:
+1. Submit `ack|enter|exit` from Signals UI and `approve|reject|execute` from Decisions UI.
+2. Repeat the same request after simulated network timeout/retry.
+Expected:
+- UI request payload includes explicit `idempotency_key`.
+- Duplicate retry returns deterministic `duplicate` response and does not create a new execution fact.
+- New `idempotency_key` creates a new auditable action event.
+
+## US-22 Instrument action ambiguity recovery
+Actor: Operator
+Goal: Resolve instrument-level action when one instrument belongs to multiple active pairs.
+Steps:
+1. Call `POST /api/v2/entities/instrument/{entity_id}/signals/actions` without pair context.
+2. Receive ambiguity response.
+3. Repeat action with explicit `pair_id`.
+Expected:
+- API returns explicit ambiguity payload with `candidate_pairs`.
+- Follow-up action with `pair_id` resolves deterministically and remains auditable.
+
+## US-23 Refresh degradation operational handling
+Actor: Operator
+Goal: Continue safe operations when refresh engine is `busy`, `degraded`, or `error`.
+Steps:
+1. Inspect `GET /api/signals/refresh-status`.
+2. Observe non-`ok` status and follow recovery path.
+Expected:
+- Status includes actionable fields (`last_error`, `skip_reason`, watermark/lag telemetry).
+- Operator can distinguish transient busy state from stale/degraded state.
+- Recovery path avoids silent stale execution assumptions.
+
+## US-24 Portfolio commit risk gate
+Actor: Operator
+Goal: Avoid committing rebalance plans that violate risk checks without explicit override.
+Status: Server-side hard gate implemented on 2026-03-02.
+Steps:
+1. Request `GET /api/v2/portfolio/rebalance/preview`.
+2. Detect one or more failed risk checks.
+3. Attempt commit.
+Expected:
+- System blocks commit by default when hard risk checks fail, or requires explicit override metadata.
+- Final commit payload remains auditable with actor, reason, and timestamp.
+
+## US-25 API v2 payload and traceability guardrail
+Actor: Integrator / Maintainer
+Goal: Keep API interactions debuggable and bounded under heavy clients.
+Steps:
+1. Send an oversized POST request to `/api/v2/*`.
+2. Send valid request and inspect response headers.
+Expected:
+- Oversized payload gets `413 payload_too_large`.
+- Responses include `X-Request-Id` for deterministic traceability.
+- Structured logs preserve path/method/status/request_id/duration for incident review.
+
 

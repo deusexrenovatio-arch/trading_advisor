@@ -13,6 +13,7 @@ import {
   fetchDecisionView as fetchDecisionViewApi,
   submitDecisionAction as submitDecisionActionApi,
 } from '../../shared/api/decisionApi'
+import { buildIdempotencyKey } from '../../shared/utils/idempotency'
 import { getArray, getObject } from '../../shared/utils/guards'
 
 export type DecisionActionState = {
@@ -139,6 +140,7 @@ export const useDecisionView = () => {
         const data = await submitDecisionActionApi(selectedId, {
           action,
           note: decisionActionNote || undefined,
+          idempotency_key: buildIdempotencyKey('decision-action', [selectedId, action]),
         })
         setDecisionAction(data)
         if (data.operator_action || data.execution_status || data.decision_ref || data.execution_ref) {

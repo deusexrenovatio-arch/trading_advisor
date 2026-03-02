@@ -1215,6 +1215,40 @@ def test_v2_portfolio_rebalance_preview_and_commit(tmp_path):
     assert commit_data["positions_committed"] == len(preview["positions"])
 
 
+def test_v2_portfolio_rebalance_commit_blocks_on_failed_risk_gate(tmp_path):
+    settings = _build_settings(tmp_path)
+    settings.risk_profile.max_positions = 1
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.post(
+        "/api/v2/portfolio/rebalance/commit",
+        json={
+            "rebalance_plan_id": "rebal-test-1",
+            "actor_id": "tester",
+            "positions": [
+                {
+                    "entity_ref": {"entity_type": "pair", "entity_id": "AAA__AAH6"},
+                    "signal_action": "enter",
+                    "target_weight": 0.5,
+                },
+                {
+                    "entity_ref": {"entity_type": "pair", "entity_id": "BBB__BBH6"},
+                    "signal_action": "hold_open",
+                    "target_weight": 0.5,
+                },
+            ],
+        },
+    )
+    assert response.status_code == 409
+    payload = response.get_json()
+    assert payload["status"] == "blocked"
+    assert payload["error"] == "risk_gate_failed"
+    assert payload["rebalance_plan_id"] == "rebal-test-1"
+    assert payload["risk_checks"][0]["check"] == "max_positions"
+    assert payload["risk_checks"][0]["passed"] is False
+
+
 def test_v2_decision_actions_and_v1_adapter(tmp_path):
     settings = _build_settings(tmp_path)
     app = create_app(settings)

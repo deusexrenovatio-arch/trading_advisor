@@ -201,6 +201,12 @@ export const fetchForwardStatus = (runId?: string) => {
   return requestJson<ForwardStatus>(url, { cache: 'no-store' })
 }
 
+export const startForwardRun = (payload: { request?: Record<string, unknown> } = {}) =>
+  requestJson<ForwardStatus>('/api/forward/start', {
+    method: 'POST',
+    body: payload,
+  })
+
 export const runHpo = (payload: Record<string, unknown>) =>
   requestJson<HpoResponse>('/api/hpo/run', {
     method: 'POST',

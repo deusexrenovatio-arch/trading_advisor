@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-02-23
+updated_at: 2026-03-02
 
 decisions:
   - id: ADM-2026-02-20-001
@@ -235,7 +235,29 @@ decisions:
       - src/moex_carry/ui/routes_research.py
       - tests/test_api_v2.py
       - docs/architecture/modules/backend-core.md
+  - id: ADM-2026-03-02-023
+    date: 2026-03-02
+    title: Use component-first scenario review as product documentation baseline
+    context: Existing artifacts covered endpoints and modules well, but user journeys were not consistently reviewed in component order with edge/negative/interruption paths.
+    decision: Update planning and scenario docs with a sequential component walkthrough and explicit high-priority risk gaps.
+    impact: Product and engineering now share one review frame for operator journeys, making coverage gaps visible before implementation.
+    links:
+      - docs/planning/user-needs-catalog.md
+      - docs/user-scenarios.md
+      - docs/planning/product-decisions.md
+      - docs/ux/workspaces-map.md
 
+  - id: ADM-2026-03-02-024
+    date: 2026-03-02
+    title: Close review-derived operator safety gaps in the same iteration
+    context: Component-first review surfaced contract-critical write-path and risk-gate gaps that were still open in UI/backend behavior.
+    decision: Implement idempotency payload generation in UI write actions, enforce server-side rebalance commit risk gate, and add forward start action in Research workspace without delaying to a separate sprint.
+    impact: Reduced duplicate-write and unsafe-commit risk immediately after discovery; operator flow now covers forward run start and status in one UI path.
+    links:
+      - ui-web/src/features/market/useMarketTables.ts
+      - ui-web/src/features/decisions/useDecisionView.ts
+      - src/moex_carry/ui/routes_market_data.py
+      - ui-web/src/features/forward/ForwardTab.tsx
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
@@ -455,3 +477,24 @@ patterns:
       - src/moex_carry/ui/routes_research.py
       - src/moex_carry/ui/app.py
       - tests/test_api_v2.py
+  - id: AMP-2026-03-02-018
+    date: 2026-03-02
+    title: Review components in operator journey order before expanding requirements
+    pattern: Start from workspace entry, then walk decisions, actions, research, news, portfolio, and ops, documenting primary/edge/negative/interruption scenarios per component.
+    when_to_use: Product or BA tasks aimed at maximizing use-case coverage and reducing hidden workflow gaps.
+    links:
+      - docs/planning/user-needs-catalog.md
+      - docs/user-scenarios.md
+      - docs/checklists/first-time-right-gate.md
+  - id: AMP-2026-03-02-019
+    date: 2026-03-02
+    title: Re-pin editable install to active worktree before running tests
+    pattern: After switching worktrees, verify `moex_carry.__file__` path and run `python -m pip install -e .` if imports still point to another checkout.
+    when_to_use: Test runs unexpectedly ignore local patches after worktree/branch switch in a shared Python environment.
+    links:
+      - pyproject.toml
+      - docs/DEV_WORKFLOW.md
+      - memory/agent_memory.yaml
+
+
+

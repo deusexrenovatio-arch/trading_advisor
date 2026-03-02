@@ -244,6 +244,40 @@ def register_market_data_routes(
         positions = payload.get("positions")
         if not isinstance(positions, list):
             return bad_request("positions must be a list")
+        max_positions = int(settings.risk_profile.max_positions or 0)
+        active_positions = 0
+        for position in positions:
+            if not isinstance(position, dict):
+                continue
+            signal_action = str(position.get("signal_action") or "").strip().lower()
+            if signal_action in {"enter", "hold_open"}:
+                active_positions += 1
+                continue
+            try:
+                target_weight = float(position.get("target_weight") or 0.0)
+            except (TypeError, ValueError):
+                target_weight = 0.0
+            if target_weight > 0:
+                active_positions += 1
+        risk_check = {
+            "check": "max_positions",
+            "passed": active_positions <= max_positions if max_positions > 0 else True,
+            "limit": max_positions if max_positions > 0 else None,
+            "value": active_positions,
+        }
+        if risk_check["passed"] is False:
+            return (
+                jsonify(
+                    {
+                        "status": "blocked",
+                        "error": "risk_gate_failed",
+                        "message": "max_positions risk gate failed",
+                        "rebalance_plan_id": plan_id,
+                        "risk_checks": [risk_check],
+                    }
+                ),
+                409,
+            )
         actor_id = str(payload.get("actor_id") or "operator").strip() or "operator"
         commit_id = f"rebal-commit-{uuid.uuid4().hex[:12]}"
         entry = {
