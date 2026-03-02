@@ -370,3 +370,99 @@ def test_derive_fold_instrument_costs_train_proxy_changes_by_instrument():
     )
     assert fixed["A"] == base
     assert fixed["B"] == base
+
+
+def test_probability_helpers_dirichlet_prior_and_expected_return():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 12, 0, tzinfo=tz)
+    forecast = mod._probability_forecast(
+        as_of_ts=as_of,
+        context_key=("PULLBACK_LIMIT", "BR", "BUY"),
+        history=[],
+        dirichlet_alpha=1.0,
+        half_life_days=30.0,
+    )
+    assert forecast["p_tp"] == pytest.approx(1 / 3)
+    assert forecast["p_sl"] == pytest.approx(1 / 3)
+    assert forecast["p_exit"] == pytest.approx(1 / 3)
+    assert forecast["n_effective"] == pytest.approx(0.0)
+
+    setup = Setup(
+        setup_id="S1",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(order_type=OrderType.LIMIT, side=Side.BUY, price_ticks=100, qty_lots=1, tif="DAY", meta={}),
+        sl_order=OrderIntent(order_type=OrderType.STOP, side=Side.SELL, price_ticks=95, qty_lots=1, tif="GTC", meta={}),
+        tp_order=OrderIntent(order_type=OrderType.LIMIT, side=Side.SELL, price_ticks=110, qty_lots=1, tif="GTC", meta={}),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    costs = mod.CostAssumptions(commission_ticks_per_side=0.5, slippage_ticks_per_side=1.0, spread_half_ticks=1.0)
+    expected = mod._expected_return_from_forecast(setup=setup, costs=costs, forecast=forecast)
+    assert expected == pytest.approx(-3.3333333333)
+
+
+def test_probability_context_key_modes():
+    mod = _load_module()
+    setup = Setup(
+        setup_id="S1",
+        side=Side.SELL,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(order_type=OrderType.LIMIT, side=Side.SELL, price_ticks=100, qty_lots=1, tif="DAY", meta={}),
+        sl_order=OrderIntent(order_type=OrderType.STOP, side=Side.BUY, price_ticks=105, qty_lots=1, tif="GTC", meta={}),
+        tp_order=OrderIntent(order_type=OrderType.LIMIT, side=Side.BUY, price_ticks=90, qty_lots=1, tif="GTC", meta={}),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    broad = mod._probability_context_key(setup=setup, instrument_id="BRH6", mode="setup_kind")
+    narrow = mod._probability_context_key(setup=setup, instrument_id="BRH6", mode="setup_group_side")
+    assert broad == ("UNKNOWN", "ALL", "ALL")
+    assert narrow == ("UNKNOWN", "BR", "SELL")
+
+
+def test_summarize_counts_gated_out_rows():
+    mod = _load_module()
+    rows = [
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-02-20",
+            setup_id="S1",
+            setup_kind="BOX_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-02-20T12:00:00+03:00",
+            entry_ts=None,
+            exit_ts=None,
+            filled=False,
+            outcome="GATED_OUT",
+            gross_ticks=0.0,
+            net_ticks=0.0,
+            cost_ticks=0.0,
+            entry_ticks=None,
+            exit_ticks=None,
+            gate_status="BLOCK",
+            gate_reason="low_n_effective",
+        ),
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-02-21",
+            setup_id="S2",
+            setup_kind="BOX_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-02-21T12:00:00+03:00",
+            entry_ts="2026-02-21T12:05:00+03:00",
+            exit_ts="2026-02-21T12:20:00+03:00",
+            filled=True,
+            outcome="TP",
+            gross_ticks=15.0,
+            net_ticks=10.0,
+            cost_ticks=5.0,
+            entry_ticks=100,
+            exit_ticks=115,
+        ),
+    ]
+    summary = mod._summarize(rows, setups_total=2)
+    assert summary["gated_out"] == 1
+    assert summary["filled_trades"] == 1

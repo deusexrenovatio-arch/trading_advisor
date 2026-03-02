@@ -305,6 +305,16 @@ decisions:
       - scripts/run_morning_plan_walk_forward.py
       - tests/test_morning_plan_walk_forward.py
       - data/output/research/morning_offline_wf_2026ytd_same_goods_assets_costawarev2_costproxy_v1.json
+  - id: ADM-2026-03-02-030
+    date: 2026-03-02
+    title: Add optional probabilistic gate to walk-forward execution path
+    context: Need to test two-layer probability gating on morning-plan candidates without introducing lookahead.
+    decision: Implement optional Dirichlet-decay gate in walk-forward test phase with train-window bootstrapped history, context-mode switch, and n_eff/expected-return thresholds.
+    impact: Added reproducible probability-gate experiments; default thresholds were too strict for current data density, while relaxed thresholds showed sparse-trade sensitivity and require further calibration.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - data/output/research/morning_offline_wf_2026ytd_same_goods_assets_probgate_v3_n1.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20

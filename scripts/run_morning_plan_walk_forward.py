@@ -4,6 +4,8 @@ import argparse
 import copy
 import itertools
 import json
+import math
+import re
 import sqlite3
 import statistics
 from dataclasses import asdict, dataclass
@@ -92,6 +94,30 @@ class SetupResult:
     cost_ticks: float
     entry_ticks: int | None
     exit_ticks: int | None
+    gate_status: str | None = None
+    gate_reason: str | None = None
+    gate_expected_return_ticks: float | None = None
+    gate_n_effective: float | None = None
+    gate_p_tp: float | None = None
+    gate_p_sl: float | None = None
+    gate_p_exit: float | None = None
+
+
+@dataclass(frozen=True)
+class ProbHistoryEvent:
+    ts: datetime
+    context_key: tuple[str, str, str]
+    outcome: str
+
+
+@dataclass(frozen=True)
+class ProbabilityGateConfig:
+    enabled: bool
+    min_n_effective: float
+    min_expected_return_ticks: float
+    half_life_days: float
+    dirichlet_alpha: float
+    context_mode: str
 
 
 def _parse_iso_date(value: str) -> date:
@@ -577,6 +603,127 @@ def _resolve_cost_model_profile(profile_name: str) -> str:
     return key
 
 
+def _instrument_group(instrument_id: str) -> str:
+    secid = str(instrument_id or "").strip()
+    matched = re.match(r"^([A-Za-z0-9]+?)[FGHJKMNQUVXZ]\d$", secid)
+    if matched:
+        return str(matched.group(1)).upper()
+    return secid.upper()
+
+
+def _probability_context_key(*, setup: Setup, instrument_id: str, mode: str) -> tuple[str, str, str]:
+    normalized = str(mode or "setup_kind").strip().lower()
+    if normalized == "setup_group_side":
+        return (_setup_kind(setup), _instrument_group(instrument_id), setup.side.value)
+    return (_setup_kind(setup), "ALL", "ALL")
+
+
+def _event_weight(age_days: float, half_life_days: float) -> float:
+    halflife = max(float(half_life_days), 1e-9)
+    age = max(float(age_days), 0.0)
+    return float(math.exp(-math.log(2.0) * age / halflife))
+
+
+def _probability_forecast(
+    *,
+    as_of_ts: datetime,
+    context_key: tuple[str, str, str],
+    history: list[ProbHistoryEvent],
+    dirichlet_alpha: float,
+    half_life_days: float,
+) -> dict[str, float]:
+    alpha = max(float(dirichlet_alpha), 1e-9)
+    n_tp = 0.0
+    n_sl = 0.0
+    n_exit = 0.0
+    weights: list[float] = []
+    for event in history:
+        if event.context_key != context_key:
+            continue
+        if event.ts > as_of_ts:
+            continue
+        age_days = (as_of_ts - event.ts).total_seconds() / 86400.0
+        weight = _event_weight(age_days, half_life_days)
+        weights.append(weight)
+        if event.outcome == "TP":
+            n_tp += weight
+        elif event.outcome == "SL":
+            n_sl += weight
+        else:
+            n_exit += weight
+    total = n_tp + n_sl + n_exit
+    denom = total + 3.0 * alpha
+    p_tp = (n_tp + alpha) / denom
+    p_sl = (n_sl + alpha) / denom
+    p_exit = (n_exit + alpha) / denom
+    if not weights:
+        n_effective = 0.0
+    else:
+        sum_w = sum(weights)
+        sum_w_sq = sum(value * value for value in weights)
+        n_effective = float((sum_w * sum_w) / max(sum_w_sq, 1e-12))
+    return {
+        "p_tp": float(p_tp),
+        "p_sl": float(p_sl),
+        "p_exit": float(p_exit),
+        "n_effective": float(n_effective),
+    }
+
+
+def _expected_return_from_forecast(
+    *,
+    setup: Setup,
+    costs: CostAssumptions,
+    forecast: dict[str, float],
+) -> float:
+    entry_ticks = int(setup.entry_order.price_ticks)
+    tp_ticks = int(setup.tp_order.price_ticks)
+    sl_ticks = int(setup.sl_order.price_ticks)
+    reward_gross = abs(int(tp_ticks) - int(entry_ticks))
+    risk_gross = abs(int(entry_ticks) - int(sl_ticks))
+    expectancy = (
+        float(forecast.get("p_tp", 0.0)) * float(reward_gross)
+        + float(forecast.get("p_sl", 0.0)) * float(-risk_gross)
+        + float(forecast.get("p_exit", 0.0)) * 0.0
+    )
+    return float(expectancy - float(costs.round_trip_ticks))
+
+
+def _gated_out_result(
+    *,
+    instrument_id: str,
+    as_of_ts: datetime,
+    setup: Setup,
+    reason: str,
+    expected_return_ticks: float,
+    forecast: dict[str, float],
+) -> SetupResult:
+    return SetupResult(
+        instrument_id=instrument_id,
+        trade_date=as_of_ts.date().isoformat(),
+        setup_id=setup.setup_id,
+        setup_kind=_setup_kind(setup),
+        side=setup.side.value,
+        as_of_ts=as_of_ts.isoformat(),
+        entry_ts=None,
+        exit_ts=None,
+        filled=False,
+        outcome="GATED_OUT",
+        gross_ticks=0.0,
+        net_ticks=0.0,
+        cost_ticks=0.0,
+        entry_ticks=None,
+        exit_ticks=None,
+        gate_status="BLOCK",
+        gate_reason=str(reason),
+        gate_expected_return_ticks=float(expected_return_ticks),
+        gate_n_effective=float(forecast.get("n_effective", 0.0)),
+        gate_p_tp=float(forecast.get("p_tp", 0.0)),
+        gate_p_sl=float(forecast.get("p_sl", 0.0)),
+        gate_p_exit=float(forecast.get("p_exit", 0.0)),
+    )
+
+
 def _value_rank(value: float, samples: list[float]) -> float:
     finite = [float(item) for item in samples if float(item) == float(item)]
     if not finite:
@@ -849,6 +996,7 @@ def _simulate_setup(
 
 def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
     filled = [row for row in results if row.filled]
+    gated = [row for row in results if row.outcome == "GATED_OUT"]
     filled_count = len(filled)
     tp_count = sum(1 for row in filled if row.outcome == "TP")
     sl_count = sum(1 for row in filled if row.outcome == "SL")
@@ -905,6 +1053,7 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
         by_instrument[instrument_id] = slot
     return {
         "setups_total": int(setups_total),
+        "gated_out": int(len(gated)),
         "filled_trades": int(filled_count),
         "fill_rate": float(fill_rate),
         "tp_rate": float(tp_count / filled_count) if filled_count > 0 else 0.0,
@@ -975,11 +1124,15 @@ def _evaluate_window(
     calendar: MarketCalendar,
     costs: CostAssumptions,
     instrument_costs: dict[str, CostAssumptions] | None = None,
-) -> tuple[list[SetupResult], dict[str, Any]]:
+    probability_gate: ProbabilityGateConfig | None = None,
+    initial_history: list[ProbHistoryEvent] | None = None,
+    collect_history: bool = False,
+) -> tuple[list[SetupResult], dict[str, Any], list[ProbHistoryEvent]]:
     provider = InMemoryCandleProvider(payload)
     builders = {instrument_id: MorningPlanBuilder(provider, calendar, cfg) for instrument_id in instruments}
     rows: list[SetupResult] = []
     setups_total = 0
+    history: list[ProbHistoryEvent] = list(initial_history or [])
     for day in _iter_days(period_start, period_end):
         as_of_ts = datetime.combine(day, decision_time, tzinfo=tz)
         if not calendar.is_trading_time(as_of_ts):
@@ -992,6 +1145,48 @@ def _evaluate_window(
             setups_total += len(plan.setups)
             m5_rows = payload.get((instrument_id, TF.M5), [])
             for setup in plan.setups:
+                if probability_gate is not None and bool(probability_gate.enabled):
+                    context_key = _probability_context_key(
+                        setup=setup,
+                        instrument_id=instrument_id,
+                        mode=str(probability_gate.context_mode),
+                    )
+                    forecast = _probability_forecast(
+                        as_of_ts=as_of_ts,
+                        context_key=context_key,
+                        history=history,
+                        dirichlet_alpha=float(probability_gate.dirichlet_alpha),
+                        half_life_days=float(probability_gate.half_life_days),
+                    )
+                    expected_value = _expected_return_from_forecast(
+                        setup=setup,
+                        costs=effective_costs,
+                        forecast=forecast,
+                    )
+                    if float(forecast.get("n_effective", 0.0)) < float(probability_gate.min_n_effective):
+                        rows.append(
+                            _gated_out_result(
+                                instrument_id=instrument_id,
+                                as_of_ts=as_of_ts,
+                                setup=setup,
+                                reason="low_n_effective",
+                                expected_return_ticks=expected_value,
+                                forecast=forecast,
+                            )
+                        )
+                        continue
+                    if float(expected_value) < float(probability_gate.min_expected_return_ticks):
+                        rows.append(
+                            _gated_out_result(
+                                instrument_id=instrument_id,
+                                as_of_ts=as_of_ts,
+                                setup=setup,
+                                reason="expected_return_below_threshold",
+                                expected_return_ticks=expected_value,
+                                forecast=forecast,
+                            )
+                        )
+                        continue
                 rows.append(
                     _simulate_setup(
                         instrument_id=instrument_id,
@@ -1003,8 +1198,21 @@ def _evaluate_window(
                         costs=effective_costs,
                     )
                 )
+                latest = rows[-1]
+                if bool(collect_history) and bool(latest.filled) and latest.outcome in {"TP", "SL", "EXIT"} and latest.exit_ts is not None:
+                    history.append(
+                        ProbHistoryEvent(
+                            ts=datetime.fromisoformat(str(latest.exit_ts)),
+                            context_key=_probability_context_key(
+                                setup=setup,
+                                instrument_id=instrument_id,
+                                mode=str(probability_gate.context_mode),
+                            ),
+                            outcome=str(latest.outcome),
+                        )
+                    )
     summary = _summarize(rows, setups_total=setups_total)
-    return rows, summary
+    return rows, summary, history
 
 
 def _parse_tick_sizes(items: list[str]) -> dict[str, float]:
@@ -1139,6 +1347,22 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     min_trades_per_instrument = max(int(args.min_trades_per_instrument), 1)
     robust_mad_penalty = max(float(args.robust_mad_penalty), 0.0)
     objective = str(args.selection_objective).strip().lower()
+    probability_gate = ProbabilityGateConfig(
+        enabled=bool(args.enable_probability_gate),
+        min_n_effective=max(float(args.prob_min_n_effective), 0.0),
+        min_expected_return_ticks=float(args.prob_min_expected_return_ticks),
+        half_life_days=max(float(args.prob_half_life_days), 1e-9),
+        dirichlet_alpha=max(float(args.prob_dirichlet_alpha), 1e-9),
+        context_mode=str(args.prob_context_mode),
+    )
+    train_probability_gate = ProbabilityGateConfig(
+        enabled=False,
+        min_n_effective=float(probability_gate.min_n_effective),
+        min_expected_return_ticks=float(probability_gate.min_expected_return_ticks),
+        half_life_days=float(probability_gate.half_life_days),
+        dirichlet_alpha=float(probability_gate.dirichlet_alpha),
+        context_mode=str(probability_gate.context_mode),
+    )
     for idx, window in enumerate(windows, start=1):
         train_start = window["train_start"]
         train_end = window["train_end"]
@@ -1156,7 +1380,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         train_scores: list[dict[str, Any]] = []
         for combo in combinations:
             cfg = _apply_overrides(base_cfg, combo)
-            _, train_summary = _evaluate_window(
+            _, train_summary, _ = _evaluate_window(
                 period_start=train_start,
                 period_end=train_end,
                 instruments=instruments,
@@ -1168,6 +1392,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 calendar=calendar,
                 costs=costs,
                 instrument_costs=fold_instrument_costs,
+                probability_gate=train_probability_gate,
+                collect_history=False,
             )
             train_scores.append(
                 {
@@ -1216,7 +1442,22 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             train_scores[0],
         )
         selected_cfg = _apply_overrides(base_cfg, selected["params"])
-        test_rows, test_summary = _evaluate_window(
+        _, _, train_history = _evaluate_window(
+            period_start=train_start,
+            period_end=train_end,
+            instruments=instruments,
+            decision_time=decision_time,
+            tz=tz,
+            cfg=selected_cfg,
+            payload=payload,
+            tick_sizes=tick_sizes,
+            calendar=calendar,
+            costs=costs,
+            instrument_costs=fold_instrument_costs,
+            probability_gate=train_probability_gate,
+            collect_history=True,
+        )
+        test_rows, test_summary, _ = _evaluate_window(
             period_start=test_start,
             period_end=test_end,
             instruments=instruments,
@@ -1228,6 +1469,9 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             calendar=calendar,
             costs=costs,
             instrument_costs=fold_instrument_costs,
+            probability_gate=probability_gate,
+            initial_history=train_history,
+            collect_history=True,
         )
         aggregate_results.extend(test_rows)
         fold_costs_payload = {
@@ -1275,6 +1519,15 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "profile": tuning_profile,
             "combinations": len(combinations),
             "cost_model_profile": cost_model_profile,
+            "probability_gate": {
+                "enabled": bool(probability_gate.enabled),
+                "apply_on_test_only": True,
+                "min_n_effective": float(probability_gate.min_n_effective),
+                "min_expected_return_ticks": float(probability_gate.min_expected_return_ticks),
+                "half_life_days": float(probability_gate.half_life_days),
+                "dirichlet_alpha": float(probability_gate.dirichlet_alpha),
+                "context_mode": str(probability_gate.context_mode),
+            },
             "grid": grid,
             "min_train_trades": min_train_trades,
             "min_train_instruments_with_trades": required_instruments,
@@ -1319,6 +1572,17 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default="fixed_v1",
         choices=list(COST_MODEL_PROFILES),
+    )
+    parser.add_argument("--enable-probability-gate", action="store_true")
+    parser.add_argument("--prob-min-n-effective", type=float, default=50.0)
+    parser.add_argument("--prob-min-expected-return-ticks", type=float, default=2.0)
+    parser.add_argument("--prob-half-life-days", type=float, default=30.0)
+    parser.add_argument("--prob-dirichlet-alpha", type=float, default=1.0)
+    parser.add_argument(
+        "--prob-context-mode",
+        type=str,
+        default="setup_kind",
+        choices=["setup_kind", "setup_group_side"],
     )
     parser.add_argument(
         "--selection-objective",
