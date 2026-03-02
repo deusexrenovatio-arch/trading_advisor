@@ -170,7 +170,7 @@ ui:
   max_api_payload_bytes: 262144
 
 telegram:
-  enabled: false
+  enabled: true
   bot_token: null
   backend_base_url: "http://127.0.0.1:8050"
   allowed_user_ids: []
