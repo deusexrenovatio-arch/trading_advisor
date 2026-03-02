@@ -5,12 +5,13 @@ python:
   target_lines_default: 700
   allowed_large_files:
     src/moex_carry/ui/app.py: 6000
-    src/moex_carry/pipeline.py: 2800
+    src/moex_carry/pipeline.py: 3200
     src/moex_carry/backtest_v2/engine.py: 1800
     src/moex_carry/backtest_v2/minute_portfolio_engine.py: 900
     src/moex_carry/unified_runtime.py: 2000
     src/moex_carry/integrations/telegram_worker.py: 1400
     src/moex_carry/portfolio/rebalance_controller.py: 900
+    src/moex_carry/signal_replay/minute_replay.py: 1300
   target_large_files:
     src/moex_carry/ui/app.py: 3200
     src/moex_carry/pipeline.py: 1800

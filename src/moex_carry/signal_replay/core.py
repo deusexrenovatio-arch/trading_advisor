@@ -83,6 +83,19 @@ def _as_float(value: Any, default: float) -> float:
         return float(default)
 
 
+def _as_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return bool(default)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return bool(default)
+
+
 def _as_float_or_none(value: Any) -> float | None:
     if value is None:
         return None
@@ -110,6 +123,22 @@ def build_replay_settings_from_resolved(resolved_config: Mapping[str, Any]) -> A
         execution_max_wait_minutes=_as_int(strategy.get("execution_max_wait_minutes"), 1440),
         force_exit_policy=str(strategy.get("force_exit_policy") or "next_anchor"),
         force_exit_penalty_bps=_as_float(strategy.get("force_exit_penalty_bps"), 0.0),
+        sequential_entry_enabled=_as_bool(strategy.get("sequential_entry_enabled"), False),
+        sequential_entry_first_leg=str(strategy.get("sequential_entry_first_leg") or "future"),
+        sequential_entry_second_leg_max_wait_minutes=_as_int(
+            strategy.get("sequential_entry_second_leg_max_wait_minutes"), 5
+        ),
+        sequential_entry_unwind_penalty_bps=_as_float(
+            strategy.get("sequential_entry_unwind_penalty_bps"), 0.0
+        ),
+        sequential_exit_enabled=_as_bool(strategy.get("sequential_exit_enabled"), False),
+        sequential_exit_first_leg=str(strategy.get("sequential_exit_first_leg") or "future"),
+        sequential_exit_second_leg_max_wait_minutes=_as_int(
+            strategy.get("sequential_exit_second_leg_max_wait_minutes"), 5
+        ),
+        sequential_exit_force_penalty_bps=_as_float_or_none(
+            strategy.get("sequential_exit_force_penalty_bps")
+        ),
         annual_target_threshold=_as_float_or_none(strategy.get("annual_target_threshold")),
         r_cb_annual=_as_float_or_none(rates.get("r_cb_annual")),
         r_fund_annual=_as_float_or_none(rates.get("r_fund_annual")),

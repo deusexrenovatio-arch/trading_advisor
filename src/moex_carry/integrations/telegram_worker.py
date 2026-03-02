@@ -863,6 +863,18 @@ class TelegramWorker:
             except (TypeError, ValueError):
                 return None
 
+        def _to_bool(value: object) -> bool | None:
+            if isinstance(value, bool):
+                return value
+            if value is None:
+                return None
+            raw = str(value).strip().lower()
+            if raw in {"1", "true", "yes", "y", "on"}:
+                return True
+            if raw in {"0", "false", "no", "n", "off"}:
+                return False
+            return None
+
         def _fmt_number(value: object, digits: int = 4) -> str:
             parsed = _to_float(value)
             if parsed is None:
@@ -971,6 +983,63 @@ class TelegramWorker:
         score = row.get("signal_score")
         if score is None:
             score = metrics_map.get("total_score")
+        seq_entry_enabled = _to_bool(row.get("sequential_entry_enabled"))
+        if seq_entry_enabled is None:
+            seq_entry_enabled = _to_bool(metrics_map.get("sequential_entry_enabled"))
+        entry_protocol_raw = str(
+            row.get("entry_execution_protocol")
+            or metrics_map.get("entry_execution_protocol")
+            or ""
+        ).strip().lower()
+        if not entry_protocol_raw:
+            entry_protocol_raw = "sequential" if seq_entry_enabled else "atomic"
+        seq_entry_first_leg = str(
+            row.get("sequential_entry_first_leg")
+            or metrics_map.get("sequential_entry_first_leg")
+            or "future"
+        ).strip().lower()
+        if seq_entry_first_leg not in {"stock", "future"}:
+            seq_entry_first_leg = "future"
+        seq_entry_second_leg_wait = row.get("sequential_entry_second_leg_max_wait_minutes")
+        if seq_entry_second_leg_wait is None:
+            seq_entry_second_leg_wait = metrics_map.get("sequential_entry_second_leg_max_wait_minutes")
+        seq_entry_unwind_penalty = row.get("sequential_entry_unwind_penalty_bps")
+        if seq_entry_unwind_penalty is None:
+            seq_entry_unwind_penalty = metrics_map.get("sequential_entry_unwind_penalty_bps")
+
+        seq_exit_enabled = _to_bool(row.get("sequential_exit_enabled"))
+        if seq_exit_enabled is None:
+            seq_exit_enabled = _to_bool(metrics_map.get("sequential_exit_enabled"))
+        exit_protocol_raw = str(
+            row.get("exit_execution_protocol")
+            or metrics_map.get("exit_execution_protocol")
+            or ""
+        ).strip().lower()
+        if not exit_protocol_raw:
+            exit_protocol_raw = "sequential" if seq_exit_enabled else "atomic"
+        seq_exit_first_leg = str(
+            row.get("sequential_exit_first_leg")
+            or metrics_map.get("sequential_exit_first_leg")
+            or "future"
+        ).strip().lower()
+        if seq_exit_first_leg not in {"stock", "future"}:
+            seq_exit_first_leg = "future"
+        seq_exit_second_leg_wait = row.get("sequential_exit_second_leg_max_wait_minutes")
+        if seq_exit_second_leg_wait is None:
+            seq_exit_second_leg_wait = metrics_map.get("sequential_exit_second_leg_max_wait_minutes")
+        seq_exit_force_penalty = row.get("sequential_exit_force_penalty_bps")
+        if seq_exit_force_penalty is None:
+            seq_exit_force_penalty = metrics_map.get("sequential_exit_force_penalty_bps")
+
+        def _entry_leg_action(leg: str) -> str:
+            if direction_raw == "reverse":
+                return "SELL акцию" if leg == "stock" else "BUY фьюч"
+            return "BUY акцию" if leg == "stock" else "SELL фьюч"
+
+        def _exit_leg_action(leg: str) -> str:
+            if direction_raw == "reverse":
+                return "BUY акцию" if leg == "stock" else "SELL фьюч"
+            return "SELL акцию" if leg == "stock" else "BUY фьюч"
 
         lines = [
             "📣 Новый сигнал",
@@ -1014,9 +1083,39 @@ class TelegramWorker:
                 )
             if current_spread_pct is not None:
                 lines.append(f"• Текущий spread (%): {_fmt_percent(current_spread_pct)}")
+        if entry_protocol_raw == "sequential":
+            second_leg = "stock" if seq_entry_first_leg == "future" else "future"
+            lines.append(
+                "• Протокол входа: staged "
+                f"({_entry_leg_action(seq_entry_first_leg)} -> {_entry_leg_action(second_leg)})"
+            )
+            lines.append(
+                f"• Макс. разрыв между ногами: {int(_to_float(seq_entry_second_leg_wait) or 0)} мин"
+            )
+            lines.append(
+                "• Если 2-я нога не встала: unwind 1-й "
+                f"(penalty {(_to_float(seq_entry_unwind_penalty) or 0.0):.2f} bps)"
+            )
+        else:
+            lines.append("• Протокол входа: atomic (обе ноги одновременно)")
 
         if tp is not None or sl is not None:
             lines.append(f"• TP/SL spread: {_fmt_percent(tp)} / {_fmt_percent(sl)}")
+        if exit_protocol_raw == "sequential":
+            second_leg = "stock" if seq_exit_first_leg == "future" else "future"
+            lines.append(
+                "• Протокол выхода: staged "
+                f"({_exit_leg_action(seq_exit_first_leg)} -> {_exit_leg_action(second_leg)})"
+            )
+            lines.append(
+                f"• Макс. разрыв между ногами (выход): {int(_to_float(seq_exit_second_leg_wait) or 0)} мин"
+            )
+            lines.append(
+                "• Если 2-я нога не встала: force-close 2-й "
+                f"(penalty {(_to_float(seq_exit_force_penalty) or 0.0):.2f} bps)"
+            )
+        else:
+            lines.append("• Протокол выхода: atomic (обе ноги одновременно)")
         if forecast_tp_probability is not None or forecast_sl_probability is not None:
             lines.append(
                 "• Forecast TP/SL prob: "

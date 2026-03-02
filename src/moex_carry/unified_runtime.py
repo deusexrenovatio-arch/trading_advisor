@@ -1152,6 +1152,32 @@ def _build_pair_rows(
         tolerance=entry_tolerance,
         spread_tolerance=spread_tolerance,
     )
+    seq_entry_enabled = bool(getattr(settings.spread_carry_alpha, "sequential_entry_enabled", False))
+    seq_entry_first_leg = str(getattr(settings.spread_carry_alpha, "sequential_entry_first_leg", "future") or "future")
+    if seq_entry_first_leg.strip().lower() not in {"stock", "future"}:
+        seq_entry_first_leg = "future"
+    seq_entry_second_leg_wait = max(
+        int(getattr(settings.spread_carry_alpha, "sequential_entry_second_leg_max_wait_minutes", 5) or 0),
+        0,
+    )
+    seq_entry_unwind_penalty = max(
+        float(getattr(settings.spread_carry_alpha, "sequential_entry_unwind_penalty_bps", 0.0) or 0.0),
+        0.0,
+    )
+    seq_exit_enabled = bool(getattr(settings.spread_carry_alpha, "sequential_exit_enabled", False))
+    seq_exit_first_leg = str(getattr(settings.spread_carry_alpha, "sequential_exit_first_leg", "future") or "future")
+    if seq_exit_first_leg.strip().lower() not in {"stock", "future"}:
+        seq_exit_first_leg = "future"
+    seq_exit_second_leg_wait = max(
+        int(getattr(settings.spread_carry_alpha, "sequential_exit_second_leg_max_wait_minutes", 5) or 0),
+        0,
+    )
+    seq_exit_penalty_raw = getattr(settings.spread_carry_alpha, "sequential_exit_force_penalty_bps", None)
+    seq_exit_force_penalty = (
+        max(float(getattr(settings.spread_carry_alpha, "force_exit_penalty_bps", 0.0) or 0.0), 0.0)
+        if seq_exit_penalty_raw is None
+        else max(float(seq_exit_penalty_raw or 0.0), 0.0)
+    )
 
     tp_spread_level = (
         float(entry_spread + tp_net) if entry_spread is not None and tp_net is not None else None
@@ -1193,6 +1219,16 @@ def _build_pair_rows(
         "score_alpha_abs_max": _SCORE_ALPHA_ABS_MAX,
         "score_gate_pass": score_gate_pass,
         "total_score": signal_score,
+        "entry_execution_protocol": "sequential" if seq_entry_enabled else "atomic",
+        "sequential_entry_enabled": seq_entry_enabled,
+        "sequential_entry_first_leg": seq_entry_first_leg,
+        "sequential_entry_second_leg_max_wait_minutes": seq_entry_second_leg_wait,
+        "sequential_entry_unwind_penalty_bps": seq_entry_unwind_penalty,
+        "exit_execution_protocol": "sequential" if seq_exit_enabled else "atomic",
+        "sequential_exit_enabled": seq_exit_enabled,
+        "sequential_exit_first_leg": seq_exit_first_leg,
+        "sequential_exit_second_leg_max_wait_minutes": seq_exit_second_leg_wait,
+        "sequential_exit_force_penalty_bps": seq_exit_force_penalty,
         "avg_trade_return_annual_recent": _safe_float(metrics.avg_trade_return_annual_fill_to_fill_last5),
         "avg_trade_return_annual_operational_recent": _safe_float(metrics.avg_trade_return_annual_operational_last5),
         "share_target_pass": share_target_pass,

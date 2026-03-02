@@ -94,6 +94,14 @@ class BacktestStrategyConfig(BaseModel):
     signal_cutoff_before_day_end_minutes: int = 0
     force_exit_policy: str = "next_anchor"
     force_exit_penalty_bps: float = 0.0
+    sequential_entry_enabled: bool = False
+    sequential_entry_first_leg: Literal["stock", "future"] = "future"
+    sequential_entry_second_leg_max_wait_minutes: int = 5
+    sequential_entry_unwind_penalty_bps: float = 0.0
+    sequential_exit_enabled: bool = False
+    sequential_exit_first_leg: Literal["stock", "future"] = "future"
+    sequential_exit_second_leg_max_wait_minutes: int = 5
+    sequential_exit_force_penalty_bps: float | None = None
     annual_target_threshold: float | None = None
     floor_tolerance: float = 0.0
     riskbuffer_floor: float = 0.0

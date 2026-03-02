@@ -241,6 +241,27 @@ def _validate_request(request: BacktestRequest) -> None:
         allow_zero=True,
         allow_none=True,
     )
+    _require_positive(
+        strategy.sequential_entry_second_leg_max_wait_minutes,
+        "strategy.sequential_entry_second_leg_max_wait_minutes",
+        allow_zero=True,
+    )
+    _require_positive(
+        strategy.sequential_entry_unwind_penalty_bps,
+        "strategy.sequential_entry_unwind_penalty_bps",
+        allow_zero=True,
+    )
+    _require_positive(
+        strategy.sequential_exit_second_leg_max_wait_minutes,
+        "strategy.sequential_exit_second_leg_max_wait_minutes",
+        allow_zero=True,
+    )
+    _require_positive(
+        strategy.sequential_exit_force_penalty_bps,
+        "strategy.sequential_exit_force_penalty_bps",
+        allow_zero=True,
+        allow_none=True,
+    )
     _require_positive(strategy.close_buffer_days, "strategy.close_buffer_days", allow_zero=True)
     _require_positive(strategy.roll_trigger_days, "strategy.roll_trigger_days", allow_zero=True)
     _require_positive(liquidity.max_days_to_exit, "liquidity.max_days_to_exit", allow_zero=False, allow_none=True)
@@ -248,6 +269,10 @@ def _validate_request(request: BacktestRequest) -> None:
     _require_positive(portfolio.account_equity, "portfolio.account_equity", allow_zero=False, allow_none=True)
     if strategy.force_exit_policy not in {"next_anchor", "market_worse"}:
         raise ValueError("strategy.force_exit_policy must be next_anchor or market_worse")
+    if str(strategy.sequential_entry_first_leg).strip().lower() not in {"stock", "future"}:
+        raise ValueError("strategy.sequential_entry_first_leg must be stock or future")
+    if str(strategy.sequential_exit_first_leg).strip().lower() not in {"stock", "future"}:
+        raise ValueError("strategy.sequential_exit_first_leg must be stock or future")
     if strategy.ranking_primary_metric not in {
         "avg_trade_return_annual_operational_recent",
         "avg_trade_return_annual_recent",
