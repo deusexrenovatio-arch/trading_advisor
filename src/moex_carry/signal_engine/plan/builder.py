@@ -47,7 +47,16 @@ class MorningPlanBuilder:
         levels = self.level_engine.merge_and_rank(d1_levels + h1_levels)
 
         exec_params = self.exec_engine.compute_params(m5, tick_size=tick_size)
-        last_price_ticks = levels[0].price_ticks if not m5 else price_to_ticks(float(m5[-1].close), tick_size)
+        if m5:
+            last_price_ticks = price_to_ticks(float(m5[-1].close), tick_size)
+        elif h1:
+            last_price_ticks = price_to_ticks(float(h1[-1].close), tick_size)
+        elif d1:
+            last_price_ticks = price_to_ticks(float(d1[-1].close), tick_size)
+        elif levels:
+            last_price_ticks = int(levels[0].price_ticks)
+        else:
+            last_price_ticks = 0
         setups = self.setup_gen.generate(
             as_of_ts=as_of_ts,
             instrument_id=instrument_id,
