@@ -83,7 +83,13 @@ def test_setup_generator_produces_trend_first_setups():
         m5_noise_ratio=1.0,
         warnings=[],
     )
-    generator = SetupGenerator({"max_setups_per_instrument": 2, "entry_expiry_policy": "EOD_BEFORE_EVENING_CLEARING"})
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 2,
+            "entry_expiry_policy": "EOD_BEFORE_EVENING_CLEARING",
+            "enable_cost_net_gate": False,
+        }
+    )
     setups = generator.generate(
         as_of_ts=as_of_ts,
         instrument_id="BRH6",
@@ -133,3 +139,120 @@ def test_setup_generator_blocks_when_regime_not_trend():
         m5=[],
     )
     assert setups == []
+
+
+def test_setup_generator_cost_gate_blocks_low_net_reward():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=40,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=20,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=99, score=0.8, meta={}),
+        Level(tf=TF.D1, kind="PDH", price_ticks=108, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="BOX_H", price_ticks=101, score=0.9, meta={}),
+        Level(tf=TF.H1, kind="BOX_L", price_ticks=97, score=0.9, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 2,
+            "estimated_round_trip_cost_ticks": 5.0,
+            "min_reward_net_ticks": 2.0,
+            "min_rr_net": 1.1,
+            "min_reward_gross_ticks": 10.0,
+            "entry_expiry_policy": "EOD_BEFORE_EVENING_CLEARING",
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=102,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    assert setups == []
+
+
+def test_setup_generator_cost_gate_passes_large_reward():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=40,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=20,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=99, score=0.8, meta={}),
+        Level(tf=TF.D1, kind="PIVOT_R2", price_ticks=126, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="BOX_H", price_ticks=101, score=0.9, meta={}),
+        Level(tf=TF.H1, kind="BOX_L", price_ticks=97, score=0.9, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 2,
+            "estimated_round_trip_cost_ticks": 5.0,
+            "min_reward_net_ticks": 2.0,
+            "min_rr_net": 1.1,
+            "min_reward_gross_ticks": 10.0,
+            "entry_expiry_policy": "EOD_BEFORE_EVENING_CLEARING",
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=102,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    assert len(setups) >= 1
+    cost_gate = setups[0].entry_order.meta.get("cost_gate")
+    assert isinstance(cost_gate, dict)
+    assert cost_gate.get("pass") is True
