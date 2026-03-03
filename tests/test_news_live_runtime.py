@@ -223,15 +223,26 @@ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
         model_mode="keyword",
     )
     run_news_ingest_cycle(config=cfg, mode="live", now_utc=datetime(2026, 3, 3, 9, 30, tzinfo=timezone.utc))
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("UPDATE news_scores SET confidence = 0.5")
+        conn.commit()
+    finally:
+        conn.close()
 
     settings = AppSettings()
     settings.news_filter.live_ingest_enabled = True
     settings.news_filter.live_db_url = _sqlite_path(db_path)
     settings.news_filter.live_min_impact_score = 0.0
+    settings.news_filter.live_min_confidence = 0.9
     settings.news_filter.live_max_items = 20
     settings.news_filter.lookback_minutes = 24 * 60
     settings.news_filter.sources = ["trusted-feed"]
 
+    items = load_news_gate_items(settings)
+    assert not items
+
+    settings.news_filter.live_min_confidence = 0.4
     items = load_news_gate_items(settings)
     assert items
     assert items[0].source == "trusted-feed"

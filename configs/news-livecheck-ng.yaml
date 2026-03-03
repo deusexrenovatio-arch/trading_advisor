@@ -9,6 +9,7 @@ news_ingest:
   live_lookback_minutes: 120
   feed_path: "data/output/news_live/live_news_signals.csv"
   feed_min_impact_score: 0.35
+  feed_min_confidence: 0.9
   feed_max_rows: 5000
   gdelt_enabled: true
   gdelt_max_records_per_call: 80

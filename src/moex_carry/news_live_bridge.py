@@ -29,18 +29,21 @@ def load_news_gate_items(settings: AppSettings) -> list[NewsItem]:
                 a.title,
                 s.severity,
                 s.impact_score,
+                s.confidence,
                 a.provider,
                 a.commodity
             FROM news_articles a
             JOIN news_scores s ON a.article_id = s.article_id
             WHERE a.published_at_utc >= ?
               AND s.impact_score >= ?
+              AND s.confidence >= ?
             ORDER BY a.published_at_utc DESC
             LIMIT ?
             """,
             (
                 cutoff_iso,
                 float(settings.news_filter.live_min_impact_score),
+                float(settings.news_filter.live_min_confidence),
                 int(settings.news_filter.live_max_items),
             ),
         ).fetchall()
@@ -52,7 +55,7 @@ def load_news_gate_items(settings: AppSettings) -> list[NewsItem]:
     allowed_sources = {item.strip().lower() for item in settings.news_filter.sources if item.strip()}
     items: list[NewsItem] = []
     for row in rows:
-        article_id, published_at_utc, source_name, title, severity, impact_score, provider, commodity = row
+        article_id, published_at_utc, source_name, title, severity, impact_score, _confidence, provider, commodity = row
         source = str(source_name or provider or "news").strip()
         if allowed_sources and source.lower() not in allowed_sources:
             continue
