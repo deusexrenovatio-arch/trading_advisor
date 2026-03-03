@@ -819,3 +819,36 @@ items:
       - P2-NEWS-SHOCK-AUTOMATION-033
     started_at: 2026-03-03
     completed_at: 2026-03-03
+
+  - id: P2-NEWS-LIVE-INGEST-035
+    title: Add live and backfill commodity news ingestion with model scoring and runtime news-gate bridge
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - News ingestion supports GDELT and NewsAPI with separate live/backfill modes and daily quota split.
+      - Live ingestion applies retry/backoff for unstable providers and throttles NewsAPI live polling per commodity.
+      - Runtime scoring supports NLI or FinBERT with automatic GPU device selection and keyword fallback.
+      - Scored news are persisted and exported to a rolling feed CSV for operational visibility.
+      - Pipeline news gate reads live-scored news items from SQLite instead of hardcoded empty list.
+      - Scheduler scripts install 5-minute live polling and independent backfill task.
+    checks:
+      - python -m pytest tests/test_news_live_runtime.py tests/test_news_filter.py -q
+      - python -m ruff check src/moex_carry/news_live_runtime.py src/moex_carry/news_live_clients.py src/moex_carry/news_live_scoring.py src/moex_carry/news_live_bridge.py scripts/run_news_ingest_cycle.py src/moex_carry/cli.py src/moex_carry/pipeline.py tests/test_news_live_runtime.py
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_clients.py
+      - src/moex_carry/news_live_scoring.py
+      - src/moex_carry/news_live_bridge.py
+      - scripts/run_news_ingest_cycle.py
+      - scripts/start_news_ingest_cycle.ps1
+      - scripts/manage_news_ingest_tasks.ps1
+      - configs/news-livecheck-ng.yaml
+      - docs/runbooks/news-shock-go-live.md
+    dependencies:
+      - P2-NEWS-SHOCK-SCHEDULER-034
+    started_at: 2026-03-03
+    completed_at: 2026-03-03

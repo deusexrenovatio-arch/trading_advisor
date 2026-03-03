@@ -2,6 +2,31 @@ version: 1
 updated_at: 2026-03-03
 
 decisions:
+  - id: ADM-2026-03-03-066
+    date: 2026-03-03
+    title: Add live polling stability controls for commodity news ingestion
+    context: Live 5-minute cycle showed transient GDELT SSL/timeout failures and risk of burning NewsAPI daily quota too early.
+    decision: Add provider retry/backoff in runtime fetch path and enforce per-commodity NewsAPI live polling interval in addition to daily budgets.
+    impact: Improved provider resilience and preserved NewsAPI quota for full-day operation while keeping frequent GDELT polling.
+    links:
+      - src/moex_carry/news_live_runtime.py
+      - tests/test_news_live_runtime.py
+      - configs/news-livecheck-ng.yaml
+      - docs/runbooks/news-shock-go-live.md
+  - id: ADM-2026-03-03-065
+    date: 2026-03-03
+    title: Split commodity news live ingestion into runtime, scoring, and client modules with GPU-first model fallback
+    context: Live NewsAPI/GDELT ingestion and model scoring were needed in production loop, while governance blocked oversized single-file implementation.
+    decision: Implement ingestion as three modules (`news_live_runtime`, `news_live_clients`, `news_live_scoring`) and bridge scored SQLite news into pipeline news gate; use NLI/FinBERT primary mode with automatic GPU selection and keyword fallback.
+    impact: Enabled 5-minute live polling plus continuous backfill with robust fallback behavior; pipeline now consumes runtime news instead of empty list.
+    links:
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_clients.py
+      - src/moex_carry/news_live_scoring.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/pipeline.py
+      - scripts/manage_news_ingest_tasks.ps1
+      - configs/news-livecheck-ng.yaml
   - id: ADM-2026-02-20-001
     date: 2026-02-20
     title: Introduce lean governance gate as single fast loop
@@ -619,4 +644,23 @@ patterns:
       - scripts/manage_shock_label_cycle_task.ps1
       - scripts/start_shock_label_cycle.ps1
       - docs/runbooks/news-shock-go-live.md
+  - id: AMP-2026-03-03-026
+    date: 2026-03-03
+    title: Keep Telegram shock feed as rolling canonical CSV plus per-run snapshot
+    pattern: Write a stable rolling path for runtime consumers and also persist per-run snapshot artifact for auditability and rollback-safe comparisons.
+    when_to_use: Any batch workflow that feeds a live notifier and also needs reproducible run artifacts.
+    links:
+      - src/moex_carry/news_shock_automation.py
+      - data/output/shock_alerts/live_shocks.csv
+      - docs/runbooks/news-shock-go-live.md
+  - id: AMP-2026-03-03-027
+    date: 2026-03-03
+    title: Split shock automation into frequent fresh and daily backfill schedules
+    pattern: Run a short lookback repeating task for live alerts and a separate daily deep task for coverage growth; keep backfill from overwriting live Telegram feed.
+    when_to_use: Any news/shock pipeline with strict daily API quotas where live latency and historical recall must coexist.
+    links:
+      - scripts/manage_news_shock_live_plan.ps1
+      - scripts/manage_shock_label_cycle_task.ps1
+      - scripts/start_shock_label_cycle.ps1
+      - src/moex_carry/news_shock_automation.py
 

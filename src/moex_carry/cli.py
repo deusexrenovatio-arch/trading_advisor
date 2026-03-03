@@ -130,6 +130,25 @@ def main() -> None:
     history_parser.add_argument("--retries", type=int, default=3)
     history_parser.add_argument("--retry-backoff-sec", type=float, default=2.0)
 
+    news_ingest_parser = subparsers.add_parser(
+        "news_ingest",
+        help="Ingest commodity news from GDELT/NewsAPI and score impact",
+    )
+    _add_common_args(news_ingest_parser)
+    news_ingest_parser.add_argument(
+        "--news-config",
+        type=str,
+        default="configs/news-livecheck-ng.yaml",
+        help="Path to news ingestion YAML config.",
+    )
+    news_ingest_parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["live", "backfill"],
+        default="live",
+        help="Ingestion mode.",
+    )
+
     news_compare_parser = subparsers.add_parser(
         "news_mode_compare",
         help="Compare current broad-first vs proposed root-event news matching",
@@ -229,6 +248,14 @@ def main() -> None:
     shock_cycle_parser.add_argument("--direction-labels-jsonl", type=str, default=None)
     shock_cycle_parser.add_argument("--causal-labels-jsonl", type=str, default=None)
     shock_cycle_parser.add_argument("--ingest-min-confidence", type=float, default=0.60)
+    shock_cycle_parser.add_argument("--no-telegram-feed", action="store_true")
+    shock_cycle_parser.add_argument(
+        "--telegram-feed-path",
+        type=str,
+        default="data/output/shock_alerts/live_shocks.csv",
+    )
+    shock_cycle_parser.add_argument("--telegram-feed-min-abs-z", type=float, default=2.0)
+    shock_cycle_parser.add_argument("--telegram-feed-max-rows", type=int, default=5000)
     shock_cycle_parser.add_argument("--run-readiness", action="store_true")
     shock_cycle_parser.add_argument("--primary-z", type=float, default=2.5)
     shock_cycle_parser.add_argument("--aftershock-z", type=float, default=2.0)
@@ -325,6 +352,12 @@ def main() -> None:
             retries=args.retries,
             retry_backoff_sec=args.retry_backoff_sec,
         )
+    elif args.command == "news_ingest":
+        from moex_carry.news_live_runtime import NewsIngestConfig, run_news_ingest_cycle
+
+        cfg = NewsIngestConfig.from_yaml(Path(args.news_config))
+        result = run_news_ingest_cycle(config=cfg, mode=args.mode)
+        print(json.dumps(result, ensure_ascii=False))
     elif args.command == "news_mode_compare":
         from moex_carry.news_mode_compare import CompareConfig, run_compare
 
@@ -555,6 +588,10 @@ def main() -> None:
                 direction_candidate_sources=_parse_sources(args.direction_candidate_sources),
                 causal_candidate_sources=_parse_sources(args.causal_candidate_sources),
                 ingest_min_confidence=args.ingest_min_confidence,
+                export_telegram_feed=not bool(args.no_telegram_feed),
+                telegram_feed_path=Path(args.telegram_feed_path),
+                telegram_feed_min_abs_z=args.telegram_feed_min_abs_z,
+                telegram_feed_max_rows=args.telegram_feed_max_rows,
                 run_readiness=args.run_readiness,
                 readiness_config=ReadinessConfig(
                     max_delay_minutes=args.max_delay_min,

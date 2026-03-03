@@ -41,6 +41,7 @@ from moex_carry.decision_log import DecisionLogStore, build_decision_view, build
 from moex_carry.domain.decision import NewsItem, RiskProfile
 from moex_carry.domain.models import ContractSpec, DividendEvent, Instrument, KeyRate
 from moex_carry.execution.model import build_execution_prices
+from moex_carry.news_live_bridge import load_news_gate_items
 from moex_carry.selection.ranking import score_pairs_alpha
 from moex_carry.selection.universe import build_pair_mappings
 from moex_carry.strategy.news_filter import apply_news_filter
@@ -2638,7 +2639,10 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     allocations = proposal["allocations"]
     risk_profile = _risk_profile_from_settings(settings)
     risk_gate = evaluate_risk_profile(risk_profile, allocations)
-    news_items: list[NewsItem] = []
+    try:
+        news_items: list[NewsItem] = load_news_gate_items(settings)
+    except Exception:
+        news_items = []
     news_gate = apply_news_filter(
         news_items,
         lookback_minutes=settings.news_filter.lookback_minutes,
