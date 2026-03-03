@@ -220,6 +220,7 @@ news_filter:
   live_ingest_enabled: false
   live_db_url: "sqlite:///./data/news_livecheck_ng.db"
   live_min_impact_score: 0.35
+  live_min_confidence: 0.9
   live_max_items: 200
   lookback_minutes: 180
   block_severity_threshold: "high"

@@ -49,6 +49,7 @@ class NewsIngestConfig:
     backfill_max_windows_per_commodity: int = 20
     feed_path: str = "data/output/news_live/live_news_signals.csv"
     feed_min_impact_score: float = 0.35
+    feed_min_confidence: float = 0.9
     feed_max_rows: int = 5000
     newsapi_enabled: bool = True
     newsapi_api_key: str | None = None
@@ -122,6 +123,7 @@ class NewsIngestConfig:
             backfill_max_windows_per_commodity=int(ingest.get("backfill_max_windows_per_commodity", 20)),
             feed_path=str(ingest.get("feed_path") or "data/output/news_live/live_news_signals.csv"),
             feed_min_impact_score=float(ingest.get("feed_min_impact_score", 0.35)),
+            feed_min_confidence=float(ingest.get("feed_min_confidence", 0.9)),
             feed_max_rows=int(ingest.get("feed_max_rows", 5000)),
             newsapi_enabled=bool(newsapi.get("enabled", True)),
             newsapi_api_key=api_key,
@@ -531,6 +533,7 @@ def _export_feed(
     *,
     feed_path: Path,
     min_impact_score: float,
+    min_confidence: float,
     max_rows: int,
 ) -> int:
     rows = conn.execute(
@@ -551,10 +554,11 @@ def _export_feed(
         FROM news_articles a
         JOIN news_scores s ON a.article_id = s.article_id
         WHERE s.impact_score >= ?
+          AND s.confidence >= ?
         ORDER BY a.published_at_utc DESC
         LIMIT ?
         """,
-        (float(min_impact_score), int(max_rows)),
+        (float(min_impact_score), float(min_confidence), int(max_rows)),
     ).fetchall()
     feed_path.parent.mkdir(parents=True, exist_ok=True)
     columns = [
@@ -724,6 +728,7 @@ def run_news_ingest_cycle(
             conn,
             feed_path=Path(config.feed_path),
             min_impact_score=config.feed_min_impact_score,
+            min_confidence=config.feed_min_confidence,
             max_rows=max(config.feed_max_rows, 1),
         )
         run_id = f"news-ingest-{ts_now.strftime('%Y%m%d%H%M%S')}-{normalized_mode}"
