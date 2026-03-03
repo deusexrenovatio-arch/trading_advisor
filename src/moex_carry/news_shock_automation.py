@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,8 +28,29 @@ class ShockLabelCycleConfig:
     direction_candidate_sources: tuple[str, ...] | None = ("v2_clean",)
     causal_candidate_sources: tuple[str, ...] | None = ("broad", "none")
     ingest_min_confidence: float = 0.60
+    export_telegram_feed: bool = True
+    telegram_feed_path: Path = field(
+        default_factory=lambda: Path("data/output/shock_alerts/live_shocks.csv")
+    )
+    telegram_feed_min_abs_z: float = 2.0
+    telegram_feed_max_rows: int = 5000
     run_readiness: bool = False
     readiness_config: ReadinessConfig = field(default_factory=ReadinessConfig)
+
+
+_TELEGRAM_FEED_COLUMNS = [
+    "shock_ts",
+    "symbol",
+    "shock_direction",
+    "z_score",
+    "abs_move_pct",
+    "topic_key",
+    "root_topic_id",
+    "selected_source",
+    "selected_event_id",
+    "headline",
+    "url",
+]
 
 
 def _parse_ts(value: str | None) -> pd.Timestamp | None:
@@ -49,6 +71,116 @@ def _pack_filename(
     z_tag = str(min_abs_z).replace(".", "p")
     source_tag = "any" if not candidate_sources else "-".join(candidate_sources)
     return f"shock_label_pack_{mode}_{source_tag}_zge{z_tag}.jsonl"
+
+
+def _slug_topic_token(value: object) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    text = re.sub(r"-{2,}", "-", text).strip("-")
+    return text
+
+
+def _empty_telegram_feed() -> pd.DataFrame:
+    return pd.DataFrame(columns=_TELEGRAM_FEED_COLUMNS)
+
+
+def _text_series(df: pd.DataFrame, column: str) -> pd.Series:
+    if column in df.columns:
+        return df[column].fillna("").astype(str).str.strip()
+    return pd.Series("", index=df.index, dtype="object")
+
+
+def _build_telegram_feed(
+    curated: pd.DataFrame,
+    *,
+    min_abs_z: float,
+    max_rows: int,
+) -> pd.DataFrame:
+    if curated.empty:
+        return _empty_telegram_feed()
+
+    df = curated.copy()
+    df["shock_ts_dt"] = pd.to_datetime(df["shock_ts"], utc=True, errors="coerce")
+    df["abs_z"] = pd.to_numeric(df["z_score"], errors="coerce").abs()
+    df = df.dropna(subset=["shock_ts_dt", "abs_z"])
+    df = df[df["abs_z"] >= float(min_abs_z)]
+    if df.empty:
+        return _empty_telegram_feed()
+
+    v2_event_id = _text_series(df, "v2_event_id")
+    broad_event_id = _text_series(df, "broad_event_id")
+    v2_title = _text_series(df, "v2_title")
+    broad_title = _text_series(df, "broad_title")
+    v2_url = _text_series(df, "v2_url")
+    broad_url = _text_series(df, "broad_url")
+
+    selected_source = _text_series(df, "selected_source").str.lower()
+    fallback_source = pd.Series("none", index=df.index, dtype="object")
+    fallback_source.loc[v2_event_id.ne("")] = "v2_clean"
+    fallback_source.loc[fallback_source.eq("none") & broad_event_id.ne("")] = "broad"
+    selected_source = selected_source.where(
+        selected_source.isin(("v2_clean", "broad", "none")),
+        "",
+    )
+    selected_source = selected_source.where(selected_source.ne(""), fallback_source)
+    df["selected_source"] = selected_source
+
+    selected_event_id = pd.Series("", index=df.index, dtype="object")
+    selected_event_id.loc[selected_source.eq("v2_clean")] = v2_event_id.loc[selected_source.eq("v2_clean")]
+    selected_event_id.loc[selected_source.eq("broad")] = broad_event_id.loc[selected_source.eq("broad")]
+    selected_event_id = selected_event_id.where(
+        selected_event_id.ne(""),
+        v2_event_id.where(v2_event_id.ne(""), broad_event_id),
+    )
+    df["selected_event_id"] = selected_event_id
+
+    headline = pd.Series("", index=df.index, dtype="object")
+    headline.loc[selected_source.eq("v2_clean")] = v2_title.loc[selected_source.eq("v2_clean")]
+    headline.loc[selected_source.eq("broad")] = broad_title.loc[selected_source.eq("broad")]
+    headline = headline.where(headline.ne(""), v2_title.where(v2_title.ne(""), broad_title))
+    df["headline"] = headline
+
+    url = pd.Series("", index=df.index, dtype="object")
+    url.loc[selected_source.eq("v2_clean")] = v2_url.loc[selected_source.eq("v2_clean")]
+    url.loc[selected_source.eq("broad")] = broad_url.loc[selected_source.eq("broad")]
+    url = url.where(url.ne(""), v2_url.where(v2_url.ne(""), broad_url))
+    df["url"] = url
+
+    df["topic_key"] = df["selected_event_id"]
+    topic_blank = df["topic_key"].eq("")
+    if topic_blank.any():
+        fallback = (
+            df.loc[topic_blank, "headline"]
+            .map(_slug_topic_token)
+            .replace("", pd.NA)
+            .fillna(
+                df.loc[topic_blank, "symbol"].astype(str).str.lower().str.strip()
+                + "-"
+                + df.loc[topic_blank, "shock_direction"].astype(str).str.lower().str.strip()
+            )
+        )
+        df.loc[topic_blank, "topic_key"] = "topic:" + fallback.astype(str)
+    df["root_topic_id"] = df["topic_key"]
+
+    feed = df[
+        [
+            "shock_ts_dt",
+            *_TELEGRAM_FEED_COLUMNS,
+        ]
+    ].copy()
+    feed = feed.sort_values("shock_ts_dt")
+    if max_rows > 0 and len(feed) > int(max_rows):
+        feed = feed.tail(int(max_rows))
+    return feed.drop(columns=["shock_ts_dt"]).reset_index(drop=True)
+
+
+def _write_csv_atomic(df: pd.DataFrame, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    df.to_csv(tmp_path, index=False)
+    tmp_path.replace(path)
 
 
 def _save_ingested_labels(
@@ -174,6 +306,22 @@ def run_shock_label_cycle(
         "direction_pack": direction_pack,
         "causal_pack": causal_pack,
     }
+
+    if config.export_telegram_feed:
+        feed = _build_telegram_feed(
+            curated,
+            min_abs_z=config.telegram_feed_min_abs_z,
+            max_rows=config.telegram_feed_max_rows,
+        )
+        _write_csv_atomic(feed, config.telegram_feed_path)
+        feed_path = output_dir / "telegram_live_shocks.csv"
+        feed.to_csv(feed_path, index=False)
+        outputs["telegram_feed"] = {
+            "rows": int(len(feed)),
+            "min_abs_z": float(config.telegram_feed_min_abs_z),
+            "path": str(config.telegram_feed_path),
+            "snapshot_path": str(feed_path),
+        }
 
     if direction_labels_jsonl is not None:
         outputs["direction_ingest"] = _save_ingested_labels(

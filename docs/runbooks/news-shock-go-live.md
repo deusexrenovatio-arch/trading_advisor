@@ -28,7 +28,9 @@ python scripts/run_shock_label_cycle.py `
   --direction-max-tasks 300 `
   --causal-max-tasks 900 `
   --direction-candidate-sources v2_clean `
-  --causal-candidate-sources broad,none
+  --causal-candidate-sources broad,none `
+  --telegram-feed-path data/output/shock_alerts/live_shocks.csv `
+  --telegram-feed-min-abs-z 2.0
 ```
 
 If Chat Pro outputs are already available, add:
@@ -43,6 +45,7 @@ Cycle output includes:
 - `shock_label_cycle_manifest.json` (single source-of-truth for artifacts and counts),
 - curated dataset and issue ledger,
 - separate direction/causal packs and summaries,
+- `telegram_live_shocks.csv` snapshot and rolling `data/output/shock_alerts/live_shocks.csv` feed for Telegram worker,
 - optional silver ingest artifacts and readiness report.
 
 ## Windows Auto-Run (Task Scheduler)
@@ -72,7 +75,18 @@ powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.p
 Task uses `scripts/start_shock_label_cycle.ps1` as launcher, which:
 - sets `PYTHONPATH=src`,
 - loads `scripts/moex-carry.local.ps1` if present,
-- writes each run to `data/output/shock_label_cycle_auto/<UTC timestamp>/`.
+- writes each run to `data/output/shock_label_cycle_auto/<UTC timestamp>/`,
+- updates `data/output/shock_alerts/live_shocks.csv` (unless `-NoTelegramFeed` is set).
+
+## Telegram Shock Alerts
+- Ensure `telegram.enabled=true`, bot token and allowed users are configured.
+- `configs/default.yaml` now sets `telegram.shock_alerts_enabled=true` and reads feed from `telegram.shock_feed_path`.
+- Run worker:
+
+```powershell
+$env:PYTHONPATH='src'
+python -m moex_carry.cli telegram_bot
+```
 
 ## Commands
 ### 1) Label pack

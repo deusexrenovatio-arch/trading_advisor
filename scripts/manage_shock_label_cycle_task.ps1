@@ -18,6 +18,10 @@ param(
     [string]$DirectionCandidateSources = "v2_clean",
     [string]$CausalCandidateSources = "broad,none",
     [double]$IngestMinConfidence = 0.60,
+    [string]$TelegramFeedPath = "data/output/shock_alerts/live_shocks.csv",
+    [double]$TelegramFeedMinAbsZ = 2.0,
+    [int]$TelegramFeedMaxRows = 5000,
+    [switch]$NoTelegramFeed,
     [switch]$RunReadiness,
     [double]$PrimaryZ = 2.5,
     [double]$AftershockZ = 2.0,
@@ -72,6 +76,9 @@ function Build-TaskArguments {
         "-DirectionCandidateSources", "`"$DirectionCandidateSources`"",
         "-CausalCandidateSources", "`"$CausalCandidateSources`"",
         "-IngestMinConfidence", "$IngestMinConfidence",
+        "-TelegramFeedPath", "`"$TelegramFeedPath`"",
+        "-TelegramFeedMinAbsZ", "$TelegramFeedMinAbsZ",
+        "-TelegramFeedMaxRows", "$TelegramFeedMaxRows",
         "-PrimaryZ", "$PrimaryZ",
         "-AftershockZ", "$AftershockZ",
         "-EpisodeWindowMin", "$EpisodeWindowMin",
@@ -89,6 +96,9 @@ function Build-TaskArguments {
     }
     if (-not [string]::IsNullOrWhiteSpace($CausalLabelsJsonl)) {
         $parts += @("-CausalLabelsJsonl", "`"$CausalLabelsJsonl`"")
+    }
+    if ($NoTelegramFeed) {
+        $parts += "-NoTelegramFeed"
     }
     if ($RunReadiness) {
         $parts += "-RunReadiness"

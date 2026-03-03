@@ -12,6 +12,10 @@ param(
     [string]$DirectionCandidateSources = "v2_clean",
     [string]$CausalCandidateSources = "broad,none",
     [double]$IngestMinConfidence = 0.60,
+    [string]$TelegramFeedPath = "data/output/shock_alerts/live_shocks.csv",
+    [double]$TelegramFeedMinAbsZ = 2.0,
+    [int]$TelegramFeedMaxRows = 5000,
+    [switch]$NoTelegramFeed,
     [switch]$RunReadiness,
     [double]$PrimaryZ = 2.5,
     [double]$AftershockZ = 2.0,
@@ -68,6 +72,7 @@ $inputCsvAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $InputCsv
 $outputRootAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $OutputRoot
 $directionLabelsAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $DirectionLabelsJsonl
 $causalLabelsAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $CausalLabelsJsonl
+$telegramFeedAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $TelegramFeedPath
 
 if (-not (Test-Path $inputCsvAbs)) {
     throw "Input CSV not found: $inputCsvAbs"
@@ -88,6 +93,8 @@ $argsList = @(
     "--direction-candidate-sources", $DirectionCandidateSources,
     "--causal-candidate-sources", $CausalCandidateSources,
     "--ingest-min-confidence", "$IngestMinConfidence",
+    "--telegram-feed-min-abs-z", "$TelegramFeedMinAbsZ",
+    "--telegram-feed-max-rows", "$TelegramFeedMaxRows",
     "--primary-z", "$PrimaryZ",
     "--aftershock-z", "$AftershockZ",
     "--episode-window-min", "$EpisodeWindowMin",
@@ -105,6 +112,12 @@ if (-not [string]::IsNullOrWhiteSpace($directionLabelsAbs)) {
 }
 if (-not [string]::IsNullOrWhiteSpace($causalLabelsAbs)) {
     $argsList += @("--causal-labels-jsonl", $causalLabelsAbs)
+}
+if ($NoTelegramFeed) {
+    $argsList += "--no-telegram-feed"
+}
+elseif (-not [string]::IsNullOrWhiteSpace($telegramFeedAbs)) {
+    $argsList += @("--telegram-feed-path", $telegramFeedAbs)
 }
 if ($RunReadiness) {
     $argsList += "--run-readiness"

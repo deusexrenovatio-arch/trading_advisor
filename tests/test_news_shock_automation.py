@@ -101,3 +101,52 @@ def test_run_shock_label_cycle_builds_direction_and_causal_packs(tmp_path: Path)
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert payload["direction_pack"]["tasks_count"] == 1
     assert payload["causal_pack"]["tasks_count"] == 2
+
+
+def test_run_shock_label_cycle_exports_telegram_feed(tmp_path: Path) -> None:
+    input_csv = tmp_path / "input.csv"
+    output_dir = tmp_path / "cycle"
+    telegram_feed_path = tmp_path / "live_shocks.csv"
+    _input_df().to_csv(input_csv, index=False)
+
+    outputs = run_shock_label_cycle(
+        input_csv=input_csv,
+        output_dir=output_dir,
+        config=ShockLabelCycleConfig(
+            min_abs_z=2.5,
+            direction_max_tasks_total=10,
+            causal_max_tasks_total=10,
+            telegram_feed_path=telegram_feed_path,
+            telegram_feed_min_abs_z=2.0,
+            telegram_feed_max_rows=10,
+            run_readiness=False,
+        ),
+    )
+
+    telegram_feed_meta = outputs.get("telegram_feed")
+    assert isinstance(telegram_feed_meta, dict)
+    assert int(telegram_feed_meta["rows"]) == 3
+    assert Path(str(telegram_feed_meta["path"])) == telegram_feed_path
+
+    feed = pd.read_csv(telegram_feed_path)
+    assert list(feed.columns) == [
+        "shock_ts",
+        "symbol",
+        "shock_direction",
+        "z_score",
+        "abs_move_pct",
+        "topic_key",
+        "root_topic_id",
+        "selected_source",
+        "selected_event_id",
+        "headline",
+        "url",
+    ]
+    assert feed["selected_event_id"].fillna("").tolist() == ["evt-v2-a", "evt-broad-b", ""]
+    assert feed["topic_key"].tolist() == ["evt-v2-a", "evt-broad-b", "topic:gold-up"]
+    assert feed["root_topic_id"].tolist() == feed["topic_key"].tolist()
+
+    snapshot_path = Path(str(telegram_feed_meta["snapshot_path"]))
+    assert snapshot_path.exists()
+    snapshot_feed = pd.read_csv(snapshot_path)
+    assert len(snapshot_feed) == len(feed)
