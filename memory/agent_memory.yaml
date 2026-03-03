@@ -325,6 +325,18 @@ decisions:
       - scripts/run_morning_plan_walk_forward.py
       - tests/test_morning_plan_walk_forward.py
       - data/output/research/morning_offline_wf_2026ytd_goods32_costawarev2_fixed_probgate_sgs_ne1_er1p0_floor2.json
+  - id: ADM-2026-03-03-032
+    date: 2026-03-03
+    title: Reframe morning-plan optimization to intraday objective and switch search to TPE-ready flow
+    context: User goal changed from broad tick-maximization to intraday setups with potential target from 0.5 percent, several entries per week, and mandatory same-day exit.
+    decision: Add `setups.min_target_return_pct`, enforce it in setup generation, and extend walk-forward runner with `GRID/RANDOM/TPE` search plus trade-frequency-aware selection score.
+    impact: Strategy search is now aligned to non-scalping intraday behavior; first TPE runs are reproducible but still unstable/negative, so further objective calibration is required.
+    links:
+      - src/moex_carry/signal_engine/setups/generator.py
+      - scripts/run_morning_plan_walk_forward.py
+      - docs/research/evaluation-policy.md
+      - docs/hpo-howto.md
+      - data/output/research/morning_offline_wf_2026ytd_goods32_tpe_intraday_goal_v1_trial12_v2.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20

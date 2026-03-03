@@ -5,6 +5,7 @@ import copy
 import itertools
 import json
 import math
+import random
 import re
 import sqlite3
 import statistics
@@ -16,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from moex_carry.config import AppSettings, load_settings
 from moex_carry.data.moex_iss import MoexIssClient
+from moex_carry.hpo.search_space import parse_search_space, sample_random, sample_tpe
 from moex_carry.signal_engine.core.calendar import MarketCalendar, parse_time_window
 from moex_carry.signal_engine.core.math_utils import price_to_ticks
 from moex_carry.signal_engine.core.ohlcv import resample_ohlcv
@@ -36,6 +38,22 @@ TUNING_GRID_PROFILES: dict[str, dict[str, list[float]]] = {
         "setups.max_risk_atr_mult": [1.0, 1.2],
         "setups.sl_atr_mult": [0.7, 0.8],
     },
+}
+
+TUNING_SEARCH_SPACE_PROFILES: dict[str, dict[str, Any]] = {
+    "intraday_goal_v1": {
+        "execution.buffer_atr_mult": {"type": "float", "min": 0.05, "max": 0.20, "step": 0.01},
+        "setups.rr_default": {"type": "float", "min": 1.2, "max": 2.8, "step": 0.1},
+        "setups.pullback_max_dist_atr_mult": {"type": "float", "min": 0.5, "max": 1.3, "step": 0.1},
+        "setups.max_risk_atr_mult": {"type": "float", "min": 0.8, "max": 1.8, "step": 0.1},
+        "setups.sl_atr_mult": {"type": "float", "min": 0.6, "max": 1.2, "step": 0.1},
+        "setups.min_rr_net": {"type": "float", "min": 1.0, "max": 1.8, "step": 0.1},
+        "setups.min_reward_net_ticks": {"type": "float", "min": 1.0, "max": 6.0, "step": 1.0},
+        "setups.min_reward_gross_ticks": {"type": "float", "min": 8.0, "max": 40.0, "step": 2.0},
+        "setups.min_target_return_pct": {"type": "float", "min": 0.5, "max": 1.5, "step": 0.1},
+        "setups.min_atr_h1_cost_mult": {"type": "float", "min": 4.0, "max": 10.0, "step": 1.0},
+        "setups.min_atr_d1_cost_mult": {"type": "float", "min": 8.0, "max": 20.0, "step": 2.0},
+    }
 }
 
 COST_MODEL_PROFILES: tuple[str, ...] = ("fixed_v1", "train_proxy_v1")
@@ -118,6 +136,19 @@ class ProbabilityGateConfig:
     half_life_days: float
     dirichlet_alpha: float
     context_mode: str
+
+
+@dataclass(frozen=True)
+class GoalConstraints:
+    min_trades_per_week: float
+    max_trades_per_week: float
+    trade_freq_penalty: float
+
+
+@dataclass(frozen=True)
+class HpoTrialState:
+    params: dict[str, Any]
+    objective: float
 
 
 def _parse_iso_date(value: str) -> date:
@@ -595,12 +626,53 @@ def _resolve_tuning_grid(profile_name: str) -> dict[str, list[float]]:
     return copy.deepcopy(TUNING_GRID_PROFILES[key])
 
 
+def _resolve_search_space(profile_name: str) -> dict[str, Any]:
+    key = str(profile_name or "intraday_goal_v1").strip()
+    if key not in TUNING_SEARCH_SPACE_PROFILES:
+        allowed = ",".join(sorted(TUNING_SEARCH_SPACE_PROFILES.keys()))
+        raise ValueError(f"unknown_search_space_profile:{key};allowed={allowed}")
+    return copy.deepcopy(TUNING_SEARCH_SPACE_PROFILES[key])
+
+
+def _resolve_search_algorithm(name: str) -> str:
+    key = str(name or "GRID").strip().upper()
+    if key not in {"GRID", "RANDOM", "TPE"}:
+        raise ValueError("unknown_search_algorithm")
+    return key
+
+
 def _resolve_cost_model_profile(profile_name: str) -> str:
     key = str(profile_name or "fixed_v1").strip()
     if key not in COST_MODEL_PROFILES:
         allowed = ",".join(COST_MODEL_PROFILES)
         raise ValueError(f"unknown_cost_model_profile:{key};allowed={allowed}")
     return key
+
+
+def _trades_per_week(*, filled_trades: int, period_start: date, period_end: date) -> float:
+    days = (period_end - period_start).days + 1
+    if days <= 0:
+        return 0.0
+    return float(max(int(filled_trades), 0) * 7.0 / float(days))
+
+
+def _goal_adjusted_selection_score(
+    *,
+    base_score: float,
+    summary: dict[str, Any],
+    period_start: date,
+    period_end: date,
+    goal: GoalConstraints,
+) -> float:
+    weekly = _trades_per_week(
+        filled_trades=int(summary.get("filled_trades", 0) or 0),
+        period_start=period_start,
+        period_end=period_end,
+    )
+    under = max(float(goal.min_trades_per_week) - float(weekly), 0.0)
+    over = max(float(weekly) - float(goal.max_trades_per_week), 0.0)
+    penalty = float(goal.trade_freq_penalty) * float(under + over)
+    return float(base_score - penalty)
 
 
 def _instrument_group(instrument_id: str) -> str:
@@ -1126,6 +1198,88 @@ def _train_selection_metrics(
     )
 
 
+def _build_train_score_row(
+    *,
+    combo: dict[str, Any],
+    base_cfg: dict[str, Any],
+    period_start: date,
+    period_end: date,
+    instruments: list[str],
+    decision_time: time,
+    tz: ZoneInfo,
+    payload: dict[tuple[str, TF], list[Candle]],
+    tick_sizes: dict[str, float],
+    calendar: MarketCalendar,
+    costs: CostAssumptions,
+    instrument_costs: dict[str, CostAssumptions] | None,
+    train_probability_gate: ProbabilityGateConfig,
+    min_trades_per_instrument: int,
+    robust_mad_penalty: float,
+    selection_objective: str,
+    goal: GoalConstraints,
+) -> dict[str, Any]:
+    cfg = _apply_overrides(base_cfg, combo)
+    _, train_summary, _ = _evaluate_window(
+        period_start=period_start,
+        period_end=period_end,
+        instruments=instruments,
+        decision_time=decision_time,
+        tz=tz,
+        cfg=cfg,
+        payload=payload,
+        tick_sizes=tick_sizes,
+        calendar=calendar,
+        costs=costs,
+        instrument_costs=instrument_costs,
+        probability_gate=train_probability_gate,
+        collect_history=False,
+    )
+    metrics = asdict(
+        _train_selection_metrics(
+            summary=train_summary,
+            min_trades_per_instrument=min_trades_per_instrument,
+            mad_penalty=robust_mad_penalty,
+        )
+    )
+    if selection_objective == "expectancy_net_ticks":
+        base_score = float(train_summary.get("expectancy_net_ticks", 0.0))
+    else:
+        base_score = float(metrics.get("robust_score", float("-inf")))
+    selection_score = _goal_adjusted_selection_score(
+        base_score=base_score,
+        summary=train_summary,
+        period_start=period_start,
+        period_end=period_end,
+        goal=goal,
+    )
+    metrics["selection_score"] = float(selection_score)
+    metrics["trades_per_week"] = _trades_per_week(
+        filled_trades=int(train_summary.get("filled_trades", 0) or 0),
+        period_start=period_start,
+        period_end=period_end,
+    )
+    return {
+        "params": combo,
+        "summary": train_summary,
+        "metrics": metrics,
+    }
+
+
+def _is_train_row_eligible(
+    *,
+    row: dict[str, Any],
+    min_train_trades: int,
+    required_instruments: int,
+) -> bool:
+    summary = row.get("summary", {})
+    metrics = row.get("metrics", {})
+    return bool(
+        int(summary.get("filled_trades", 0) or 0) >= int(min_train_trades)
+        and int(metrics.get("instruments_with_trades", 0) or 0) >= int(required_instruments)
+        and int(metrics.get("robust_instruments", 0) or 0) >= int(required_instruments)
+    )
+
+
 def _evaluate_window(
     *,
     period_start: date,
@@ -1335,13 +1489,24 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         }
 
     base_cfg = settings.signal_engine.morning_plan.model_dump(mode="python")
+    setup_cfg = base_cfg.setdefault("setups", {})
+    if isinstance(setup_cfg, dict):
+        current_min_target_pct = float(setup_cfg.get("min_target_return_pct", 0.0) or 0.0)
+        setup_cfg["min_target_return_pct"] = max(current_min_target_pct, max(float(args.goal_min_target_return_pct), 0.0))
     costs = CostAssumptions(
         commission_ticks_per_side=float(args.commission_ticks_per_side),
         slippage_ticks_per_side=float(args.slippage_ticks_per_side),
         spread_half_ticks=float(args.spread_half_ticks),
     )
+    search_algorithm = _resolve_search_algorithm(args.search_algorithm)
     tuning_profile = str(args.tuning_profile).strip()
     grid = _resolve_tuning_grid(tuning_profile)
+    search_space_profile = str(args.search_space_profile).strip()
+    search_space = _resolve_search_space(search_space_profile) if search_algorithm in {"RANDOM", "TPE"} else {}
+    search_params = parse_search_space(search_space) if search_space else []
+    hpo_trials = max(int(args.hpo_trials), 1)
+    hpo_startup_trials = max(int(args.hpo_startup_trials), 1)
+    hpo_seed = int(args.hpo_seed)
     cost_model_profile = _resolve_cost_model_profile(args.cost_model_profile)
     combinations = _expand_grid(grid)
     default_combo = next((item for item in combinations if item == {}), None)
@@ -1362,6 +1527,15 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     min_trades_per_instrument = max(int(args.min_trades_per_instrument), 1)
     robust_mad_penalty = max(float(args.robust_mad_penalty), 0.0)
     objective = str(args.selection_objective).strip().lower()
+    goal_max_trades_per_week = max(float(args.goal_max_trades_per_week), 0.0)
+    goal_min_trades_per_week = max(float(args.goal_min_trades_per_week), 0.0)
+    if goal_max_trades_per_week > 0.0 and goal_max_trades_per_week < goal_min_trades_per_week:
+        goal_max_trades_per_week = goal_min_trades_per_week
+    goal = GoalConstraints(
+        min_trades_per_week=goal_min_trades_per_week,
+        max_trades_per_week=goal_max_trades_per_week,
+        trade_freq_penalty=max(float(args.goal_trade_freq_penalty), 0.0),
+    )
     probability_gate = ProbabilityGateConfig(
         enabled=bool(args.enable_probability_gate),
         min_n_effective=max(float(args.prob_min_n_effective), 0.0),
@@ -1394,68 +1568,126 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             profile=cost_model_profile,
         )
         train_scores: list[dict[str, Any]] = []
-        for combo in combinations:
-            cfg = _apply_overrides(base_cfg, combo)
-            _, train_summary, _ = _evaluate_window(
-                period_start=train_start,
-                period_end=train_end,
-                instruments=instruments,
-                decision_time=decision_time,
-                tz=tz,
-                cfg=cfg,
-                payload=payload,
-                tick_sizes=tick_sizes,
-                calendar=calendar,
-                costs=costs,
-                instrument_costs=fold_instrument_costs,
-                probability_gate=train_probability_gate,
-                collect_history=False,
-            )
-            train_scores.append(
-                {
-                    "params": combo,
-                    "summary": train_summary,
-                    "metrics": asdict(
-                        _train_selection_metrics(
-                            summary=train_summary,
-                            min_trades_per_instrument=min_trades_per_instrument,
-                            mad_penalty=robust_mad_penalty,
-                        )
-                    ),
-                }
-            )
+        if search_algorithm == "GRID":
+            for combo in combinations:
+                train_scores.append(
+                    _build_train_score_row(
+                        combo=combo,
+                        base_cfg=base_cfg,
+                        period_start=train_start,
+                        period_end=train_end,
+                        instruments=instruments,
+                        decision_time=decision_time,
+                        tz=tz,
+                        payload=payload,
+                        tick_sizes=tick_sizes,
+                        calendar=calendar,
+                        costs=costs,
+                        instrument_costs=fold_instrument_costs,
+                        train_probability_gate=train_probability_gate,
+                        min_trades_per_instrument=min_trades_per_instrument,
+                        robust_mad_penalty=robust_mad_penalty,
+                        selection_objective=objective,
+                        goal=goal,
+                    )
+                )
+        else:
+            rng = random.Random(int(hpo_seed) + int(idx) * 9973)
+            tpe_trials: list[HpoTrialState] = []
+            seen_signatures: set[str] = set()
+            attempts = 0
+            max_attempts = max(int(hpo_trials) * 4, int(hpo_trials))
+            while len(train_scores) < int(hpo_trials) and attempts < max_attempts:
+                attempts += 1
+                if search_algorithm == "RANDOM":
+                    combo = sample_random(search_params, rng)
+                else:
+                    combo = sample_tpe(
+                        search_params,
+                        tpe_trials,
+                        rng,
+                        mode="max",
+                        startup_trials=hpo_startup_trials,
+                    )
+                signature = json.dumps(combo, sort_keys=True, ensure_ascii=True)
+                if signature in seen_signatures:
+                    continue
+                seen_signatures.add(signature)
+                row = _build_train_score_row(
+                    combo=combo,
+                    base_cfg=base_cfg,
+                    period_start=train_start,
+                    period_end=train_end,
+                    instruments=instruments,
+                    decision_time=decision_time,
+                    tz=tz,
+                    payload=payload,
+                    tick_sizes=tick_sizes,
+                    calendar=calendar,
+                    costs=costs,
+                    instrument_costs=fold_instrument_costs,
+                    train_probability_gate=train_probability_gate,
+                    min_trades_per_instrument=min_trades_per_instrument,
+                    robust_mad_penalty=robust_mad_penalty,
+                    selection_objective=objective,
+                    goal=goal,
+                )
+                eligible_trial = _is_train_row_eligible(
+                    row=row,
+                    min_train_trades=min_train_trades,
+                    required_instruments=required_instruments,
+                )
+                tpe_objective = float(row["metrics"].get("selection_score", float("-inf")))
+                if not eligible_trial or not math.isfinite(tpe_objective):
+                    tpe_objective = -1e9
+                row["metrics"]["hpo_objective"] = float(tpe_objective)
+                train_scores.append(row)
+                tpe_trials.append(HpoTrialState(params=combo, objective=float(tpe_objective)))
+            if not train_scores:
+                train_scores.append(
+                    _build_train_score_row(
+                        combo=default_combo,
+                        base_cfg=base_cfg,
+                        period_start=train_start,
+                        period_end=train_end,
+                        instruments=instruments,
+                        decision_time=decision_time,
+                        tz=tz,
+                        payload=payload,
+                        tick_sizes=tick_sizes,
+                        calendar=calendar,
+                        costs=costs,
+                        instrument_costs=fold_instrument_costs,
+                        train_probability_gate=train_probability_gate,
+                        min_trades_per_instrument=min_trades_per_instrument,
+                        robust_mad_penalty=robust_mad_penalty,
+                        selection_objective=objective,
+                        goal=goal,
+                    )
+                )
         eligible = [
             row
             for row in train_scores
-            if int(row["summary"]["filled_trades"]) >= min_train_trades
-            and int(row["metrics"]["instruments_with_trades"]) >= required_instruments
-            and int(row["metrics"]["robust_instruments"]) >= required_instruments
+            if _is_train_row_eligible(
+                row=row,
+                min_train_trades=min_train_trades,
+                required_instruments=required_instruments,
+            )
         ]
-        if objective == "expectancy_net_ticks":
-            ranked = sorted(
-                eligible,
-                key=lambda row: (
-                    float(row["summary"]["expectancy_net_ticks"]),
-                    float(row["summary"]["net_ticks_sum"]),
-                    int(row["summary"]["filled_trades"]),
-                ),
-                reverse=True,
-            )
-        else:
-            ranked = sorted(
-                eligible,
-                key=lambda row: (
-                    float(row["metrics"]["robust_score"]),
-                    float(row["metrics"]["median_expectancy"]),
-                    float(row["summary"]["expectancy_net_ticks"]),
-                    float(row["summary"]["net_ticks_sum"]),
-                    int(row["summary"]["filled_trades"]),
-                ),
-                reverse=True,
-            )
-        selected = ranked[0] if ranked else next(
-            (row for row in train_scores if row["params"] == default_combo),
-            train_scores[0],
+        ranked = sorted(
+            eligible,
+            key=lambda row: (
+                float(row["metrics"].get("selection_score", float("-inf"))),
+                float(row["metrics"].get("robust_score", float("-inf"))),
+                float(row["summary"].get("expectancy_net_ticks", float("-inf"))),
+                float(row["summary"].get("net_ticks_sum", float("-inf"))),
+                int(row["summary"].get("filled_trades", 0)),
+            ),
+            reverse=True,
+        )
+        selected = ranked[0] if ranked else max(
+            train_scores,
+            key=lambda row: float(row["metrics"].get("selection_score", float("-inf"))),
         )
         selected_cfg = _apply_overrides(base_cfg, selected["params"])
         _, _, train_history = _evaluate_window(
@@ -1538,6 +1770,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "train_end": train_end.isoformat(),
                 "test_start": test_start.isoformat(),
                 "test_end": test_end.isoformat(),
+                "search_algorithm": search_algorithm,
+                "train_candidates": int(len(train_scores)),
                 "selected_params": selected["params"],
                 "train_summary": selected["summary"],
                 "train_selection_metrics": selected["metrics"],
@@ -1569,8 +1803,13 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         "cost_assumptions_ticks": asdict(costs),
         "tuning_points": {
             "objective": objective,
+            "search_algorithm": search_algorithm,
             "profile": tuning_profile,
+            "search_space_profile": search_space_profile,
             "combinations": len(combinations),
+            "hpo_trials": int(hpo_trials),
+            "hpo_startup_trials": int(hpo_startup_trials),
+            "hpo_seed": int(hpo_seed),
             "cost_model_profile": cost_model_profile,
             "probability_gate": {
                 "enabled": bool(probability_gate.enabled),
@@ -1583,6 +1822,16 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "min_filled_trades_per_fold": int(min_prob_filled_per_fold),
             },
             "grid": grid,
+            "search_space": search_space,
+            "goal": {
+                "min_target_return_pct": float(args.goal_min_target_return_pct),
+                "min_trades_per_week": float(goal.min_trades_per_week),
+                "max_trades_per_week": float(goal.max_trades_per_week),
+                "trade_freq_penalty": float(goal.trade_freq_penalty),
+            },
+            "effective_min_target_return_pct": float(
+                base_cfg.get("setups", {}).get("min_target_return_pct", 0.0)
+            ),
             "min_train_trades": min_train_trades,
             "min_train_instruments_with_trades": required_instruments,
             "min_trades_per_instrument": min_trades_per_instrument,
@@ -1622,6 +1871,21 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=sorted(TUNING_GRID_PROFILES.keys()),
     )
     parser.add_argument(
+        "--search-algorithm",
+        type=str,
+        default="GRID",
+        choices=["GRID", "RANDOM", "TPE"],
+    )
+    parser.add_argument(
+        "--search-space-profile",
+        type=str,
+        default="intraday_goal_v1",
+        choices=sorted(TUNING_SEARCH_SPACE_PROFILES.keys()),
+    )
+    parser.add_argument("--hpo-trials", type=int, default=24)
+    parser.add_argument("--hpo-startup-trials", type=int, default=8)
+    parser.add_argument("--hpo-seed", type=int, default=42)
+    parser.add_argument(
         "--cost-model-profile",
         type=str,
         default="fixed_v1",
@@ -1645,9 +1909,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default="robust_median_mad",
         choices=["robust_median_mad", "expectancy_net_ticks"],
     )
-    parser.add_argument("--min-train-trades", type=int, default=80)
-    parser.add_argument("--min-train-instruments-with-trades", type=int, default=8)
-    parser.add_argument("--min-trades-per-instrument", type=int, default=3)
+    parser.add_argument("--goal-min-target-return-pct", type=float, default=0.5)
+    parser.add_argument("--goal-min-trades-per-week", type=float, default=2.0)
+    parser.add_argument("--goal-max-trades-per-week", type=float, default=12.0)
+    parser.add_argument("--goal-trade-freq-penalty", type=float, default=3.0)
+    parser.add_argument("--min-train-trades", type=int, default=12)
+    parser.add_argument("--min-train-instruments-with-trades", type=int, default=4)
+    parser.add_argument("--min-trades-per-instrument", type=int, default=1)
     parser.add_argument("--robust-mad-penalty", type=float, default=0.5)
     parser.add_argument("--tick-size", action="append", default=[], help="Optional SECID=tick_size override.")
     parser.add_argument("--commission-ticks-per-side", type=float, default=0.5)
