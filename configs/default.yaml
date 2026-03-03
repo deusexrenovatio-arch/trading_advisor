@@ -236,7 +236,8 @@ news_ingest:
   commodity_profiles:
     - ticker: "BRN"
       name: "Brent Crude Oil"
-      gdelt_query: "(\"brent crude\" OR \"brent oil\" OR \"ice brent\")"
+      gdelt_query: "(\"brent crude\" OR \"brent oil\" OR \"ice brent\" OR \"oil prices\" OR opec OR \"strait of hormuz\" OR iran OR israel OR \"middle east conflict\" OR \"red sea shipping\" OR houthi OR \"shipping disruption\")"
+      newsapi_query: "(\"brent\" OR \"crude oil\" OR \"oil prices\" OR opec OR \"strait of hormuz\" OR iran OR israel OR houthi OR \"red sea shipping\" OR \"middle east conflict\") AND (oil OR brent OR crude OR tanker OR opec)"
       rss_urls:
         - "https://news.google.com/rss/search?q=Brent+crude+oil+futures"
       price_source: "yfinance"
@@ -244,7 +245,8 @@ news_ingest:
       price_interval: "1d"
     - ticker: "GOLD"
       name: "Gold"
-      gdelt_query: "(\"gold futures\" OR \"gold price\" OR bullion)"
+      gdelt_query: "(\"gold futures\" OR \"gold price\" OR bullion OR \"safe haven\" OR \"real yields\" OR \"middle east conflict\" OR iran OR israel OR \"geopolitical risk\" OR \"war escalation\" OR \"risk-off\")"
+      newsapi_query: "(\"gold\" OR bullion OR \"safe haven\" OR \"real yields\" OR \"fed rates\" OR iran OR israel OR \"middle east conflict\" OR \"geopolitical risk\" OR \"war escalation\" OR \"risk-off\") AND (gold OR bullion OR xau OR \"safe haven\")"
       rss_urls:
         - "https://news.google.com/rss/search?q=gold+futures"
       price_source: "yfinance"
@@ -252,7 +254,8 @@ news_ingest:
       price_interval: "1d"
     - ticker: "NG_US"
       name: "US Natural Gas"
-      gdelt_query: "(\"natural gas\" OR \"henry hub\" OR \"nymex gas\")"
+      gdelt_query: "(\"natural gas\" OR \"henry hub\" OR \"nymex gas\" OR \"us lng\" OR \"eia storage\" OR \"freeze-off\" OR \"us weather gas\" OR \"arctic blast\" OR \"strait of hormuz\" OR iran OR israel OR \"lng shipping disruption\")"
+      newsapi_query: "(\"natural gas\" OR \"henry hub\" OR \"nymex gas\" OR \"eia storage\" OR \"freeze-off\" OR \"arctic blast\" OR \"us lng exports\" OR \"strait of hormuz\" OR iran OR israel OR \"lng shipping disruption\") AND (\"natural gas\" OR \"henry hub\" OR lng OR feedgas)"
       rss_urls:
         - "https://news.google.com/rss/search?q=henry+hub+natural+gas+futures"
       price_source: "yfinance"
