@@ -356,6 +356,86 @@ def register_news_subcommands(
     news_factor_autolabel_parser.add_argument("--text-max-chars", type=int, default=4000)
     news_factor_autolabel_parser.add_argument("--max-events", type=int, default=0)
 
+    news_live_eval_parser = subparsers.add_parser(
+        "news_live_eval",
+        help="Build live-style per-news forecasts and 1-horizon post-factum eval with human-readable local time.",
+    )
+    add_common_args(news_live_eval_parser)
+    news_live_eval_parser.add_argument(
+        "--from-date",
+        type=str,
+        default=None,
+        help="UTC date start (YYYY-MM-DD). Default: yesterday.",
+    )
+    news_live_eval_parser.add_argument(
+        "--to-date",
+        type=str,
+        default=None,
+        help="UTC date end exclusive (YYYY-MM-DD). Default: from-date + 1 day.",
+    )
+    news_live_eval_parser.add_argument(
+        "--tickers",
+        type=str,
+        default="BRN,GOLD,NG_US",
+        help="Comma-separated tickers (default: BRN,GOLD,NG_US).",
+    )
+    news_live_eval_parser.add_argument(
+        "--horizon",
+        type=str,
+        default="1h",
+        help="Target horizon for post-factum evaluation (default: 1h).",
+    )
+    news_live_eval_parser.add_argument(
+        "--timezone",
+        type=str,
+        default="Europe/Moscow",
+        help="Output timezone (default: Europe/Moscow).",
+    )
+    news_live_eval_parser.add_argument(
+        "--limit",
+        type=int,
+        default=200,
+        help="Per-ticker news feed limit (default: 200).",
+    )
+    news_live_eval_parser.add_argument(
+        "--top-per-ticker",
+        type=int,
+        default=5,
+        help="How many top-impact rows per ticker to print into text summary (default: 5).",
+    )
+    news_live_eval_parser.add_argument(
+        "--gap-lag-minutes",
+        type=int,
+        default=180,
+        help=(
+            "Lag threshold between publication and first target price point (t0) to treat move as likely gap "
+            "and exclude from tradable hit-rate (default: 180)."
+        ),
+    )
+    news_live_eval_parser.add_argument(
+        "--moex-contract-eval",
+        action="store_true",
+        help="Recompute post-factum return on MOEX futures contracts with rollover-aware SECID selection.",
+    )
+    news_live_eval_parser.add_argument(
+        "--moex-roll-days",
+        type=int,
+        default=1,
+        help="Minimum days-to-expiry for contract selection in MOEX contract eval mode (default: 1).",
+    )
+    news_live_eval_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Optional output JSONL path. Default: data/output/news_live_eval_<from>_<to>.jsonl",
+    )
+    news_live_eval_parser.add_argument(
+        "--summary-output",
+        type=str,
+        default=None,
+        help="Optional text summary path. Default: data/output/news_live_eval_<from>_<to>_top.txt",
+    )
+
     news_benchmark_parser = subparsers.add_parser(
         "news_benchmark",
         help="Benchmark news model inference matrix and suggest host-optimized safe profile.",
