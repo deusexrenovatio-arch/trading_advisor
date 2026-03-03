@@ -5,8 +5,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from moex_carry.signal_engine.core.types import TF
-from moex_carry.signal_engine.data.candles import IssCandleProvider, IssInstrumentRoute
+from moex_carry.signal_engine.core.types import Candle, TF
+from moex_carry.signal_engine.data.candles import InMemoryCandleProvider, IssCandleProvider, IssInstrumentRoute
 
 
 class _FakeIssClient:
@@ -119,3 +119,19 @@ def test_iss_candle_provider_filters_sorts_and_limits():
 
     limited = provider.get_candles("BRK6", tf=TF.M5, end_ts=end_ts, limit=2)
     assert [item.ts.strftime("%H:%M") for item in limited] == ["10:05", "10:10"]
+
+
+def test_inmemory_candle_provider_returns_last_slice_without_resort():
+    tz = ZoneInfo("Europe/Moscow")
+    payload = {
+        ("BRK6", TF.M5): [
+            Candle(ts=datetime(2026, 3, 1, 10, 10, tzinfo=tz), open=10.3, high=10.5, low=10.2, close=10.4, volume=13.0),
+            Candle(ts=datetime(2026, 3, 1, 10, 0, tzinfo=tz), open=10.0, high=10.2, low=9.9, close=10.1, volume=11.0),
+            Candle(ts=datetime(2026, 3, 1, 10, 5, tzinfo=tz), open=10.1, high=10.3, low=10.0, close=10.2, volume=12.0),
+            Candle(ts=datetime(2026, 3, 1, 10, 15, tzinfo=tz), open=10.4, high=10.6, low=10.3, close=10.5, volume=14.0),
+        ]
+    }
+    provider = InMemoryCandleProvider(payload)
+    end_ts = datetime(2026, 3, 1, 10, 10, tzinfo=tz)
+    candles = provider.get_candles("BRK6", tf=TF.M5, end_ts=end_ts, limit=2)
+    assert [item.ts.strftime("%H:%M") for item in candles] == ["10:05", "10:10"]
