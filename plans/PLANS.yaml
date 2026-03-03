@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-02
+updated_at: 2026-03-03
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -656,3 +656,166 @@ items:
       - P1-UX-RISK-HARDENING-027
     started_at: 2026-03-02
     completed_at: 2026-03-02
+
+  - id: P2-NEWS-MODE-COMPARE-029
+    title: Add deterministic A/B comparator for current and root-event news matching modes
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - comparator builds side-by-side outputs for current broad-first and proposed root-event strict selection
+      - report includes coverage, timeliness, labeled directional accuracy, and per-symbol deltas
+      - CLI entrypoint exists for reproducible reruns on the same shock-news dataset
+      - threshold sweep can identify precision-focused profile under minimum coverage constraint
+    checks:
+      - python -m pytest tests/test_news_mode_compare.py -q
+      - python -m ruff check src/moex_carry/news_mode_compare.py scripts/compare_news_modes.py tests/test_news_mode_compare.py src/moex_carry/cli.py
+      - python scripts/compare_news_modes.py --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv --output-dir data/output/news_mode_compare_365d_5m_opt --run-sweep --sweep-broad-grid 0.0,0.6,1.0 --sweep-v2-grid 0.0,0.4 --sweep-min-coverage 0.1
+      - python -m moex_carry.cli news_mode_compare --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv --output-dir data/output/news_mode_compare_cli_smoke --max-delay-min 60 --broad-min-relevance 0.6 --v2-min-relevance 0.4
+    docs:
+      - src/moex_carry/news_mode_compare.py
+      - scripts/compare_news_modes.py
+      - src/moex_carry/cli.py
+      - tests/test_news_mode_compare.py
+      - data/output/news_mode_compare_365d_5m_opt/news_mode_compare_report.txt
+    dependencies:
+      - P2-STAGED-PROTOCOL-028
+    started_at: 2026-03-03
+    completed_at: 2026-03-03
+
+  - id: P2-SHOCK-EPISODE-CAPTURE-030
+    title: Add primary/aftershock episode analysis and capture metrics for shock-oriented workflow
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - shock episode segmentation supports primary and aftershock roles from z-score stream
+      - capture metrics report recall on primary and aftershock subsets separately for current and proposed modes
+      - script and CLI command produce reproducible artifacts for constrained date window (2026 YTD)
+    checks:
+      - python -m pytest tests/test_shock_episodes.py tests/test_news_mode_compare.py -q
+      - python -m ruff check src/moex_carry/shock_episodes.py scripts/analyze_shock_episodes.py tests/test_shock_episodes.py src/moex_carry/cli.py src/moex_carry/news_mode_compare.py
+      - python scripts/analyze_shock_episodes.py --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv --output-dir data/output/shock_episode_analysis_2026_ytd --start-ts 2026-01-01T00:00:00Z --end-ts 2026-12-31T23:59:59Z --max-delay-min 60 --primary-z 2.5 --aftershock-z 2.0 --episode-window-min 360 --max-gap-min 120
+    docs:
+      - src/moex_carry/shock_episodes.py
+      - scripts/analyze_shock_episodes.py
+      - src/moex_carry/cli.py
+      - tests/test_shock_episodes.py
+      - data/output/shock_episode_analysis_2026_ytd/shock_mode_capture.csv
+    dependencies:
+      - P2-NEWS-MODE-COMPARE-029
+    started_at: 2026-03-03
+    completed_at: 2026-03-03
+
+  - id: P2-TELEGRAM-SHOCK-ALERTS-031
+    title: Enable topic-aware shock and aftershock Telegram delivery for multi-day episodes
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - telegram config supports shock feed thresholds, multi-day topic reopen window, and fingerprint TTL
+      - worker runtime sends primary and aftershock alerts from CSV feed with deduplication and cooldown controls
+      - shock delivery policy is unit-tested for cross-day aftershock continuity and cooldown behavior
+      - governance line-budget blocker for telegram worker remains passing after integration
+    checks:
+      - python -m pytest tests/test_shock_alert_delivery.py tests/test_telegram_worker.py -q
+      - python -m ruff check src/moex_carry/integrations/telegram_worker.py src/moex_carry/integrations/telegram_shock_broadcast.py src/moex_carry/integrations/telegram_runtime_utils.py src/moex_carry/shock_alert_delivery.py tests/test_shock_alert_delivery.py tests/test_telegram_worker.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/shock_alert_delivery.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
+      - src/moex_carry/integrations/telegram_runtime_utils.py
+      - src/moex_carry/integrations/telegram_worker.py
+      - src/moex_carry/config.py
+      - configs/default.yaml
+      - tests/test_shock_alert_delivery.py
+      - tests/test_telegram_worker.py
+    dependencies:
+      - P2-SHOCK-EPISODE-CAPTURE-030
+    started_at: 2026-03-03
+    completed_at: 2026-03-03
+
+  - id: P2-NEWS-SHOCK-READINESS-032
+    title: Implement end-to-end shock data curation, silver labeling loop, and launch-readiness assessment
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - deterministic curation removes critical shock outliers per-symbol and emits issue ledger
+      - label-pack builder outputs Chat Pro-ready JSONL with top-level symbol/task fields and candidate context
+      - label ingest normalizes heterogeneous Chat Pro JSONL responses into silver dataset with confidence controls
+      - readiness assessment emits pass/fail critical checks and artifacts for launch decision
+      - new flow is available via scripts and moex-carry CLI commands
+    checks:
+      - python -m pytest tests/test_news_shock_pipeline.py tests/test_news_shock_readiness.py tests/test_news_mode_compare.py tests/test_shock_episodes.py tests/test_shock_alert_delivery.py tests/test_telegram_worker.py -q
+      - python -m ruff check src/moex_carry/news_shock_pipeline.py src/moex_carry/news_shock_readiness.py scripts/build_shock_label_pack.py scripts/ingest_shock_labels.py scripts/news_shock_readiness.py src/moex_carry/cli.py tests/test_news_shock_pipeline.py tests/test_news_shock_readiness.py
+      - python scripts/news_shock_readiness.py --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv --output-dir data/output/news_shock_readiness_2026_ytd --start-ts 2026-01-01T00:00:00Z --max-delay-min 60 --primary-z 2.5 --aftershock-z 2.0 --episode-window-min 10080 --max-gap-min 2880
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/news_shock_pipeline.py
+      - src/moex_carry/news_shock_readiness.py
+      - scripts/build_shock_label_pack.py
+      - scripts/ingest_shock_labels.py
+      - scripts/news_shock_readiness.py
+      - docs/runbooks/news-shock-go-live.md
+      - data/output/news_shock_readiness_2026_ytd/readiness_report.md
+    dependencies:
+      - P2-TELEGRAM-SHOCK-ALERTS-031
+    started_at: 2026-03-03
+    completed_at: 2026-03-03
+
+  - id: P2-NEWS-SHOCK-AUTOMATION-033
+    title: Automate daily shock labeling cycle with directional and causal packs
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - label pack builder supports primary candidate source filtering and causal-only mode
+      - automated cycle command builds direction and causal packs from one run and writes a manifest
+      - cycle optionally ingests Chat Pro labels and runs readiness in the same pipeline
+      - regression tests cover source filtering, causal-only mode, and cycle artifacts
+    checks:
+      - python -m pytest tests/test_news_shock_pipeline.py tests/test_news_shock_automation.py -q
+      - python -m ruff check src/moex_carry/news_shock_pipeline.py src/moex_carry/news_shock_automation.py scripts/build_shock_label_pack.py scripts/run_shock_label_cycle.py src/moex_carry/cli.py tests/test_news_shock_pipeline.py tests/test_news_shock_automation.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/news_shock_pipeline.py
+      - src/moex_carry/news_shock_automation.py
+      - scripts/build_shock_label_pack.py
+      - scripts/run_shock_label_cycle.py
+      - src/moex_carry/cli.py
+      - docs/runbooks/news-shock-go-live.md
+    dependencies:
+      - P2-NEWS-SHOCK-READINESS-032
+    started_at: 2026-03-03
+    completed_at: 2026-03-03
+
+  - id: P2-NEWS-SHOCK-SCHEDULER-034
+    title: Enable unattended daily shock label cycle via Windows Task Scheduler
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - launcher script exists for one-shot cycle execution with timestamped output directories
+      - task-manager script supports install/status/run/remove and configurable schedule
+      - runbook documents unattended setup and operational commands
+      - task installation and manual trigger succeed on target workstation
+    checks:
+      - powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -CheckOnly
+      - powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Install -DryRun
+      - powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Status
+      - python scripts/run_lean_gate.py
+    docs:
+      - scripts/start_shock_label_cycle.ps1
+      - scripts/manage_shock_label_cycle_task.ps1
+      - docs/runbooks/news-shock-go-live.md
+    dependencies:
+      - P2-NEWS-SHOCK-AUTOMATION-033
+    started_at: 2026-03-03
+    completed_at: 2026-03-03

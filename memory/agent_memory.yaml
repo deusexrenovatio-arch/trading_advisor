@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-02
+updated_at: 2026-03-03
 
 decisions:
   - id: ADM-2026-02-20-001
@@ -271,6 +271,51 @@ decisions:
       - src/moex_carry/contracts/strategy_test.py
       - data/reports/sequential_compare_base_vs_staged_summary_20260302.csv
       - data/reports/sequential_protocol_settings_20260302.json
+  - id: ADM-2026-03-03-026
+    date: 2026-03-03
+    title: Compare news matching modes by precision-coverage tradeoff instead of raw hit-count only
+    context: Broad-first shock-to-news linkage produced higher candidate coverage but frequently selected off-topic headlines, masking the quality gain of stricter root-event linking.
+    decision: Add deterministic comparator that runs current broad-first and proposed root-event strict selection side-by-side on the same shock dataset, reports per-symbol deltas, and supports threshold sweep with minimum-coverage constraint.
+    impact: Team can now make promotion decisions on measurable tradeoffs (coverage, labeled directional accuracy, relevance quality) rather than anecdotal examples.
+    links:
+      - src/moex_carry/news_mode_compare.py
+      - scripts/compare_news_modes.py
+      - src/moex_carry/cli.py
+      - data/output/news_mode_compare_365d_5m_opt/news_mode_compare_report.txt
+  - id: ADM-2026-03-03-027
+    date: 2026-03-03
+    title: Split shock workflow into primary and aftershock capture metrics
+    context: Single shock recall metric mixed initial impulse and continuation bursts, making optimization ambiguous for alerting logic.
+    decision: Add deterministic episode segmentation (`primary` + `aftershock`) and report mode capture recall for both roles separately.
+    impact: "Tuning now targets the stated objective directly: catch initial market shock while measuring continuation coverage independently."
+    links:
+      - src/moex_carry/shock_episodes.py
+      - scripts/analyze_shock_episodes.py
+      - data/output/shock_episode_analysis_2026_ytd/shock_mode_capture.csv
+  - id: ADM-2026-03-03-028
+    date: 2026-03-03
+    title: Deliver shock alerts in Telegram as topic episodes with multi-day aftershock continuity
+    context: User requirement shifted to operational shock capture where aftershocks can occur days after root event but still belong to one tradeable theme.
+    decision: Wire Telegram worker to consume shock feed with topic-aware policy (primary and aftershock roles), reopen window in hours, cooldown, and fingerprint dedupe TTL.
+    impact: Worker can emit actionable shock alerts that preserve root-topic identity across days instead of treating each move as unrelated single-shot signal.
+    links:
+      - src/moex_carry/shock_alert_delivery.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
+      - src/moex_carry/integrations/telegram_worker.py
+      - tests/test_shock_alert_delivery.py
+      - tests/test_telegram_worker.py
+  - id: ADM-2026-03-03-029
+    date: 2026-03-03
+    title: Formalize shock-first ML readiness with deterministic curation and pass/fail report
+    context: Existing evaluation mixed detector and direction quality, with hidden data-quality risk and no single launch decision artifact.
+    decision: Add one pipeline for outlier curation, label-pack generation, label ingest, and launch-readiness checks with critical thresholds and machine-readable outputs.
+    impact: Launch/no-launch decision is reproducible and auditable; critical blockers are visible immediately from report files.
+    links:
+      - src/moex_carry/news_shock_pipeline.py
+      - src/moex_carry/news_shock_readiness.py
+      - scripts/news_shock_readiness.py
+      - docs/runbooks/news-shock-go-live.md
+      - data/output/news_shock_readiness_2026_ytd/readiness_report.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
@@ -341,6 +386,17 @@ incidents:
     links:
       - pyproject.toml
       - docs/DEV_WORKFLOW.md
+  - id: AMI-2026-03-03-008
+    date: 2026-03-03
+    title: Self-heal workflow failed daily on PR-creation policy mismatch
+    symptom: Scheduled self-heal runs on main were marked failed even when deterministic self-heal and lean gate passed.
+    root_cause: create-pull-request attempted to commit untracked self-heal-report.json and then failed because repository settings disallow Actions-created PRs.
+    remediation: Gate PR step by actual drift files and constrain PR paths to governance-managed targets only.
+    remediation_type: workflow
+    links:
+      - .github/workflows/self-heal.yml
+      - scripts/self_heal.py
+      - docs/runbooks/self-heal-escalation.md
 
 patterns:
   - id: AMP-2026-02-20-001
@@ -508,6 +564,59 @@ patterns:
       - pyproject.toml
       - docs/DEV_WORKFLOW.md
       - memory/agent_memory.yaml
-
-
+  - id: AMP-2026-03-03-020
+    date: 2026-03-03
+    title: Evaluate news-linking changes with precision-at-coverage, not single scalar score
+    pattern: For shock-to-news matching, always report at least coverage, labeled directional accuracy, and relevance quality together, then add threshold sweep with minimum coverage constraint.
+    when_to_use: Any tuning of strict vs broad candidate selection where naive high-precision or high-coverage settings can look misleading in isolation.
+    links:
+      - src/moex_carry/news_mode_compare.py
+      - scripts/compare_news_modes.py
+      - data/output/news_mode_compare_365d_5m_opt/news_mode_compare_sweep.csv
+  - id: AMP-2026-03-03-021
+    date: 2026-03-03
+    title: Measure shock-capture quality by role (primary vs aftershock)
+    pattern: Compute and track recall for initial shock impulse and follow-up aftershock legs separately; use primary recall for detector tuning and aftershock recall for continuation logic.
+    when_to_use: Any shock-detection strategy where continuation bursts are materially different from root impulse behavior.
+    links:
+      - src/moex_carry/shock_episodes.py
+      - scripts/analyze_shock_episodes.py
+      - data/output/shock_episode_analysis_2026_ytd/shock_mode_capture.csv
+  - id: AMP-2026-03-03-022
+    date: 2026-03-03
+    title: Keep oversized runtime modules within hard limits by extracting leaf capabilities
+    pattern: When a hard size gate blocks integration, extract feature-specific runtime paths into dedicated modules and keep composition entrypoint thin.
+    when_to_use: Any worker or API composition module near hard line cap where a new capability must be added without loosening governance limits.
+    links:
+      - src/moex_carry/integrations/telegram_worker.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
+      - src/moex_carry/integrations/telegram_runtime_utils.py
+  - id: AMP-2026-03-03-023
+    date: 2026-03-03
+    title: Split shock workflow into detector and direction quality lanes
+    pattern: Keep high-recall detector broad enough for root shock capture, but compute direction quality only on stricter source (`v2_clean`) and gate it by labeled accuracy and coverage.
+    when_to_use: Shock-driven news systems where broad matching improves recall but harms directional precision.
+    links:
+      - src/moex_carry/news_mode_compare.py
+      - src/moex_carry/news_shock_readiness.py
+      - docs/runbooks/news-shock-go-live.md
+  - id: AMP-2026-03-03-024
+    date: 2026-03-03
+    title: Automate silver expansion with split directional and causal packs
+    pattern: Build two packs from one curated dataset each day, where directional tasks use `v2_clean` and causal-only tasks use `broad/none`, then track results through one manifest.
+    when_to_use: Any annotation cycle where direction labels need high precision but causal coverage must scale quickly without manual triage.
+    links:
+      - src/moex_carry/news_shock_automation.py
+      - scripts/run_shock_label_cycle.py
+      - src/moex_carry/news_shock_pipeline.py
+      - docs/runbooks/news-shock-go-live.md
+  - id: AMP-2026-03-03-025
+    date: 2026-03-03
+    title: Use user-context scheduled task for unattended local ML/news jobs
+    pattern: For workstation automation, install Task Scheduler jobs under current user by default and keep SYSTEM mode optional for elevated deployments.
+    when_to_use: Any recurring local research/labeling pipeline that must run daily without manual CLI launch and without admin-only setup.
+    links:
+      - scripts/manage_shock_label_cycle_task.ps1
+      - scripts/start_shock_label_cycle.ps1
+      - docs/runbooks/news-shock-go-live.md
 

@@ -1,8 +1,9 @@
 import argparse
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
+import pandas as pd
 import yaml
 
 from moex_carry.config import load_settings, resolve_paths
@@ -38,6 +39,20 @@ def _parse_precompute(value: str | None) -> bool | None:
     if lowered in {"false", "0", "no", "n"}:
         return False
     raise ValueError(f"Unsupported precompute flag: {value}")
+
+
+def _build_shock_pack_name(
+    min_abs_z: float,
+    *,
+    causal_only: bool,
+    candidate_sources: tuple[str, ...] | None,
+) -> str:
+    z_tag = str(min_abs_z).replace(".", "p")
+    if not causal_only and not candidate_sources:
+        return f"shock_label_pack_zge{z_tag}.jsonl"
+    mode = "causal" if causal_only else "direction"
+    source_tag = "any" if not candidate_sources else "-".join(candidate_sources)
+    return f"shock_label_pack_{mode}_{source_tag}_zge{z_tag}.jsonl"
 
 
 def main() -> None:
@@ -114,6 +129,111 @@ def main() -> None:
     history_parser.add_argument("--sleep-sec", type=float, default=0.2)
     history_parser.add_argument("--retries", type=int, default=3)
     history_parser.add_argument("--retry-backoff-sec", type=float, default=2.0)
+
+    news_compare_parser = subparsers.add_parser(
+        "news_mode_compare",
+        help="Compare current broad-first vs proposed root-event news matching",
+    )
+    _add_common_args(news_compare_parser)
+    news_compare_parser.add_argument("--input-csv", type=str, required=True)
+    news_compare_parser.add_argument("--output-dir", type=str, default=None)
+    news_compare_parser.add_argument("--max-delay-min", type=float, default=60.0)
+    news_compare_parser.add_argument("--broad-min-relevance", type=float, default=1.0)
+    news_compare_parser.add_argument("--v2-min-relevance", type=float, default=0.4)
+
+    shock_episode_parser = subparsers.add_parser(
+        "shock_episode_analysis",
+        help="Analyze primary and aftershock capture for current/proposed news matching modes",
+    )
+    _add_common_args(shock_episode_parser)
+    shock_episode_parser.add_argument("--input-csv", type=str, required=True)
+    shock_episode_parser.add_argument("--output-dir", type=str, default=None)
+    shock_episode_parser.add_argument("--start-ts", type=str, default=None)
+    shock_episode_parser.add_argument("--end-ts", type=str, default=None)
+    shock_episode_parser.add_argument("--max-delay-min", type=float, default=60.0)
+    shock_episode_parser.add_argument("--broad-min-relevance", type=float, default=1.0)
+    shock_episode_parser.add_argument("--v2-min-relevance", type=float, default=0.4)
+    shock_episode_parser.add_argument("--primary-z", type=float, default=2.5)
+    shock_episode_parser.add_argument("--aftershock-z", type=float, default=2.0)
+    shock_episode_parser.add_argument("--episode-window-min", type=int, default=360)
+    shock_episode_parser.add_argument("--max-gap-min", type=int, default=120)
+    shock_episode_parser.add_argument("--same-direction-aftershock-only", action="store_true")
+
+    shock_pack_parser = subparsers.add_parser(
+        "shock_label_pack",
+        help="Build high-impact shock label pack for Chat Pro annotation",
+    )
+    _add_common_args(shock_pack_parser)
+    shock_pack_parser.add_argument("--input-csv", type=str, required=True)
+    shock_pack_parser.add_argument("--output-dir", type=str, default=None)
+    shock_pack_parser.add_argument("--start-ts", type=str, default=None)
+    shock_pack_parser.add_argument("--end-ts", type=str, default=None)
+    shock_pack_parser.add_argument("--min-abs-z", type=float, default=2.5)
+    shock_pack_parser.add_argument("--max-tasks-total", type=int, default=1200)
+    shock_pack_parser.add_argument("--max-tasks-per-day-symbol", type=int, default=20)
+    shock_pack_parser.add_argument("--max-delay-min", type=float, default=60.0)
+    shock_pack_parser.add_argument(
+        "--candidate-source",
+        action="append",
+        choices=["v2_clean", "broad", "none"],
+        default=None,
+        help="Primary candidate source filter; repeat for multiple values.",
+    )
+    shock_pack_parser.add_argument(
+        "--causal-only",
+        action="store_true",
+        help="Build causal-only task pack (direction optional).",
+    )
+
+    shock_ingest_parser = subparsers.add_parser(
+        "shock_labels_ingest",
+        help="Ingest Chat Pro label JSONL and build silver shock dataset",
+    )
+    _add_common_args(shock_ingest_parser)
+    shock_ingest_parser.add_argument("--tasks-jsonl", type=str, required=True)
+    shock_ingest_parser.add_argument("--labels-jsonl", type=str, required=True)
+    shock_ingest_parser.add_argument("--output-dir", type=str, default=None)
+    shock_ingest_parser.add_argument("--min-confidence", type=float, default=0.60)
+
+    shock_ready_parser = subparsers.add_parser(
+        "news_shock_readiness",
+        help="Run launch-readiness checks for shock-news workflow",
+    )
+    _add_common_args(shock_ready_parser)
+    shock_ready_parser.add_argument("--input-csv", type=str, required=True)
+    shock_ready_parser.add_argument("--output-dir", type=str, default=None)
+    shock_ready_parser.add_argument("--start-ts", type=str, default=None)
+    shock_ready_parser.add_argument("--end-ts", type=str, default=None)
+    shock_ready_parser.add_argument("--max-delay-min", type=float, default=60.0)
+    shock_ready_parser.add_argument("--primary-z", type=float, default=2.5)
+    shock_ready_parser.add_argument("--aftershock-z", type=float, default=2.0)
+    shock_ready_parser.add_argument("--episode-window-min", type=int, default=10080)
+    shock_ready_parser.add_argument("--max-gap-min", type=int, default=2880)
+
+    shock_cycle_parser = subparsers.add_parser(
+        "shock_label_cycle",
+        help="Run automated shock labeling cycle (direction pack + causal pack + optional ingest/readiness).",
+    )
+    _add_common_args(shock_cycle_parser)
+    shock_cycle_parser.add_argument("--input-csv", type=str, required=True)
+    shock_cycle_parser.add_argument("--output-dir", type=str, default=None)
+    shock_cycle_parser.add_argument("--start-ts", type=str, default=None)
+    shock_cycle_parser.add_argument("--end-ts", type=str, default=None)
+    shock_cycle_parser.add_argument("--min-abs-z", type=float, default=2.5)
+    shock_cycle_parser.add_argument("--max-delay-min", type=float, default=60.0)
+    shock_cycle_parser.add_argument("--max-tasks-per-day-symbol", type=int, default=20)
+    shock_cycle_parser.add_argument("--direction-max-tasks", type=int, default=300)
+    shock_cycle_parser.add_argument("--causal-max-tasks", type=int, default=900)
+    shock_cycle_parser.add_argument("--direction-candidate-sources", type=str, default="v2_clean")
+    shock_cycle_parser.add_argument("--causal-candidate-sources", type=str, default="broad,none")
+    shock_cycle_parser.add_argument("--direction-labels-jsonl", type=str, default=None)
+    shock_cycle_parser.add_argument("--causal-labels-jsonl", type=str, default=None)
+    shock_cycle_parser.add_argument("--ingest-min-confidence", type=float, default=0.60)
+    shock_cycle_parser.add_argument("--run-readiness", action="store_true")
+    shock_cycle_parser.add_argument("--primary-z", type=float, default=2.5)
+    shock_cycle_parser.add_argument("--aftershock-z", type=float, default=2.0)
+    shock_cycle_parser.add_argument("--episode-window-min", type=int, default=10080)
+    shock_cycle_parser.add_argument("--max-gap-min", type=int, default=2880)
 
     args = parser.parse_args()
     configure_logging(args.log_level)
@@ -205,6 +325,251 @@ def main() -> None:
             retries=args.retries,
             retry_backoff_sec=args.retry_backoff_sec,
         )
+    elif args.command == "news_mode_compare":
+        from moex_carry.news_mode_compare import CompareConfig, run_compare
+
+        input_csv = Path(args.input_csv)
+        if not input_csv.exists():
+            raise FileNotFoundError(f"Input file not found: {input_csv}")
+        if args.output_dir:
+            output_dir = Path(args.output_dir)
+        else:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            output_dir = Path("data/output") / f"news_mode_compare_{stamp}"
+
+        config = CompareConfig(
+            max_delay_minutes=args.max_delay_min,
+            broad_min_relevance=args.broad_min_relevance,
+            v2_min_relevance=args.v2_min_relevance,
+        )
+        result = run_compare(input_csv=input_csv, output_dir=output_dir, config=config)
+        payload = {key: str(value) for key, value in result.items()}
+        print(json.dumps(payload, ensure_ascii=False))
+    elif args.command == "shock_episode_analysis":
+        from moex_carry.news_mode_compare import CompareConfig, compare_modes
+        from moex_carry.shock_episodes import ShockEpisodeConfig, run_shock_episode_analysis
+
+        input_csv = Path(args.input_csv)
+        if not input_csv.exists():
+            raise FileNotFoundError(f"Input file not found: {input_csv}")
+        if args.output_dir:
+            output_dir = Path(args.output_dir)
+        else:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            output_dir = Path("data/output") / f"shock_episode_analysis_{stamp}"
+
+        input_df = pd.read_csv(input_csv)
+        input_df["shock_ts_dt"] = pd.to_datetime(input_df["shock_ts"], utc=True, errors="coerce")
+        if args.start_ts:
+            start_ts = pd.to_datetime(args.start_ts, utc=True, errors="coerce")
+            if pd.isna(start_ts):
+                raise ValueError(f"Invalid --start-ts: {args.start_ts}")
+            input_df = input_df[input_df["shock_ts_dt"] >= start_ts]
+        if args.end_ts:
+            end_ts = pd.to_datetime(args.end_ts, utc=True, errors="coerce")
+            if pd.isna(end_ts):
+                raise ValueError(f"Invalid --end-ts: {args.end_ts}")
+            input_df = input_df[input_df["shock_ts_dt"] <= end_ts]
+        if input_df.empty:
+            raise ValueError("No rows available after date filtering.")
+
+        compare_cfg = CompareConfig(
+            max_delay_minutes=args.max_delay_min,
+            broad_min_relevance=args.broad_min_relevance,
+            v2_min_relevance=args.v2_min_relevance,
+        )
+        detail_df, _, _ = compare_modes(input_df.drop(columns=["shock_ts_dt"]), compare_cfg)
+
+        episode_cfg = ShockEpisodeConfig(
+            primary_z_threshold=args.primary_z,
+            aftershock_z_threshold=args.aftershock_z,
+            episode_window_minutes=args.episode_window_min,
+            max_gap_minutes=args.max_gap_min,
+            same_direction_aftershock_required=args.same_direction_aftershock_only,
+        )
+        result = run_shock_episode_analysis(
+            detail_df=detail_df,
+            output_dir=output_dir,
+            config=episode_cfg,
+            min_delay_minutes=0.0,
+            max_delay_minutes=args.max_delay_min,
+        )
+        payload = {key: str(value) for key, value in result.items()}
+        print(json.dumps(payload, ensure_ascii=False))
+    elif args.command == "shock_label_pack":
+        from moex_carry.news_shock_pipeline import (
+            LabelPackConfig,
+            ShockCurationConfig,
+            build_shock_label_pack,
+            curate_shock_dataset,
+            write_label_pack_jsonl,
+        )
+
+        input_csv = Path(args.input_csv)
+        if not input_csv.exists():
+            raise FileNotFoundError(f"Input file not found: {input_csv}")
+        if args.output_dir:
+            output_dir = Path(args.output_dir)
+        else:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            output_dir = Path("data/output") / f"shock_label_pack_{stamp}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        df = pd.read_csv(input_csv)
+        df["shock_ts_dt"] = pd.to_datetime(df["shock_ts"], utc=True, errors="coerce")
+        if args.start_ts:
+            start_ts = pd.to_datetime(args.start_ts, utc=True, errors="coerce")
+            if pd.isna(start_ts):
+                raise ValueError(f"Invalid --start-ts: {args.start_ts}")
+            df = df[df["shock_ts_dt"] >= start_ts]
+        if args.end_ts:
+            end_ts = pd.to_datetime(args.end_ts, utc=True, errors="coerce")
+            if pd.isna(end_ts):
+                raise ValueError(f"Invalid --end-ts: {args.end_ts}")
+            df = df[df["shock_ts_dt"] <= end_ts]
+        if df.empty:
+            raise ValueError("No rows available after date filtering.")
+        df = df.drop(columns=["shock_ts_dt"])
+
+        curated, issues, curation_summary = curate_shock_dataset(df, ShockCurationConfig.defaults())
+        candidate_sources = tuple(args.candidate_source) if args.candidate_source else None
+        tasks, pack_summary = build_shock_label_pack(
+            curated,
+            LabelPackConfig(
+                min_abs_z=args.min_abs_z,
+                max_tasks_total=args.max_tasks_total,
+                max_tasks_per_day_symbol=args.max_tasks_per_day_symbol,
+                max_delay_minutes=args.max_delay_min,
+                candidate_sources=candidate_sources,
+                causal_only=args.causal_only,
+            ),
+        )
+        jsonl_path = output_dir / _build_shock_pack_name(
+            args.min_abs_z,
+            causal_only=args.causal_only,
+            candidate_sources=candidate_sources,
+        )
+        write_label_pack_jsonl(tasks, jsonl_path)
+        pack_summary_path = output_dir / "shock_label_pack_summary.csv"
+        issues_path = output_dir / "shock_label_pack_curation_issues.csv"
+        curation_summary_path = output_dir / "shock_label_pack_curation_summary.csv"
+        pack_summary.to_csv(pack_summary_path, index=False)
+        issues.to_csv(issues_path, index=False)
+        curation_summary.to_csv(curation_summary_path, index=False)
+        payload = {
+            "tasks": str(jsonl_path),
+            "summary": str(pack_summary_path),
+            "issues": str(issues_path),
+            "curation_summary": str(curation_summary_path),
+            "tasks_count": len(tasks),
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+    elif args.command == "shock_labels_ingest":
+        from moex_carry.news_shock_pipeline import ingest_chat_labels
+
+        tasks_jsonl = Path(args.tasks_jsonl)
+        labels_jsonl = Path(args.labels_jsonl)
+        if not tasks_jsonl.exists():
+            raise FileNotFoundError(f"Tasks JSONL not found: {tasks_jsonl}")
+        if not labels_jsonl.exists():
+            raise FileNotFoundError(f"Labels JSONL not found: {labels_jsonl}")
+        if args.output_dir:
+            output_dir = Path(args.output_dir)
+        else:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            output_dir = Path("data/output") / f"shock_silver_ingest_{stamp}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        merged, summary = ingest_chat_labels(
+            tasks_jsonl=tasks_jsonl,
+            labels_jsonl=labels_jsonl,
+            min_confidence=args.min_confidence,
+        )
+        merged_path = output_dir / "shock_silver_labels.csv"
+        summary_path = output_dir / "shock_silver_labels_summary.csv"
+        merged.to_csv(merged_path, index=False)
+        summary.to_csv(summary_path, index=False)
+        payload = {
+            "labels": str(merged_path),
+            "summary": str(summary_path),
+            "rows_total": int(len(merged)),
+            "high_conf_count": int((merged.get("is_high_conf", 0) == 1).sum()) if not merged.empty else 0,
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+    elif args.command == "news_shock_readiness":
+        from moex_carry.news_shock_readiness import ReadinessConfig, run_readiness_assessment
+
+        input_csv = Path(args.input_csv)
+        if not input_csv.exists():
+            raise FileNotFoundError(f"Input file not found: {input_csv}")
+        if args.output_dir:
+            output_dir = Path(args.output_dir)
+        else:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            output_dir = Path("data/output") / f"news_shock_readiness_{stamp}"
+
+        result = run_readiness_assessment(
+            input_csv=input_csv,
+            output_dir=output_dir,
+            config=ReadinessConfig(
+                max_delay_minutes=args.max_delay_min,
+                primary_z_threshold=args.primary_z,
+                aftershock_z_threshold=args.aftershock_z,
+                episode_window_minutes=args.episode_window_min,
+                max_gap_minutes=args.max_gap_min,
+            ),
+            start_ts=args.start_ts,
+            end_ts=args.end_ts,
+        )
+        payload = {key: str(value) for key, value in result.items()}
+        print(json.dumps(payload, ensure_ascii=False))
+    elif args.command == "shock_label_cycle":
+        from moex_carry.news_shock_automation import ShockLabelCycleConfig, run_shock_label_cycle
+        from moex_carry.news_shock_readiness import ReadinessConfig
+
+        def _parse_sources(raw: str) -> tuple[str, ...] | None:
+            text = (raw or "").strip().lower()
+            if not text or text == "any":
+                return None
+            values = tuple(part.strip() for part in text.split(",") if part.strip())
+            return values or None
+
+        input_csv = Path(args.input_csv)
+        if not input_csv.exists():
+            raise FileNotFoundError(f"Input file not found: {input_csv}")
+        if args.output_dir:
+            output_dir = Path(args.output_dir)
+        else:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            output_dir = Path("data/output") / f"shock_label_cycle_{stamp}"
+
+        result = run_shock_label_cycle(
+            input_csv=input_csv,
+            output_dir=output_dir,
+            config=ShockLabelCycleConfig(
+                min_abs_z=args.min_abs_z,
+                max_tasks_per_day_symbol=args.max_tasks_per_day_symbol,
+                max_delay_minutes=args.max_delay_min,
+                direction_max_tasks_total=args.direction_max_tasks,
+                causal_max_tasks_total=args.causal_max_tasks,
+                direction_candidate_sources=_parse_sources(args.direction_candidate_sources),
+                causal_candidate_sources=_parse_sources(args.causal_candidate_sources),
+                ingest_min_confidence=args.ingest_min_confidence,
+                run_readiness=args.run_readiness,
+                readiness_config=ReadinessConfig(
+                    max_delay_minutes=args.max_delay_min,
+                    primary_z_threshold=args.primary_z,
+                    aftershock_z_threshold=args.aftershock_z,
+                    episode_window_minutes=args.episode_window_min,
+                    max_gap_minutes=args.max_gap_min,
+                ),
+            ),
+            start_ts=args.start_ts,
+            end_ts=args.end_ts,
+            direction_labels_jsonl=Path(args.direction_labels_jsonl) if args.direction_labels_jsonl else None,
+            causal_labels_jsonl=Path(args.causal_labels_jsonl) if args.causal_labels_jsonl else None,
+        )
+        print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":

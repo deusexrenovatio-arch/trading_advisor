@@ -32,6 +32,15 @@ jobs:
           python scripts/self_heal.py \
             --report self-heal-report.json \
             --summary-file "$GITHUB_STEP_SUMMARY"
+      - name: Detect self-heal drift files
+        id: detect-drift
+        shell: bash
+        run: |
+          if git diff --quiet -- docs/architecture/architecture-map-data.js plans/PLANS.yaml; then
+            echo "has_drift=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_drift=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Upload self-heal report
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,7 +72,8 @@ jobs:
               labels: ["governance", "incident", "self-heal"]
             });
       - name: Create self-heal PR (if changes)
-        if: always()
+        id: create-self-heal-pr
+        if: always() && steps.detect-drift.outputs.has_drift == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           branch: chore/self-heal-drift
@@ -77,3 +87,6 @@ jobs:
           labels: |
             automation
             governance
+          add-paths: |
+            docs/architecture/architecture-map-data.js
+            plans/PLANS.yaml
