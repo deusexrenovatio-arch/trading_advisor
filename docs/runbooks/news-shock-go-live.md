@@ -12,6 +12,39 @@
 3. Ingest Chat Pro labels into silver dataset.
 4. Run readiness assessment and only then enable production signaling.
 
+## Automated Daily Cycle
+Use one command to build both task packs:
+- `direction` pack: default `v2_clean` only (direction + causal).
+- `causal` pack: default `broad,none` (causal-only to expand coverage).
+
+```powershell
+$env:PYTHONPATH='src'
+python scripts/run_shock_label_cycle.py `
+  --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv `
+  --output-dir data/output/shock_label_cycle_latest `
+  --start-ts 2026-01-01T00:00:00Z `
+  --min-abs-z 2.5 `
+  --max-delay-min 60 `
+  --direction-max-tasks 300 `
+  --causal-max-tasks 900 `
+  --direction-candidate-sources v2_clean `
+  --causal-candidate-sources broad,none
+```
+
+If Chat Pro outputs are already available, add:
+```powershell
+  --direction-labels-jsonl data/output/shock_label_cycle_latest/direction/chat_labels.jsonl `
+  --causal-labels-jsonl data/output/shock_label_cycle_latest/causal/chat_labels.jsonl `
+  --ingest-min-confidence 0.6 `
+  --run-readiness
+```
+
+Cycle output includes:
+- `shock_label_cycle_manifest.json` (single source-of-truth for artifacts and counts),
+- curated dataset and issue ledger,
+- separate direction/causal packs and summaries,
+- optional silver ingest artifacts and readiness report.
+
 ## Commands
 ### 1) Label pack
 ```powershell
@@ -21,7 +54,8 @@ python scripts/build_shock_label_pack.py `
   --output-dir data/output/shock_label_pack_latest `
   --start-ts 2026-01-01T00:00:00Z `
   --min-abs-z 2.5 `
-  --max-delay-min 60
+  --max-delay-min 60 `
+  --candidate-source v2_clean
 ```
 
 ### 2) Ingest labels

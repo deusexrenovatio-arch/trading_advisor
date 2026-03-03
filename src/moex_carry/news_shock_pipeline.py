@@ -39,6 +39,8 @@ class LabelPackConfig:
     max_tasks_per_day_symbol: int = 20
     max_secondary_candidates: int = 4
     max_delay_minutes: float = 60.0
+    candidate_sources: tuple[str, ...] | None = None
+    causal_only: bool = False
 
 
 _DIRECTION_MAP = {
@@ -57,12 +59,34 @@ _DIRECTION_MAP = {
     "flat": "hold",
     "none": "hold",
 }
+_VALID_CANDIDATE_SOURCES = ("v2_clean", "broad", "none")
 
 
 def _norm_text(value: object) -> str:
     if value is None or pd.isna(value):
         return ""
     return " ".join(str(value).strip().split())
+
+
+def _normalize_candidate_sources(value: tuple[str, ...] | None) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    normalized = tuple(
+        dict.fromkeys(
+            _norm_text(item).lower()
+            for item in value
+            if _norm_text(item)
+        )
+    )
+    if not normalized:
+        return None
+    unknown = sorted(item for item in normalized if item not in _VALID_CANDIDATE_SOURCES)
+    if unknown:
+        raise ValueError(
+            f"Unsupported candidate source filter values: {unknown}. "
+            f"Supported: {list(_VALID_CANDIDATE_SOURCES)}"
+        )
+    return normalized
 
 
 def _parse_ts_utc(series: pd.Series) -> pd.Series:
@@ -92,16 +116,30 @@ def _candidate(row: pd.Series, source: str) -> dict[str, Any] | None:
     }
 
 
-def _choose_primary_candidate(row: pd.Series, max_delay_minutes: float) -> dict[str, Any]:
-    v2 = _candidate(row, "v2_clean")
-    broad = _candidate(row, "broad")
-    for item in (v2, broad):
+def _choose_primary_candidate(
+    row: pd.Series,
+    max_delay_minutes: float,
+    candidate_sources: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    allowed = set(candidate_sources or [])
+    ranked_candidates: list[dict[str, Any]] = []
+    for source in ("v2_clean", "broad"):
+        item = _candidate(row, source)
+        if item is None:
+            continue
+        if allowed and item["source"] not in allowed:
+            continue
+        ranked_candidates.append(item)
+
+    for item in ranked_candidates:
         if item is None:
             continue
         delay = item.get("delay_min")
         if delay is not None and 0.0 <= float(delay) <= max_delay_minutes:
             return item
-    return v2 or broad or {
+    if ranked_candidates:
+        return ranked_candidates[0]
+    return {
         "source": "none",
         "event_id": "",
         "event_ts_utc": "",
@@ -223,6 +261,7 @@ def build_shock_label_pack(
     config: LabelPackConfig | None = None,
 ) -> tuple[list[dict[str, Any]], pd.DataFrame]:
     cfg = config or LabelPackConfig()
+    candidate_sources = _normalize_candidate_sources(cfg.candidate_sources)
     df = curated_df.copy()
     required = {"symbol", "shock_ts", "z_score", "shock_direction", "abs_move_pct"}
     missing = required.difference(df.columns)
@@ -246,7 +285,24 @@ def build_shock_label_pack(
         if used >= int(cfg.max_tasks_per_day_symbol):
             continue
 
-        primary = _choose_primary_candidate(row, cfg.max_delay_minutes)
+        available_sources = {
+            source
+            for source in ("v2_clean", "broad")
+            if _candidate(row, source) is not None
+        }
+        if candidate_sources is not None:
+            has_allowed_candidate = bool(available_sources.intersection(candidate_sources))
+            allow_none_fallback = ("none" in candidate_sources) and not available_sources
+            if not has_allowed_candidate and not allow_none_fallback:
+                continue
+
+        primary = _choose_primary_candidate(
+            row,
+            cfg.max_delay_minutes,
+            candidate_sources=candidate_sources,
+        )
+        if candidate_sources is not None and primary["source"] not in candidate_sources:
+            continue
         secondary: list[dict[str, Any]] = []
         for source in ("v2_clean", "broad"):
             cand = _candidate(row, source)
@@ -259,8 +315,23 @@ def build_shock_label_pack(
 
         shock_ts = row["shock_ts_dt"].strftime("%Y-%m-%dT%H:%M:%SZ")
         task_id = f"shock-{len(tasks)+1:05d}-{symbol}-{shock_ts}"
+        if cfg.causal_only:
+            instruction = {
+                "goal": "Determine if primary candidate is causal for this shock. Direction is optional.",
+                "required_fields": ["task_id", "is_causal", "confidence"],
+                "optional_fields": ["direction", "root_topic_key", "reasoning"],
+            }
+            label_mode = "causal_only"
+        else:
+            instruction = {
+                "goal": "Determine if primary candidate is causal for this shock and assign direction.",
+                "allowed_direction": ["up", "down", "hold"],
+                "required_fields": ["task_id", "is_causal", "direction", "confidence"],
+            }
+            label_mode = "directional"
         task = {
             "task_id": task_id,
+            "label_mode": label_mode,
             "symbol": symbol,
             "shock_ts_utc": shock_ts,
             "shock": {
@@ -275,11 +346,7 @@ def build_shock_label_pack(
             },
             "candidate_primary": primary,
             "secondary_candidates": secondary,
-            "labeling_instruction": {
-                "goal": "Determine if primary candidate is causal for this shock and assign direction.",
-                "allowed_direction": ["up", "down", "hold"],
-                "required_fields": ["task_id", "is_causal", "direction", "confidence"],
-            },
+            "labeling_instruction": instruction,
         }
         tasks.append(task)
         day_symbol_count[counter_key] = used + 1
@@ -289,9 +356,10 @@ def build_shock_label_pack(
             [
                 {
                     "task_id": item["task_id"],
+                    "label_mode": item.get("label_mode", "directional"),
                     "symbol": item["symbol"],
                     "shock_ts_utc": item["shock_ts_utc"],
-                    "z_score_abs": item["shock"]["z_score"],
+                    "z_score_abs": abs(item["shock"]["z_score"]) if item["shock"]["z_score"] is not None else None,
                     "candidate_source": item["candidate_primary"]["source"],
                     "candidate_delay_min": item["candidate_primary"]["delay_min"],
                 }
@@ -300,7 +368,15 @@ def build_shock_label_pack(
         )
         if tasks
         else pd.DataFrame(
-            columns=["task_id", "symbol", "shock_ts_utc", "z_score_abs", "candidate_source", "candidate_delay_min"]
+            columns=[
+                "task_id",
+                "label_mode",
+                "symbol",
+                "shock_ts_utc",
+                "z_score_abs",
+                "candidate_source",
+                "candidate_delay_min",
+            ]
         )
     )
     return tasks, summary

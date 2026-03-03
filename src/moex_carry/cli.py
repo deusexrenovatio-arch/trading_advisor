@@ -41,6 +41,20 @@ def _parse_precompute(value: str | None) -> bool | None:
     raise ValueError(f"Unsupported precompute flag: {value}")
 
 
+def _build_shock_pack_name(
+    min_abs_z: float,
+    *,
+    causal_only: bool,
+    candidate_sources: tuple[str, ...] | None,
+) -> str:
+    z_tag = str(min_abs_z).replace(".", "p")
+    if not causal_only and not candidate_sources:
+        return f"shock_label_pack_zge{z_tag}.jsonl"
+    mode = "causal" if causal_only else "direction"
+    source_tag = "any" if not candidate_sources else "-".join(candidate_sources)
+    return f"shock_label_pack_{mode}_{source_tag}_zge{z_tag}.jsonl"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="moex-carry")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -158,6 +172,18 @@ def main() -> None:
     shock_pack_parser.add_argument("--max-tasks-total", type=int, default=1200)
     shock_pack_parser.add_argument("--max-tasks-per-day-symbol", type=int, default=20)
     shock_pack_parser.add_argument("--max-delay-min", type=float, default=60.0)
+    shock_pack_parser.add_argument(
+        "--candidate-source",
+        action="append",
+        choices=["v2_clean", "broad", "none"],
+        default=None,
+        help="Primary candidate source filter; repeat for multiple values.",
+    )
+    shock_pack_parser.add_argument(
+        "--causal-only",
+        action="store_true",
+        help="Build causal-only task pack (direction optional).",
+    )
 
     shock_ingest_parser = subparsers.add_parser(
         "shock_labels_ingest",
@@ -183,6 +209,31 @@ def main() -> None:
     shock_ready_parser.add_argument("--aftershock-z", type=float, default=2.0)
     shock_ready_parser.add_argument("--episode-window-min", type=int, default=10080)
     shock_ready_parser.add_argument("--max-gap-min", type=int, default=2880)
+
+    shock_cycle_parser = subparsers.add_parser(
+        "shock_label_cycle",
+        help="Run automated shock labeling cycle (direction pack + causal pack + optional ingest/readiness).",
+    )
+    _add_common_args(shock_cycle_parser)
+    shock_cycle_parser.add_argument("--input-csv", type=str, required=True)
+    shock_cycle_parser.add_argument("--output-dir", type=str, default=None)
+    shock_cycle_parser.add_argument("--start-ts", type=str, default=None)
+    shock_cycle_parser.add_argument("--end-ts", type=str, default=None)
+    shock_cycle_parser.add_argument("--min-abs-z", type=float, default=2.5)
+    shock_cycle_parser.add_argument("--max-delay-min", type=float, default=60.0)
+    shock_cycle_parser.add_argument("--max-tasks-per-day-symbol", type=int, default=20)
+    shock_cycle_parser.add_argument("--direction-max-tasks", type=int, default=300)
+    shock_cycle_parser.add_argument("--causal-max-tasks", type=int, default=900)
+    shock_cycle_parser.add_argument("--direction-candidate-sources", type=str, default="v2_clean")
+    shock_cycle_parser.add_argument("--causal-candidate-sources", type=str, default="broad,none")
+    shock_cycle_parser.add_argument("--direction-labels-jsonl", type=str, default=None)
+    shock_cycle_parser.add_argument("--causal-labels-jsonl", type=str, default=None)
+    shock_cycle_parser.add_argument("--ingest-min-confidence", type=float, default=0.60)
+    shock_cycle_parser.add_argument("--run-readiness", action="store_true")
+    shock_cycle_parser.add_argument("--primary-z", type=float, default=2.5)
+    shock_cycle_parser.add_argument("--aftershock-z", type=float, default=2.0)
+    shock_cycle_parser.add_argument("--episode-window-min", type=int, default=10080)
+    shock_cycle_parser.add_argument("--max-gap-min", type=int, default=2880)
 
     args = parser.parse_args()
     configure_logging(args.log_level)
@@ -381,6 +432,7 @@ def main() -> None:
         df = df.drop(columns=["shock_ts_dt"])
 
         curated, issues, curation_summary = curate_shock_dataset(df, ShockCurationConfig.defaults())
+        candidate_sources = tuple(args.candidate_source) if args.candidate_source else None
         tasks, pack_summary = build_shock_label_pack(
             curated,
             LabelPackConfig(
@@ -388,9 +440,15 @@ def main() -> None:
                 max_tasks_total=args.max_tasks_total,
                 max_tasks_per_day_symbol=args.max_tasks_per_day_symbol,
                 max_delay_minutes=args.max_delay_min,
+                candidate_sources=candidate_sources,
+                causal_only=args.causal_only,
             ),
         )
-        jsonl_path = output_dir / f"shock_label_pack_zge{str(args.min_abs_z).replace('.', 'p')}.jsonl"
+        jsonl_path = output_dir / _build_shock_pack_name(
+            args.min_abs_z,
+            causal_only=args.causal_only,
+            candidate_sources=candidate_sources,
+        )
         write_label_pack_jsonl(tasks, jsonl_path)
         pack_summary_path = output_dir / "shock_label_pack_summary.csv"
         issues_path = output_dir / "shock_label_pack_curation_issues.csv"
@@ -465,6 +523,53 @@ def main() -> None:
         )
         payload = {key: str(value) for key, value in result.items()}
         print(json.dumps(payload, ensure_ascii=False))
+    elif args.command == "shock_label_cycle":
+        from moex_carry.news_shock_automation import ShockLabelCycleConfig, run_shock_label_cycle
+        from moex_carry.news_shock_readiness import ReadinessConfig
+
+        def _parse_sources(raw: str) -> tuple[str, ...] | None:
+            text = (raw or "").strip().lower()
+            if not text or text == "any":
+                return None
+            values = tuple(part.strip() for part in text.split(",") if part.strip())
+            return values or None
+
+        input_csv = Path(args.input_csv)
+        if not input_csv.exists():
+            raise FileNotFoundError(f"Input file not found: {input_csv}")
+        if args.output_dir:
+            output_dir = Path(args.output_dir)
+        else:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            output_dir = Path("data/output") / f"shock_label_cycle_{stamp}"
+
+        result = run_shock_label_cycle(
+            input_csv=input_csv,
+            output_dir=output_dir,
+            config=ShockLabelCycleConfig(
+                min_abs_z=args.min_abs_z,
+                max_tasks_per_day_symbol=args.max_tasks_per_day_symbol,
+                max_delay_minutes=args.max_delay_min,
+                direction_max_tasks_total=args.direction_max_tasks,
+                causal_max_tasks_total=args.causal_max_tasks,
+                direction_candidate_sources=_parse_sources(args.direction_candidate_sources),
+                causal_candidate_sources=_parse_sources(args.causal_candidate_sources),
+                ingest_min_confidence=args.ingest_min_confidence,
+                run_readiness=args.run_readiness,
+                readiness_config=ReadinessConfig(
+                    max_delay_minutes=args.max_delay_min,
+                    primary_z_threshold=args.primary_z,
+                    aftershock_z_threshold=args.aftershock_z,
+                    episode_window_minutes=args.episode_window_min,
+                    max_gap_minutes=args.max_gap_min,
+                ),
+            ),
+            start_ts=args.start_ts,
+            end_ts=args.end_ts,
+            direction_labels_jsonl=Path(args.direction_labels_jsonl) if args.direction_labels_jsonl else None,
+            causal_labels_jsonl=Path(args.causal_labels_jsonl) if args.causal_labels_jsonl else None,
+        )
+        print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":

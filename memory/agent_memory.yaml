@@ -600,6 +600,15 @@ patterns:
       - src/moex_carry/news_mode_compare.py
       - src/moex_carry/news_shock_readiness.py
       - docs/runbooks/news-shock-go-live.md
-
+  - id: AMP-2026-03-03-024
+    date: 2026-03-03
+    title: Automate silver expansion with split directional and causal packs
+    pattern: Build two packs from one curated dataset each day, where directional tasks use `v2_clean` and causal-only tasks use `broad/none`, then track results through one manifest.
+    when_to_use: Any annotation cycle where direction labels need high precision but causal coverage must scale quickly without manual triage.
+    links:
+      - src/moex_carry/news_shock_automation.py
+      - scripts/run_shock_label_cycle.py
+      - src/moex_carry/news_shock_pipeline.py
+      - docs/runbooks/news-shock-go-live.md
 
 

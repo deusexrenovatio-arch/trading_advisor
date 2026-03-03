@@ -24,6 +24,20 @@ def _parse_ts(value: str | None) -> pd.Timestamp | None:
     return parsed
 
 
+def _build_pack_name(
+    min_abs_z: float,
+    *,
+    causal_only: bool,
+    candidate_sources: tuple[str, ...] | None,
+) -> str:
+    z_tag = str(min_abs_z).replace(".", "p")
+    if not causal_only and not candidate_sources:
+        return f"shock_label_pack_zge{z_tag}.jsonl"
+    mode = "causal" if causal_only else "direction"
+    source_tag = "any" if not candidate_sources else "-".join(candidate_sources)
+    return f"shock_label_pack_{mode}_{source_tag}_zge{z_tag}.jsonl"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build high-impact shock label pack for Chat Pro.")
     parser.add_argument("--input-csv", type=Path, required=True)
@@ -34,6 +48,18 @@ def main() -> None:
     parser.add_argument("--max-tasks-total", type=int, default=1200)
     parser.add_argument("--max-tasks-per-day-symbol", type=int, default=20)
     parser.add_argument("--max-delay-min", type=float, default=60.0)
+    parser.add_argument(
+        "--candidate-source",
+        action="append",
+        choices=["v2_clean", "broad", "none"],
+        default=None,
+        help="Primary candidate source filter; repeat for multiple values.",
+    )
+    parser.add_argument(
+        "--causal-only",
+        action="store_true",
+        help="Build causal-only task pack (direction optional).",
+    )
     args = parser.parse_args()
 
     if not args.input_csv.exists():
@@ -55,6 +81,7 @@ def main() -> None:
         raise SystemExit("No rows after date filtering")
     df = df.drop(columns=["shock_ts_dt"])
 
+    candidate_sources = tuple(args.candidate_source) if args.candidate_source else None
     curated, issues, curation_summary = curate_shock_dataset(df, ShockCurationConfig.defaults())
     tasks, pack_summary = build_shock_label_pack(
         curated,
@@ -63,9 +90,15 @@ def main() -> None:
             max_tasks_total=args.max_tasks_total,
             max_tasks_per_day_symbol=args.max_tasks_per_day_symbol,
             max_delay_minutes=args.max_delay_min,
+            candidate_sources=candidate_sources,
+            causal_only=args.causal_only,
         ),
     )
-    jsonl_path = args.output_dir / f"shock_label_pack_zge{str(args.min_abs_z).replace('.', 'p')}.jsonl"
+    jsonl_path = args.output_dir / _build_pack_name(
+        args.min_abs_z,
+        causal_only=args.causal_only,
+        candidate_sources=candidate_sources,
+    )
     write_label_pack_jsonl(tasks, jsonl_path)
     pack_summary.to_csv(args.output_dir / "shock_label_pack_summary.csv", index=False)
     issues.to_csv(args.output_dir / "shock_label_pack_curation_issues.csv", index=False)
