@@ -21,8 +21,12 @@ from moex_carry.hpo.search_space import parse_search_space, sample_random, sampl
 from moex_carry.signal_engine.core.calendar import MarketCalendar, parse_time_window
 from moex_carry.signal_engine.core.math_utils import price_to_ticks
 from moex_carry.signal_engine.core.ohlcv import resample_ohlcv
-from moex_carry.signal_engine.core.types import Candle, Setup, Side, TF
+from moex_carry.signal_engine.core.types import Candle, ExecutionParams, Level, RegimeState, Setup, Side, TF
 from moex_carry.signal_engine.data.candles import InMemoryCandleProvider
+from moex_carry.signal_engine.execution.engine import ExecutionEngine
+from moex_carry.signal_engine.levels.engine import LevelEngine
+from moex_carry.signal_engine.regime.engine import RegimeEngine
+from moex_carry.signal_engine.setups.generator import SetupGenerator
 from moex_carry.signal_engine.plan.builder import MorningPlanBuilder
 
 TUNING_GRID_PROFILES: dict[str, dict[str, list[float]]] = {
@@ -53,7 +57,38 @@ TUNING_SEARCH_SPACE_PROFILES: dict[str, dict[str, Any]] = {
         "setups.min_target_return_pct": {"type": "float", "min": 0.5, "max": 1.5, "step": 0.1},
         "setups.min_atr_h1_cost_mult": {"type": "float", "min": 4.0, "max": 10.0, "step": 1.0},
         "setups.min_atr_d1_cost_mult": {"type": "float", "min": 8.0, "max": 20.0, "step": 2.0},
-    }
+    },
+    "intraday_goal_v2": {
+        "execution.buffer_atr_mult": {"type": "float", "min": 0.08, "max": 0.16, "step": 0.01},
+        "setups.rr_default": {"type": "float", "min": 1.4, "max": 2.2, "step": 0.1},
+        "setups.pullback_max_dist_atr_mult": {"type": "float", "min": 0.6, "max": 1.0, "step": 0.1},
+        "setups.max_risk_atr_mult": {"type": "float", "min": 0.9, "max": 1.3, "step": 0.1},
+        "setups.sl_atr_mult": {"type": "float", "min": 0.7, "max": 0.9, "step": 0.1},
+        "setups.min_rr_net": {"type": "float", "min": 1.1, "max": 1.5, "step": 0.1},
+        "setups.min_reward_net_ticks": {"type": "float", "min": 2.0, "max": 4.0, "step": 1.0},
+        "setups.min_reward_gross_ticks": {"type": "float", "min": 12.0, "max": 24.0, "step": 2.0},
+        "setups.min_target_return_pct": {"type": "float", "min": 0.5, "max": 1.0, "step": 0.1},
+        "setups.min_atr_h1_cost_mult": {"type": "float", "min": 5.0, "max": 8.0, "step": 1.0},
+        "setups.min_atr_d1_cost_mult": {"type": "float", "min": 10.0, "max": 16.0, "step": 2.0},
+    },
+    "intraday_goal_v3": {
+        "execution.buffer_atr_mult": {"type": "float", "min": 0.07, "max": 0.16, "step": 0.01},
+        "levels.h1.box_range_atr_mult": {"type": "float", "min": 1.0, "max": 1.8, "step": 0.1},
+        "regime.d1.adx_trend_min": {"type": "int", "min": 20, "max": 27, "step": 1},
+        "regime.d1.er_trend_min": {"type": "float", "min": 0.20, "max": 0.35, "step": 0.01},
+        "regime.h1.dir_band_atr_mult": {"type": "float", "min": 0.15, "max": 0.30, "step": 0.01},
+        "setups.require_vol_not_low": [True, False],
+        "setups.rr_default": {"type": "float", "min": 1.4, "max": 2.2, "step": 0.1},
+        "setups.pullback_max_dist_atr_mult": {"type": "float", "min": 0.6, "max": 1.2, "step": 0.1},
+        "setups.max_risk_atr_mult": {"type": "float", "min": 0.9, "max": 1.4, "step": 0.1},
+        "setups.sl_atr_mult": {"type": "float", "min": 0.7, "max": 1.0, "step": 0.1},
+        "setups.min_rr_net": {"type": "float", "min": 1.0, "max": 1.4, "step": 0.1},
+        "setups.min_reward_net_ticks": {"type": "float", "min": 1.0, "max": 4.0, "step": 1.0},
+        "setups.min_reward_gross_ticks": {"type": "float", "min": 10.0, "max": 22.0, "step": 2.0},
+        "setups.min_target_return_pct": {"type": "float", "min": 0.5, "max": 0.9, "step": 0.1},
+        "setups.min_atr_h1_cost_mult": {"type": "float", "min": 4.0, "max": 8.0, "step": 1.0},
+        "setups.min_atr_d1_cost_mult": {"type": "float", "min": 8.0, "max": 14.0, "step": 2.0},
+    },
 }
 
 COST_MODEL_PROFILES: tuple[str, ...] = ("fixed_v1", "train_proxy_v1")
@@ -149,6 +184,86 @@ class GoalConstraints:
 class HpoTrialState:
     params: dict[str, Any]
     objective: float
+
+
+@dataclass(frozen=True)
+class EvalBaseSlice:
+    d1: list[Candle]
+    h1: list[Candle]
+    m5: list[Candle]
+    last_price_ticks: int
+
+
+@dataclass
+class WindowEvalCache:
+    provider: InMemoryCandleProvider
+    base_slice_cache: dict[tuple[Any, ...], EvalBaseSlice]
+    regime_cache: dict[tuple[Any, ...], RegimeState]
+    d1_levels_cache: dict[tuple[Any, ...], list[Level]]
+    h1_levels_cache: dict[tuple[Any, ...], list[Level]]
+    execution_cache: dict[tuple[Any, ...], ExecutionParams]
+    regime_engines: dict[str, RegimeEngine]
+    level_engines: dict[str, LevelEngine]
+    execution_engines: dict[str, ExecutionEngine]
+    setup_generators: dict[tuple[str, str], SetupGenerator]
+
+
+@dataclass(frozen=True)
+class ContractSpan:
+    secid: str
+    root: str
+    first_date: date
+    last_date: date
+
+
+class FrontContractSelector:
+    def __init__(self, *, spans_by_root: dict[str, list[ContractSpan]], roll_avoid_expiry_days: int) -> None:
+        self._spans_by_root = {
+            root: sorted(
+                rows,
+                key=lambda item: (item.last_date, item.first_date, item.secid),
+            )
+            for root, rows in spans_by_root.items()
+            if rows
+        }
+        self._roll_avoid_expiry_days = max(int(roll_avoid_expiry_days), 0)
+
+    @property
+    def reporting_ids(self) -> list[str]:
+        return sorted(self._spans_by_root.keys())
+
+    @property
+    def spans_by_root(self) -> dict[str, list[ContractSpan]]:
+        return {root: list(rows) for root, rows in self._spans_by_root.items()}
+
+    @property
+    def roll_avoid_expiry_days(self) -> int:
+        return int(self._roll_avoid_expiry_days)
+
+    def resolve_day(self, day: date) -> list[tuple[str, str]]:
+        resolved: list[tuple[str, str]] = []
+        for root, rows in self._spans_by_root.items():
+            secid = self._select_contract_for_day(rows, day)
+            if secid is None:
+                continue
+            resolved.append((root, secid))
+        return resolved
+
+    def _select_contract_for_day(self, rows: list[ContractSpan], day: date) -> str | None:
+        safe_rows = [
+            item
+            for item in rows
+            if item.first_date <= day <= (item.last_date - timedelta(days=self._roll_avoid_expiry_days))
+        ]
+        if safe_rows:
+            return str(safe_rows[0].secid)
+        active_rows = [item for item in rows if item.first_date <= day <= item.last_date]
+        if active_rows:
+            return str(active_rows[0].secid)
+        upcoming_rows = [item for item in rows if day < item.first_date]
+        if upcoming_rows:
+            return str(upcoming_rows[0].secid)
+        return None
 
 
 def _parse_iso_date(value: str) -> date:
@@ -517,6 +632,20 @@ def _resolve_tick_sizes(
 ) -> dict[str, float]:
     rows = client.get_futures_specs(board)
     by_secid = {str(row.get("SECID")): row for row in rows}
+    by_group_steps: dict[str, list[float]] = {}
+    for row in rows:
+        secid_raw = row.get("SECID")
+        if secid_raw is None:
+            continue
+        group = _instrument_group(str(secid_raw))
+        minstep = row.get("MINSTEP")
+        try:
+            step = float(minstep)
+        except (TypeError, ValueError):
+            continue
+        if step <= 0:
+            continue
+        by_group_steps.setdefault(group, []).append(step)
     resolved: dict[str, float] = {}
     for instrument_id in instruments:
         if instrument_id in explicit:
@@ -527,9 +656,13 @@ def _resolve_tick_sizes(
         try:
             tick_size = float(minstep)
         except (TypeError, ValueError):
-            tick_size = 0.01
+            group = _instrument_group(instrument_id)
+            group_steps = by_group_steps.get(group, [])
+            tick_size = float(statistics.median(group_steps)) if group_steps else 0.01
         if tick_size <= 0:
-            tick_size = 0.01
+            group = _instrument_group(instrument_id)
+            group_steps = by_group_steps.get(group, [])
+            tick_size = float(statistics.median(group_steps)) if group_steps else 0.01
         resolved[instrument_id] = tick_size
     return resolved
 
@@ -546,6 +679,7 @@ def _build_inmemory_payload(
     use_cache: bool,
     offline_only: bool,
     refresh_cache: bool,
+    allow_missing_cache: bool = False,
 ) -> tuple[dict[tuple[str, TF], list[Candle]], dict[str, int]]:
     payload: dict[tuple[str, TF], list[Candle]] = {}
     stats = {
@@ -568,30 +702,24 @@ def _build_inmemory_payload(
             "tz": tz,
         }
         if conn is not None:
-            d1 = _fetch_candles_cached(
-                conn=conn,
-                interval=24,
-                offline_only=offline_only,
-                refresh_cache=refresh_cache,
-                stats=stats,
-                **fetch_args,
-            )
-            h1 = _fetch_candles_cached(
-                conn=conn,
-                interval=60,
-                offline_only=offline_only,
-                refresh_cache=refresh_cache,
-                stats=stats,
-                **fetch_args,
-            )
-            m1 = _fetch_candles_cached(
-                conn=conn,
-                interval=1,
-                offline_only=offline_only,
-                refresh_cache=refresh_cache,
-                stats=stats,
-                **fetch_args,
-            )
+            def _cached_or_empty(interval: int) -> list[Candle]:
+                try:
+                    return _fetch_candles_cached(
+                        conn=conn,
+                        interval=interval,
+                        offline_only=offline_only,
+                        refresh_cache=refresh_cache,
+                        stats=stats,
+                        **fetch_args,
+                    )
+                except ValueError as err:
+                    if bool(allow_missing_cache) and str(err).startswith("cache_miss_offline_mode:"):
+                        return []
+                    raise
+
+            d1 = _cached_or_empty(24)
+            h1 = _cached_or_empty(60)
+            m1 = _cached_or_empty(1)
         else:
             d1 = _fetch_candles(interval=24, **fetch_args)
             h1 = _fetch_candles(interval=60, **fetch_args)
@@ -681,6 +809,40 @@ def _instrument_group(instrument_id: str) -> str:
     if matched:
         return str(matched.group(1)).upper()
     return secid.upper()
+
+
+def _build_front_selector(
+    *,
+    instruments: list[str],
+    payload: dict[tuple[str, TF], list[Candle]],
+    roll_avoid_expiry_days: int,
+) -> FrontContractSelector:
+    spans_by_root: dict[str, list[ContractSpan]] = {}
+    for secid in instruments:
+        rows = payload.get((secid, TF.M5), [])
+        if not rows:
+            rows = payload.get((secid, TF.H1), [])
+        if not rows:
+            rows = payload.get((secid, TF.D1), [])
+        if not rows:
+            continue
+        first_date = rows[0].ts.date()
+        last_date = rows[-1].ts.date()
+        if last_date < first_date:
+            continue
+        root = _instrument_group(secid)
+        spans_by_root.setdefault(root, []).append(
+            ContractSpan(
+                secid=str(secid),
+                root=str(root),
+                first_date=first_date,
+                last_date=last_date,
+            )
+        )
+    return FrontContractSelector(
+        spans_by_root=spans_by_root,
+        roll_avoid_expiry_days=max(int(roll_avoid_expiry_days), 0),
+    )
 
 
 def _probability_context_key(*, setup: Setup, instrument_id: str, mode: str) -> tuple[str, str, str]:
@@ -1198,6 +1360,139 @@ def _train_selection_metrics(
     )
 
 
+def _stable_signature(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=True, separators=(",", ":"), default=str)
+
+
+def _cfg_section(cfg: dict[str, Any], key: str) -> dict[str, Any]:
+    item = cfg.get(key, {})
+    return item if isinstance(item, dict) else {}
+
+
+def _build_window_eval_cache(payload: dict[tuple[str, TF], list[Candle]]) -> WindowEvalCache:
+    return WindowEvalCache(
+        provider=InMemoryCandleProvider(payload),
+        base_slice_cache={},
+        regime_cache={},
+        d1_levels_cache={},
+        h1_levels_cache={},
+        execution_cache={},
+        regime_engines={},
+        level_engines={},
+        execution_engines={},
+        setup_generators={},
+    )
+
+
+def _compute_setups_cached(
+    *,
+    eval_cache: WindowEvalCache,
+    cfg: dict[str, Any],
+    calendar: MarketCalendar,
+    as_of_ts: datetime,
+    instrument_id: str,
+    tick_size: float,
+) -> list[Setup]:
+    data_cfg = _cfg_section(cfg, "data")
+    d1_limit = int(data_cfg.get("d1_limit", 200))
+    h1_limit = int(data_cfg.get("h1_limit", 300))
+    m5_limit = int(data_cfg.get("m5_limit", 300))
+    base_key = (
+        str(instrument_id),
+        as_of_ts.isoformat(),
+        float(tick_size),
+        int(d1_limit),
+        int(h1_limit),
+        int(m5_limit),
+    )
+    base_slice = eval_cache.base_slice_cache.get(base_key)
+    if base_slice is None:
+        d1 = eval_cache.provider.get_candles(instrument_id, TF.D1, as_of_ts, d1_limit)
+        h1 = eval_cache.provider.get_candles(instrument_id, TF.H1, as_of_ts, h1_limit)
+        m5 = eval_cache.provider.get_candles(instrument_id, TF.M5, as_of_ts, m5_limit)
+        if m5:
+            last_price_ticks = price_to_ticks(float(m5[-1].close), tick_size)
+        elif h1:
+            last_price_ticks = price_to_ticks(float(h1[-1].close), tick_size)
+        elif d1:
+            last_price_ticks = price_to_ticks(float(d1[-1].close), tick_size)
+        else:
+            last_price_ticks = 0
+        base_slice = EvalBaseSlice(d1=d1, h1=h1, m5=m5, last_price_ticks=int(last_price_ticks))
+        eval_cache.base_slice_cache[base_key] = base_slice
+
+    regime_cfg = _cfg_section(cfg, "regime")
+    regime_sig = _stable_signature(regime_cfg)
+    regime_key = (base_key, regime_sig)
+    regime = eval_cache.regime_cache.get(regime_key)
+    if regime is None:
+        regime_engine = eval_cache.regime_engines.get(regime_sig)
+        if regime_engine is None:
+            regime_engine = RegimeEngine(regime_cfg)
+            eval_cache.regime_engines[regime_sig] = regime_engine
+        regime = regime_engine.compute(
+            as_of_ts=as_of_ts,
+            d1=base_slice.d1,
+            h1=base_slice.h1,
+            m5=base_slice.m5,
+            tick_size=tick_size,
+            orderbook=None,
+            calendar=calendar,
+        )
+        eval_cache.regime_cache[regime_key] = regime
+
+    levels_cfg = _cfg_section(cfg, "levels")
+    levels_sig = _stable_signature(levels_cfg)
+    level_engine = eval_cache.level_engines.get(levels_sig)
+    if level_engine is None:
+        level_engine = LevelEngine(levels_cfg)
+        eval_cache.level_engines[levels_sig] = level_engine
+
+    d1_levels_key = (base_key, levels_sig, "D1")
+    d1_levels = eval_cache.d1_levels_cache.get(d1_levels_key)
+    if d1_levels is None:
+        d1_levels = level_engine.compute_d1_levels(base_slice.d1, tick_size=tick_size)
+        eval_cache.d1_levels_cache[d1_levels_key] = d1_levels
+
+    h1_levels_key = (base_key, levels_sig, "H1")
+    h1_levels = eval_cache.h1_levels_cache.get(h1_levels_key)
+    if h1_levels is None:
+        h1_levels = level_engine.compute_h1_levels(base_slice.h1, calendar=calendar, tick_size=tick_size)
+        eval_cache.h1_levels_cache[h1_levels_key] = h1_levels
+
+    execution_cfg = _cfg_section(cfg, "execution")
+    execution_sig = _stable_signature(execution_cfg)
+    execution_key = (base_key, execution_sig)
+    exec_params = eval_cache.execution_cache.get(execution_key)
+    execution_engine = eval_cache.execution_engines.get(execution_sig)
+    if execution_engine is None:
+        execution_engine = ExecutionEngine(execution_cfg)
+        eval_cache.execution_engines[execution_sig] = execution_engine
+    if exec_params is None:
+        exec_params = execution_engine.compute_params(base_slice.m5, tick_size=tick_size)
+        eval_cache.execution_cache[execution_key] = exec_params
+
+    setups_cfg = _cfg_section(cfg, "setups")
+    setups_sig = _stable_signature(setups_cfg)
+    setup_key = (setups_sig, execution_sig)
+    setup_generator = eval_cache.setup_generators.get(setup_key)
+    if setup_generator is None:
+        setup_generator = SetupGenerator(setups_cfg, execution_engine=execution_engine)
+        eval_cache.setup_generators[setup_key] = setup_generator
+    setups = setup_generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id=instrument_id,
+        last_price_ticks=int(base_slice.last_price_ticks),
+        regime=regime,
+        levels_d1=d1_levels,
+        levels_h1=h1_levels,
+        exec_params=exec_params,
+        calendar=calendar,
+        m5=base_slice.m5,
+    )
+    return setups
+
+
 def _build_train_score_row(
     *,
     combo: dict[str, Any],
@@ -1212,6 +1507,8 @@ def _build_train_score_row(
     calendar: MarketCalendar,
     costs: CostAssumptions,
     instrument_costs: dict[str, CostAssumptions] | None,
+    front_selector: FrontContractSelector | None,
+    eval_cache: WindowEvalCache | None,
     train_probability_gate: ProbabilityGateConfig,
     min_trades_per_instrument: int,
     robust_mad_penalty: float,
@@ -1231,6 +1528,8 @@ def _build_train_score_row(
         calendar=calendar,
         costs=costs,
         instrument_costs=instrument_costs,
+        front_selector=front_selector,
+        eval_cache=eval_cache,
         probability_gate=train_probability_gate,
         collect_history=False,
     )
@@ -1293,32 +1592,53 @@ def _evaluate_window(
     calendar: MarketCalendar,
     costs: CostAssumptions,
     instrument_costs: dict[str, CostAssumptions] | None = None,
+    front_selector: FrontContractSelector | None = None,
+    eval_cache: WindowEvalCache | None = None,
     probability_gate: ProbabilityGateConfig | None = None,
     initial_history: list[ProbHistoryEvent] | None = None,
     collect_history: bool = False,
 ) -> tuple[list[SetupResult], dict[str, Any], list[ProbHistoryEvent]]:
-    provider = InMemoryCandleProvider(payload)
-    builders = {instrument_id: MorningPlanBuilder(provider, calendar, cfg) for instrument_id in instruments}
+    builders: dict[str, MorningPlanBuilder] = {}
+    if eval_cache is None:
+        provider = InMemoryCandleProvider(payload)
+        builders = {instrument_id: MorningPlanBuilder(provider, calendar, cfg) for instrument_id in instruments}
     rows: list[SetupResult] = []
     setups_total = 0
     history: list[ProbHistoryEvent] = list(initial_history or [])
+    gate_mode = str(probability_gate.context_mode) if probability_gate is not None else "setup_kind"
     for day in _iter_days(period_start, period_end):
         as_of_ts = datetime.combine(day, decision_time, tzinfo=tz)
         if not calendar.is_trading_time(as_of_ts):
             continue
-        for instrument_id in instruments:
-            builder = builders[instrument_id]
-            tick_size = float(tick_sizes[instrument_id])
-            effective_costs = costs if instrument_costs is None else instrument_costs.get(instrument_id, costs)
-            plan = builder.build_plan(as_of_ts=as_of_ts, instrument_id=instrument_id, tick_size=tick_size)
-            setups_total += len(plan.setups)
-            m5_rows = payload.get((instrument_id, TF.M5), [])
-            for setup in plan.setups:
+        day_targets = (
+            front_selector.resolve_day(day)
+            if front_selector is not None
+            else [(instrument_id, instrument_id) for instrument_id in instruments]
+        )
+        for report_instrument_id, secid in day_targets:
+            tick_size = float(tick_sizes[secid])
+            effective_costs = costs if instrument_costs is None else instrument_costs.get(secid, costs)
+            if eval_cache is None:
+                builder = builders[secid]
+                plan = builder.build_plan(as_of_ts=as_of_ts, instrument_id=secid, tick_size=tick_size)
+                setups = plan.setups
+            else:
+                setups = _compute_setups_cached(
+                    eval_cache=eval_cache,
+                    cfg=cfg,
+                    calendar=calendar,
+                    as_of_ts=as_of_ts,
+                    instrument_id=secid,
+                    tick_size=tick_size,
+                )
+            m5_rows = payload.get((secid, TF.M5), [])
+            setups_total += len(setups)
+            for setup in setups:
                 if probability_gate is not None and bool(probability_gate.enabled):
                     context_key = _probability_context_key(
                         setup=setup,
-                        instrument_id=instrument_id,
-                        mode=str(probability_gate.context_mode),
+                        instrument_id=report_instrument_id,
+                        mode=gate_mode,
                     )
                     forecast = _probability_forecast(
                         as_of_ts=as_of_ts,
@@ -1335,7 +1655,7 @@ def _evaluate_window(
                     if float(forecast.get("n_effective", 0.0)) < float(probability_gate.min_n_effective):
                         rows.append(
                             _gated_out_result(
-                                instrument_id=instrument_id,
+                                instrument_id=report_instrument_id,
                                 as_of_ts=as_of_ts,
                                 setup=setup,
                                 reason="low_n_effective",
@@ -1347,7 +1667,7 @@ def _evaluate_window(
                     if float(expected_value) < float(probability_gate.min_expected_return_ticks):
                         rows.append(
                             _gated_out_result(
-                                instrument_id=instrument_id,
+                                instrument_id=report_instrument_id,
                                 as_of_ts=as_of_ts,
                                 setup=setup,
                                 reason="expected_return_below_threshold",
@@ -1358,7 +1678,7 @@ def _evaluate_window(
                         continue
                 rows.append(
                     _simulate_setup(
-                        instrument_id=instrument_id,
+                        instrument_id=report_instrument_id,
                         as_of_ts=as_of_ts,
                         setup=setup,
                         m5_rows=m5_rows,
@@ -1374,8 +1694,8 @@ def _evaluate_window(
                             ts=datetime.fromisoformat(str(latest.exit_ts)),
                             context_key=_probability_context_key(
                                 setup=setup,
-                                instrument_id=instrument_id,
-                                mode=str(probability_gate.context_mode),
+                                instrument_id=report_instrument_id,
+                                mode=gate_mode,
                             ),
                             outcome=str(latest.outcome),
                         )
@@ -1434,6 +1754,10 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     client = _build_client(settings)
 
     instruments = sorted(set(args.instrument))
+    instrument_mode = str(args.instrument_mode or "fixed").strip().lower()
+    if instrument_mode not in {"fixed", "front_nearest"}:
+        raise ValueError("unknown_instrument_mode")
+    front_roll_avoid_expiry_days = max(int(args.front_roll_avoid_expiry_days), 0)
     explicit_tick_sizes = _parse_tick_sizes(args.tick_size or [])
     tick_sizes = _resolve_tick_sizes(
         client=client,
@@ -1464,13 +1788,30 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         use_cache=use_cache,
         offline_only=bool(args.offline_only),
         refresh_cache=bool(args.refresh_cache),
+        allow_missing_cache=bool(instrument_mode == "front_nearest"),
     )
+    run_eval_cache = _build_window_eval_cache(payload)
+
+    front_selector: FrontContractSelector | None = None
+    reporting_instruments = list(instruments)
+    if instrument_mode == "front_nearest":
+        front_selector = _build_front_selector(
+            instruments=instruments,
+            payload=payload,
+            roll_avoid_expiry_days=front_roll_avoid_expiry_days,
+        )
+        reporting_instruments = list(front_selector.reporting_ids)
+        if not reporting_instruments:
+            raise ValueError("front_selector_empty")
 
     if bool(args.prefetch_only):
         return {
             "generated_at": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
             "mode": "cache_prefetch_only",
             "instruments": instruments,
+            "reporting_instruments": reporting_instruments,
+            "instrument_mode": instrument_mode,
+            "front_roll_avoid_expiry_days": int(front_roll_avoid_expiry_days),
             "cache": {
                 "enabled": use_cache,
                 "cache_db": (str(cache_db_path) if cache_db_path is not None else None),
@@ -1523,7 +1864,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     folds: list[dict[str, Any]] = []
     aggregate_results: list[SetupResult] = []
     min_train_trades = max(int(args.min_train_trades), 1)
-    required_instruments = min(max(int(args.min_train_instruments_with_trades), 1), len(instruments))
+    required_instruments = min(max(int(args.min_train_instruments_with_trades), 1), len(reporting_instruments))
     min_trades_per_instrument = max(int(args.min_trades_per_instrument), 1)
     robust_mad_penalty = max(float(args.robust_mad_penalty), 0.0)
     objective = str(args.selection_objective).strip().lower()
@@ -1545,6 +1886,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         context_mode=str(args.prob_context_mode),
     )
     min_prob_filled_per_fold = max(int(args.prob_min_filled_trades_per_fold), 0)
+    retune_every_folds = max(int(args.retune_every_folds), 1)
     train_probability_gate = ProbabilityGateConfig(
         enabled=False,
         min_n_effective=float(probability_gate.min_n_effective),
@@ -1553,6 +1895,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         dirichlet_alpha=float(probability_gate.dirichlet_alpha),
         context_mode=str(probability_gate.context_mode),
     )
+    cached_selected_params: dict[str, Any] | None = None
     for idx, window in enumerate(windows, start=1):
         train_start = window["train_start"]
         train_end = window["train_end"]
@@ -1568,10 +1911,56 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             profile=cost_model_profile,
         )
         train_scores: list[dict[str, Any]] = []
-        if search_algorithm == "GRID":
-            for combo in combinations:
-                train_scores.append(
-                    _build_train_score_row(
+        retuned_this_fold = bool(cached_selected_params is None or ((idx - 1) % retune_every_folds == 0))
+        if retuned_this_fold:
+            if search_algorithm == "GRID":
+                for combo in combinations:
+                    train_scores.append(
+                        _build_train_score_row(
+                            combo=combo,
+                            base_cfg=base_cfg,
+                            period_start=train_start,
+                            period_end=train_end,
+                            instruments=instruments,
+                            decision_time=decision_time,
+                            tz=tz,
+                            payload=payload,
+                            tick_sizes=tick_sizes,
+                            calendar=calendar,
+                            costs=costs,
+                            instrument_costs=fold_instrument_costs,
+                            front_selector=front_selector,
+                            eval_cache=run_eval_cache,
+                            train_probability_gate=train_probability_gate,
+                            min_trades_per_instrument=min_trades_per_instrument,
+                            robust_mad_penalty=robust_mad_penalty,
+                            selection_objective=objective,
+                            goal=goal,
+                        )
+                    )
+            else:
+                rng = random.Random(int(hpo_seed) + int(idx) * 9973)
+                tpe_trials: list[HpoTrialState] = []
+                seen_signatures: set[str] = set()
+                attempts = 0
+                max_attempts = max(int(hpo_trials) * 4, int(hpo_trials))
+                while len(train_scores) < int(hpo_trials) and attempts < max_attempts:
+                    attempts += 1
+                    if search_algorithm == "RANDOM":
+                        combo = sample_random(search_params, rng)
+                    else:
+                        combo = sample_tpe(
+                            search_params,
+                            tpe_trials,
+                            rng,
+                            mode="max",
+                            startup_trials=hpo_startup_trials,
+                        )
+                    signature = json.dumps(combo, sort_keys=True, ensure_ascii=True)
+                    if signature in seen_signatures:
+                        continue
+                    seen_signatures.add(signature)
+                    row = _build_train_score_row(
                         combo=combo,
                         base_cfg=base_cfg,
                         period_start=train_start,
@@ -1584,113 +1973,78 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                         calendar=calendar,
                         costs=costs,
                         instrument_costs=fold_instrument_costs,
+                        front_selector=front_selector,
+                        eval_cache=run_eval_cache,
                         train_probability_gate=train_probability_gate,
                         min_trades_per_instrument=min_trades_per_instrument,
                         robust_mad_penalty=robust_mad_penalty,
                         selection_objective=objective,
                         goal=goal,
                     )
-                )
-        else:
-            rng = random.Random(int(hpo_seed) + int(idx) * 9973)
-            tpe_trials: list[HpoTrialState] = []
-            seen_signatures: set[str] = set()
-            attempts = 0
-            max_attempts = max(int(hpo_trials) * 4, int(hpo_trials))
-            while len(train_scores) < int(hpo_trials) and attempts < max_attempts:
-                attempts += 1
-                if search_algorithm == "RANDOM":
-                    combo = sample_random(search_params, rng)
-                else:
-                    combo = sample_tpe(
-                        search_params,
-                        tpe_trials,
-                        rng,
-                        mode="max",
-                        startup_trials=hpo_startup_trials,
+                    eligible_trial = _is_train_row_eligible(
+                        row=row,
+                        min_train_trades=min_train_trades,
+                        required_instruments=required_instruments,
                     )
-                signature = json.dumps(combo, sort_keys=True, ensure_ascii=True)
-                if signature in seen_signatures:
-                    continue
-                seen_signatures.add(signature)
-                row = _build_train_score_row(
-                    combo=combo,
-                    base_cfg=base_cfg,
-                    period_start=train_start,
-                    period_end=train_end,
-                    instruments=instruments,
-                    decision_time=decision_time,
-                    tz=tz,
-                    payload=payload,
-                    tick_sizes=tick_sizes,
-                    calendar=calendar,
-                    costs=costs,
-                    instrument_costs=fold_instrument_costs,
-                    train_probability_gate=train_probability_gate,
-                    min_trades_per_instrument=min_trades_per_instrument,
-                    robust_mad_penalty=robust_mad_penalty,
-                    selection_objective=objective,
-                    goal=goal,
-                )
-                eligible_trial = _is_train_row_eligible(
+                    tpe_objective = float(row["metrics"].get("selection_score", float("-inf")))
+                    if not eligible_trial or not math.isfinite(tpe_objective):
+                        tpe_objective = -1e9
+                    row["metrics"]["hpo_objective"] = float(tpe_objective)
+                    train_scores.append(row)
+                    tpe_trials.append(HpoTrialState(params=combo, objective=float(tpe_objective)))
+                if not train_scores:
+                    train_scores.append(
+                        _build_train_score_row(
+                            combo=default_combo,
+                            base_cfg=base_cfg,
+                            period_start=train_start,
+                            period_end=train_end,
+                            instruments=instruments,
+                            decision_time=decision_time,
+                            tz=tz,
+                            payload=payload,
+                            tick_sizes=tick_sizes,
+                            calendar=calendar,
+                            costs=costs,
+                            instrument_costs=fold_instrument_costs,
+                            front_selector=front_selector,
+                            eval_cache=run_eval_cache,
+                            train_probability_gate=train_probability_gate,
+                            min_trades_per_instrument=min_trades_per_instrument,
+                            robust_mad_penalty=robust_mad_penalty,
+                            selection_objective=objective,
+                            goal=goal,
+                        )
+                    )
+            eligible = [
+                row
+                for row in train_scores
+                if _is_train_row_eligible(
                     row=row,
                     min_train_trades=min_train_trades,
                     required_instruments=required_instruments,
                 )
-                tpe_objective = float(row["metrics"].get("selection_score", float("-inf")))
-                if not eligible_trial or not math.isfinite(tpe_objective):
-                    tpe_objective = -1e9
-                row["metrics"]["hpo_objective"] = float(tpe_objective)
-                train_scores.append(row)
-                tpe_trials.append(HpoTrialState(params=combo, objective=float(tpe_objective)))
-            if not train_scores:
-                train_scores.append(
-                    _build_train_score_row(
-                        combo=default_combo,
-                        base_cfg=base_cfg,
-                        period_start=train_start,
-                        period_end=train_end,
-                        instruments=instruments,
-                        decision_time=decision_time,
-                        tz=tz,
-                        payload=payload,
-                        tick_sizes=tick_sizes,
-                        calendar=calendar,
-                        costs=costs,
-                        instrument_costs=fold_instrument_costs,
-                        train_probability_gate=train_probability_gate,
-                        min_trades_per_instrument=min_trades_per_instrument,
-                        robust_mad_penalty=robust_mad_penalty,
-                        selection_objective=objective,
-                        goal=goal,
-                    )
-                )
-        eligible = [
-            row
-            for row in train_scores
-            if _is_train_row_eligible(
-                row=row,
-                min_train_trades=min_train_trades,
-                required_instruments=required_instruments,
+            ]
+            ranked = sorted(
+                eligible,
+                key=lambda row: (
+                    float(row["metrics"].get("selection_score", float("-inf"))),
+                    float(row["metrics"].get("robust_score", float("-inf"))),
+                    float(row["summary"].get("expectancy_net_ticks", float("-inf"))),
+                    float(row["summary"].get("net_ticks_sum", float("-inf"))),
+                    int(row["summary"].get("filled_trades", 0)),
+                ),
+                reverse=True,
             )
-        ]
-        ranked = sorted(
-            eligible,
-            key=lambda row: (
-                float(row["metrics"].get("selection_score", float("-inf"))),
-                float(row["metrics"].get("robust_score", float("-inf"))),
-                float(row["summary"].get("expectancy_net_ticks", float("-inf"))),
-                float(row["summary"].get("net_ticks_sum", float("-inf"))),
-                int(row["summary"].get("filled_trades", 0)),
-            ),
-            reverse=True,
-        )
-        selected = ranked[0] if ranked else max(
-            train_scores,
-            key=lambda row: float(row["metrics"].get("selection_score", float("-inf"))),
-        )
-        selected_cfg = _apply_overrides(base_cfg, selected["params"])
-        _, _, train_history = _evaluate_window(
+            selected_row = ranked[0] if ranked else max(
+                train_scores,
+                key=lambda row: float(row["metrics"].get("selection_score", float("-inf"))),
+            )
+            cached_selected_params = dict(selected_row["params"])
+
+        selected_params = dict(cached_selected_params or {})
+        selected_cfg = _apply_overrides(base_cfg, selected_params)
+        _, selected_train_summary, train_history = _evaluate_window(
             period_start=train_start,
             period_end=train_end,
             instruments=instruments,
@@ -1702,8 +2056,33 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             calendar=calendar,
             costs=costs,
             instrument_costs=fold_instrument_costs,
+            front_selector=front_selector,
+            eval_cache=run_eval_cache,
             probability_gate=train_probability_gate,
             collect_history=True,
+        )
+        selected_train_metrics = asdict(
+            _train_selection_metrics(
+                summary=selected_train_summary,
+                min_trades_per_instrument=min_trades_per_instrument,
+                mad_penalty=robust_mad_penalty,
+            )
+        )
+        if objective == "expectancy_net_ticks":
+            selected_base_score = float(selected_train_summary.get("expectancy_net_ticks", 0.0))
+        else:
+            selected_base_score = float(selected_train_metrics.get("robust_score", float("-inf")))
+        selected_train_metrics["selection_score"] = _goal_adjusted_selection_score(
+            base_score=selected_base_score,
+            summary=selected_train_summary,
+            period_start=train_start,
+            period_end=train_end,
+            goal=goal,
+        )
+        selected_train_metrics["trades_per_week"] = _trades_per_week(
+            filled_trades=int(selected_train_summary.get("filled_trades", 0) or 0),
+            period_start=train_start,
+            period_end=train_end,
         )
         test_rows, test_summary, _ = _evaluate_window(
             period_start=test_start,
@@ -1717,6 +2096,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             calendar=calendar,
             costs=costs,
             instrument_costs=fold_instrument_costs,
+            front_selector=front_selector,
+            eval_cache=run_eval_cache,
             probability_gate=probability_gate,
             initial_history=train_history,
             collect_history=True,
@@ -1747,6 +2128,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 calendar=calendar,
                 costs=costs,
                 instrument_costs=fold_instrument_costs,
+                front_selector=front_selector,
+                eval_cache=run_eval_cache,
                 probability_gate=None,
                 initial_history=None,
                 collect_history=False,
@@ -1771,10 +2154,11 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "test_start": test_start.isoformat(),
                 "test_end": test_end.isoformat(),
                 "search_algorithm": search_algorithm,
+                "retuned_this_fold": bool(retuned_this_fold),
                 "train_candidates": int(len(train_scores)),
-                "selected_params": selected["params"],
-                "train_summary": selected["summary"],
-                "train_selection_metrics": selected["metrics"],
+                "selected_params": selected_params,
+                "train_summary": selected_train_summary,
+                "train_selection_metrics": selected_train_metrics,
                 "cost_assumptions_by_instrument": fold_costs_payload,
                 "probability_gate_fallback": probability_gate_fallback,
                 "test_summary": test_summary,
@@ -1786,6 +2170,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         "generated_at": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
         "mode": "causal_walk_forward",
         "instruments": instruments,
+        "reporting_instruments": reporting_instruments,
+        "instrument_mode": instrument_mode,
         "tick_sizes": tick_sizes,
         "cache": {
             "enabled": use_cache,
@@ -1810,6 +2196,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "hpo_trials": int(hpo_trials),
             "hpo_startup_trials": int(hpo_startup_trials),
             "hpo_seed": int(hpo_seed),
+            "retune_every_folds": int(retune_every_folds),
             "cost_model_profile": cost_model_profile,
             "probability_gate": {
                 "enabled": bool(probability_gate.enabled),
@@ -1832,6 +2219,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "effective_min_target_return_pct": float(
                 base_cfg.get("setups", {}).get("min_target_return_pct", 0.0)
             ),
+            "front_roll_avoid_expiry_days": int(front_roll_avoid_expiry_days),
             "min_train_trades": min_train_trades,
             "min_train_instruments_with_trades": required_instruments,
             "min_trades_per_instrument": min_trades_per_instrument,
@@ -1857,6 +2245,19 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         required=True,
         help="Instrument id (repeatable), e.g. --instrument BRH6 --instrument NGH6",
+    )
+    parser.add_argument(
+        "--instrument-mode",
+        type=str,
+        default="fixed",
+        choices=["fixed", "front_nearest"],
+        help="fixed=trade provided contracts as-is; front_nearest=roll to nearest active contract per root.",
+    )
+    parser.add_argument(
+        "--front-roll-avoid-expiry-days",
+        type=int,
+        default=3,
+        help="When instrument-mode=front_nearest, avoid opening on current front within N days before its last cache date.",
     )
     parser.add_argument("--start-date", type=str, required=True, help="YYYY-MM-DD")
     parser.add_argument("--end-date", type=str, required=True, help="YYYY-MM-DD")
@@ -1885,6 +2286,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hpo-trials", type=int, default=24)
     parser.add_argument("--hpo-startup-trials", type=int, default=8)
     parser.add_argument("--hpo-seed", type=int, default=42)
+    parser.add_argument(
+        "--retune-every-folds",
+        type=int,
+        default=1,
+        help="Re-run HPO every N folds; reuse last selected params on intermediate folds (causal speedup).",
+    )
     parser.add_argument(
         "--cost-model-profile",
         type=str,
