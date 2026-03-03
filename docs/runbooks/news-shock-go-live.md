@@ -45,6 +45,35 @@ Cycle output includes:
 - separate direction/causal packs and summaries,
 - optional silver ingest artifacts and readiness report.
 
+## Windows Auto-Run (Task Scheduler)
+Install daily auto-run task (default: every day at `09:10` local time):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 `
+  -Action Install `
+  -StartTime 09:10
+```
+
+Check status:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Status
+```
+
+Run immediately (manual trigger):
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Run
+```
+
+Remove task:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Remove
+```
+
+Task uses `scripts/start_shock_label_cycle.ps1` as launcher, which:
+- sets `PYTHONPATH=src`,
+- loads `scripts/moex-carry.local.ps1` if present,
+- writes each run to `data/output/shock_label_cycle_auto/<UTC timestamp>/`.
+
 ## Commands
 ### 1) Label pack
 ```powershell
