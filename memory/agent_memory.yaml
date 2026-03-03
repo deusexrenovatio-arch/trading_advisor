@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-02
+updated_at: 2026-03-03
 
 decisions:
   - id: ADM-2026-02-20-001
@@ -341,6 +341,17 @@ incidents:
     links:
       - pyproject.toml
       - docs/DEV_WORKFLOW.md
+  - id: AMI-2026-03-03-008
+    date: 2026-03-03
+    title: Self-heal workflow failed daily on PR-creation policy mismatch
+    symptom: Scheduled self-heal runs on main were marked failed even when deterministic self-heal and lean gate passed.
+    root_cause: create-pull-request attempted to commit untracked self-heal-report.json and then failed because repository settings disallow Actions-created PRs.
+    remediation: Gate PR step by actual drift files and constrain PR paths to governance-managed targets only.
+    remediation_type: workflow
+    links:
+      - .github/workflows/self-heal.yml
+      - scripts/self_heal.py
+      - docs/runbooks/self-heal-escalation.md
 
 patterns:
   - id: AMP-2026-02-20-001
