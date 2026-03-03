@@ -10,6 +10,7 @@ import pandas as pd
 from moex_carry.news_shock_pipeline import (
     LabelPackConfig,
     ShockCurationConfig,
+    SUPPORTED_SYMBOLS,
     build_shock_label_pack,
     curate_shock_dataset,
     ingest_chat_labels,
@@ -34,6 +35,7 @@ class ShockLabelCycleConfig:
     )
     telegram_feed_min_abs_z: float = 2.0
     telegram_feed_max_rows: int = 5000
+    allow_empty_after_filter: bool = True
     run_readiness: bool = False
     readiness_config: ReadinessConfig = field(default_factory=ReadinessConfig)
 
@@ -258,11 +260,39 @@ def run_shock_label_cycle(
         source_df = source_df[source_df["shock_ts_dt"] >= start]
     if end is not None:
         source_df = source_df[source_df["shock_ts_dt"] <= end]
-    if source_df.empty:
+    if source_df.empty and not config.allow_empty_after_filter:
         raise ValueError("No rows available after date filtering.")
     source_df = source_df.drop(columns=["shock_ts_dt"])
 
-    curated, issues, curation_summary = curate_shock_dataset(source_df, ShockCurationConfig.defaults())
+    if source_df.empty:
+        curated = source_df.copy()
+        curated["selected_source"] = pd.Series(dtype="object")
+        curated["direction_layer_eligible"] = pd.Series(dtype="int64")
+        issues = pd.DataFrame(
+            columns=[
+                "row_index",
+                "symbol",
+                "shock_ts",
+                "selected_source",
+                "critical_issue",
+                "issue_count",
+                "issue_codes",
+            ]
+        )
+        curation_summary = pd.DataFrame(
+            [
+                {
+                    "symbol": symbol,
+                    "rows_total": 0,
+                    "rows_curated": 0,
+                    "rows_critical_dropped": 0,
+                    "critical_drop_share": 0.0,
+                }
+                for symbol in [*SUPPORTED_SYMBOLS, "ALL"]
+            ]
+        )
+    else:
+        curated, issues, curation_summary = curate_shock_dataset(source_df, ShockCurationConfig.defaults())
     curated_path = output_dir / "curated_shocks.csv"
     issues_path = output_dir / "curation_issues.csv"
     curation_summary_path = output_dir / "curation_summary.csv"
@@ -307,7 +337,7 @@ def run_shock_label_cycle(
         "causal_pack": causal_pack,
     }
 
-    if config.export_telegram_feed:
+    if config.export_telegram_feed and not curated.empty:
         feed = _build_telegram_feed(
             curated,
             min_abs_z=config.telegram_feed_min_abs_z,
@@ -321,6 +351,14 @@ def run_shock_label_cycle(
             "min_abs_z": float(config.telegram_feed_min_abs_z),
             "path": str(config.telegram_feed_path),
             "snapshot_path": str(feed_path),
+        }
+    elif config.export_telegram_feed:
+        outputs["telegram_feed"] = {
+            "rows": 0,
+            "min_abs_z": float(config.telegram_feed_min_abs_z),
+            "path": str(config.telegram_feed_path),
+            "snapshot_path": "",
+            "skipped": "curated_empty_after_filter",
         }
 
     if direction_labels_jsonl is not None:

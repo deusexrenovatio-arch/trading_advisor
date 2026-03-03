@@ -628,4 +628,14 @@ patterns:
       - src/moex_carry/news_shock_automation.py
       - data/output/shock_alerts/live_shocks.csv
       - docs/runbooks/news-shock-go-live.md
+  - id: AMP-2026-03-03-027
+    date: 2026-03-03
+    title: Split shock automation into frequent fresh and daily backfill schedules
+    pattern: Run a short lookback repeating task for live alerts and a separate daily deep task for coverage growth; keep backfill from overwriting live Telegram feed.
+    when_to_use: Any news/shock pipeline with strict daily API quotas where live latency and historical recall must coexist.
+    links:
+      - scripts/manage_news_shock_live_plan.ps1
+      - scripts/manage_shock_label_cycle_task.ps1
+      - scripts/start_shock_label_cycle.ps1
+      - src/moex_carry/news_shock_automation.py
 

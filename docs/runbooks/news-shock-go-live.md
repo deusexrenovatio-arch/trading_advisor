@@ -72,11 +72,32 @@ Remove task:
 powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Remove
 ```
 
+Recommended live mode (`fresh + backfill` split):
+- `fresh` task: repeats every 30 minutes, only recent window (`FreshLookbackHours=6`), updates Telegram feed.
+- `backfill` task: once per day, broader historical coverage, does not overwrite Telegram feed.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action Install
+```
+
+Check both tasks:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action Status
+```
+
+Budget-aware defaults for `NewsAPI` daily limit `100`:
+- realtime verification budget: `55`
+- backfill budget: `35`
+- emergency reserve: `10`
+
+These are exposed as parameters in `manage_news_shock_live_plan.ps1`.
+
 Task uses `scripts/start_shock_label_cycle.ps1` as launcher, which:
 - sets `PYTHONPATH=src`,
 - loads `scripts/moex-carry.local.ps1` if present,
 - writes each run to `data/output/shock_label_cycle_auto/<UTC timestamp>/`,
 - updates `data/output/shock_alerts/live_shocks.csv` (unless `-NoTelegramFeed` is set).
+- supports rolling window mode via `-FreshLookbackHours` for frequent runs.
 
 ## Telegram Shock Alerts
 - Ensure `telegram.enabled=true`, bot token and allowed users are configured.

@@ -4,12 +4,17 @@ param(
     [string]$Action = "Status",
     [string]$TaskName = "MoexCarry-ShockLabelCycleDaily",
     [string]$StartTime = "09:10",
+    [ValidateSet("Daily", "Repeat")]
+    [string]$ScheduleMode = "Daily",
+    [int]$RepeatMinutes = 0,
+    [int]$RepeatDurationHours = 24,
     [string]$RunAs = "",
     [string]$PowerShellExe = "",
     [string]$InputCsv = "data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv",
     [string]$OutputRoot = "data/output/shock_label_cycle_auto",
     [string]$StartTs = "",
     [string]$EndTs = "",
+    [int]$FreshLookbackHours = 0,
     [double]$MinAbsZ = 2.5,
     [double]$MaxDelayMin = 60.0,
     [int]$MaxTasksPerDaySymbol = 20,
@@ -91,6 +96,9 @@ function Build-TaskArguments {
     if (-not [string]::IsNullOrWhiteSpace($EndTs)) {
         $parts += @("-EndTs", "`"$EndTs`"")
     }
+    if ($FreshLookbackHours -gt 0 -and [string]::IsNullOrWhiteSpace($StartTs)) {
+        $parts += @("-FreshLookbackHours", "$FreshLookbackHours")
+    }
     if (-not [string]::IsNullOrWhiteSpace($DirectionLabelsJsonl)) {
         $parts += @("-DirectionLabelsJsonl", "`"$DirectionLabelsJsonl`"")
     }
@@ -108,6 +116,47 @@ function Build-TaskArguments {
     }
 
     return ($parts -join " ")
+}
+
+function New-ShockTaskTrigger {
+    param(
+        [string]$Mode,
+        [string]$AtTime,
+        [int]$EveryMinutes,
+        [int]$DurationHours
+    )
+
+    if ($Mode -eq "Repeat" -or $EveryMinutes -gt 0) {
+        $intervalMinutes = [Math]::Max($EveryMinutes, 1)
+        $durationHoursSafe = [Math]::Max($DurationHours, 1)
+        if ($durationHoursSafe * 60 -lt $intervalMinutes) {
+            throw "RepeatDurationHours must be >= RepeatMinutes/60."
+        }
+
+        $parts = $AtTime.Split(":")
+        if ($parts.Count -ne 2) {
+            throw "Invalid StartTime format: '$AtTime'. Use HH:mm."
+        }
+        $hour = [int]$parts[0]
+        $minute = [int]$parts[1]
+        if ($hour -lt 0 -or $hour -gt 23 -or $minute -lt 0 -or $minute -gt 59) {
+            throw "Invalid StartTime value: '$AtTime'. Use HH:mm."
+        }
+
+        $now = Get-Date
+        $startAt = Get-Date -Year $now.Year -Month $now.Month -Day $now.Day -Hour $hour -Minute $minute -Second 0
+        if ($startAt -le $now) {
+            $startAt = $startAt.AddDays(1)
+        }
+
+        return New-ScheduledTaskTrigger `
+            -Once `
+            -At $startAt `
+            -RepetitionInterval (New-TimeSpan -Minutes $intervalMinutes) `
+            -RepetitionDuration (New-TimeSpan -Hours $durationHoursSafe)
+    }
+
+    return New-ScheduledTaskTrigger -Daily -At $AtTime
 }
 
 switch ($Action) {
@@ -154,7 +203,11 @@ switch ($Action) {
     "Install" {
         $taskArguments = Build-TaskArguments
         $taskAction = New-ScheduledTaskAction -Execute $PowerShellExe -Argument $taskArguments
-        $taskTrigger = New-ScheduledTaskTrigger -Daily -At $StartTime
+        $taskTrigger = New-ShockTaskTrigger `
+            -Mode $ScheduleMode `
+            -AtTime $StartTime `
+            -EveryMinutes $RepeatMinutes `
+            -DurationHours $RepeatDurationHours
         $taskSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
         if ($RunAs.Trim().ToUpperInvariant() -eq "SYSTEM") {
@@ -166,7 +219,12 @@ switch ($Action) {
 
         Write-Host "[moex] RepoRoot: $repoRoot"
         Write-Host "[moex] TaskName: $TaskName"
-        Write-Host "[moex] Schedule: daily at $StartTime"
+        if ($ScheduleMode -eq "Repeat" -or $RepeatMinutes -gt 0) {
+            Write-Host "[moex] Schedule: repeat every $([Math]::Max($RepeatMinutes,1))m from $StartTime (duration ${RepeatDurationHours}h)"
+        }
+        else {
+            Write-Host "[moex] Schedule: daily at $StartTime"
+        }
         Write-Host "[moex] RunAs: $RunAs"
         Write-Host "[moex] Command: $PowerShellExe $taskArguments"
 

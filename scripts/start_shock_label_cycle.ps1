@@ -4,6 +4,7 @@ param(
     [string]$OutputRoot = "data/output/shock_label_cycle_auto",
     [string]$StartTs = "",
     [string]$EndTs = "",
+    [int]$FreshLookbackHours = 0,
     [double]$MinAbsZ = 2.5,
     [double]$MaxDelayMin = 60.0,
     [int]$MaxTasksPerDaySymbol = 20,
@@ -104,6 +105,10 @@ $argsList = @(
 if (-not [string]::IsNullOrWhiteSpace($StartTs)) {
     $argsList += @("--start-ts", $StartTs)
 }
+elseif ($FreshLookbackHours -gt 0) {
+    $autoStartTs = [DateTime]::UtcNow.AddHours(-1 * $FreshLookbackHours).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $argsList += @("--start-ts", $autoStartTs)
+}
 if (-not [string]::IsNullOrWhiteSpace($EndTs)) {
     $argsList += @("--end-ts", $EndTs)
 }
@@ -127,6 +132,9 @@ Write-Host "[moex] RepoRoot: $repoRoot"
 Write-Host "[moex] Python: $python"
 Write-Host "[moex] InputCsv: $inputCsvAbs"
 Write-Host "[moex] OutputDir: $outputDir"
+if ($FreshLookbackHours -gt 0 -and [string]::IsNullOrWhiteSpace($StartTs)) {
+    Write-Host "[moex] AutoStartTs: $autoStartTs (FreshLookbackHours=$FreshLookbackHours)"
+}
 Write-Host "[moex] Command: $python $($argsList -join ' ')"
 
 if ($CheckOnly) {
