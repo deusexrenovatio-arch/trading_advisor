@@ -18,6 +18,40 @@ Initial commodity set:
   - `GOLD` -> yfinance `GC=F`
   - `NG_US` -> yfinance `NG=F`
 
+The default profiles are intentionally geo-aware:
+- `BRN` query includes conflict and chokepoint terms (`iran`, `strait of hormuz`, `middle east conflict`) to catch root shocks even when ticker mentions are weak.
+- `GOLD` query includes safe-haven and rates context (`safe haven`, `real yields`) for cross-asset spillovers.
+- `NG_US` query keeps strict US gas scope, adds weather/storage terms (`eia storage`, `freeze-off`, `arctic blast`), and includes LNG-route geopolitics (`hormuz`, `lng shipping disruption`) for spillover capture.
+
+## Next Profile Packs (Recommended)
+
+After baseline stability, add these profile packs as additional `commodity_profiles` entries per ticker:
+
+1. `SCHEDULED_MACRO`
+- Purpose: catch scheduled macro releases that move all three contracts.
+- Keywords: `fomc`, `fed`, `cpi`, `ppi`, `nfp`, `payrolls`, `pce`.
+- Tickers: `BRN`, `GOLD`, `NG_US`.
+
+2. `SHIPPING_CHOKEPOINTS`
+- Purpose: catch logistics shocks before explicit commodity coverage.
+- Keywords: `hormuz`, `suez`, `panama canal`, `shipping disruption`, `tanker reroute`.
+- Tickers: primary `BRN`, secondary `GOLD`, `NG_US`.
+
+3. `ENERGY_INFRA_OUTAGES`
+- Purpose: catch physical outages with immediate supply impact.
+- Keywords: `pipeline outage`, `force majeure`, `terminal outage`, `refinery outage`, `fire at plant`.
+- Tickers: `BRN`, `NG_US`.
+
+4. `POWER_WEATHER_DEMAND`
+- Purpose: improve NG demand-side root detection.
+- Keywords: `hdd`, `cdd`, `heat wave`, `cold blast`, `power burn`.
+- Tickers: `NG_US` primary, spillover to `BRN`.
+
+5. `GEOPOLITICAL_ESCALATION`
+- Purpose: detect cross-commodity root shocks before explicit ticker language appears.
+- Keywords: `iran`, `israel`, `strait of hormuz`, `red sea shipping`, `houthi`, `shipping disruption`, `war escalation`, `geopolitical risk`.
+- Tickers: `BRN`, `GOLD`, `NG_US` (with ticker-specific AND filters in NewsAPI query).
+
 ## Runtime Flow
 
 Regular worker (`news_sync`):

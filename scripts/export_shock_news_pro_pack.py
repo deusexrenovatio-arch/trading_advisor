@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import math
+import re
 import sqlite3
 import sys
 from bisect import bisect_right
@@ -25,6 +26,108 @@ from moex_carry.config import load_settings, resolve_paths  # noqa: E402
 
 DEFAULT_SYMBOLS = ("NG_US", "BRN", "GOLD")
 DEFAULT_THRESHOLDS = (2.0, 2.5, 3.0)
+_ROOT_STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "after",
+    "amid",
+    "update",
+    "updated",
+    "follow",
+    "follows",
+    "followup",
+    "revision",
+    "revised",
+    "report",
+    "reports",
+    "reporting",
+    "says",
+    "say",
+    "said",
+    "news",
+    "live",
+    "analysis",
+}
+_BRN_TEXT_CUES = (
+    "brent",
+    "crude oil",
+    "oil prices",
+    "opec",
+    "barrel",
+    "wti",
+)
+_GOLD_TEXT_CUES = (
+    "gold",
+    "bullion",
+    "xau",
+    "spot gold",
+)
+_GAS_GENERAL_CUES = (
+    "natural gas",
+    "natgas",
+    "lng",
+    "henry hub",
+    "nymex gas",
+)
+_GAS_US_CUES = (
+    "henry hub",
+    "nymex",
+    "u.s.",
+    "us natural gas",
+    "u.s. natural gas",
+    "u.s. gas",
+    "usa",
+    "united states",
+    "american gas",
+    "eia",
+    "freeport",
+    "sabine",
+    "louisiana",
+    "texas",
+    "permian",
+    "marcellus",
+    "haynesville",
+)
+_GAS_EU_CUES = (
+    "ttf",
+    "title transfer facility",
+    "nbp",
+    "dutch gas",
+    "european gas",
+    "europe",
+    "european union",
+    "eu ",
+    "eu gas",
+    "uk gas",
+    "greece",
+    "german",
+    "france",
+    "italy",
+    "netherlands",
+    "ice endex",
+)
+_CROSS_ASSET_GEO_CUES = (
+    "iran",
+    "tehran",
+    "hormuz",
+    "strait of hormuz",
+    "israel",
+    "u.s. strikes",
+    "us strikes",
+    "air strike",
+    "missile",
+    "drone strike",
+    "military strike",
+    "war",
+    "conflict",
+    "irgc",
+    "sanctions",
+    "shipping route",
+    "gulf markets",
+)
 
 
 @dataclass(frozen=True)
@@ -78,6 +181,14 @@ class RollingStats:
         return math.sqrt(variance)
 
 
+@dataclass(frozen=True)
+class RootEventRef:
+    root_event_id: str
+    root_event_ts: datetime
+    root_title: str | None
+    aftershock_rank: int
+
+
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(str(value).replace("Z", "+00:00").replace("+00:00", ""))
 
@@ -101,6 +212,81 @@ def _parse_list(raw: str | None, *, cast=float, default: Iterable | None = None)
 def _parse_symbols(raw: str | None) -> list[str]:
     values = _parse_list(raw, cast=str, default=DEFAULT_SYMBOLS)
     return [str(item).strip().upper() for item in values if str(item).strip()]
+
+
+def _contains_phrase(text: str, phrase: str) -> bool:
+    body = str(text or "").lower()
+    needle = str(phrase or "").strip().lower()
+    if not body or not needle:
+        return False
+    if " " in needle or "-" in needle or "/" in needle:
+        return needle in body
+    pattern = rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])"
+    return re.search(pattern, body) is not None
+
+
+def _contains_any(text: str, phrases: Iterable[str]) -> bool:
+    for phrase in phrases:
+        if _contains_phrase(text, str(phrase)):
+            return True
+    return False
+
+
+def _supports_ng_us(text: str) -> bool:
+    lowered = str(text or "").lower()
+    if not _contains_any(lowered, _GAS_GENERAL_CUES):
+        return False
+    has_us = _contains_any(lowered, _GAS_US_CUES)
+    has_eu = _contains_any(lowered, _GAS_EU_CUES)
+    if has_eu and not has_us:
+        return False
+    return bool(has_us)
+
+
+def _normalized_entity_tokens(raw: object) -> list[str]:
+    if raw is None:
+        return []
+    values: list[str] = []
+    for item in str(raw).split(","):
+        token = str(item or "").strip().upper().replace("-", "_").replace(" ", "_")
+        if token:
+            values.append(token)
+    return values
+
+
+def _normalize_event_symbols(*, entity_tokens: Iterable[str], text: str) -> set[str]:
+    symbols: set[str] = set()
+    lowered = str(text or "").lower()
+    brn_text = _contains_any(lowered, _BRN_TEXT_CUES)
+    gold_text = _contains_any(lowered, _GOLD_TEXT_CUES)
+    ng_us_text = _supports_ng_us(lowered)
+    gas_has_us = _contains_any(lowered, _GAS_US_CUES)
+    gas_has_eu = _contains_any(lowered, _GAS_EU_CUES)
+    token_set = {str(item or "").strip().upper() for item in entity_tokens if str(item or "").strip()}
+    if "BRN" in token_set and brn_text:
+        symbols.add("BRN")
+    if ("GOLD" in token_set or "XAU" in token_set) and gold_text:
+        symbols.add("GOLD")
+    if "NG_US" in token_set and ng_us_text and not (gas_has_eu and not gas_has_us):
+        symbols.add("NG_US")
+
+    if {"OIL", "WTI", "CRUDE", "BRENT"} & token_set and brn_text:
+        symbols.add("BRN")
+    if {"GLD", "BULLION"} & token_set and gold_text:
+        symbols.add("GOLD")
+    if {"GAS", "NATGAS", "NATURAL_GAS", "NG", "LNG"} & token_set and ng_us_text:
+        symbols.add("NG_US")
+
+    if brn_text:
+        symbols.add("BRN")
+    if gold_text:
+        symbols.add("GOLD")
+    if ng_us_text:
+        symbols.add("NG_US")
+    # Geopolitical shock can propagate across oil/gold/gas even without explicit ticker mention.
+    if _contains_any(lowered, _CROSS_ASSET_GEO_CUES):
+        symbols.update({"BRN", "GOLD", "NG_US"})
+    return symbols
 
 
 def _pick_price(bid: float | None, ask: float | None, last: float | None) -> float | None:
@@ -284,20 +470,36 @@ def _enrich_event_refs(
     return enriched
 
 
-def _fetch_broad_events(
+def _fetch_broad_events_by_symbol(
     *,
     conn: sqlite3.Connection,
+    symbols: list[str],
     period_from: datetime,
     period_to: datetime,
     primary_news: dict[str, tuple[str | None, str | None]],
-) -> tuple[list[datetime], list[EventRef]]:
+) -> dict[str, tuple[list[datetime], list[EventRef]]]:
+    by_symbol: dict[str, list[EventRef]] = {symbol: [] for symbol in symbols}
     query = """
-        select e.event_id, e.event_first_published_at_utc
+        select
+            e.event_id,
+            e.event_first_published_at_utc,
+            e.canonical_summary,
+            e.canonical_mechanism,
+            group_concat(distinct upper(coalesce(l.ticker, l.entity_id))) as entity_tokens
         from news_events e
+        left join news_event_items ei
+          on ei.event_id = e.event_id
+        left join news_entity_links l
+          on l.news_id = ei.news_id
         where e.event_first_published_at_utc is not null
           and e.event_first_published_at_utc >= ?
           and e.event_first_published_at_utc <= ?
-        order by e.event_first_published_at_utc asc
+        group by
+            e.event_id,
+            e.event_first_published_at_utc,
+            e.canonical_summary,
+            e.canonical_mechanism
+        order by e.event_first_published_at_utc asc, e.event_id asc
     """
     rows = conn.execute(
         query,
@@ -306,22 +508,127 @@ def _fetch_broad_events(
             (period_to + timedelta(days=1)).isoformat(sep=" "),
         ),
     ).fetchall()
-    ts_list: list[datetime] = []
-    refs: list[EventRef] = []
-    for event_id, ts_raw in rows:
+    for event_id, ts_raw, canonical_summary, canonical_mechanism, entity_tokens in rows:
         title, url = primary_news.get(str(event_id), (None, None))
         ts = _parse_datetime(ts_raw)
-        ts_list.append(ts)
-        refs.append(
-            EventRef(
-                event_id=str(event_id),
-                event_ts=ts,
-                title=str(title) if title is not None else None,
-                url=str(url) if url is not None else None,
-                source="broad",
-            )
+        summary_text = str(canonical_summary or "").strip()
+        mechanism_text = str(canonical_mechanism or "").strip()
+        title_text = str(title or "").strip()
+        normalization_text = " ".join(part for part in (title_text, summary_text, mechanism_text) if part).strip()
+        normalized_symbols = _normalize_event_symbols(
+            entity_tokens=_normalized_entity_tokens(entity_tokens),
+            text=normalization_text,
         )
-    return ts_list, refs
+        for symbol in symbols:
+            if symbol not in normalized_symbols:
+                continue
+            by_symbol.setdefault(symbol, []).append(
+                EventRef(
+                    event_id=str(event_id),
+                    event_ts=ts,
+                    title=title_text or summary_text or None,
+                    url=str(url) if url is not None else None,
+                    source="broad",
+                )
+            )
+    prepared: dict[str, tuple[list[datetime], list[EventRef]]] = {}
+    for symbol in symbols:
+        refs = sorted(
+            by_symbol.get(symbol, []),
+            key=lambda item: (item.event_ts, item.event_id),
+        )
+        prepared[symbol] = ([item.event_ts for item in refs], refs)
+    return prepared
+
+
+def _root_tokens(text: str, *, max_tokens: int = 14) -> set[str]:
+    tokens: list[str] = []
+    for token in re.findall(r"[a-z0-9]{3,}", str(text or "").lower()):
+        if token in _ROOT_STOPWORDS:
+            continue
+        if token.isdigit():
+            continue
+        tokens.append(token)
+        if len(tokens) >= max_tokens:
+            break
+    return set(tokens)
+
+
+def _jaccard_similarity(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    union = left | right
+    if not union:
+        return 0.0
+    return float(len(left & right)) / float(len(union))
+
+
+def _build_root_event_map(
+    refs: list[EventRef],
+    *,
+    root_window_minutes: int,
+    min_similarity: float,
+) -> dict[str, RootEventRef]:
+    deduped: dict[str, EventRef] = {}
+    for ref in sorted(refs, key=lambda item: (item.event_ts, item.event_id)):
+        deduped.setdefault(ref.event_id, ref)
+    ordered = list(deduped.values())
+    roots: list[dict[str, object]] = []
+    mapping: dict[str, RootEventRef] = {}
+
+    window_delta = timedelta(minutes=max(int(root_window_minutes), 1))
+    similarity_threshold = max(float(min_similarity), 0.0)
+
+    for ref in ordered:
+        title_tokens = _root_tokens(ref.title or "")
+        matched_index: int | None = None
+        matched_score = 0.0
+
+        for idx, root in enumerate(roots):
+            root_last_ts = root.get("last_ts")
+            root_tokens = root.get("tokens")
+            if not isinstance(root_last_ts, datetime) or not isinstance(root_tokens, set):
+                continue
+            if (ref.event_ts - root_last_ts) > window_delta:
+                continue
+            score = _jaccard_similarity(title_tokens, root_tokens)
+            if score < similarity_threshold:
+                continue
+            if score > matched_score:
+                matched_score = score
+                matched_index = idx
+
+        if matched_index is None:
+            roots.append(
+                {
+                    "root_event_id": ref.event_id,
+                    "root_event_ts": ref.event_ts,
+                    "root_title": ref.title,
+                    "tokens": set(title_tokens),
+                    "last_ts": ref.event_ts,
+                    "count": 1,
+                }
+            )
+            mapping[ref.event_id] = RootEventRef(
+                root_event_id=ref.event_id,
+                root_event_ts=ref.event_ts,
+                root_title=ref.title,
+                aftershock_rank=0,
+            )
+            continue
+
+        root = roots[matched_index]
+        rank = int(root.get("count") or 0)
+        root["count"] = rank + 1
+        root["last_ts"] = ref.event_ts
+        root["tokens"] = set(root.get("tokens") or set()) | title_tokens
+        mapping[ref.event_id] = RootEventRef(
+            root_event_id=str(root.get("root_event_id") or ref.event_id),
+            root_event_ts=root.get("root_event_ts") if isinstance(root.get("root_event_ts"), datetime) else ref.event_ts,
+            root_title=str(root.get("root_title") or "") or ref.title,
+            aftershock_rank=rank,
+        )
+    return mapping
 
 
 def _fetch_v2_clean_events_by_symbol(
@@ -334,17 +641,21 @@ def _fetch_v2_clean_events_by_symbol(
 ) -> dict[str, tuple[list[datetime], list[EventRef]]]:
     result: dict[str, tuple[list[datetime], list[EventRef]]] = {}
     query = """
-        select t.event_id, t.t0
+        select
+            t.event_id,
+            coalesce(e.event_first_published_at_utc, t.t0) as event_ts
         from event_target_v2 t
+        left join news_events e
+          on e.event_id = t.event_id
         where t.symbol = ?
           and t.horizon = '1h'
-          and t.t0 is not null
-          and t.t0 >= ?
-          and t.t0 <= ?
+          and coalesce(e.event_first_published_at_utc, t.t0) is not null
+          and coalesce(e.event_first_published_at_utc, t.t0) >= ?
+          and coalesce(e.event_first_published_at_utc, t.t0) <= ?
           and coalesce(t.is_repost, 0) = 0
           and coalesce(t.is_overlapped, 0) = 0
           and coalesce(t.leakage_postmove, 0) = 0
-        order by t.t0 asc
+        order by coalesce(e.event_first_published_at_utc, t.t0) asc, t.event_id asc
     """
     for symbol in symbols:
         rows = conn.execute(
@@ -448,8 +759,9 @@ def run_export(args: argparse.Namespace) -> int:
             period_from=period_from,
             period_to=period_to,
         )
-        broad_ts, broad_refs = _fetch_broad_events(
+        broad_map = _fetch_broad_events_by_symbol(
             conn=conn,
+            symbols=symbols,
             period_from=period_from,
             period_to=period_to,
             primary_news={},
@@ -461,17 +773,39 @@ def run_export(args: argparse.Namespace) -> int:
             period_to=period_to,
             primary_news={},
         )
-        candidate_event_ids = {ref.event_id for ref in broad_refs if ref.event_id}
+        candidate_event_ids: set[str] = set()
+        for _symbol, (_ts_values, refs) in broad_map.items():
+            for ref in refs:
+                if ref.event_id:
+                    candidate_event_ids.add(ref.event_id)
         for _symbol, (_ts_values, refs) in v2_map.items():
             for ref in refs:
                 if ref.event_id:
                     candidate_event_ids.add(ref.event_id)
         primary_news = _fetch_primary_news_map(conn=conn, event_ids=sorted(candidate_event_ids))
-        broad_refs = _enrich_event_refs(broad_refs, primary_news)
+        broad_map = _fetch_broad_events_by_symbol(
+            conn=conn,
+            symbols=symbols,
+            period_from=period_from,
+            period_to=period_to,
+            primary_news=primary_news,
+        )
         v2_map = {
             key: (ts_values, _enrich_event_refs(refs, primary_news))
             for key, (ts_values, refs) in v2_map.items()
         }
+        root_map_by_symbol: dict[str, dict[str, RootEventRef]] = {}
+        for symbol in symbols:
+            merged_refs: dict[str, EventRef] = {}
+            for ref in broad_map.get(symbol, ([], []))[1]:
+                merged_refs.setdefault(ref.event_id, ref)
+            for ref in v2_map.get(symbol, ([], []))[1]:
+                merged_refs.setdefault(ref.event_id, ref)
+            root_map_by_symbol[symbol] = _build_root_event_map(
+                list(merged_refs.values()),
+                root_window_minutes=max(int(args.root_window_minutes), 1),
+                min_similarity=float(args.root_similarity),
+            )
         labels_by_event = _load_label_summary_by_event(conn=conn)
     finally:
         conn.close()
@@ -481,7 +815,9 @@ def run_export(args: argparse.Namespace) -> int:
         quote_points = quote_points_by_symbol.get(symbol, [])
         bar_points = _build_bar_closes(quote_points, bar_minutes=max(int(args.bar_minutes), 1))
         rolling = RollingStats(maxlen=max(int(args.lookback_bars), 2))
+        broad_ts, broad_refs = broad_map.get(symbol, ([], []))
         v2_ts, v2_refs = v2_map.get(symbol, ([], []))
+        roots = root_map_by_symbol.get(symbol, {})
 
         for idx in range(1, len(bar_points)):
             prev_ts, prev_px = bar_points[idx - 1]
@@ -515,6 +851,7 @@ def run_export(args: argparse.Namespace) -> int:
 
                     selected = v2_event if v2_event is not None else broad_event
                     selected_delay = v2_delay if v2_event is not None else broad_delay
+                    root_meta = roots.get(selected.event_id) if selected is not None else None
 
                     label = labels_by_event.get(selected.event_id) if selected is not None else None
                     label_has_any = bool(label.has_any) if label else False
@@ -552,6 +889,20 @@ def run_export(args: argparse.Namespace) -> int:
                             "selected_delay_min": round(float(selected_delay), 1) if selected_delay is not None else "",
                             "selected_title": selected.title or "" if selected else "",
                             "selected_url": selected.url or "" if selected else "",
+                            "selected_root_event_id": root_meta.root_event_id if root_meta is not None else "",
+                            "selected_root_event_ts": (
+                                _to_iso_utc(root_meta.root_event_ts) if root_meta is not None else ""
+                            ),
+                            "selected_root_title": root_meta.root_title if root_meta is not None else "",
+                            "selected_is_root_event": (
+                                int(bool(selected is not None and root_meta is not None and selected.event_id == root_meta.root_event_id))
+                            ),
+                            "selected_aftershock_rank": int(root_meta.aftershock_rank) if root_meta is not None else "",
+                            "selected_root_delay_min": (
+                                round((cur_ts - root_meta.root_event_ts).total_seconds() / 60.0, 1)
+                                if root_meta is not None
+                                else ""
+                            ),
                             "label_has_any": int(label_has_any),
                             "label_has_gold": int(label_has_gold),
                             "label_has_silver": int(label_has_silver),
@@ -586,6 +937,8 @@ def run_export(args: argparse.Namespace) -> int:
                         "broad_causal_count": 0,
                         "v2_causal_count": 0,
                         "selected_causal_count": 0,
+                        "selected_root_unique_count": 0,
+                        "selected_root_primary_count": 0,
                         "label_any_count": 0,
                         "label_gold_count": 0,
                         "label_silver_count": 0,
@@ -599,6 +952,12 @@ def run_export(args: argparse.Namespace) -> int:
             broad_causal_count = sum(1 for row in subset if str(row["broad_event_id"]))
             v2_causal_count = sum(1 for row in subset if str(row["v2_event_id"]))
             selected_count = sum(1 for row in subset if str(row["selected_event_id"]))
+            selected_root_unique = {
+                str(row.get("selected_root_event_id") or "").strip()
+                for row in subset
+                if str(row.get("selected_root_event_id") or "").strip()
+            }
+            selected_root_primary_count = sum(1 for row in subset if int(row.get("selected_is_root_event") or 0) == 1)
             label_any_count = sum(int(row["label_has_any"]) for row in subset)
             label_gold_count = sum(int(row["label_has_gold"]) for row in subset)
             label_silver_count = sum(int(row["label_has_silver"]) for row in subset)
@@ -616,6 +975,8 @@ def run_export(args: argparse.Namespace) -> int:
                     "broad_causal_count": broad_causal_count,
                     "v2_causal_count": v2_causal_count,
                     "selected_causal_count": selected_count,
+                    "selected_root_unique_count": len(selected_root_unique),
+                    "selected_root_primary_count": selected_root_primary_count,
                     "label_any_count": label_any_count,
                     "label_gold_count": label_gold_count,
                     "label_silver_count": label_silver_count,
@@ -653,6 +1014,34 @@ def run_export(args: argparse.Namespace) -> int:
         row for row in all_rows if float(row["z_score"]) >= pack_threshold and str(row["selected_event_id"])
     ]
     pack_rows.sort(key=lambda row: float(row["z_score"]), reverse=True)
+    if bool(args.pack_root_only):
+        best_by_root: dict[tuple[str, str], dict[str, object]] = {}
+        for row in pack_rows:
+            symbol = str(row.get("symbol") or "").strip().upper()
+            root_event_id = str(row.get("selected_root_event_id") or "").strip()
+            event_key = root_event_id or str(row.get("selected_event_id") or "").strip()
+            if not symbol or not event_key:
+                continue
+            key = (symbol, event_key)
+            prev = best_by_root.get(key)
+            if prev is None:
+                best_by_root[key] = row
+                continue
+            prev_rank = int(prev.get("selected_aftershock_rank") or 9999)
+            new_rank = int(row.get("selected_aftershock_rank") or 9999)
+            if new_rank < prev_rank:
+                best_by_root[key] = row
+                continue
+            if new_rank == prev_rank and float(row.get("z_score") or 0.0) > float(prev.get("z_score") or 0.0):
+                best_by_root[key] = row
+        pack_rows = list(best_by_root.values())
+        pack_rows.sort(
+            key=lambda row: (
+                str(row.get("symbol") or ""),
+                str(row.get("selected_root_event_ts") or row.get("selected_event_ts") or ""),
+                -float(row.get("z_score") or 0.0),
+            )
+        )
     if int(args.max_pack_items) > 0:
         pack_rows = pack_rows[: int(args.max_pack_items)]
 
@@ -675,6 +1064,10 @@ def run_export(args: argparse.Namespace) -> int:
                     "delay_min": row["selected_delay_min"],
                     "title": row["selected_title"],
                     "url": row["selected_url"],
+                    "root_event_id": row.get("selected_root_event_id") or row["selected_event_id"],
+                    "root_event_ts_utc": row.get("selected_root_event_ts") or row["selected_event_ts"],
+                    "is_root_event": bool(int(row.get("selected_is_root_event") or 0)),
+                    "aftershock_rank": row.get("selected_aftershock_rank"),
                 },
                 "secondary_candidates": [
                     {
@@ -718,6 +1111,7 @@ def run_export(args: argparse.Namespace) -> int:
         f"Symbols: {', '.join(symbols)}",
         f"Bar: {int(args.bar_minutes)}m",
         f"Causal window: {int(args.causal_window_minutes)}m (news must be before shock)",
+        f"Root-only pack: {'yes' if bool(args.pack_root_only) else 'no'}",
         "",
         "## Files",
         f"- Summary: `{summary_path.as_posix()}`",
@@ -776,8 +1170,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-std-bars", type=int, default=120)
     parser.add_argument("--max-gap-hours", type=float, default=2.5)
     parser.add_argument("--causal-window-minutes", type=int, default=60)
+    parser.add_argument("--root-window-minutes", type=int, default=720)
+    parser.add_argument("--root-similarity", type=float, default=0.40)
     parser.add_argument("--z-thresholds", type=str, default="2.0,2.5,3.0")
     parser.add_argument("--pack-threshold", type=float, default=2.5)
+    parser.add_argument("--pack-root-only", action="store_true", default=True)
+    parser.add_argument("--no-pack-root-only", dest="pack_root_only", action="store_false")
     parser.add_argument("--max-pack-items", type=int, default=0, help="0 means all")
     return parser
 
