@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -77,14 +78,27 @@ class IssCandleProvider:
 class InMemoryCandleProvider:
     def __init__(self, payload: dict[tuple[str, TF], list[Candle]]) -> None:
         self.payload = payload
+        self._series: dict[tuple[str, TF], list[Candle]] = {}
+        self._timestamps: dict[tuple[str, TF], list[datetime]] = {}
+        for key, rows in payload.items():
+            ordered = _sorted_if_needed(rows)
+            self._series[key] = ordered
+            self._timestamps[key] = [item.ts for item in ordered]
 
     def get_candles(self, instrument_id: str, tf: TF, end_ts: datetime, limit: int) -> list[Candle]:
-        rows = list(self.payload.get((instrument_id, tf), []))
-        filtered = [item for item in rows if item.ts <= end_ts]
-        filtered.sort(key=lambda item: item.ts)
-        if len(filtered) > limit:
-            filtered = filtered[-limit:]
-        return filtered
+        key = (instrument_id, tf)
+        rows = self._series.get(key, [])
+        if not rows:
+            return []
+        timestamps = self._timestamps.get(key, [])
+        end_idx = bisect.bisect_right(timestamps, end_ts)
+        if end_idx <= 0:
+            return []
+        take = max(int(limit), 0)
+        if take <= 0:
+            take = end_idx
+        start_idx = max(end_idx - take, 0)
+        return rows[start_idx:end_idx]
 
 
 def _iss_interval(tf: TF) -> int:
@@ -105,3 +119,12 @@ def _bars_per_day(tf: TF) -> int:
     if tf == TF.M5:
         return 24 * 12
     return 1
+
+
+def _sorted_if_needed(rows: list[Candle]) -> list[Candle]:
+    if len(rows) <= 1:
+        return list(rows)
+    for idx in range(1, len(rows)):
+        if rows[idx - 1].ts > rows[idx].ts:
+            return sorted(rows, key=lambda item: item.ts)
+    return list(rows)

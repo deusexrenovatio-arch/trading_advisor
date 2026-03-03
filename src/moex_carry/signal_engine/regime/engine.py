@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import math
 from datetime import datetime
 from typing import Any
@@ -33,9 +34,9 @@ class RegimeEngine:
     ) -> RegimeState:
         if tick_size <= 0:
             raise ValueError("tick_size must be > 0")
-        d1_hist = sorted((row for row in d1 if row.ts <= as_of_ts), key=lambda item: item.ts)
-        h1_hist = sorted((row for row in h1 if row.ts <= as_of_ts), key=lambda item: item.ts)
-        m5_hist = sorted((row for row in m5 if row.ts <= as_of_ts), key=lambda item: item.ts)
+        d1_hist = _history_upto_asof(d1, as_of_ts)
+        h1_hist = _history_upto_asof(h1, as_of_ts)
+        m5_hist = _history_upto_asof(m5, as_of_ts)
 
         warnings: list[str] = []
         components: dict[str, Any] = {}
@@ -257,3 +258,27 @@ def _to_float(value: Any) -> float | None:
     if not math.isfinite(parsed):
         return None
     return parsed
+
+
+def _history_upto_asof(rows: list[Candle], as_of_ts: datetime) -> list[Candle]:
+    if not rows:
+        return []
+    ordered = _ordered_if_needed(rows)
+    if not ordered:
+        return []
+    if ordered[-1].ts <= as_of_ts:
+        return ordered
+    ts_values = [item.ts for item in ordered]
+    end_idx = bisect.bisect_right(ts_values, as_of_ts)
+    if end_idx <= 0:
+        return []
+    return ordered[:end_idx]
+
+
+def _ordered_if_needed(rows: list[Candle]) -> list[Candle]:
+    if len(rows) <= 1:
+        return list(rows)
+    for idx in range(1, len(rows)):
+        if rows[idx - 1].ts > rows[idx].ts:
+            return sorted(rows, key=lambda item: item.ts)
+    return list(rows)

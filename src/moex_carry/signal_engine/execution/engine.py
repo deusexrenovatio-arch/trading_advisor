@@ -15,7 +15,7 @@ class ExecutionEngine:
         if tick_size <= 0:
             raise ValueError("tick_size must be > 0")
         warnings: list[str] = []
-        ordered = sorted(m5, key=lambda item: item.ts)
+        ordered = _ordered_if_needed(m5)
         if len(ordered) < 2:
             return ExecutionParams(
                 buffer_ticks=max(int(self.cfg.get("buffer_min_ticks", 1)), 1),
@@ -58,7 +58,7 @@ class ExecutionEngine:
         entry_ticks: int,
         buffer_ticks: int,
     ) -> int:
-        ordered = sorted(m5, key=lambda item: item.ts)
+        ordered = _ordered_if_needed(m5)
         tick_size = _infer_tick_size(ordered, entry_ticks)
         if not ordered:
             return int(entry_ticks - max(int(buffer_ticks), 1) if side == Side.BUY else entry_ticks + max(int(buffer_ticks), 1))
@@ -138,3 +138,12 @@ def _infer_tick_size(candles: list[Candle], entry_ticks: int) -> float:
     if not math.isfinite(inferred) or inferred <= 0.0:
         return 1.0
     return float(inferred)
+
+
+def _ordered_if_needed(rows: list[Candle]) -> list[Candle]:
+    if len(rows) <= 1:
+        return list(rows)
+    for idx in range(1, len(rows)):
+        if rows[idx - 1].ts > rows[idx].ts:
+            return sorted(rows, key=lambda item: item.ts)
+    return list(rows)
