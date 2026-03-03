@@ -153,6 +153,14 @@ class _FakeIssClient:
         return list(self.rows)
 
 
+class _FakeSpecClient:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+
+    def get_futures_specs(self, _board: str):
+        return list(self.rows)
+
+
 def test_cached_fetch_second_call_uses_sqlite_without_network(tmp_path):
     mod = _load_module()
     tz = ZoneInfo("Europe/Moscow")
@@ -323,16 +331,71 @@ def test_resolve_tuning_grid_profiles():
         mod._resolve_tuning_grid("missing")
 
 
+def test_resolve_tick_sizes_falls_back_to_group_step_for_expired_contract():
+    mod = _load_module()
+    client = _FakeSpecClient(
+        [
+            {"SECID": "BRH6", "MINSTEP": 0.01},
+            {"SECID": "NGH6", "MINSTEP": 0.1},
+        ]
+    )
+    tick_sizes = mod._resolve_tick_sizes(
+        client=client,
+        board="RFUD",
+        instruments=["BRZ5", "NGH6", "UNKNOWN1"],
+        explicit={},
+    )
+    assert tick_sizes["BRZ5"] == pytest.approx(0.01)
+    assert tick_sizes["NGH6"] == pytest.approx(0.1)
+    assert tick_sizes["UNKNOWN1"] == pytest.approx(0.01)
+
+
 def test_resolve_search_space_profile_and_algorithm():
     mod = _load_module()
     space = mod._resolve_search_space("intraday_goal_v1")
     assert "setups.min_target_return_pct" in space
+    space_v2 = mod._resolve_search_space("intraday_goal_v2")
+    assert space_v2["setups.min_reward_gross_ticks"]["min"] == pytest.approx(12.0)
+    assert space_v2["setups.min_target_return_pct"]["max"] == pytest.approx(1.0)
+    space_v3 = mod._resolve_search_space("intraday_goal_v3")
+    assert space_v3["regime.d1.adx_trend_min"]["min"] == 20
+    assert space_v3["setups.require_vol_not_low"] == [True, False]
     assert mod._resolve_search_algorithm("grid") == "GRID"
     assert mod._resolve_search_algorithm("tpe") == "TPE"
     with pytest.raises(ValueError, match="unknown_search_space_profile"):
         mod._resolve_search_space("missing")
     with pytest.raises(ValueError, match="unknown_search_algorithm"):
         mod._resolve_search_algorithm("bad")
+
+
+def test_front_selector_rolls_to_next_contract_before_expiry_cutoff():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    payload = {
+        ("BRZ5", TF.M5): [
+            Candle(ts=datetime(2025, 9, 1, 10, 0, tzinfo=tz), open=100.0, high=101.0, low=99.0, close=100.0, volume=1.0),
+            Candle(ts=datetime(2025, 12, 20, 10, 0, tzinfo=tz), open=100.0, high=101.0, low=99.0, close=100.0, volume=1.0),
+        ],
+        ("BRH6", TF.M5): [
+            Candle(ts=datetime(2025, 12, 10, 10, 0, tzinfo=tz), open=100.0, high=101.0, low=99.0, close=100.0, volume=1.0),
+            Candle(ts=datetime(2026, 3, 20, 10, 0, tzinfo=tz), open=100.0, high=101.0, low=99.0, close=100.0, volume=1.0),
+        ],
+        ("NGH6", TF.M5): [
+            Candle(ts=datetime(2025, 12, 10, 10, 0, tzinfo=tz), open=50.0, high=51.0, low=49.0, close=50.0, volume=1.0),
+            Candle(ts=datetime(2026, 3, 20, 10, 0, tzinfo=tz), open=50.0, high=51.0, low=49.0, close=50.0, volume=1.0),
+        ],
+    }
+    selector = mod._build_front_selector(
+        instruments=["BRZ5", "BRH6", "NGH6"],
+        payload=payload,
+        roll_avoid_expiry_days=3,
+    )
+    assert selector.reporting_ids == ["BR", "NG"]
+    on_early_day = dict(selector.resolve_day(date(2025, 12, 15)))
+    on_roll_day = dict(selector.resolve_day(date(2025, 12, 19)))
+    assert on_early_day["BR"] == "BRZ5"
+    assert on_roll_day["BR"] == "BRH6"
+    assert on_roll_day["NG"] == "NGH6"
 
 
 def test_resolve_cost_model_profile():
@@ -543,3 +606,100 @@ def test_should_probability_gate_fallback_by_fold_trade_floor():
         )
         is False
     )
+
+
+def test_evaluate_window_fast_cache_keeps_parity_with_plain_evaluation():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    start = datetime(2026, 1, 1, 10, 0, tzinfo=tz)
+
+    def _series(count: int, step: timedelta, slope: float) -> list[Candle]:
+        rows: list[Candle] = []
+        for idx in range(count):
+            close = 100.0 + slope * idx
+            rows.append(
+                Candle(
+                    ts=start + idx * step,
+                    open=close - 0.2,
+                    high=close + 0.6,
+                    low=close - 0.6,
+                    close=close,
+                    volume=1_000.0 + idx,
+                )
+            )
+        return rows
+
+    payload = {
+        ("BRH6", TF.D1): _series(90, timedelta(days=1), 0.7),
+        ("BRH6", TF.H1): _series(350, timedelta(hours=1), 0.05),
+        ("BRH6", TF.M5): _series(1500, timedelta(minutes=5), 0.01),
+    }
+    cfg = {
+        "data": {"d1_limit": 90, "h1_limit": 300, "m5_limit": 500},
+        "regime": {
+            "d1": {
+                "ema_fast": 20,
+                "ema_slow": 50,
+                "adx_period": 14,
+                "er_period": 20,
+                "dir_band_atr_mult": 0.25,
+                "adx_trend_min": 25,
+                "adx_range_max": 18,
+                "er_trend_min": 0.30,
+                "er_range_max": 0.20,
+                "atr_period": 14,
+                "atr_rank_lookback": 60,
+                "vol_high_pct": 0.70,
+                "vol_low_pct": 0.30,
+            },
+            "h1": {"ema_fast": 20, "ema_slow": 50, "atr_period": 14, "dir_band_atr_mult": 0.20},
+        },
+        "levels": {
+            "merge_distance_ticks": 1,
+            "d1": {"donchian_period": 20, "pivots": True},
+            "h1": {"swing_k": 2, "max_swings_each_side": 8, "box_hours": 6, "box_range_atr_mult": 1.2, "include_ema20_level": True},
+        },
+        "execution": {
+            "m5_atr_period": 14,
+            "buffer_atr_mult": 0.10,
+            "buffer_min_ticks": 1,
+            "limit_slip_ticks": 2,
+            "noise_warn_high": 2.5,
+            "noise_warn_low": 0.4,
+            "swing_k": 2,
+        },
+        "setups": {
+            "max_setups_per_instrument": 2,
+            "require_vol_not_low": False,
+            "pullback_max_dist_atr_mult": 1.0,
+            "rr_default": 1.6,
+            "min_target_ticks": 3,
+            "max_risk_atr_mult": 1.2,
+            "entry_expiry_policy": "SESSION_END",
+        },
+    }
+    calendar = _calendar()
+    costs = mod.CostAssumptions(commission_ticks_per_side=0.5, slippage_ticks_per_side=1.0, spread_half_ticks=1.0)
+    kwargs = {
+        "period_start": date(2026, 2, 2),
+        "period_end": date(2026, 2, 5),
+        "instruments": ["BRH6"],
+        "decision_time": time(12, 0),
+        "tz": tz,
+        "cfg": cfg,
+        "payload": payload,
+        "tick_sizes": {"BRH6": 0.01},
+        "calendar": calendar,
+        "costs": costs,
+        "instrument_costs": None,
+        "front_selector": None,
+        "probability_gate": None,
+        "initial_history": None,
+        "collect_history": True,
+    }
+    rows_plain, summary_plain, history_plain = mod._evaluate_window(**kwargs)
+    cache = mod._build_window_eval_cache(payload)
+    rows_fast, summary_fast, history_fast = mod._evaluate_window(**kwargs, eval_cache=cache)
+    assert rows_plain == rows_fast
+    assert summary_plain == summary_fast
+    assert history_plain == history_fast
