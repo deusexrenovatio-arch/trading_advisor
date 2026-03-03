@@ -1,35 +1,31 @@
 # Session Handoff
-Updated: 2026-03-03 12:48 UTC
+Updated: 2026-03-03 14:00 UTC
 
 ## Goal
-- Reach launch-ready shock-news workflow with deterministic data curation, scalable silver labeling loop, and explicit critical pass/fail readiness decision.
+- Run live commodity-news ingestion (GDELT + NewsAPI), score incoming news with model fallback, and feed runtime news gate.
 
 ## Current Delta
-- Added rolling Telegram shock feed export from cycle to `data/output/shock_alerts/live_shocks.csv` plus snapshot artifact.
-- Fixed feed candidate mapping (`selected_source + v2/broad`) so missing `selected_*` columns no longer break export.
-- Added `FreshLookbackHours` mode in `scripts/start_shock_label_cycle.ps1` for frequent recent-window runs.
-- `run_shock_label_cycle` now tolerates empty post-filter windows and does not overwrite live feed when curated is empty.
-- Extended scheduler manager with repeat triggers (`ScheduleMode=Repeat`, `RepeatMinutes`, `RepeatDurationHours`) and lookback pass-through.
-- Added dual-schedule orchestrator `scripts/manage_news_shock_live_plan.ps1` with NewsAPI budget split printout.
-- Installed tasks: `MoexCarry-ShockLabelCycleFresh` (every 30m, lookback 6h) and `MoexCarry-ShockLabelCycleBackfill` (daily 03:40), removed legacy daily task.
-- Added regression tests for feed export + empty-window no-overwrite and updated runbook with `fresh+backfill` model.
+- Added `news_ingest` CLI command (`moex-carry news_ingest --news-config ... --mode live|backfill`).
+- Implemented runtime ingestion with SQLite persistence, dedup, quota-aware NewsAPI usage, and rolling feed export.
+- Added `NLI/FinBERT` primary scoring with auto GPU device selection and keyword fallback.
+- Added bridge `load_news_gate_items` and wired `pipeline` to use live scored news instead of `news_items=[]`.
+- Added scripts: `scripts/run_news_ingest_cycle.py`, `scripts/start_news_ingest_cycle.ps1`, `scripts/manage_news_ingest_tasks.ps1`.
+- Updated config defaults for live gate fields and expanded `configs/news-livecheck-ng.yaml` for three commodities.
+- Added live stability controls: GDELT/NewsAPI retry+backoff and NewsAPI per-commodity live interval throttling.
+- Lean gate and quality scorecards pass after module split (`news_live_runtime`/`news_live_clients`/`news_live_scoring`).
 
 ## Blockers
-- No critical blockers in runtime scheduling.
-- NewsAPI polling itself is external to this repo; enforced budget here is schedule policy and operational split.
+- No code blockers.
+- Runtime model quality still depends on available local model weights and GPU drivers; fallback is active by design.
 
 ## Next Step
-- Verify one full day of `fresh` and `backfill` task runs (`LastTaskResult=0`) and compare delivered shock alerts vs expected high-impact windows.
+- Keep 5-minute live scheduler active, monitor 24h commodity coverage and provider reliability, then tune profile queries for `BRN/GOLD` if coverage remains low.
 
 ## Validation
-- `powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -CheckOnly`
-- `powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Install -DryRun`
-- `powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Install -TaskName MoexCarry-ShockLabelCycleFresh-Test -ScheduleMode Repeat -RepeatMinutes 30 -FreshLookbackHours 6 -DryRun`
-- `powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action Install -DryRun`
-- `powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action Install`
-- `powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action Status`
-- `powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action RunFresh`
-- `powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action RunBackfill`
-- `python -m pytest tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py tests/test_telegram_worker.py -q`
-- `python -m ruff check src/moex_carry/news_shock_automation.py scripts/run_shock_label_cycle.py src/moex_carry/cli.py tests/test_news_shock_automation.py`
+- `python -m pytest tests/test_news_live_runtime.py tests/test_news_filter.py -q`
+- `python -m ruff check src/moex_carry/news_live_runtime.py src/moex_carry/news_live_clients.py src/moex_carry/news_live_scoring.py src/moex_carry/news_live_bridge.py src/moex_carry/cli.py src/moex_carry/pipeline.py scripts/run_news_ingest_cycle.py tests/test_news_live_runtime.py`
+- `powershell -ExecutionPolicy Bypass -File scripts/start_news_ingest_cycle.ps1 -Mode live -CheckOnly`
+- `powershell -ExecutionPolicy Bypass -File scripts/manage_news_ingest_tasks.ps1 -Action Install -DryRun`
+- `python -m moex_carry.cli news_ingest --news-config configs/news-livecheck-ng.yaml --mode live`
 - `python scripts/run_lean_gate.py`
+- `python scripts/validate_quality_scorecards.py`

@@ -130,6 +130,25 @@ def main() -> None:
     history_parser.add_argument("--retries", type=int, default=3)
     history_parser.add_argument("--retry-backoff-sec", type=float, default=2.0)
 
+    news_ingest_parser = subparsers.add_parser(
+        "news_ingest",
+        help="Ingest commodity news from GDELT/NewsAPI and score impact",
+    )
+    _add_common_args(news_ingest_parser)
+    news_ingest_parser.add_argument(
+        "--news-config",
+        type=str,
+        default="configs/news-livecheck-ng.yaml",
+        help="Path to news ingestion YAML config.",
+    )
+    news_ingest_parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["live", "backfill"],
+        default="live",
+        help="Ingestion mode.",
+    )
+
     news_compare_parser = subparsers.add_parser(
         "news_mode_compare",
         help="Compare current broad-first vs proposed root-event news matching",
@@ -333,6 +352,12 @@ def main() -> None:
             retries=args.retries,
             retry_backoff_sec=args.retry_backoff_sec,
         )
+    elif args.command == "news_ingest":
+        from moex_carry.news_live_runtime import NewsIngestConfig, run_news_ingest_cycle
+
+        cfg = NewsIngestConfig.from_yaml(Path(args.news_config))
+        result = run_news_ingest_cycle(config=cfg, mode=args.mode)
+        print(json.dumps(result, ensure_ascii=False))
     elif args.command == "news_mode_compare":
         from moex_carry.news_mode_compare import CompareConfig, run_compare
 

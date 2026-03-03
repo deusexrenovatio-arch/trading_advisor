@@ -261,6 +261,10 @@ class RiskProfileConfig(BaseModel):
 
 
 class NewsFilterConfig(BaseModel):
+    live_ingest_enabled: bool = False
+    live_db_url: str = "sqlite:///./data/news_livecheck_ng.db"
+    live_min_impact_score: float = 0.35
+    live_max_items: int = 200
     lookback_minutes: int = 180
     block_severity_threshold: str = "high"
     reduce_severity_threshold: str = "medium"

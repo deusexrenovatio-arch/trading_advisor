@@ -6,27 +6,60 @@ news_ingest:
   enabled: true
   rss_urls: []
   max_items_per_run: 20
+  live_lookback_minutes: 120
+  feed_path: "data/output/news_live/live_news_signals.csv"
+  feed_min_impact_score: 0.35
+  feed_max_rows: 5000
   gdelt_enabled: true
   gdelt_max_records_per_call: 80
   gdelt_min_request_interval_sec: 2.0
   gdelt_request_timeout_sec: 30
+  gdelt_retry_attempts: 3
+  gdelt_retry_backoff_sec: 1.5
   backfill_chunk_days: 30
   backfill_max_windows_per_commodity: 20
+  newsapi:
+    enabled: true
+    api_key_env: "NEWS_API_KEY"
+    timeout_sec: 30
+    page_size: 100
+    sort_by: "publishedAt"
+    retry_attempts: 2
+    retry_backoff_sec: 1.0
+    live_min_interval_minutes: 90
+    daily_quota: 100
+    realtime_budget: 55
+    backfill_budget: 35
+    emergency_buffer: 10
   qc_min_news_per_ticker: 50
   qc_min_price_points_per_ticker: 500
   commodity_profiles:
     - ticker: "NG_US"
       name: "US Natural Gas"
       gdelt_query: "(\"natural gas\" OR \"henry hub\" OR \"nymex gas\")"
+      newsapi_query: "(natural gas OR \"henry hub\" OR nymex gas)"
       rss_urls:
         - "https://news.google.com/rss/search?q=henry+hub+natural+gas+futures"
       price_source: "yfinance"
       price_symbol: "NG=F"
       price_interval: "1h"
+    - ticker: "BRN"
+      name: "Brent Oil"
+      gdelt_query: "(brent OR oil OR OPEC OR \"middle east\" OR hormuz)"
+      newsapi_query: "(brent OR crude oil OR OPEC OR hormuz OR red sea)"
+      language: "en"
+    - ticker: "GOLD"
+      name: "Gold"
+      gdelt_query: "(gold OR xau OR bullion OR \"safe haven\" OR fed rates)"
+      newsapi_query: "(gold OR bullion OR xau OR \"safe haven\" OR \"real yields\")"
+      language: "en"
 
 news_models:
-  enabled_models: ["finbert", "nli"]
-  primary_model: "finbert"
+  enabled_models: ["nli", "finbert", "keyword"]
+  primary_model: "nli"
+  nli_model_name: "facebook/bart-large-mnli"
+  finbert_model_name: "ProsusAI/finbert"
+  device: "auto"
   inference_batch_size: 1
   inference_text_max_chars: 900
   inference_thread_cap: 1

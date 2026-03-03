@@ -89,6 +89,8 @@ Budget-aware defaults for `NewsAPI` daily limit `100`:
 - realtime verification budget: `55`
 - backfill budget: `35`
 - emergency reserve: `10`
+- live per-commodity poll interval: `90` minutes (prevents burning live budget in first hours)
+- client retries: `GDELT=3`, `NewsAPI=2` with backoff
 
 These are exposed as parameters in `manage_news_shock_live_plan.ps1`.
 
@@ -98,6 +100,38 @@ Task uses `scripts/start_shock_label_cycle.ps1` as launcher, which:
 - writes each run to `data/output/shock_label_cycle_auto/<UTC timestamp>/`,
 - updates `data/output/shock_alerts/live_shocks.csv` (unless `-NoTelegramFeed` is set).
 - supports rolling window mode via `-FreshLookbackHours` for frequent runs.
+
+## Live News Ingestion (GDELT + NewsAPI)
+Runtime ingestion and article-level scoring are available via:
+- CLI: `moex-carry news_ingest`
+- Script: `scripts/run_news_ingest_cycle.py`
+
+Live one-shot run:
+```powershell
+$env:PYTHONPATH='src'
+python -m moex_carry.cli news_ingest `
+  --news-config configs/news-livecheck-ng.yaml `
+  --mode live
+```
+
+Backfill one-shot run:
+```powershell
+$env:PYTHONPATH='src'
+python -m moex_carry.cli news_ingest `
+  --news-config configs/news-livecheck-ng.yaml `
+  --mode backfill
+```
+
+Scheduler (5-minute live + daily backfill):
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_ingest_tasks.ps1 -Action Install
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_ingest_tasks.ps1 -Action Status
+```
+
+Notes:
+- Scoring mode comes from `news_models.primary_model` (`nli`, `finbert`, `keyword`).
+- GPU is auto-selected via `news_models.device: auto`; fallback to CPU/keyword is automatic.
+- Live feed output is written to `news_ingest.feed_path` (default `data/output/news_live/live_news_signals.csv`).
 
 ## Telegram Shock Alerts
 - Ensure `telegram.enabled=true`, bot token and allowed users are configured.
