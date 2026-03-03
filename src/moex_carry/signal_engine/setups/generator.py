@@ -134,6 +134,9 @@ class SetupGenerator:
     def _eligibility_filter_enabled(self) -> bool:
         return bool(self.cfg.get("enable_eligibility_filter", True))
 
+    def _min_target_return_pct(self) -> float:
+        return _safe_non_negative_float(self.cfg.get("min_target_return_pct"), 0.5)
+
     def _generate_box_breakout(
         self,
         *,
@@ -192,6 +195,9 @@ class SetupGenerator:
             rr_default = float(self.cfg.get("rr_default", 1.6))
             delta = max(round_half_away_from_zero(rr_default * float(risk_ticks)), min_target_ticks)
             tp_ticks = entry_stop_ticks + delta if side == Side.BUY else entry_stop_ticks - delta
+        target_return_pct = _potential_return_pct(entry_stop_ticks, tp_ticks)
+        if float(target_return_pct) < float(self._min_target_return_pct()):
+            return None
 
         cost_gate = self._cost_gate_metrics(
             reward_gross_ticks=abs(int(tp_ticks) - int(entry_stop_ticks)),
@@ -223,6 +229,7 @@ class SetupGenerator:
                     "limit_price_ticks": int(limit_ticks),
                     "setup_kind": "BOX_BREAKOUT",
                     "cost_gate": cost_gate,
+                    "target_return_pct": float(target_return_pct),
                 },
             ),
             sl_order=OrderIntent(
@@ -310,6 +317,9 @@ class SetupGenerator:
             rr_default = float(self.cfg.get("rr_default", 1.6))
             delta = max(round_half_away_from_zero(rr_default * float(risk_ticks)), min_target_ticks)
             tp_ticks = entry_ticks + delta if side == Side.BUY else entry_ticks - delta
+        target_return_pct = _potential_return_pct(entry_ticks, tp_ticks)
+        if float(target_return_pct) < float(self._min_target_return_pct()):
+            return None
 
         cost_gate = self._cost_gate_metrics(
             reward_gross_ticks=abs(int(tp_ticks) - int(entry_ticks)),
@@ -334,7 +344,11 @@ class SetupGenerator:
                 activate_from_ts=None,
                 expire_ts=expiry_ts,
                 link_group=setup_id,
-                meta={"setup_kind": "PULLBACK_LIMIT", "cost_gate": cost_gate},
+                meta={
+                    "setup_kind": "PULLBACK_LIMIT",
+                    "cost_gate": cost_gate,
+                    "target_return_pct": float(target_return_pct),
+                },
             ),
             sl_order=OrderIntent(
                 order_type=OrderType.STOP,
@@ -383,3 +397,9 @@ def _safe_non_negative_float(value: object, default: float) -> float:
     if parsed < 0.0:
         return 0.0
     return float(parsed)
+
+
+def _potential_return_pct(entry_ticks: int, tp_ticks: int) -> float:
+    base = max(abs(int(entry_ticks)), 1)
+    distance = abs(int(tp_ticks) - int(entry_ticks))
+    return float(100.0 * distance / base)

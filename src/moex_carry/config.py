@@ -525,6 +525,7 @@ class SignalEngineMorningSetupsConfig(BaseModel):
     require_vol_not_low: bool = True
     pullback_max_dist_atr_mult: float = 1.0
     rr_default: float = 1.6
+    min_target_return_pct: float = 0.5
     min_target_ticks: int = 3
     max_risk_atr_mult: float = 1.2
     sl_atr_mult: float = 0.8
