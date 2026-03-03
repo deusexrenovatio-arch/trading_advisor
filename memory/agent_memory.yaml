@@ -304,6 +304,18 @@ decisions:
       - src/moex_carry/integrations/telegram_worker.py
       - tests/test_shock_alert_delivery.py
       - tests/test_telegram_worker.py
+  - id: ADM-2026-03-03-029
+    date: 2026-03-03
+    title: Formalize shock-first ML readiness with deterministic curation and pass/fail report
+    context: Existing evaluation mixed detector and direction quality, with hidden data-quality risk and no single launch decision artifact.
+    decision: Add one pipeline for outlier curation, label-pack generation, label ingest, and launch-readiness checks with critical thresholds and machine-readable outputs.
+    impact: Launch/no-launch decision is reproducible and auditable; critical blockers are visible immediately from report files.
+    links:
+      - src/moex_carry/news_shock_pipeline.py
+      - src/moex_carry/news_shock_readiness.py
+      - scripts/news_shock_readiness.py
+      - docs/runbooks/news-shock-go-live.md
+      - data/output/news_shock_readiness_2026_ytd/readiness_report.json
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
@@ -579,6 +591,15 @@ patterns:
       - src/moex_carry/integrations/telegram_worker.py
       - src/moex_carry/integrations/telegram_shock_broadcast.py
       - src/moex_carry/integrations/telegram_runtime_utils.py
+  - id: AMP-2026-03-03-023
+    date: 2026-03-03
+    title: Split shock workflow into detector and direction quality lanes
+    pattern: Keep high-recall detector broad enough for root shock capture, but compute direction quality only on stricter source (`v2_clean`) and gate it by labeled accuracy and coverage.
+    when_to_use: Shock-driven news systems where broad matching improves recall but harms directional precision.
+    links:
+      - src/moex_carry/news_mode_compare.py
+      - src/moex_carry/news_shock_readiness.py
+      - docs/runbooks/news-shock-go-live.md
 
 
 

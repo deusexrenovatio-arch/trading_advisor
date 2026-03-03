@@ -1,0 +1,79 @@
+# News Shock Go-Live Runbook
+
+## Scope
+- Instruments: `BRN`, `GOLD`, `NG_US`.
+- Objective:
+  - catch root shocks and aftershocks (including multi-day continuation);
+  - provide direction signal only when evidence quality is sufficient.
+
+## Pipeline
+1. Build/curate shock dataset from `shock_news_1h_annual_all.csv`.
+2. Build high-impact label pack for Chat Pro.
+3. Ingest Chat Pro labels into silver dataset.
+4. Run readiness assessment and only then enable production signaling.
+
+## Commands
+### 1) Label pack
+```powershell
+$env:PYTHONPATH='src'
+python scripts/build_shock_label_pack.py `
+  --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv `
+  --output-dir data/output/shock_label_pack_latest `
+  --start-ts 2026-01-01T00:00:00Z `
+  --min-abs-z 2.5 `
+  --max-delay-min 60
+```
+
+### 2) Ingest labels
+```powershell
+$env:PYTHONPATH='src'
+python scripts/ingest_shock_labels.py `
+  --tasks-jsonl data/output/shock_label_pack_latest/shock_label_pack_zge2p5.jsonl `
+  --labels-jsonl data/output/shock_label_pack_latest/chat_pro_labels.jsonl `
+  --output-dir data/output/shock_silver_latest `
+  --min-confidence 0.6
+```
+
+### 3) Readiness report
+```powershell
+$env:PYTHONPATH='src'
+python scripts/news_shock_readiness.py `
+  --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv `
+  --output-dir data/output/news_shock_readiness_latest `
+  --start-ts 2026-01-01T00:00:00Z `
+  --max-delay-min 60 `
+  --primary-z 2.5 `
+  --aftershock-z 2.0 `
+  --episode-window-min 10080 `
+  --max-gap-min 2880
+```
+
+## Readiness Criteria (critical)
+- `detector_primary_recall >= 0.70`
+- `detector_aftershock_recall >= 0.75`
+- `direction_v2_accuracy >= 0.58`
+- `direction_v2_labeled_count >= 120`
+- `direction_v2_coverage >= 0.07`
+- `curation_critical_drop_share <= 0.05`
+- `aftershock_1d_count >= 10`
+
+If any critical check fails, production enablement is blocked.
+
+## Production Mode Recommendation
+- Detector layer: use current high-recall matching.
+- Direction layer: use only `v2_clean` matched events.
+- If direction evidence is absent, send shock alert without direction commitment.
+
+## Artifacts
+- `readiness_report.md` and `readiness_report.json`
+- `readiness_checks.csv`, `readiness_metrics.csv`
+- `readiness_curated_shocks.csv`, `readiness_curation_issues.csv`
+- Episode capture artifacts: `shock_episode_events.csv`, `shock_mode_capture.csv`
+
+## Known Failure Modes and Controls
+- Extreme price artifacts from roll or bad ticks:
+  - controlled by curation caps per symbol (`abs_move_pct`, `|z|`).
+- Direction drift from broad noisy links:
+  - direction quality measured separately on `v2_clean`.
+- Short episode windows miss multi-day aftershocks:
+  - readiness uses long topic profile (`7d window`, `2d max gap`).
