@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-02
+updated_at: 2026-03-03
 
 decisions:
   - id: ADM-2026-02-20-001
@@ -337,6 +337,30 @@ decisions:
       - docs/research/evaluation-policy.md
       - docs/hpo-howto.md
       - data/output/research/morning_offline_wf_2026ytd_goods32_tpe_intraday_goal_v1_trial12_v2.json
+  - id: ADM-2026-03-03-033
+    date: 2026-03-03
+    title: Move morning walk-forward to root-level front-contract rollout and add causal speed mode
+    context: Fixed-contract runs over mixed expiries produced biased outcomes and HPO iteration time stayed high for wide-universe folds.
+    decision: Add `front_nearest` instrument mode with expiry-avoid margin, root-level tick-size fallback for expired secids, indexed in-memory candle access, and `retune_every_folds` causal reuse of tuned params.
+    impact: Contract selection now matches nearest-future trading practice and full TPE walk-forward runtime improved materially while preserving fold-level result parity.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/data/candles.py
+      - src/moex_carry/signal_engine/regime/engine.py
+      - src/moex_carry/signal_engine/levels/engine.py
+      - src/moex_carry/signal_engine/execution/engine.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_data_provider.py
+  - id: ADM-2026-03-03-034
+    date: 2026-03-03
+    title: Add reusable minute-fast evaluation cache for morning walk-forward
+    context: Even with rollover and retune cadence improvements, repeated HPO trial evaluation still rebuilt regime/levels/execution stacks for identical day/instrument slices.
+    decision: Introduce `WindowEvalCache` in walk-forward runner and compute setups from cached base slices and config-keyed regime/levels/execution layers while preserving causal simulation semantics.
+    impact: Full wide-universe TPE run with unchanged params kept bitwise parity and runtime dropped from ~245s to ~40s.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/data/candles.py
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20

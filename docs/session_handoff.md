@@ -1,26 +1,29 @@
 # Session Handoff
-Updated: 2026-03-03 04:47 UTC
+Updated: 2026-03-03 12:20 UTC
 
 ## Goal
 - Shift morning-plan to intraday set-and-wait profile: several entries per week, potential target from 0.5%, mandatory same-day MOEX exit.
 
 ## Current Delta
-- Added strategy-level target filter `setups.min_target_return_pct` (default `0.5`) in setup generation.
-- Added objective/goal docs for morning intraday profile in `docs/research/evaluation-policy.md` and `docs/hpo-howto.md`.
-- Extended walk-forward runner with `--search-algorithm GRID|RANDOM|TPE`.
-- Added TPE search space profile `intraday_goal_v1` for non-bruteforce HPO.
-- Added goal-aware train selection score with weekly trade-frequency penalty band (`min..max trades/week`).
-- Added CLI goal controls: `--goal-min-target-return-pct`, `--goal-min-trades-per-week`, `--goal-max-trades-per-week`.
-- Added tests for search-space resolution, goal score behavior, and target-return gate.
-- First TPE starts are reproducible but unstable: trial12 v1 `net +2`, trial12 v2 `net -116`, trial24 `net -484`.
+- Added walk-forward rollover mode `front_nearest` with `front_roll_avoid_expiry_days` to trade nearest active contracts by root.
+- Added offline-safe cache behavior for rollover mode (non-active contract gaps no longer fail run in `offline-only`).
+- Added root-level tick-size fallback for expired secids with missing `MINSTEP` (group median by root).
+- Added causal speed mode `retune_every_folds` to avoid full HPO re-tune on each fold.
+- Optimized in-memory candle access: indexed bisect slicing instead of per-call filter/sort.
+- Added minute-fast evaluator cache in walk-forward for reusable `base_slice/regime/levels/execution` layers across HPO trials.
+- Added parity tests for fast evaluator cache plus front selector/tick-size/provider coverage.
+- Verified parity and speed: full `v2 + retune3` run remains bitwise-equal and now runs `~424.6s -> ~245.0s -> ~40.4s`.
 
 ## Blockers
 - None.
 
 ## Next Step
-- Calibrate objective to percent-normalized returns and tighten search bounds around conservative risk to stabilize TPE before expanding trial budget.
+- Use faster cycle to continue strategy-quality iteration:
+  - tighten objective for wide-universe robustness (reduce negative tails by root),
+  - test stricter probabilistic/context gating and root-level exclusion policies,
+  - keep causal parity and runtime budget regression checks in each iteration.
 
 ## Validation
-- `PYTHONPATH=src pytest tests/test_morning_plan_walk_forward.py tests/test_signal_engine_setups.py tests/test_config_loading.py tests/test_signal_engine_morning_plan.py -q`
-- `PYTHONPATH=src python scripts/run_morning_plan_walk_forward.py --search-algorithm TPE --search-space-profile intraday_goal_v1 --hpo-trials 12 --hpo-startup-trials 4 --goal-min-target-return-pct 0.5 --goal-min-trades-per-week 2 --goal-max-trades-per-week 12 --selection-objective robust_median_mad --tuning-profile cost_aware_v2 --cost-model-profile fixed_v1 --offline-only ... --out-json data/output/research/morning_offline_wf_2026ytd_goods32_tpe_intraday_goal_v1_trial12_v2.json`
+- `PYTHONPATH=src pytest tests/test_signal_engine_data_provider.py tests/test_signal_engine_morning_plan.py tests/test_morning_plan_walk_forward.py -q`
+- `PYTHONPATH=src python scripts/run_morning_plan_walk_forward.py --instrument-mode front_nearest --front-roll-avoid-expiry-days 3 --retune-every-folds 3 --search-algorithm TPE --search-space-profile intraday_goal_v2 --cost-model-profile fixed_v1 --offline-only ... --out-json artifacts/research/wf_front_nearest_tpe_v2_seed72_fix_ticks_retune3_after_evalcache.json`
 - `python scripts/run_lean_gate.py`
