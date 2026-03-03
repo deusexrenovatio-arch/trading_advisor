@@ -16,7 +16,7 @@ class LevelEngine:
     def compute_d1_levels(self, d1: list[Candle], tick_size: float) -> list[Level]:
         if tick_size <= 0:
             raise ValueError("tick_size must be > 0")
-        ordered = sorted(d1, key=lambda item: item.ts)
+        ordered = _ordered_if_needed(d1)
         if not ordered:
             return []
         prev = ordered[-2] if len(ordered) >= 2 else ordered[-1]
@@ -75,7 +75,7 @@ class LevelEngine:
         del calendar
         if tick_size <= 0:
             raise ValueError("tick_size must be > 0")
-        ordered = sorted(h1, key=lambda item: item.ts)
+        ordered = _ordered_if_needed(h1)
         if not ordered:
             return []
 
@@ -235,3 +235,12 @@ def _last_finite(values: list[float]) -> float:
         if math.isfinite(value):
             return float(value)
     return 0.0
+
+
+def _ordered_if_needed(rows: list[Candle]) -> list[Candle]:
+    if len(rows) <= 1:
+        return list(rows)
+    for idx in range(1, len(rows)):
+        if rows[idx - 1].ts > rows[idx].ts:
+            return sorted(rows, key=lambda item: item.ts)
+    return list(rows)
