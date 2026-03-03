@@ -371,3 +371,57 @@ def test_setup_generator_eligibility_passes_when_atr_large():
         m5=_m5(),
     )
     assert len(setups) >= 1
+
+
+def test_setup_generator_blocks_when_target_return_pct_below_threshold():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PDH", price_ticks=104, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="BOX_H", price_ticks=101, score=0.9, meta={}),
+        Level(tf=TF.H1, kind="BOX_L", price_ticks=97, score=0.9, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 2,
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "min_target_return_pct": 15.0,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=102,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    assert setups == []
