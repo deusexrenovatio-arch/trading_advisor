@@ -1,0 +1,9 @@
+{
+  "timestamp_utc": "2026-03-03T07:03:25.343769+00:00",
+  "initial_pass": true,
+  "final_pass": true,
+  "autofix_applied": false,
+  "escalation_required": false,
+  "escalation_runbook": "docs/runbooks/self-heal-escalation.md",
+  "actions": []
+}
