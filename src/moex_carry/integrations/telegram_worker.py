@@ -7,11 +7,16 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
 from moex_carry.config import AppSettings
+from moex_carry.integrations.telegram_runtime_utils import (
+    is_retryable_telegram_http_error,
+    parse_hhmm,
+    resolve_display_timezone,
+)
+from moex_carry.integrations.telegram_shock_broadcast import broadcast_shock_alerts
 from moex_carry.signals_ack import build_ack_note, build_signal_fingerprint
 from moex_carry.signals_delivery import (
     DELIVERY_ACTIONS,
@@ -29,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 _SIGNAL_ACTIONS = set(DELIVERY_ACTIONS)
 _SENT_FINGERPRINT_TTL_HOURS = 168
-_TELEGRAM_RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS = 2
 _TELEGRAM_GET_UPDATES_RETRY_SLEEP_SEC = 0.25
 
@@ -45,23 +49,6 @@ def _safe_int(value: object) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
-
-
-def _parse_hhmm(value: object, *, fallback: tuple[int, int] = (9, 0)) -> tuple[int, int]:
-    if isinstance(value, str):
-        parts = value.strip().split(":")
-        if len(parts) == 2:
-            hour = _safe_int(parts[0])
-            minute = _safe_int(parts[1])
-            if hour is not None and minute is not None and 0 <= hour <= 23 and 0 <= minute <= 59:
-                return hour, minute
-    logger.warning(
-        "Invalid telegram.daily_healthcheck_time_local '%s', fallback to %02d:%02d.",
-        value,
-        fallback[0],
-        fallback[1],
-    )
-    return fallback
 
 
 class TelegramWorker:
@@ -80,13 +67,22 @@ class TelegramWorker:
         self._backend_base_url = str(self.cfg.backend_base_url).rstrip("/")
         self._telegram_api_base = f"https://api.telegram.org/bot{self.cfg.bot_token}"
         self._state_path = self._resolve_state_path(self.cfg.state_path, settings.data.data_dir)
+        self._shock_feed_path = (
+            self._resolve_state_path(self.cfg.shock_feed_path, settings.data.data_dir)
+            if isinstance(self.cfg.shock_feed_path, str) and self.cfg.shock_feed_path.strip()
+            else None
+        )
         self._telegram_session = telegram_session or requests.Session()
         self._backend_session = backend_session or requests.Session()
         self._sleep_fn = sleep_fn
         self._monotonic_fn = monotonic_fn
         self._display_timezone_name = str(settings.environment.timezone or "UTC").strip() or "UTC"
-        self._display_timezone = self._resolve_display_timezone(self._display_timezone_name)
-        self._daily_healthcheck_time = _parse_hhmm(self.cfg.daily_healthcheck_time_local, fallback=(9, 0))
+        self._display_timezone = resolve_display_timezone(self._display_timezone_name, logger=logger)
+        self._daily_healthcheck_time = parse_hhmm(
+            self.cfg.daily_healthcheck_time_local,
+            logger=logger,
+            fallback=(9, 0),
+        )
         self._state = self._load_state()
         self._next_signal_fetch_at = 0.0
 
@@ -108,31 +104,20 @@ class TelegramWorker:
         return (base_dir / path).resolve()
 
     @staticmethod
-    def _resolve_display_timezone(name: str) -> timezone | ZoneInfo:
-        try:
-            return ZoneInfo(name)
-        except ZoneInfoNotFoundError:
-            logger.warning("Unknown timezone '%s', fallback to UTC.", name)
-            return timezone.utc
-
-    @staticmethod
-    def _is_retryable_telegram_http_error(exc: requests.HTTPError) -> bool:
-        response = exc.response
-        if response is None:
-            return False
-        return int(response.status_code) in _TELEGRAM_RETRYABLE_HTTP_STATUSES
-
-    @staticmethod
     def _empty_state() -> dict[str, object]:
         return {
             "last_update_id": 0,
             "registered_chats": {},
             "sent_fingerprints": {},
+            "sent_shock_fingerprints": {},
             "hold_open_last_sent_date_by_pair": {},
             "enter_last_sent_at_by_pair": {},
             "enter_tracking_by_fingerprint": {},
             "daily_healthcheck_last_sent_date_by_chat": {},
             "pending_callbacks": {},
+            "shock_topics": {},
+            "shock_last_processed_ts": None,
+            "shock_episode_counter": 0,
         }
 
     def _load_state(self) -> dict[str, object]:
@@ -155,6 +140,11 @@ class TelegramWorker:
         state["sent_fingerprints"] = {
             str(key): str(value)
             for key, value in (payload.get("sent_fingerprints") or {}).items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+        state["sent_shock_fingerprints"] = {
+            str(key): str(value)
+            for key, value in (payload.get("sent_shock_fingerprints") or {}).items()
             if isinstance(key, str) and isinstance(value, str)
         }
         state["hold_open_last_sent_date_by_pair"] = {
@@ -188,6 +178,18 @@ class TelegramWorker:
                     continue
                 normalized_callbacks[key] = dict(value)
             state["pending_callbacks"] = normalized_callbacks
+        shock_topics = payload.get("shock_topics") or {}
+        if isinstance(shock_topics, dict):
+            normalized_topics: dict[str, dict[str, object]] = {}
+            for key, value in shock_topics.items():
+                if not isinstance(key, str) or not isinstance(value, dict):
+                    continue
+                normalized_topics[key] = dict(value)
+            state["shock_topics"] = normalized_topics
+        last_processed_ts = payload.get("shock_last_processed_ts")
+        if isinstance(last_processed_ts, str) and last_processed_ts.strip():
+            state["shock_last_processed_ts"] = last_processed_ts
+        state["shock_episode_counter"] = _safe_int(payload.get("shock_episode_counter")) or 0
         return state
 
     def _save_state(self) -> None:
@@ -277,7 +279,7 @@ class TelegramWorker:
                     exc,
                 )
             except requests.HTTPError as exc:
-                if not self._is_retryable_telegram_http_error(exc):
+                if not is_retryable_telegram_http_error(exc):
                     raise
                 status_code = int(exc.response.status_code) if exc.response is not None else "unknown"
                 if attempt >= _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS:
@@ -1342,6 +1344,15 @@ class TelegramWorker:
         now = self._monotonic_fn()
         if now >= self._next_signal_fetch_at:
             self._broadcast_signals()
+            broadcast_shock_alerts(
+                cfg=self.cfg,
+                state=self._state,
+                registered_chats=self._registered_chats(),
+                shock_feed_path=self._shock_feed_path,
+                send_text=self._send_text,
+                save_state=self._save_state,
+                logger=logger,
+            )
             interval = max(int(self.cfg.signal_fetch_interval_sec), 1)
             self._next_signal_fetch_at = now + interval
 

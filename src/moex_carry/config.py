@@ -222,6 +222,14 @@ class TelegramConfig(BaseModel):
     daily_healthcheck_time_local: str = "09:00"
     state_path: str = "./data/telegram/bot_state.json"
     ui_base_url: str | None = None
+    shock_alerts_enabled: bool = False
+    shock_feed_path: str | None = None
+    shock_primary_min_z: float = 2.5
+    shock_aftershock_min_z: float = 2.0
+    shock_topic_reopen_after_hours: int = 168
+    shock_aftershock_cooldown_minutes: int = 60
+    shock_max_alerts_per_cycle: int = 20
+    shock_sent_fingerprint_ttl_hours: int = 24 * 21
 
 
 class DataConfig(BaseModel):

@@ -182,6 +182,14 @@ telegram:
   daily_healthcheck_time_local: "09:00"
   state_path: "./data/telegram/bot_state.json"
   ui_base_url: null
+  shock_alerts_enabled: false
+  shock_feed_path: "./data/output/shock_alerts/live_shocks.csv"
+  shock_primary_min_z: 2.5
+  shock_aftershock_min_z: 2.0
+  shock_topic_reopen_after_hours: 168
+  shock_aftershock_cooldown_minutes: 60
+  shock_max_alerts_per_cycle: 20
+  shock_sent_fingerprint_ttl_hours: 504
 
 data:
   data_dir: "./data"

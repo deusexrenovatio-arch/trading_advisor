@@ -100,6 +100,14 @@ def _build_settings(
     enter_resend_cooldown_minutes: int = 60,
     daily_healthcheck_enabled: bool = True,
     daily_healthcheck_time_local: str = "00:00",
+    shock_alerts_enabled: bool = False,
+    shock_feed_path: str | None = None,
+    shock_primary_min_z: float = 2.5,
+    shock_aftershock_min_z: float = 2.0,
+    shock_topic_reopen_after_hours: int = 168,
+    shock_aftershock_cooldown_minutes: int = 60,
+    shock_max_alerts_per_cycle: int = 20,
+    shock_sent_fingerprint_ttl_hours: int = 24 * 21,
 ) -> AppSettings:
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path)),
@@ -118,6 +126,14 @@ def _build_settings(
             daily_healthcheck_time_local=daily_healthcheck_time_local,
             state_path=str(tmp_path / "telegram-state.json"),
             ui_base_url=None,
+            shock_alerts_enabled=shock_alerts_enabled,
+            shock_feed_path=shock_feed_path,
+            shock_primary_min_z=shock_primary_min_z,
+            shock_aftershock_min_z=shock_aftershock_min_z,
+            shock_topic_reopen_after_hours=shock_topic_reopen_after_hours,
+            shock_aftershock_cooldown_minutes=shock_aftershock_cooldown_minutes,
+            shock_max_alerts_per_cycle=shock_max_alerts_per_cycle,
+            shock_sent_fingerprint_ttl_hours=shock_sent_fingerprint_ttl_hours,
         ),
     )
 
@@ -876,3 +892,44 @@ def test_worker_daily_healthcheck_reports_backend_error(tmp_path):
     message_text = str(telegram_session.sent_messages[0]["text"])
     assert "Backend: ERROR" in message_text
     assert "проверить не удалось" in message_text
+
+
+def test_worker_broadcasts_shock_primary_and_aftershock(tmp_path):
+    shock_feed = tmp_path / "shocks.csv"
+    shock_feed.write_text(
+        "\n".join(
+            [
+                "shock_ts,symbol,shock_direction,z_score,abs_move_pct,headline,url,topic_key",
+                "2026-02-28T07:00:00Z,BRN,up,3.20,2.10,Israel strikes Iran facilities,https://example.com/a,iran-attack",
+                "2026-03-02T09:00:00Z,BRN,up,2.40,1.30,Oil extends gains amid Iran risk premium,https://example.com/b,iran-attack",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        daily_healthcheck_enabled=False,
+        shock_alerts_enabled=True,
+        shock_feed_path=str(shock_feed),
+        shock_aftershock_cooldown_minutes=0,
+    )
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[[]])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker.run_cycle()
+    worker.run_cycle()
+
+    assert len(telegram_session.sent_messages) == 2
+    text_1 = str(telegram_session.sent_messages[0]["text"])
+    text_2 = str(telegram_session.sent_messages[1]["text"])
+    assert "SHOCK PRIMARY" in text_1
+    assert "SHOCK AFTERSHOCK" in text_2
+    assert "Topic: iran-attack" in text_1
+    assert "Topic age: 2d" in text_2

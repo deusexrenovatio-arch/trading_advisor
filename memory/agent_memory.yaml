@@ -271,6 +271,39 @@ decisions:
       - src/moex_carry/contracts/strategy_test.py
       - data/reports/sequential_compare_base_vs_staged_summary_20260302.csv
       - data/reports/sequential_protocol_settings_20260302.json
+  - id: ADM-2026-03-03-026
+    date: 2026-03-03
+    title: Compare news matching modes by precision-coverage tradeoff instead of raw hit-count only
+    context: Broad-first shock-to-news linkage produced higher candidate coverage but frequently selected off-topic headlines, masking the quality gain of stricter root-event linking.
+    decision: Add deterministic comparator that runs current broad-first and proposed root-event strict selection side-by-side on the same shock dataset, reports per-symbol deltas, and supports threshold sweep with minimum-coverage constraint.
+    impact: Team can now make promotion decisions on measurable tradeoffs (coverage, labeled directional accuracy, relevance quality) rather than anecdotal examples.
+    links:
+      - src/moex_carry/news_mode_compare.py
+      - scripts/compare_news_modes.py
+      - src/moex_carry/cli.py
+      - data/output/news_mode_compare_365d_5m_opt/news_mode_compare_report.txt
+  - id: ADM-2026-03-03-027
+    date: 2026-03-03
+    title: Split shock workflow into primary and aftershock capture metrics
+    context: Single shock recall metric mixed initial impulse and continuation bursts, making optimization ambiguous for alerting logic.
+    decision: Add deterministic episode segmentation (`primary` + `aftershock`) and report mode capture recall for both roles separately.
+    impact: "Tuning now targets the stated objective directly: catch initial market shock while measuring continuation coverage independently."
+    links:
+      - src/moex_carry/shock_episodes.py
+      - scripts/analyze_shock_episodes.py
+      - data/output/shock_episode_analysis_2026_ytd/shock_mode_capture.csv
+  - id: ADM-2026-03-03-028
+    date: 2026-03-03
+    title: Deliver shock alerts in Telegram as topic episodes with multi-day aftershock continuity
+    context: User requirement shifted to operational shock capture where aftershocks can occur days after root event but still belong to one tradeable theme.
+    decision: Wire Telegram worker to consume shock feed with topic-aware policy (primary and aftershock roles), reopen window in hours, cooldown, and fingerprint dedupe TTL.
+    impact: Worker can emit actionable shock alerts that preserve root-topic identity across days instead of treating each move as unrelated single-shot signal.
+    links:
+      - src/moex_carry/shock_alert_delivery.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
+      - src/moex_carry/integrations/telegram_worker.py
+      - tests/test_shock_alert_delivery.py
+      - tests/test_telegram_worker.py
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
@@ -519,6 +552,33 @@ patterns:
       - pyproject.toml
       - docs/DEV_WORKFLOW.md
       - memory/agent_memory.yaml
+  - id: AMP-2026-03-03-020
+    date: 2026-03-03
+    title: Evaluate news-linking changes with precision-at-coverage, not single scalar score
+    pattern: For shock-to-news matching, always report at least coverage, labeled directional accuracy, and relevance quality together, then add threshold sweep with minimum coverage constraint.
+    when_to_use: Any tuning of strict vs broad candidate selection where naive high-precision or high-coverage settings can look misleading in isolation.
+    links:
+      - src/moex_carry/news_mode_compare.py
+      - scripts/compare_news_modes.py
+      - data/output/news_mode_compare_365d_5m_opt/news_mode_compare_sweep.csv
+  - id: AMP-2026-03-03-021
+    date: 2026-03-03
+    title: Measure shock-capture quality by role (primary vs aftershock)
+    pattern: Compute and track recall for initial shock impulse and follow-up aftershock legs separately; use primary recall for detector tuning and aftershock recall for continuation logic.
+    when_to_use: Any shock-detection strategy where continuation bursts are materially different from root impulse behavior.
+    links:
+      - src/moex_carry/shock_episodes.py
+      - scripts/analyze_shock_episodes.py
+      - data/output/shock_episode_analysis_2026_ytd/shock_mode_capture.csv
+  - id: AMP-2026-03-03-022
+    date: 2026-03-03
+    title: Keep oversized runtime modules within hard limits by extracting leaf capabilities
+    pattern: When a hard size gate blocks integration, extract feature-specific runtime paths into dedicated modules and keep composition entrypoint thin.
+    when_to_use: Any worker or API composition module near hard line cap where a new capability must be added without loosening governance limits.
+    links:
+      - src/moex_carry/integrations/telegram_worker.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
+      - src/moex_carry/integrations/telegram_runtime_utils.py
 
 
 
