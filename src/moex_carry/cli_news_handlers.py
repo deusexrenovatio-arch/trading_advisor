@@ -613,6 +613,100 @@ def handle_news_command(args, settings) -> bool:
                 default=str,
             )
         )
+    elif args.command == "news_live_eval":
+        from moex_carry.news.live_eval import build_news_live_eval_rows, render_news_live_eval_top
+        from moex_carry.data.moex_iss import MoexIssClient
+        from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
+
+        from_date = date.fromisoformat(args.from_date) if args.from_date else (date.today() - timedelta(days=1))
+        to_date = date.fromisoformat(args.to_date) if args.to_date else (from_date + timedelta(days=1))
+        tickers = [item.strip().upper() for item in str(args.tickers or "").split(",") if item.strip()]
+        if not tickers:
+            tickers = ["BRN", "GOLD", "NG_US"]
+        horizon = str(args.horizon or "1h").strip().lower()
+        timezone_name = str(args.timezone or "Europe/Moscow").strip() or "Europe/Moscow"
+        limit = max(int(args.limit or 0), 1)
+        top_per_ticker = max(int(args.top_per_ticker or 0), 1)
+        gap_lag_minutes = max(int(args.gap_lag_minutes or 0), 1)
+        moex_contract_eval = bool(args.moex_contract_eval)
+        moex_roll_days = max(int(args.moex_roll_days or 0), 0)
+
+        engine = create_engine_from_settings(settings)
+        init_db(engine)
+        session_factory = create_session_factory(engine)
+        preferred_models = [settings.news_models.primary_model] + list(settings.news_models.enabled_models)
+        moex_client = None
+        if moex_contract_eval:
+            moex_client = MoexIssClient(
+                base_url=settings.moex.base_url,
+                timeout_sec=settings.moex.request_timeout_sec,
+                max_retries=settings.moex.request_max_retries,
+                retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+                retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+                fallback_ips=settings.moex.fallback_ips,
+                force_fallback=settings.moex.force_fallback,
+            )
+
+        with session_factory() as session:
+            rows, summary = build_news_live_eval_rows(
+                session,
+                from_date=from_date,
+                to_date=to_date,
+                tickers=tickers,
+                horizon=horizon,
+                timezone_name=timezone_name,
+                limit=limit,
+                preferred_models=preferred_models,
+                gap_lag_minutes=gap_lag_minutes,
+                moex_client=moex_client,
+                moex_futures_board=str(settings.moex.futures_board or "RFUD").strip() or "RFUD",
+                moex_roll_days=moex_roll_days,
+            )
+
+        output_dir = resolve_paths(settings).data_dir / "output"
+        from_text = from_date.isoformat()
+        to_text = to_date.isoformat()
+        output_path = (
+            Path(args.output)
+            if args.output
+            else (output_dir / f"news_live_eval_{from_text}_{to_text}.jsonl")
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+        summary_path = (
+            Path(args.summary_output)
+            if args.summary_output
+            else (output_dir / f"news_live_eval_{from_text}_{to_text}_top.txt")
+        )
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(
+            render_news_live_eval_top(rows, tickers=tickers, top_per_ticker=top_per_ticker),
+            encoding="utf-8",
+        )
+
+        print(
+            json.dumps(
+                {
+                    "from_date": from_text,
+                    "to_date": to_text,
+                    "timezone": timezone_name,
+                    "horizon": horizon,
+                    "tickers": tickers,
+                    "gap_lag_minutes": gap_lag_minutes,
+                    "moex_contract_eval": moex_contract_eval,
+                    "moex_roll_days": moex_roll_days,
+                    "rows_total": len(rows),
+                    "output_path": str(output_path),
+                    "summary_path": str(summary_path),
+                    "summary": summary,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+        )
     elif args.command == "news_benchmark":
         from moex_carry.news import parse_positive_int_list, run_news_inference_benchmark
         from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
