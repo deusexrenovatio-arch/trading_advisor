@@ -3,6 +3,13 @@
 ## Scope
 Applies to Backtest v2, HPO, and forward readiness decisions.
 
+## Morning-Plan intraday objective (MOEX futures)
+- Trading style: intraday level set-and-wait, not scalping.
+- Hold horizon: entry and mandatory exit within the same MOEX trading day (`EOD` / before evening clearing).
+- Potential setup target: `TP distance >= 0.5%` of entry price.
+- Activity target: several entries per week (default optimization band: `2..12` filled trades per week).
+- Selection priority: maximize robust net expectancy after costs while respecting the activity band and risk gates.
+
 ## Mandatory experiment contract
 - Hypothesis (single sentence)
 - Data window (explicit start/end)

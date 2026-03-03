@@ -382,6 +382,7 @@ signal_engine:
       require_vol_not_low: true
       pullback_max_dist_atr_mult: 1.0
       rr_default: 1.6
+      min_target_return_pct: 0.5
       min_target_ticks: 3
       max_risk_atr_mult: 1.2
       sl_atr_mult: 0.8

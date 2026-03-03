@@ -137,3 +137,4 @@ signal_engine:
     assert settings.signal_engine.morning_plan.calendar.forbid_new_positions_margin_min == 7
     assert settings.signal_engine.morning_plan.setups.max_setups_per_instrument == 1
     assert settings.signal_engine.morning_plan.setups.rr_default == 2.0
+    assert settings.signal_engine.morning_plan.setups.min_target_return_pct == 0.5

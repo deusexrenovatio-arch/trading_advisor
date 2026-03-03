@@ -323,6 +323,18 @@ def test_resolve_tuning_grid_profiles():
         mod._resolve_tuning_grid("missing")
 
 
+def test_resolve_search_space_profile_and_algorithm():
+    mod = _load_module()
+    space = mod._resolve_search_space("intraday_goal_v1")
+    assert "setups.min_target_return_pct" in space
+    assert mod._resolve_search_algorithm("grid") == "GRID"
+    assert mod._resolve_search_algorithm("tpe") == "TPE"
+    with pytest.raises(ValueError, match="unknown_search_space_profile"):
+        mod._resolve_search_space("missing")
+    with pytest.raises(ValueError, match="unknown_search_algorithm"):
+        mod._resolve_search_algorithm("bad")
+
+
 def test_resolve_cost_model_profile():
     mod = _load_module()
     assert mod._resolve_cost_model_profile("fixed_v1") == "fixed_v1"
@@ -402,6 +414,35 @@ def test_probability_helpers_dirichlet_prior_and_expected_return():
     costs = mod.CostAssumptions(commission_ticks_per_side=0.5, slippage_ticks_per_side=1.0, spread_half_ticks=1.0)
     expected = mod._expected_return_from_forecast(setup=setup, costs=costs, forecast=forecast)
     assert expected == pytest.approx(-3.3333333333)
+
+
+def test_goal_adjusted_selection_score_penalizes_out_of_band_trade_frequency():
+    mod = _load_module()
+    goal = mod.GoalConstraints(min_trades_per_week=2.0, max_trades_per_week=4.0, trade_freq_penalty=3.0)
+    in_band = mod._goal_adjusted_selection_score(
+        base_score=10.0,
+        summary={"filled_trades": 6},
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 1, 14),
+        goal=goal,
+    )
+    too_low = mod._goal_adjusted_selection_score(
+        base_score=10.0,
+        summary={"filled_trades": 1},
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 1, 14),
+        goal=goal,
+    )
+    too_high = mod._goal_adjusted_selection_score(
+        base_score=10.0,
+        summary={"filled_trades": 14},
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 1, 14),
+        goal=goal,
+    )
+    assert in_band == pytest.approx(10.0)
+    assert too_low < in_band
+    assert too_high < in_band
 
 
 def test_probability_context_key_modes():
