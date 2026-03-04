@@ -103,9 +103,33 @@ def _evaluate_trial(
         fold_results.append(result)
         fold_objectives.append(result.val_objective)
     aggregated = aggregate_objectives(fold_objectives, aggregation, objective_mode=objective.mode)
+    negative_stats = _negative_fold_stats(fold_results=fold_results, objective=objective)
+    negative_penalty = float(objective.lambda_negative_folds) * float(negative_stats["negative_share"])
+    hard_negative_gate_pass = True
+    hard_negative_share = _as_float_or_none(objective.hard_max_negative_fold_share)
+    if hard_negative_share is not None and float(negative_stats["negative_share"]) > hard_negative_share:
+        aggregated = invalid_objective(objective.mode)
+        hard_negative_gate_pass = False
+    else:
+        if str(objective.mode).lower() == "min":
+            aggregated += negative_penalty
+        else:
+            aggregated -= negative_penalty
     objective_breakdown = _build_objective_breakdown(
         fold_results=fold_results,
         objective=objective,
+    )
+    if objective_breakdown is None:
+        objective_breakdown = {}
+    objective_breakdown.update(
+        {
+            "negative_fold_count": float(negative_stats["negative_fold_count"]),
+            "positive_fold_count": float(negative_stats["positive_fold_count"]),
+            "negative_fold_share": float(negative_stats["negative_share"]),
+            "negative_fold_threshold": float(objective.negative_fold_threshold),
+            "negative_fold_penalty": float(negative_penalty),
+            "hard_negative_gate_pass": 1.0 if hard_negative_gate_pass else 0.0,
+        }
     )
     return TrialResult(
         params=dict(params),
@@ -390,10 +414,63 @@ def _build_objective_breakdown(
     }
 
 
+def _negative_fold_stats(
+    *,
+    fold_results: list[FoldResult],
+    objective: ObjectiveConfig,
+) -> dict[str, float]:
+    threshold = float(objective.negative_fold_threshold)
+    considered = 0
+    negative = 0
+    for result in fold_results:
+        metrics = result.val_metrics
+        if not isinstance(metrics, Mapping):
+            continue
+        value = _negative_fold_metric_value(metrics=metrics, objective=objective)
+        if value is None:
+            continue
+        considered += 1
+        if float(value) <= threshold:
+            negative += 1
+    if considered <= 0:
+        return {
+            "negative_fold_count": 0.0,
+            "positive_fold_count": 0.0,
+            "negative_share": 1.0,
+        }
+    return {
+        "negative_fold_count": float(negative),
+        "positive_fold_count": float(max(considered - negative, 0)),
+        "negative_share": float(negative / considered),
+    }
+
+
+def _negative_fold_metric_value(
+    *,
+    metrics: Mapping[str, Any],
+    objective: ObjectiveConfig,
+) -> float | None:
+    configured_metric = str(objective.negative_fold_metric or "").strip().lower()
+    if configured_metric in {"utility", "portfolio_utility"}:
+        return float(compute_objective(metrics, objective))
+    if configured_metric:
+        return _metric_value(metrics, configured_metric)
+    if _is_portfolio_scope(objective):
+        return _first_finite(metrics.get("PortfolioExcessAnn"), metrics.get("ExcessAnn"))
+    return _metric_value(metrics, objective.metric)
+
+
 def _metric_value(metrics: Mapping[str, Any], metric_name: str | None) -> float | None:
     key = str(metric_name or "excess_ann").lower()
     if key in {"excessann", "excess_ann", "excess"}:
         return _first_finite(metrics.get("ExcessAnn"))
+    if key in {"portfolio_excessann", "portfolio_excess_ann", "portfolio_excess"}:
+        return _first_finite(metrics.get("PortfolioExcessAnn"), metrics.get("ExcessAnn"))
+    if key in {"portfolio_cagr"}:
+        return _first_finite(metrics.get("PortfolioCAGR"), metrics.get("CAGR"))
+    if key in {"portfolio_maxdd", "portfolio_max_dd"}:
+        value = _first_finite(metrics.get("PortfolioMaxDD"), metrics.get("MaxDD"))
+        return abs(float(value)) if value is not None else None
     if key in {"cagr"}:
         return _first_finite(metrics.get("CAGR"))
     if key in {"ir"}:
