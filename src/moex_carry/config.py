@@ -230,10 +230,17 @@ class TelegramConfig(BaseModel):
     shock_feed_path: str | None = None
     shock_primary_min_z: float = 2.5
     shock_aftershock_min_z: float = 2.0
+    shock_aftershock_min_tier: str = "minor"
     shock_topic_reopen_after_hours: int = 168
     shock_aftershock_cooldown_minutes: int = 60
     shock_max_alerts_per_cycle: int = 20
     shock_sent_fingerprint_ttl_hours: int = 24 * 21
+    news_alerts_enabled: bool = False
+    news_feed_path: str | None = "./data/output/news_live/live_news_signals.csv"
+    news_min_impact_score: float = 0.35
+    news_min_confidence: float = 0.9
+    news_max_alerts_per_cycle: int = 20
+    news_sent_fingerprint_ttl_hours: int = 24 * 21
 
 
 class DataConfig(BaseModel):
@@ -288,81 +295,14 @@ class NewsIngestConfig(BaseModel):
         price_symbol: str = ""
         price_interval: str = "1d"
 
-    @staticmethod
-    def _default_profiles() -> list["NewsIngestConfig.CommodityProfile"]:
-        return [
-            NewsIngestConfig.CommodityProfile(
-                ticker="BRN",
-                name="Brent Crude Oil",
-                gdelt_query=(
-                    '("brent crude" OR "brent oil" OR "ice brent" OR "oil prices" OR opec '
-                    'OR "strait of hormuz" OR iran OR israel OR "middle east conflict" '
-                    'OR "red sea shipping" OR houthi OR "shipping disruption")'
-                ),
-                newsapi_query=(
-                    '("brent" OR "crude oil" OR "oil prices" OR opec OR "strait of hormuz" OR iran '
-                    'OR israel OR houthi OR "red sea shipping" OR "middle east conflict") '
-                    "AND (oil OR brent OR crude OR tanker OR opec)"
-                ),
-                rss_urls=[
-                    "https://news.google.com/rss/search?q=Brent+crude+oil+futures",
-                ],
-                price_source="yfinance",
-                price_symbol="BZ=F",
-                price_interval="1d",
-            ),
-            NewsIngestConfig.CommodityProfile(
-                ticker="GOLD",
-                name="Gold",
-                gdelt_query=(
-                    '("gold futures" OR "gold price" OR bullion OR "safe haven" OR "real yields" '
-                    'OR "middle east conflict" OR iran OR israel OR "geopolitical risk" '
-                    'OR "war escalation" OR "risk-off")'
-                ),
-                newsapi_query=(
-                    '("gold" OR bullion OR "safe haven" OR "real yields" OR "fed rates" '
-                    'OR iran OR israel OR "middle east conflict" OR "geopolitical risk" '
-                    'OR "war escalation" OR "risk-off") '
-                    "AND (gold OR bullion OR xau OR \"safe haven\")"
-                ),
-                rss_urls=[
-                    "https://news.google.com/rss/search?q=gold+futures",
-                ],
-                price_source="yfinance",
-                price_symbol="GC=F",
-                price_interval="1d",
-            ),
-            NewsIngestConfig.CommodityProfile(
-                ticker="NG_US",
-                name="US Natural Gas",
-                gdelt_query=(
-                    '("natural gas" OR "henry hub" OR "nymex gas" OR "us lng" OR "eia storage" '
-                    'OR "freeze-off" OR "us weather gas" OR "arctic blast" '
-                    'OR "strait of hormuz" OR iran OR israel OR "lng shipping disruption")'
-                ),
-                newsapi_query=(
-                    '("natural gas" OR "henry hub" OR "nymex gas" OR "eia storage" OR "freeze-off" '
-                    'OR "arctic blast" OR "us lng exports" OR "strait of hormuz" OR iran OR israel '
-                    'OR "lng shipping disruption") '
-                    "AND (\"natural gas\" OR \"henry hub\" OR lng OR feedgas)"
-                ),
-                rss_urls=[
-                    "https://news.google.com/rss/search?q=henry+hub+natural+gas+futures",
-                ],
-                price_source="yfinance",
-                price_symbol="NG=F",
-                price_interval="1d",
-            ),
-        ]
-
     enabled: bool = False
     rss_urls: list[str] = []
     max_items_per_run: int = 100
     gdelt_enabled: bool = True
     gdelt_max_records_per_call: int = 250
-    gdelt_backfill_max_pages_per_window: int = 8
     gdelt_min_request_interval_sec: float = 5.2
     gdelt_request_timeout_sec: int = 40
+    gdelt_backfill_max_pages_per_window: int = 10
     newsapi_enabled: bool = False
     newsapi_base_url: str = "https://newsapi.org/v2/everything"
     newsapi_api_key_env: str = "NEWSAPI_API_KEY"
@@ -378,48 +318,44 @@ class NewsIngestConfig(BaseModel):
     backfill_start_date: str = "2018-01-01"
     backfill_chunk_days: int = 7
     backfill_max_windows_per_commodity: int = 0
+    backfill_shock_bar_minutes: int = 0
     backfill_window_order: str = "chronological"
-    backfill_shock_bar_minutes: int = 60
     qc_min_news_per_ticker: int = 500
     qc_min_price_points_per_ticker: int = 500
-    commodity_profiles: list[CommodityProfile] = Field(default_factory=_default_profiles)
-
-
-class NewsModelsConfig(BaseModel):
-    enabled_models: list[str] = ["finbert", "nli"]
-    primary_model: str = "finbert"
-    finbert_model_name: str = "ProsusAI/finbert"
-    nli_model_name: str = "facebook/bart-large-mnli"
-    multilingual_nli_model_name: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
-    model_version: str = "v1"
-    inference_batch_size: int = 16
-    inference_text_max_chars: int = 2000
-    inference_thread_cap: int = 0
-    calibration_mode: str = "none"
-    calibration_min_train_samples: int = 30
-    epsilon_default: float = 0.0005
-    horizons: list[str] = ["5m", "1h", "4h", "1d", "5d"]
-    promotion_min_accuracy: float = 0.70
-    promotion_min_coverage: float = 0.20
-    promotion_max_brier: float = 0.25
-    promotion_min_sample_count: int = 30
-    promotion_min_ticker_stability: float = 0.55
-    decision_weight_quality_horizon: str = "1h"
-    decision_weight_quality_max_age_hours: int = 72
-    decision_weight_rollout_mode: str = "limited"
-    decision_weight_min_sample_size: int = 3
-    decision_weight_limited_max_deviation: float = 0.25
-    decision_weight_signal_threshold: float = 0.12
-    decision_weight_min_impact: float = 0.6
-    decision_weight_reduce_factor: float = 0.5
-    decision_weight_boost_factor: float = 1.1
-    target_mode_default: str = "legacy"
-    target_v2_processing_lag_sec: int = 60
-    target_v2_use_midpoint: bool = True
-    target_v2_market_min_clean_events_5m: int = 400
-    target_v2_market_min_clean_events_1h: int = 300
-    target_v2_market_min_clean_events_4h: int = 250
-    target_v2_market_min_clean_events_1d: int = 200
+    commodity_profiles: list[CommodityProfile] = Field(
+        default_factory=lambda: [
+            NewsIngestConfig.CommodityProfile(
+                ticker="BRN",
+                name="Brent Crude Oil",
+                gdelt_query='("brent crude" OR "brent oil" OR "ice brent" OR opec)',
+                newsapi_query='("brent" OR "crude oil" OR opec)',
+                rss_urls=["https://news.google.com/rss/search?q=Brent+crude+oil+futures"],
+                price_source="yfinance",
+                price_symbol="BZ=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="GOLD",
+                name="Gold",
+                gdelt_query='("gold futures" OR "gold price" OR bullion)',
+                newsapi_query='("gold" OR bullion OR "safe haven")',
+                rss_urls=["https://news.google.com/rss/search?q=gold+futures"],
+                price_source="yfinance",
+                price_symbol="GC=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="NG_US",
+                name="US Natural Gas",
+                gdelt_query='("natural gas" OR "henry hub" OR "us lng")',
+                newsapi_query='("natural gas" OR "henry hub" OR lng)',
+                rss_urls=["https://news.google.com/rss/search?q=henry+hub+natural+gas+futures"],
+                price_source="yfinance",
+                price_symbol="NG=F",
+                price_interval="1d",
+            ),
+        ]
+    )
 
 
 class NewsEventsConfig(BaseModel):
@@ -428,26 +364,26 @@ class NewsEventsConfig(BaseModel):
     cluster_window_hours: int = 48
     similarity_threshold: float = 0.35
     resolve_after_hours: int = 72
-    anchor_seed_enabled: bool = True
-    anchor_link_enabled: bool = True
-    anchor_cluster_version: str = "anchor-scheduled-v1"
-    anchor_match_window_minutes: int = 90
-    anchor_seed_padding_days: int = 2
-    anchor_episode_seed_enabled: bool = False
-    anchor_episode_cluster_version: str = "anchor-episodic-v1"
-    anchor_episode_sources: list[str] = ["nws_alerts", "nhc", "ukmto"]
-    anchor_episode_match_window_minutes: int = 240
-    anchor_request_timeout_sec: int = 20
-    anchor_user_agent: str = "moex-carry/0.1 (+news-anchor)"
-    anchor_nws_url: str = "https://api.weather.gov/alerts/active?event=Hurricane%20Warning,Storm%20Warning,Tropical%20Storm%20Warning"
-    anchor_nhc_url: str = "https://www.nhc.noaa.gov/CurrentStorms.json"
-    anchor_ukmto_url: str = "https://www.ukmto.org/recent-incidents"
-    anchor_bsee_url: str = "https://www.bsee.gov/resources-tools/planning-preparedness/hurricane/hurricane-history"
-    anchor_panama_url: str = "https://pancanal.com/en/maritime-services/advisory-to-shipping/"
-    anchor_suez_url: str = "https://www.suezcanal.gov.eg/English/Navigation/NavigationCirculars/Pages/default.aspx"
-    anchor_fred_release_url: str = "https://api.stlouisfed.org/fred/release/dates"
-    anchor_fred_release_ids: list[int] = []
+    anchor_link_enabled: bool = False
+    anchor_seed_enabled: bool = False
+    anchor_seed_padding_days: int = 7
+    anchor_match_window_minutes: int = 60
+    anchor_request_timeout_sec: int = 30
+    anchor_user_agent: str = "moex-carry/1.0"
+    anchor_bsee_url: str = "https://www.bsee.gov/newsroom"
+    anchor_suez_url: str = "https://www.suezcanal.gov.eg"
+    anchor_panama_url: str = "https://pancanal.com/en/notices/"
+    anchor_nhc_url: str = "https://www.nhc.noaa.gov"
+    anchor_nws_url: str = "https://www.weather.gov"
+    anchor_ukmto_url: str = "https://www.ukmto.org"
+    anchor_fred_release_url: str = "https://api.stlouisfed.org/fred/releases/dates"
     anchor_fred_api_key_env: str = "FRED_API_KEY"
+    anchor_fred_release_ids: list[int] = []
+    anchor_cluster_version: str = "anchor-v1"
+    anchor_episode_seed_enabled: bool = False
+    anchor_episode_sources: list[str] = []
+    anchor_episode_cluster_version: str = "anchor-episode-v1"
+    anchor_episode_match_window_minutes: int = 180
 
 
 class NewsLlmConfig(BaseModel):
@@ -474,6 +410,37 @@ class NewsLlmConfig(BaseModel):
     min_impact_for_priority: float = 0.0
 
 
+class NewsModelsConfig(BaseModel):
+    enabled_models: list[str] = ["finbert", "nli"]
+    primary_model: str = "finbert"
+    finbert_model_name: str = "ProsusAI/finbert"
+    nli_model_name: str = "facebook/bart-large-mnli"
+    model_version: str = "v1"
+    multilingual_nli_model_name: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
+    inference_batch_size: int = 16
+    inference_text_max_chars: int = 2000
+    inference_thread_cap: int = 0
+    calibration_mode: str = "none"
+    calibration_min_train_samples: int = 30
+    epsilon_default: float = 0.0005
+    horizons: list[str] = ["5m", "1h", "4h", "1d", "5d"]
+    target_mode_default: str = "close"
+    promotion_min_accuracy: float = 0.70
+    promotion_min_coverage: float = 0.20
+    promotion_max_brier: float = 0.25
+    promotion_min_sample_count: int = 30
+    promotion_min_ticker_stability: float = 0.55
+    decision_weight_rollout_mode: str = "limited"
+    decision_weight_min_sample_size: int = 3
+    decision_weight_limited_max_deviation: float = 0.25
+    decision_weight_signal_threshold: float = 0.12
+    decision_weight_min_impact: float = 0.6
+    decision_weight_reduce_factor: float = 0.5
+    decision_weight_boost_factor: float = 1.1
+    decision_weight_quality_horizon: str = "1h"
+    decision_weight_quality_max_age_hours: int = 72
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="MOEX_CARRY_",
@@ -496,9 +463,9 @@ class AppSettings(BaseSettings):
     risk_profile: RiskProfileConfig = RiskProfileConfig()
     news_filter: NewsFilterConfig = NewsFilterConfig()
     news_ingest: NewsIngestConfig = NewsIngestConfig()
-    news_models: NewsModelsConfig = NewsModelsConfig()
     news_events: NewsEventsConfig = NewsEventsConfig()
     news_llm: NewsLlmConfig = NewsLlmConfig()
+    news_models: NewsModelsConfig = NewsModelsConfig()
 
 
 def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -588,4 +555,3 @@ def resolve_paths(settings: AppSettings) -> RuntimePaths:
         data_dir = _repo_root() / data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
     return RuntimePaths(data_dir=data_dir)
-

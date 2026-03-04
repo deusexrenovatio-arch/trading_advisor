@@ -234,3 +234,9 @@ def _build_unified_snapshot(
             ingest_cycle.global_watermark_after if ingest_cycle is not None else None
         ),
     )
+
+
+def _persist_unified_snapshot_csv(snapshot, data_dir: Path) -> None:
+    from moex_carry.unified_runtime import persist_snapshot_to_csv
+
+    persist_snapshot_to_csv(snapshot, data_dir)

@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from moex_carry.news_shock_automation import ShockLabelCycleConfig, run_shock_label_cycle
+from moex_carry.news_shock_store import upsert_live_shock_rows
 
 
 def _input_df() -> pd.DataFrame:
@@ -94,7 +95,6 @@ def test_run_shock_label_cycle_builds_direction_and_causal_packs(tmp_path: Path)
             run_readiness=False,
         ),
     )
-
     assert int(outputs["curated_rows"]) == 3
     assert int(outputs["direction_pack"]["tasks_count"]) == 1
     assert int(outputs["causal_pack"]["tasks_count"]) == 2
@@ -103,6 +103,10 @@ def test_run_shock_label_cycle_builds_direction_and_causal_packs(tmp_path: Path)
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert payload["direction_pack"]["tasks_count"] == 1
     assert payload["causal_pack"]["tasks_count"] == 2
+
+
+def _db_url(path: Path) -> str:
+    return f"sqlite:///{path.as_posix()}"
 
 
 def test_run_shock_label_cycle_exports_telegram_feed(tmp_path: Path) -> None:
@@ -137,16 +141,25 @@ def test_run_shock_label_cycle_exports_telegram_feed(tmp_path: Path) -> None:
         "shock_direction",
         "z_score",
         "abs_move_pct",
+        "impact_tier",
         "topic_key",
         "root_topic_id",
         "selected_source",
         "selected_event_id",
+        "selected_match_mode",
+        "episode_event_index",
+        "episode_cum_signed_move_pct",
+        "episode_signed_increment_pct",
         "headline",
         "url",
     ]
     assert feed["selected_event_id"].fillna("").tolist() == ["evt-v2-a", "evt-broad-b", ""]
-    assert feed["topic_key"].tolist() == ["evt-v2-a", "evt-broad-b", "topic:gold-up"]
+    assert feed["impact_tier"].tolist() == ["major", "strong", "medium"]
+    assert feed["topic_key"].tolist()[0] == "root:NG_US:weather_demand"
+    assert feed["topic_key"].tolist()[1].startswith("root:BRN:topic:shipping-disruption-risk-rises")
+    assert feed["topic_key"].tolist()[2] == "root:GOLD:generic"
     assert feed["root_topic_id"].tolist() == feed["topic_key"].tolist()
+    assert feed["episode_event_index"].tolist() == [1, 1, 1]
 
     snapshot_path = Path(str(telegram_feed_meta["snapshot_path"]))
     assert snapshot_path.exists()
@@ -191,3 +204,35 @@ def test_run_shock_label_cycle_empty_window_does_not_overwrite_feed(tmp_path: Pa
     existing_feed = pd.read_csv(telegram_feed_path)
     assert len(existing_feed) == 1
     assert str(existing_feed.iloc[0]["selected_event_id"]) == "evt-a"
+
+
+def test_run_shock_label_cycle_reads_input_from_db(tmp_path: Path) -> None:
+    db_path = tmp_path / "news_live.db"
+    output_dir = tmp_path / "cycle_db"
+    upsert_live_shock_rows(
+        frame=_input_df(),
+        database_url=_db_url(db_path),
+        data_dir=tmp_path,
+    )
+
+    outputs = run_shock_label_cycle(
+        input_csv=None,
+        output_dir=output_dir,
+        config=ShockLabelCycleConfig(
+            min_abs_z=2.5,
+            direction_max_tasks_total=10,
+            causal_max_tasks_total=10,
+            direction_candidate_sources=("v2_clean",),
+            causal_candidate_sources=("broad", "none"),
+            input_database_url=_db_url(db_path),
+            input_data_dir=tmp_path.as_posix(),
+            input_bar_minutes=0,
+            input_max_rows=100,
+            run_readiness=False,
+        ),
+    )
+
+    assert str(outputs.get("input_source")) == "db"
+    assert int(outputs.get("curated_rows") or 0) == 3
+    assert int(outputs["direction_pack"]["tasks_count"]) == 1
+    assert int(outputs["causal_pack"]["tasks_count"]) == 2

@@ -260,6 +260,72 @@ items:
     started_at: 2026-02-20
     completed_at: 2026-02-20
 
+  - id: P2-NEWS-SHOCK-SILVER-013
+    title: Unified shock-first to silver-high-confidence cycle for commodity news
+    lane: news
+    status: completed
+    execution_mode: autonomous
+    owner: quant-research
+    acceptance:
+      - single command/script runs shock-first target build, factor autolabel, and silver bootstrap for NG_US BRN GOLD
+      - run produces machine-readable summary and silver_high_conf dataset artifacts
+      - workflow remains compatible with existing target_v2 and factor-autolabel logic
+    checks:
+      - python -m ruff check scripts/run_news_shock_silver_cycle.py
+      - python scripts/run_news_shock_silver_cycle.py --from-date 2026-01-01 --to-date 2026-01-03 --horizon 5m --max-events 5 --factor-max-events 5 --out-dir data/output/shock_silver_cycle_smoke
+      - python scripts/run_lean_gate.py
+    docs:
+      - scripts/run_news_shock_silver_cycle.py
+      - docs/session_handoff.md
+    dependencies:
+      - P1-CONTEXT-BUDGET-012
+    started_at: 2026-02-23
+    completed_at: 2026-02-23
+
+  - id: P2-NEWS-ARCH-HARDEN-014
+    title: Harden news-module runtime boundaries and transactional behavior
+    lane: news
+    status: completed
+    execution_mode: autonomous
+    owner: quant-research
+    acceptance:
+      - GET /api/v2/signals/active has no DB write side effect by default
+      - signal-news links preserve event_id and include allowlist-aware gate evaluation
+      - sync_news_runtime executes news upserts in a single transaction commit
+      - anchor seeding/linking and llm full-pass support deferred commit orchestration
+    checks:
+      - pytest tests/test_api_v2.py -q
+      - pytest tests/test_news_anchors.py tests/test_news_llm_gateway.py tests/test_news_sync_profiles.py -q
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-SHOCK-SILVER-013
+    started_at: 2026-03-02
+    completed_at: 2026-03-02
+
+  - id: P2-NEWS-LIVE-RUNBOOK-015
+    title: Live runbook and automation wrapper for NG_US BRN GOLD news cycle
+    lane: news
+    status: completed
+    execution_mode: autonomous
+    owner: quant-research
+    acceptance:
+      - runbook documents shadow and active operations for exactly NG_US BRN GOLD
+      - includes explicit PYTHONPATH requirement for local news CLI commands
+      - one wrapper script executes daily silver cycle for all three commodities
+    checks:
+      - powershell -ExecutionPolicy Bypass -Command "$content = Get-Content -Raw 'scripts/run_news_daily_silver_cycle_3c.ps1'; [scriptblock]::Create($content) | Out-Null"
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/runbooks/news-live-3-commodities.md
+      - docs/session_handoff.md
+    dependencies:
+      - P2-NEWS-ARCH-HARDEN-014
+    started_at: 2026-03-02
+    completed_at: 2026-03-02
+
   - id: P1-PR-ONLY-013
     title: Enforce PR-only main flow with machine-checked emergency override contract
     lane: governance

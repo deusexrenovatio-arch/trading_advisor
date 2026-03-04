@@ -94,6 +94,26 @@ Budget-aware defaults for `NewsAPI` daily limit `100`:
 
 These are exposed as parameters in `manage_news_shock_live_plan.ps1`.
 
+## Shock Rows Backfill (progressive DB fill)
+Use cursor-based backfill to populate `news_shock_rows` gradually from older periods. Each run processes a bounded set of historical windows and updates a persistent cursor in `news_state`, so backfill is incremental and safe for regular scheduling.
+
+Manual run:
+```powershell
+$env:PYTHONPATH='src'
+python -m moex_carry.cli news_shock_backfill `
+  --news-config configs/news-livecheck-ng.yaml `
+  --start-ts 2025-01-01T00:00:00Z `
+  --window-hours 24 `
+  --windows-per-run 8 `
+  --cursor-key shock_rows_backfill_cursor_utc
+```
+
+Scheduled mode:
+- `manage_news_shock_live_plan.ps1 -Action Install` configures daily backfill task with:
+  - `UseDbInput` for DB-first cycle input,
+  - `RunShockBackfill` for pre-cycle incremental `news_shock_rows` fill,
+  - bounded `ShockBackfillWindowHours` / `ShockBackfillWindowsPerRun` for smooth progression.
+
 Task uses `scripts/start_shock_label_cycle.ps1` as launcher, which:
 - sets `PYTHONPATH=src`,
 - loads `scripts/moex-carry.local.ps1` if present,

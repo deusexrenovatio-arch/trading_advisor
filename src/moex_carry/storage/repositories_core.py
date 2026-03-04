@@ -162,6 +162,7 @@ def store_signal_execution(
             quantity=payload.get("quantity"),
             side=payload.get("side"),
             order_id=payload.get("order_id"),
+            idempotency_key=payload.get("idempotency_key"),
             status=payload.get("status"),
             note=payload.get("note"),
         )
@@ -212,6 +213,27 @@ def load_active_signals(session: Session, run_id: str):
 def load_open_executions(session: Session):
     rows = session.execute(select(db.SignalExecutionModel)).scalars().all()
     return rows
+
+
+def load_signal_execution_by_idempotency(
+    session: Session,
+    *,
+    stock: str,
+    future: str,
+    idempotency_key: str,
+):
+    normalized_key = str(idempotency_key or "").strip()
+    if not normalized_key:
+        return None
+    query = (
+        select(db.SignalExecutionModel)
+        .where(db.SignalExecutionModel.stock_secid == stock)
+        .where(db.SignalExecutionModel.future_secid == future)
+        .where(db.SignalExecutionModel.idempotency_key == normalized_key)
+        .order_by(db.SignalExecutionModel.timestamp.desc())
+        .limit(1)
+    )
+    return session.execute(query).scalars().first()
 
 
 def upsert_quotes(session: Session, rows: Iterable[dict[str, object]]) -> int:

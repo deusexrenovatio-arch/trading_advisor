@@ -4469,7 +4469,9 @@ def create_app(settings: AppSettings) -> Dash:
             override_reason = None
         idempotency_key = str(payload.get("idempotency_key") or "").strip()
         if not idempotency_key:
-            return _bad_request("idempotency_key is required")
+            if legacy_mode:
+                return _bad_request("idempotency_key is required")
+            idempotency_key = f"idem-{uuid.uuid4().hex[:12]}"
 
         signal_row = None
         active_rows_cache: list[dict[str, object]] | None = None
