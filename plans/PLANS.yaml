@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-03
+updated_at: 2026-03-04
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -852,3 +852,30 @@ items:
       - P2-NEWS-SHOCK-SCHEDULER-034
     started_at: 2026-03-03
     completed_at: 2026-03-03
+
+  - id: P2-SIGNAL-NEWS-GATE-036
+    title: Integrate live commodity news gate into signal_engine morning-plan and walk-forward fast-path
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - signal_engine morning-plan supports config-driven causal news gating by commodity with allow/reduce/block actions.
+      - walk-forward runner exposes news gate overrides and applies the same gate in both builder and eval-cache fast-path.
+      - tests cover causal cutoff and builder-level reduce/block behavior.
+      - smoke run demonstrates that gate can suppress setups when high-severity commodity events are present.
+    checks:
+      - python -m pytest tests/test_signal_engine_news_gate.py tests/test_signal_engine_morning_plan.py tests/test_config_loading.py -q
+      - python scripts/run_lean_gate.py
+      - python scripts/run_morning_plan_walk_forward.py --instrument BRZ5 --instrument BRH6 --instrument NGU5 --instrument NGH6 --instrument GDZ5 --instrument GDH6 --instrument GDM6 --instrument-mode front_nearest --front-roll-avoid-expiry-days 3 --start-date 2025-08-01 --end-date 2026-02-20 --decision-times 10:30,12:00,14:00 --train-days 60 --test-days 20 --step-days 20 --search-algorithm RANDOM --search-space-profile intraday_goal_v2 --hpo-trials 8 --hpo-startup-trials 3 --hpo-seed 77 --cache-db data/cache/morning_plan_candles.sqlite --offline-only --enable-news-gate --news-gate-db-url sqlite:///./artifacts/research/news_gate_synth_smoke.db --tick-size BRZ5=0.01 --tick-size BRH6=0.01 --tick-size NGU5=0.001 --tick-size NGH6=0.001 --tick-size GDZ5=0.1 --tick-size GDH6=0.1 --tick-size GDM6=0.1 --out-json artifacts/research/wf_news_gate_step1_front_news_synth_eval.json
+    docs:
+      - src/moex_carry/signal_engine/news/gate.py
+      - src/moex_carry/signal_engine/plan/builder.py
+      - scripts/run_morning_plan_walk_forward.py
+      - configs/default.yaml
+      - tests/test_signal_engine_news_gate.py
+      - tests/test_signal_engine_morning_plan.py
+    dependencies:
+      - P2-NEWS-LIVE-INGEST-035
+    started_at: 2026-03-04
+    completed_at: 2026-03-04
