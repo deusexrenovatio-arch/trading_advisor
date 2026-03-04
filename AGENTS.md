@@ -9,6 +9,7 @@
   - `docs/README.md`
   - `docs/DEV_WORKFLOW.md`
   - `docs/workflows/context-budget.md`
+  - `docs/workflows/agent-practices-alignment.md`
   - `docs/workflows/skill-governance-sync.md`
   - `docs/session_handoff.md`
   - `harness-guideline.md`
@@ -16,24 +17,30 @@
   - `memory/agent_memory.yaml`
   - `CODEOWNERS`
   - `docs/checklists/first-time-right-gate.md`
+  - `docs/checklists/task-request-contract.md`
   - `docs/runbooks/governance-remediation.md`
   - `scripts/run_lean_gate.py`
 
 ## Non-Negotiable Loop
 1) Verify worktree context with `./scripts/worktree_guard.ps1 -Action Check`.
-2) Before and after meaningful patches run `python scripts/run_lean_gate.py`.
-3) Keep `plans/PLANS.yaml` statuses aligned with actual progress.
-4) Keep `memory/agent_memory.yaml` updated with durable decisions/incidents/patterns.
+2) Before implementation, define and validate task contract in `docs/session_handoff.md`.
+  - use `docs/checklists/task-request-contract.md`.
+  - include `## Repetition Control` (max attempts, stop trigger, reset action, new search space, next probe).
+  - run `python scripts/validate_task_request_contract.py`.
+3) Before and after meaningful patches run `python scripts/run_lean_gate.py`.
+4) Keep `plans/PLANS.yaml` statuses aligned with actual progress.
+5) Keep `memory/agent_memory.yaml` updated with durable decisions/incidents/patterns.
   - incidents must use remediation types from `configs/agent_incident_policy.yaml`.
-5) Keep `docs/session_handoff.md` updated and pass `python scripts/validate_session_handoff.py`.
-6) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
+  - incidents on/after policy effective date must include `incident_signature`, learning fields, and `same_path_attempts`.
+6) Keep `docs/session_handoff.md` updated and pass `python scripts/validate_session_handoff.py`.
+7) Before push run blocker checks from `docs/DEV_WORKFLOW.md`.
   - include `python scripts/validate_quality_scorecards.py`.
-7) Use PR-only flow for `main`: feature branch -> PR -> merge.
+8) Use PR-only flow for `main`: feature branch -> PR -> merge.
   - direct push to `main` is blocked by `.githooks/pre-push`.
   - emergency override requires both:
     - `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1`
     - `MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'`
-8) Any failing gate is a blocker; fix first, continue after.
+9) Any failing gate is a blocker; fix first, continue after.
   - use `docs/runbooks/governance-remediation.md` for deterministic fixes.
 
 ## Skills
@@ -133,6 +140,15 @@
   2) Missing or risky scenarios.
   3) Resource/time risks and controls.
   4) Highest-priority fixes or follow-ups.
+
+## Task Request Contract (mandatory)
+- Before non-trivial implementation, fill `docs/session_handoff.md`:
+  - `## Task Request Contract` with objective, scope, out-of-scope, constraints, done evidence, priority rule.
+  - `## First-Time-Right Report` with all 4 required report lines.
+  - `## Repetition Control` with max same-path attempts, stop trigger, reset action, new search space, next probe.
+- Validate with:
+  - `python scripts/validate_task_request_contract.py`
+- If request is vague or contradictory, stop and ask for clarification; do not continue with implicit assumptions.
 
 ## Worktree Safety Protocol (mandatory)
 - Before any code edits or long-running commands, run:

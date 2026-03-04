@@ -19,12 +19,37 @@ Use this guide when a governance gate fails.
   - `docs`
   - `test`
   - `workflow`
+- For incidents on/after `incident.enforce_learning_fields_from` in `configs/agent_incident_policy.yaml`, also set:
+  - `incident_signature`
+  - `prevention_change`
+  - `prevention_artifact`
+  - `prevention_check`
+  - `loop_breaker_trigger`
+  - `search_space_reset`
+  - `same_path_attempts` (must be positive integer and within policy max).
 
 ## `python scripts/validate_session_handoff.py`
 - Keep `docs/session_handoff.md` present and updated for the current stream.
 - Ensure required sections exist: Goal, Current Delta, Blockers, Next Step, Validation.
 - Keep `Current Delta` concise (maximum 8 bullets) and avoid pasting large instruction blocks.
 - For policy details, follow `docs/workflows/context-budget.md`.
+
+## `python scripts/validate_task_request_contract.py`
+- Keep `## Task Request Contract` in `docs/session_handoff.md` with:
+  - Objective
+  - In Scope
+  - Out of Scope
+  - Constraints
+  - Done Evidence
+  - Priority Rule
+- Keep `## First-Time-Right Report` in `docs/session_handoff.md` with all four numbered report lines.
+- Keep `## Repetition Control` in `docs/session_handoff.md` with:
+  - Max Same-Path Attempts
+  - Stop Trigger
+  - Reset Action
+  - New Search Space
+  - Next Probe
+- Use `docs/checklists/task-request-contract.md` as the canonical template.
 
 ## `python scripts/validate_pr_only_policy.py`
 - Keep `.githooks/pre-push` in PR-only mode for `main`.

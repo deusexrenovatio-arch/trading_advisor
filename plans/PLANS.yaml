@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-03
+updated_at: 2026-03-04
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -852,3 +852,188 @@ items:
       - P2-NEWS-SHOCK-SCHEDULER-034
     started_at: 2026-03-03
     completed_at: 2026-03-03
+
+  - id: P2-NEWS-SHOCK-LIVE-FEED-036
+    title: Wire fresh MOEX shock input and topic-stable story dedup into live shock and Telegram flow
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - fresh shock cycles auto-build input from live MOEX candles and live news DB when FreshLookbackHours is set
+      - shock feed rows include stable root topic keys and impact tiers for primary/aftershock policy
+      - live news feed and Telegram news dedup use story fingerprints across commodities
+      - line-budget hard gate remains passing after runtime refactor
+    checks:
+      - python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml --output-csv data/output/tmp_live_shocks_input.csv --lookback-hours 1 --bar-minutes 5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6
+      - powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours 1 -DirectionMaxTasks 20 -CausalMaxTasks 40 -NoTelegramFeed
+      - python -m pytest tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py tests/test_news_live_runtime.py tests/test_telegram_worker.py -q
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - scripts/build_live_shock_input.py
+      - src/moex_carry/news_shock_live_input.py
+      - scripts/start_shock_label_cycle.ps1
+      - src/moex_carry/news_topic.py
+      - src/moex_carry/news_shock_automation.py
+      - src/moex_carry/shock_alert_delivery.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
+    dependencies:
+      - P2-NEWS-LIVE-INGEST-035
+    started_at: 2026-03-04
+    completed_at: 2026-03-04
+
+  - id: P2-NEWS-ARCH-HARDEN-037
+    title: Harden news live storage architecture and path resolution for reliable runtime and bridge reads
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - runtime, bridge, and live shock input use one shared sqlite/path helper instead of ad-hoc URL parsing
+      - csv feed writes are atomic to prevent partial reads by downstream workers
+      - sqlite connections use busy timeout and WAL for write paths; read paths avoid silent failures
+      - db indexes support bridge filters by published timestamp and confidence/impact
+    checks:
+      - python -m pytest tests/test_news_live_runtime.py tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py tests/test_telegram_worker.py -q
+      - powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours 1 -DirectionMaxTasks 10 -CausalMaxTasks 20 -NoTelegramFeed -CheckOnly
+      - python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml --output-csv data/output/tmp_live_shocks_input_archfix.csv --lookback-hours 1 --bar-minutes 5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - src/moex_carry/news_storage.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/news_shock_live_input.py
+      - tests/test_news_live_runtime.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-SHOCK-LIVE-FEED-036
+    started_at: 2026-03-04
+    completed_at: 2026-03-04
+
+  - id: P2-NEWS-CAUSAL-GATE-038
+    title: Add as-of timestamp semantics to news gate for causal replay and deterministic walk-forward
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - news gate logic accepts explicit as-of timestamp instead of hard dependency on wall-clock now
+      - live bridge loader accepts optional as-of timestamp and uses it for lookback cutoff
+      - pipeline passes one shared as-of timestamp to bridge and gate in the same decision cycle
+      - tests cover replay-safe behavior where historical events are evaluated against explicit as-of
+    checks:
+      - python -m pytest tests/test_news_filter.py tests/test_news_live_runtime.py tests/test_signal_cycle.py -q
+      - python -m ruff check src/moex_carry/strategy/news_filter.py src/moex_carry/news_live_bridge.py src/moex_carry/pipeline.py tests/test_news_filter.py tests/test_news_live_runtime.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/strategy/news_filter.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/pipeline.py
+      - tests/test_news_filter.py
+      - tests/test_news_live_runtime.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-ARCH-HARDEN-037
+    started_at: 2026-03-04
+    completed_at: 2026-03-04
+
+  - id: P1-REQUEST-CONTRACT-039
+    title: Enforce task request contract and first-time-right report as governance blockers
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - session handoff includes explicit task request contract fields for objective, scope, constraints, done evidence, and priority rule
+      - first-time-right report block is machine-validated in handoff
+      - lean governance loop fails when request contract or report blocks are missing
+      - governance remediation and source-of-truth docs include deterministic operator guidance
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - scripts/validate_task_request_contract.py
+      - scripts/run_lean_gate.py
+      - docs/checklists/task-request-contract.md
+      - docs/workflows/agent-practices-alignment.md
+      - docs/DEV_WORKFLOW.md
+      - AGENTS.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-CONTEXT-BUDGET-012
+      - P1-SKILL-DECISION-018
+    started_at: 2026-03-04
+    completed_at: 2026-03-04
+
+  - id: P1-SELF-LEARN-LOOP-040
+    title: Enforce repeated-issue self-learning and search-space reset as machine-checked governance
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - new incidents require explicit behavior-change and loop-breaker evidence
+      - handoff task contract requires repetition-control section with stop/reset/new-search fields
+      - repeated-issue skill requires prevention artifact and enforcement-check output
+      - governance docs and remediation flow are aligned with the new policy
+    checks:
+      - python scripts/validate_agent_memory.py
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_skills.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - configs/agent_incident_policy.yaml
+      - scripts/validate_agent_memory.py
+      - scripts/validate_task_request_contract.py
+      - docs/checklists/task-request-contract.md
+      - docs/checklists/first-time-right-gate.md
+      - docs/DEV_WORKFLOW.md
+      - AGENTS.md
+      - docs/session_handoff.md
+      - .cursor/skills/repeated-issue-review/SKILL.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-REQUEST-CONTRACT-039
+    started_at: 2026-03-04
+    completed_at: 2026-03-04
+
+  - id: P1-EXTERNAL-ADVICE-MAP-041
+    title: Build advice-by-advice mapping for external AI-agent practices and implement high-fit controls
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - every concrete advice from the three external sources is mapped to repository status and decision
+      - mapping includes critical usefulness assessment against current architecture and completed governance work
+      - high-fit missing controls are implemented in validators and process docs
+      - governance loop remains green after integration
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_agent_memory.py
+      - python scripts/validate_skills.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/workflows/external-advice-mapping-2026-03-04.md
+      - docs/workflows/agent-practices-alignment.md
+      - docs/README.md
+      - configs/agent_incident_policy.yaml
+      - scripts/validate_agent_memory.py
+      - scripts/validate_task_request_contract.py
+      - docs/DEV_WORKFLOW.md
+      - AGENTS.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-SELF-LEARN-LOOP-040
+    started_at: 2026-03-04
+    completed_at: 2026-03-04

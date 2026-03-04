@@ -9,6 +9,12 @@
 - Any task with potentially long runtime, heavy compute, or heavy network traffic.
 - Any repeated issue or regression-prone area.
 
+## 0) Task Request Contract Gate (required before coding)
+- Request contract is explicit in `docs/session_handoff.md` under `## Task Request Contract`.
+- Contract includes objective, scope, out-of-scope, constraints, done evidence, and priority rule.
+- Validation command passes:
+  - `python scripts/validate_task_request_contract.py`
+
 ## 1) Goal Contract (required before coding)
 - User outcome: what exact user decision/action this changes.
 - Acceptance criteria: concrete pass/fail outputs.
@@ -50,6 +56,10 @@
 - If same issue reappears, run structured root-cause review before new patch.
 - Capture findings, hypotheses, and regression checklist.
 - Do not continue patching until primary failure mode is explicit.
+- Stop deepening same approach after capped attempts and force strategy reset:
+  - set `Max Same-Path Attempts` and `Stop Trigger` in `## Repetition Control`,
+  - execute `Reset Action`,
+  - test a new search space probe before additional patching.
 
 ## Required output format
 1. Confirmed coverage.
