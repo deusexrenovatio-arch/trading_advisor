@@ -114,6 +114,12 @@ You can switch the metric and mode:
   `win_rate`, `profit_factor`, `avg_hold_days`, `share_alpha_exits`,
   `r_d`, `b_d`, `ex_d`, `sharpe`.
 - `mode`: `max` or `min`.
+- For fold-stability optimization (fewer negative validation windows), use:
+  - `optimization.negative_fold_penalty` (for example `0.3` to `1.0`)
+  - `optimization.negative_fold_threshold` (usually `0.0`)
+  - `optimization.negative_fold_metric` (for example `portfolio_excess_ann`)
+  - `optimization.hard_max_negative_fold_share` (for example `0.35`)
+  - `optimization.aggregation=p25` (more conservative than median)
 
 ### 3.2 Portfolio utility objective (default)
 
