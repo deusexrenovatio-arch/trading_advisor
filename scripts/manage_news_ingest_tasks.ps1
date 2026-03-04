@@ -54,6 +54,7 @@ function Install-NewsTask {
     )
     $arguments = @(
         "-NoProfile",
+        "-WindowStyle", "Hidden",
         "-ExecutionPolicy", "Bypass",
         "-File", "`"$startScript`"",
         "-Mode", $Mode,
