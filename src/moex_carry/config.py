@@ -230,6 +230,12 @@ class TelegramConfig(BaseModel):
     shock_aftershock_cooldown_minutes: int = 60
     shock_max_alerts_per_cycle: int = 20
     shock_sent_fingerprint_ttl_hours: int = 24 * 21
+    news_alerts_enabled: bool = False
+    news_feed_path: str | None = "./data/output/news_live/live_news_signals.csv"
+    news_min_impact_score: float = 0.35
+    news_min_confidence: float = 0.9
+    news_max_alerts_per_cycle: int = 20
+    news_sent_fingerprint_ttl_hours: int = 24 * 21
 
 
 class DataConfig(BaseModel):

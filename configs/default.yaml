@@ -190,6 +190,12 @@ telegram:
   shock_aftershock_cooldown_minutes: 60
   shock_max_alerts_per_cycle: 20
   shock_sent_fingerprint_ttl_hours: 504
+  news_alerts_enabled: true
+  news_feed_path: "./data/output/news_live/live_news_signals.csv"
+  news_min_impact_score: 0.35
+  news_min_confidence: 0.9
+  news_max_alerts_per_cycle: 20
+  news_sent_fingerprint_ttl_hours: 504
 
 data:
   data_dir: "./data"

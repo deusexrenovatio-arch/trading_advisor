@@ -108,6 +108,12 @@ def _build_settings(
     shock_aftershock_cooldown_minutes: int = 60,
     shock_max_alerts_per_cycle: int = 20,
     shock_sent_fingerprint_ttl_hours: int = 24 * 21,
+    news_alerts_enabled: bool = False,
+    news_feed_path: str | None = None,
+    news_min_impact_score: float = 0.35,
+    news_min_confidence: float = 0.9,
+    news_max_alerts_per_cycle: int = 20,
+    news_sent_fingerprint_ttl_hours: int = 24 * 21,
 ) -> AppSettings:
     return AppSettings(
         data=DataConfig(data_dir=str(tmp_path)),
@@ -134,6 +140,12 @@ def _build_settings(
             shock_aftershock_cooldown_minutes=shock_aftershock_cooldown_minutes,
             shock_max_alerts_per_cycle=shock_max_alerts_per_cycle,
             shock_sent_fingerprint_ttl_hours=shock_sent_fingerprint_ttl_hours,
+            news_alerts_enabled=news_alerts_enabled,
+            news_feed_path=news_feed_path,
+            news_min_impact_score=news_min_impact_score,
+            news_min_confidence=news_min_confidence,
+            news_max_alerts_per_cycle=news_max_alerts_per_cycle,
+            news_sent_fingerprint_ttl_hours=news_sent_fingerprint_ttl_hours,
         ),
     )
 
@@ -933,3 +945,44 @@ def test_worker_broadcasts_shock_primary_and_aftershock(tmp_path):
     assert "SHOCK AFTERSHOCK" in text_2
     assert "Topic: iran-attack" in text_1
     assert "Topic age: 2d" in text_2
+
+
+def test_worker_broadcasts_live_news_alert_once(tmp_path):
+    news_feed = tmp_path / "live_news_signals.csv"
+    news_feed.write_text(
+        "\n".join(
+            [
+                "published_at_utc,commodity,direction,severity,impact_score,confidence,source_name,provider,title,url",
+                "2026-03-04T07:00:00Z,BRN,up,critical,0.95,0.95,reuters.com,newsapi,Oil jumps after Iran escalation,https://example.com/news-1",
+                "2026-03-04T07:05:00Z,GOLD,up,high,0.70,0.85,bloomberg.com,gdelt,Gold edges higher,https://example.com/news-2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        daily_healthcheck_enabled=False,
+        news_alerts_enabled=True,
+        news_feed_path=str(news_feed),
+        news_min_impact_score=0.8,
+        news_min_confidence=0.9,
+    )
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[[]])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker.run_cycle()
+    worker._next_signal_fetch_at = 0.0
+    worker.run_cycle()
+
+    assert len(telegram_session.sent_messages) == 1
+    text = str(telegram_session.sent_messages[0]["text"])
+    assert "NEWS IMPACT ALERT" in text
+    assert "Commodity: BRN" in text
+    assert "Oil jumps after Iran escalation" in text
