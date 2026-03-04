@@ -1,5 +1,5 @@
 # Session Handoff
-Updated: 2026-03-04 15:07 UTC
+Updated: 2026-03-04 15:13 UTC
 
 ## Goal
 - Remove popup console windows when worker/background processes are started locally.
@@ -16,6 +16,8 @@ Updated: 2026-03-04 15:07 UTC
 - Identified popup source: `scripts/start_all_background.ps1` starts backend/worker/frontend via `Start-Process` without hidden window flags.
 - Confirmed active worker wrappers are running under `powershell.exe` parent processes for backend and Telegram worker.
 - Scoped scheduled-task launcher paths for autostart, news ingest, and shock label cycle workers.
+- Updated installed `MoexCarry-NewsIngest*` and `MoexCarry-ShockLabelCycle*` tasks to include `-WindowStyle Hidden` in action arguments.
+- Relaunched backend and Telegram worker in hidden mode; frontend launch still depends on local `vite` availability.
 
 ## First-Time-Right Report
 1. Confirmed coverage: manual background launcher and scheduled-task templates for all recurring workers are included.
