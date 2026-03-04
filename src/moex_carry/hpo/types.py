@@ -39,6 +39,10 @@ class ObjectiveConfig:
     hard_max_idle_ratio: float | None = 0.75
     hard_max_forced_exit_rate: float | None = 0.40
     hard_max_unfilled_entry_rate: float | None = 0.50
+    lambda_negative_folds: float = 0.0
+    negative_fold_threshold: float = 0.0
+    negative_fold_metric: str | None = None
+    hard_max_negative_fold_share: float | None = None
 
 
 @dataclass(frozen=True)

@@ -465,6 +465,15 @@ def start_hpo_run(
     folds, folds_meta = _build_folds(request, data_dir)
     max_trials = max_trials_override or request.optimization.max_trials or DEFAULT_MAX_TRIALS
     max_trials = max(int(max_trials), 1)
+    algorithm = str(request.optimization.algorithm or DEFAULT_ALGORITHM).upper()
+    if algorithm not in {"RANDOM", "TPE"}:
+        algorithm = DEFAULT_ALGORITHM
+    aggregation = str(request.optimization.aggregation or DEFAULT_AGGREGATION).lower()
+    if aggregation not in {"median", "p25", "mean"}:
+        aggregation = DEFAULT_AGGREGATION
+    evaluation_mode = str(request.optimization.evaluation_mode or DEFAULT_EVALUATION).upper()
+    if evaluation_mode not in {"CONTINUOUS", "WARMUP_THEN_FLAT"}:
+        evaluation_mode = DEFAULT_EVALUATION
 
     status_payload = {
         "run_id": run_id,
@@ -484,9 +493,9 @@ def start_hpo_run(
         "folds": [_serialize_fold(fold) for fold in folds],
         "folds_meta": folds_meta,
         "max_trials": max_trials,
-        "algorithm": DEFAULT_ALGORITHM,
-        "aggregation": DEFAULT_AGGREGATION,
-        "evaluation_mode": DEFAULT_EVALUATION,
+        "algorithm": algorithm,
+        "aggregation": aggregation,
+        "evaluation_mode": evaluation_mode,
         "precompute": precompute,
     }
     _write_json(run_dir / "run.json", metadata)
@@ -503,6 +512,9 @@ def start_hpo_run(
             "data_dir": Path(data_dir),
             "run_dir": run_dir,
             "max_trials": max_trials,
+            "algorithm": algorithm,
+            "aggregation": aggregation,
+            "evaluation_mode": evaluation_mode,
             "precompute": precompute,
         },
     )
@@ -535,6 +547,9 @@ def _run_hpo_async(
     data_dir: Path,
     run_dir: Path,
     max_trials: int,
+    algorithm: str,
+    aggregation: str,
+    evaluation_mode: str,
     precompute: bool | None,
 ) -> None:
     status_path = _status_path(run_dir)
@@ -549,10 +564,17 @@ def _run_hpo_async(
         if mode not in {"max", "min"}:
             mode = "max"
         metric = str(request.optimization.metric or "excess_ann")
-        objective = ObjectiveConfig(metric=metric, mode=mode)
+        objective = ObjectiveConfig(
+            metric=metric,
+            mode=mode,
+            lambda_negative_folds=float(request.optimization.negative_fold_penalty or 0.0),
+            negative_fold_threshold=float(request.optimization.negative_fold_threshold or 0.0),
+            negative_fold_metric=request.optimization.negative_fold_metric,
+            hard_max_negative_fold_share=request.optimization.hard_max_negative_fold_share,
+        )
         trials: list[TrialResult] = []
         for idx in range(max_trials):
-            if DEFAULT_ALGORITHM == "TPE":
+            if str(algorithm).upper() == "TPE":
                 params = sample_tpe(space, trials, rng, mode=mode)
             else:
                 params = sample_random(space, rng)
@@ -562,8 +584,8 @@ def _run_hpo_async(
                 folds=folds,
                 data_dir=data_dir,
                 objective=objective,
-                aggregation=DEFAULT_AGGREGATION,
-                evaluation_mode=DEFAULT_EVALUATION,
+                aggregation=str(aggregation).lower(),
+                evaluation_mode=str(evaluation_mode).upper(),
                 precompute=precompute,
                 backtest_runner=_default_backtest_runner,
             )
