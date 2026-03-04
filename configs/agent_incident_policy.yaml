@@ -11,3 +11,12 @@ incident:
     - prompt
     - prompt-only
     - reprompt
+  enforce_learning_fields_from: 2026-03-04
+  required_learning_fields:
+    - incident_signature
+    - prevention_change
+    - prevention_artifact
+    - prevention_check
+    - loop_breaker_trigger
+    - search_space_reset
+  max_same_path_attempts: 2

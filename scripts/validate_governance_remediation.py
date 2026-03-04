@@ -10,6 +10,7 @@ REQUIRED_SECTIONS = [
     "## `python scripts/validate_plans.py`",
     "## `python scripts/validate_agent_memory.py`",
     "## `python scripts/validate_session_handoff.py`",
+    "## `python scripts/validate_task_request_contract.py`",
     "## `python scripts/validate_pr_only_policy.py`",
     "## `python scripts/validate_dependency_decisions.py`",
     "## `python scripts/validate_taste_invariants.py`",

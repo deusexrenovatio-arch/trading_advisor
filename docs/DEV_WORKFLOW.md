@@ -96,6 +96,22 @@ Required report block for implementation and reviews:
 3. Resource/time risks and chosen controls.
 4. Highest-priority fixes or follow-ups.
 
+## Task request contract gate (mandatory)
+- Before non-trivial implementation, define operator contract in `docs/session_handoff.md`:
+  - `## Task Request Contract` with objective, scope, constraints, done-evidence, and priority rule.
+  - `## First-Time-Right Report` using the required 4-part report block.
+  - `## Repetition Control` with max same-path attempts, stop trigger, reset action, new search space, and next probe.
+- Use checklist:
+  - `docs/checklists/task-request-contract.md`
+- Validation command:
+  - `python scripts/validate_task_request_contract.py`
+
+Blockers:
+- Missing measurable objective or contradictory scope.
+- Missing completion evidence commands/artifacts.
+- Missing priority rule when tradeoffs conflict.
+- Missing repetition-control policy for stop/reset/new-search behavior.
+
 ## Context budget gate (mandatory)
 - Keep handoff state in `docs/session_handoff.md`, not in long chat recaps.
 - `## Current Delta` must stay within 8 bullets and contain only actionable changes.
@@ -126,8 +142,13 @@ Required report block for implementation and reviews:
 - Keep operational memory fresh:
   - record durable decisions/incidents/patterns in `memory/agent_memory.yaml`.
   - incident `remediation_type` must follow `configs/agent_incident_policy.yaml`.
+  - for incidents on/after policy effective date, include learning fields:
+    - `incident_signature`,
+    - `prevention_change`, `prevention_artifact`, `prevention_check`,
+    - `loop_breaker_trigger`, `search_space_reset`, `same_path_attempts`.
 - Keep handoff delta fresh:
   - update `docs/session_handoff.md` with current goal, delta, blockers, and next step.
+  - keep task request contract and first-time-right report sections current.
 - Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
 - Before push/PR, always run the full blocker gate below.
 
@@ -145,6 +166,7 @@ Required report block for implementation and reviews:
 - `python -m pip install -e ".[dev]"`
 - `python scripts/run_lean_gate.py`
 - `python scripts/validate_session_handoff.py`
+- `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_quality_scorecards.py`
 - `python scripts/validate_python_style.py`
 - `python scripts/validate_structured_logging.py`

@@ -22,6 +22,8 @@
 - Run `python scripts/run_lean_gate.py` before and after meaningful patches.
 - Keep `plans/PLANS.yaml`, `memory/agent_memory.yaml`, and `docs/session_handoff.md` aligned with real progress.
 - Run `python scripts/validate_session_handoff.py` after handoff updates.
+- Run `python scripts/validate_task_request_contract.py` after updating task contract and first-time-right report blocks.
+- Ensure `## Repetition Control` is present in handoff and incident learning fields follow `configs/agent_incident_policy.yaml`.
 - Before push, run blocker checks from `docs/DEV_WORKFLOW.md`, including `python scripts/validate_quality_scorecards.py`.
 - For repeated issues/regressions, run `docs/checklists/first-time-right-gate.md` and produce the required 4-part report block.
 
