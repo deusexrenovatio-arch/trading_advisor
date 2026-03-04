@@ -27,7 +27,10 @@ This directory is the repository knowledge system for agent-first engineering.
 ## Governance and Process
 - `agent-runbook.md`
 - `docs/checklists/first-time-right-gate.md`
+- `docs/checklists/task-request-contract.md`
 - `docs/planning/plans-registry.md`
+- `docs/workflows/agent-practices-alignment.md`
+- `docs/workflows/external-advice-mapping-2026-03-04.md`
 - `docs/workflows/context-budget.md`
 - `docs/workflows/skill-governance-sync.md`
 - `docs/workflows/worktree-governance.md`
@@ -39,6 +42,7 @@ This directory is the repository knowledge system for agent-first engineering.
 ## Validation Commands
 - `python scripts/run_lean_gate.py`
 - `python scripts/validate_session_handoff.py`
+- `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_pr_only_policy.py`
 - `python scripts/validate_quality_scorecards.py`
 - `python scripts/validate_python_style.py`

@@ -12,6 +12,8 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | --- | --- | --- | --- |
 | Machine-readable execution plan | `python scripts/validate_plans.py` | Engineering owner | `governance` |
 | Session handoff context budget contract | `python scripts/validate_session_handoff.py` | Engineering owner | `governance` |
+| Operator request contract and first-time-right report completeness | `python scripts/validate_task_request_contract.py` | Engineering owner | `governance` |
+| Recurring-error prevention with behavior-change evidence and loop-breaker control | `python scripts/validate_agent_memory.py` + `python scripts/validate_task_request_contract.py` | Engineering owner | `governance` |
 | Contract-first API surface | `python scripts/validate_api_v2_contract_parity.py` | Backend platform | `governance` |
 | Directional module boundaries (no core -> UI imports) | `python scripts/validate_import_boundaries.py` | Architecture owner | `governance` |
 | Hard architecture policy-as-code | `python scripts/validate_architecture_policy.py` | Architecture owner | `governance` |

@@ -1,7 +1,131 @@
 version: 1
-updated_at: 2026-03-03
+updated_at: 2026-03-04
 
 decisions:
+  - id: ADM-2026-03-04-075
+    date: 2026-03-04
+    title: Complete advice-by-advice external practices mapping and enforce recurrence-signature learning
+    context: Full comparison request across Boris Way, Anthropic best-practices, and Claude-code tips required explicit mapping for each advice plus targeted implementation of high-fit gaps.
+    decision: Add one traceability matrix for all concrete advice items, enforce incident recurrence signatures and behavior-change deltas in memory validation, and enforce numeric same-path attempt caps against policy in task-contract validation.
+    impact: External guidance is now auditable against repository controls; repeated failure classes require measurable process/capability change instead of repeated patch loops.
+    links:
+      - docs/workflows/external-advice-mapping-2026-03-04.md
+      - scripts/validate_agent_memory.py
+      - scripts/validate_task_request_contract.py
+      - configs/agent_incident_policy.yaml
+      - docs/DEV_WORKFLOW.md
+      - AGENTS.md
+  - id: ADM-2026-03-04-074
+    date: 2026-03-04
+    title: Enforce repeated-issue self-learning with mandatory behavior-change fields and loop-breaker policy
+    context: Existing repeated-issue workflow emphasized deep analysis but did not strictly require future behavior change evidence or explicit stop/reset/new-search controls.
+    decision: Extend incident policy and memory validator with required learning fields for new incidents; extend task-contract validator with mandatory repetition control; update repeated-issue-review skill output requirements.
+    impact: Repeated failures now require explicit prevention artifacts and capped same-path attempts; context reset and new search-space probing are enforced before continued patching.
+    links:
+      - configs/agent_incident_policy.yaml
+      - scripts/validate_agent_memory.py
+      - scripts/validate_task_request_contract.py
+      - docs/checklists/task-request-contract.md
+      - .cursor/skills/repeated-issue-review/SKILL.md
+      - docs/DEV_WORKFLOW.md
+      - AGENTS.md
+  - id: ADM-2026-03-04-073
+    date: 2026-03-04
+    title: Promote task request quality to a hard governance gate
+    context: External agent-practice review showed that weak operator prompts still caused avoidable ambiguity despite strong code-quality gates.
+    decision: Add `validate_task_request_contract.py`, require explicit task contract and first-time-right report sections in session handoff, and run this validator inside `run_lean_gate.py`.
+    impact: Ambiguous or contradictory requests are now blocked early with deterministic remediation instead of leaking into implementation and review loops.
+    links:
+      - scripts/validate_task_request_contract.py
+      - scripts/run_lean_gate.py
+      - docs/checklists/task-request-contract.md
+      - docs/workflows/agent-practices-alignment.md
+      - docs/DEV_WORKFLOW.md
+      - AGENTS.md
+      - docs/session_handoff.md
+  - id: ADM-2026-03-04-072
+    date: 2026-03-04
+    title: Enable incremental shock-row backfill via cursor and scheduler wiring
+    context: "news_shock_rows backfill existed as a standalone script but was not integrated into the regular shock-label cycle and scheduler plan, so historical DB coverage depended on manual runs."
+    decision: Add CLI command `news_shock_backfill`, add optional pre-cycle shock backfill stage in `run_shock_label_cycle.py`, and wire daily backfill task to run `RunShockBackfill` with bounded windows and persistent cursor.
+    impact: Historical shock rows now fill gradually in DB (`news_state` cursor progression) without long one-shot jobs; daily automation can extend history while keeping runtime bounded.
+    links:
+      - src/moex_carry/cli.py
+      - src/moex_carry/news_shock_backfill.py
+      - scripts/run_shock_label_cycle.py
+      - scripts/start_shock_label_cycle.ps1
+      - scripts/manage_shock_label_cycle_task.ps1
+      - scripts/manage_news_shock_live_plan.ps1
+      - docs/runbooks/news-shock-go-live.md
+  - id: ADM-2026-03-04-071
+    date: 2026-03-04
+    title: Switch news/shock alert pipeline to DB-first ingestion with CSV fallback
+    context: Silver and live shock/news pipelines were still partially coupled to CSV snapshots, which created drift between runtime state and alerting/label-cycle entrypoints.
+    decision: Add DB-first loaders for Telegram news/shock broadcasts, add SQLite reader for `news_shock_rows`, and allow `run_shock_label_cycle.py` to run directly from DB input while keeping CSV as compatibility fallback/snapshot.
+    impact: Runtime alerting and shock-label cycle now consume the same persisted SQLite state; CSV is no longer a mandatory source-of-truth for operational flow.
+    links:
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
+      - src/moex_carry/shock_alert_delivery.py
+      - src/moex_carry/news_shock_store.py
+      - src/moex_carry/news_shock_automation.py
+      - scripts/run_shock_label_cycle.py
+      - tests/test_telegram_worker.py
+      - tests/test_news_shock_store.py
+      - tests/test_news_shock_automation.py
+  - id: ADM-2026-03-04-070
+    date: 2026-03-04
+    title: Make NewsAPI backfill windowed with deterministic cursor progression
+    context: A single wide backfill request per commodity returned only the latest top-100 items, leaving recent historical days underfilled and breaking shock-to-news matching quality.
+    decision: Add per-commodity NewsAPI backfill windows per run (`newsapi_backfill_windows_per_commodity`) with independent day chunking (`newsapi_backfill_chunk_days`) and move runtime state/budget helpers into `news_runtime_state.py`.
+    impact: Backfill now advances history predictably and fills recent windows needed for live shock linking; runtime governance line-budget blocker on `news_live_runtime.py` was also removed.
+    links:
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_runtime_state.py
+      - tests/test_news_live_runtime.py
+      - configs/news-livecheck-ng.yaml
+  - id: ADM-2026-03-04-069
+    date: 2026-03-04
+    title: Make news-gate timing explicit via as-of timestamp to preserve causal replay semantics
+    context: News gate and bridge lookback logic were tied to wall-clock `datetime.now()`, which can break walk-forward/replay behavior and hide news effects when evaluating historical timestamps.
+    decision: Add optional `as_of_utc` to `load_news_gate_items` and `apply_news_filter`, and pass one shared timestamp from pipeline decision flow to both components.
+    impact: News gating behavior is deterministic for a fixed decision timestamp and now supports causal replay/walk-forward without implicit time drift.
+    links:
+      - src/moex_carry/strategy/news_filter.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/pipeline.py
+      - tests/test_news_filter.py
+      - tests/test_news_live_runtime.py
+  - id: ADM-2026-03-04-068
+    date: 2026-03-04
+    title: Consolidate news runtime storage semantics into shared helper with atomic feed export
+    context: Live news runtime, bridge reads, and shock input builder duplicated sqlite URL/path parsing and could produce partial feed CSV snapshots under concurrent reads.
+    decision: Add `news_storage.py` as a single storage utility for sqlite path resolution and connection settings; switch runtime/bridge/shock input to shared helper; export live feed via atomic temp-file replace; add indexes for bridge query patterns and warning logs on sqlite read errors.
+    impact: Reduced storage divergence and race windows across ingest, bridge, and shock pipelines; improved operational diagnosability without silent data drops.
+    links:
+      - src/moex_carry/news_storage.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/news_shock_live_input.py
+      - tests/test_news_live_runtime.py
+  - id: ADM-2026-03-04-067
+    date: 2026-03-04
+    title: Route fresh shock cycles through live MOEX plus live-news input and stabilize topic identity
+    context: Shock labeling and Telegram alerts were running on stale static CSV input, while repeated stories fragmented into unstable topic keys and duplicate commodity alerts.
+    decision: Auto-build fresh shock input from MOEX front contracts plus live news DB when FreshLookbackHours is used; introduce shared topic utility for stable root keys and impact tiers; deduplicate live feed and Telegram news by story fingerprint across commodities.
+    impact: Fresh cycles now evaluate current market moves instead of stale snapshots; root-vs-aftershock continuity is stable; duplicate multi-commodity echoes are reduced.
+    links:
+      - scripts/build_live_shock_input.py
+      - src/moex_carry/news_shock_live_input.py
+      - scripts/start_shock_label_cycle.ps1
+      - src/moex_carry/news_topic.py
+      - src/moex_carry/news_shock_automation.py
+      - src/moex_carry/shock_alert_delivery.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
   - id: ADM-2026-03-03-066
     date: 2026-03-03
     title: Add live polling stability controls for commodity news ingestion
@@ -663,4 +787,34 @@ patterns:
       - scripts/manage_shock_label_cycle_task.ps1
       - scripts/start_shock_label_cycle.ps1
       - src/moex_carry/news_shock_automation.py
+  - id: AMP-2026-03-04-028
+    date: 2026-03-04
+    title: Reject under-specified requests before coding
+    pattern: Define and validate objective/scope/constraints/done-evidence/priority rule in handoff before implementation; stop and request clarification when any field is missing.
+    when_to_use: Any non-trivial task where implicit assumptions can cause rework or hidden scope drift.
+    links:
+      - docs/checklists/task-request-contract.md
+      - scripts/validate_task_request_contract.py
+      - docs/session_handoff.md
+      - docs/DEV_WORKFLOW.md
+  - id: AMP-2026-03-04-029
+    date: 2026-03-04
+    title: Force loop-breaker reset after repeated same-path failures
+    pattern: Cap same-path attempts, stop on repeated failure signature, execute context reset, and run one falsifiable probe from a new search space before further patching.
+    when_to_use: Any recurring bug/incident where fixes repeat without changing failure mode.
+    links:
+      - configs/agent_incident_policy.yaml
+      - scripts/validate_agent_memory.py
+      - scripts/validate_task_request_contract.py
+      - docs/session_handoff.md
+      - .cursor/skills/repeated-issue-review/SKILL.md
+  - id: AMP-2026-03-04-030
+    date: 2026-03-04
+    title: Keep external-practice adoption explicit with per-advice decision traceability
+    pattern: For each external recommendation, record usefulness and decision (`ADOPT/ADAPT/DEFER/REJECT`) against architecture and active governance gates before implementing changes.
+    when_to_use: Any methodology import where generic advice may conflict with repository-specific safety, risk, or delivery constraints.
+    links:
+      - docs/workflows/external-advice-mapping-2026-03-04.md
+      - docs/workflows/agent-practices-alignment.md
+      - plans/PLANS.yaml
 
