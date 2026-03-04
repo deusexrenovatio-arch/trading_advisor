@@ -842,6 +842,26 @@ class SignalEngineMorningSetupsConfig(BaseModel):
     min_atr_d1_cost_mult: float = 12.0
 
 
+class SignalEngineMorningNewsGateConfig(BaseModel):
+    enabled: bool = False
+    db_url: str = "sqlite:///./data/news_livecheck_ng.db"
+    lookback_minutes: int = 180
+    block_severity_threshold: str = "high"
+    reduce_severity_threshold: str = "medium"
+    min_impact_score: float = 0.35
+    min_confidence: float = 0.9
+    max_items: int = 200
+    sources: list[str] = Field(default_factory=list)
+    commodity_map: dict[str, str] = Field(
+        default_factory=lambda: {
+            "BR": "BRN",
+            "NG": "NG_US",
+            "GD": "GOLD",
+        }
+    )
+    reduce_max_setups: int = 1
+
+
 class SignalEngineMorningPlanConfig(BaseModel):
     timezone: str = "Europe/Moscow"
     calendar: SignalEngineMorningCalendarConfig = SignalEngineMorningCalendarConfig()
@@ -850,6 +870,7 @@ class SignalEngineMorningPlanConfig(BaseModel):
     levels: SignalEngineMorningLevelsConfig = SignalEngineMorningLevelsConfig()
     execution: SignalEngineMorningExecutionConfig = SignalEngineMorningExecutionConfig()
     setups: SignalEngineMorningSetupsConfig = SignalEngineMorningSetupsConfig()
+    news_gate: SignalEngineMorningNewsGateConfig = SignalEngineMorningNewsGateConfig()
 
 
 class SignalEngineConfig(BaseModel):

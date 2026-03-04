@@ -26,6 +26,7 @@ from moex_carry.signal_engine.data.candles import InMemoryCandleProvider
 from moex_carry.signal_engine.execution.engine import ExecutionEngine
 from moex_carry.signal_engine.levels.engine import LevelEngine
 from moex_carry.signal_engine.regime.engine import RegimeEngine
+from moex_carry.signal_engine.news.gate import CommodityNewsGate
 from moex_carry.signal_engine.setups.generator import SetupGenerator
 from moex_carry.signal_engine.plan.builder import MorningPlanBuilder
 
@@ -250,6 +251,7 @@ class WindowEvalCache:
     level_engines: dict[str, LevelEngine]
     execution_engines: dict[str, ExecutionEngine]
     setup_generators: dict[tuple[str, str], SetupGenerator]
+    news_gates: dict[str, CommodityNewsGate]
 
 
 @dataclass(frozen=True)
@@ -1653,6 +1655,7 @@ def _build_window_eval_cache(payload: dict[tuple[str, TF], list[Candle]]) -> Win
         level_engines={},
         execution_engines={},
         setup_generators={},
+        news_gates={},
     )
 
 
@@ -1762,6 +1765,17 @@ def _compute_setups_cached(
         calendar=calendar,
         m5=base_slice.m5,
     )
+    news_cfg = _cfg_section(cfg, "news_gate")
+    news_sig = _stable_signature(news_cfg)
+    news_gate = eval_cache.news_gates.get(news_sig)
+    if news_gate is None:
+        news_gate = CommodityNewsGate(news_cfg)
+        eval_cache.news_gates[news_sig] = news_gate
+    decision = news_gate.evaluate(as_of_ts=as_of_ts, instrument_id=instrument_id)
+    if decision.action == "block":
+        return []
+    if decision.action == "reduce" and setups:
+        setups = setups[: news_gate.reduce_max_setups]
     return setups
 
 
@@ -2088,6 +2102,30 @@ def _parse_tick_sizes(items: list[str]) -> dict[str, float]:
     return result
 
 
+def _parse_csv_tokens(items: list[str]) -> list[str]:
+    tokens: list[str] = []
+    for item in items:
+        for part in str(item).split(","):
+            value = str(part).strip()
+            if value:
+                tokens.append(value)
+    return tokens
+
+
+def _parse_news_commodity_map(items: list[str]) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for item in _parse_csv_tokens(items):
+        if "=" not in item:
+            raise ValueError(f"invalid_news_commodity_map_pair:{item}")
+        root, commodity = item.split("=", 1)
+        normalized_root = str(root).strip().upper()
+        normalized_commodity = str(commodity).strip().upper()
+        if not normalized_root or not normalized_commodity:
+            raise ValueError(f"invalid_news_commodity_map_pair:{item}")
+        parsed[normalized_root] = normalized_commodity
+    return parsed
+
+
 def _fold_windows(
     *,
     start_date: date,
@@ -2116,6 +2154,8 @@ def _fold_windows(
 
 
 def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
+    if bool(args.enable_news_gate) and bool(args.disable_news_gate):
+        raise ValueError("news_gate_enable_disable_conflict")
     settings = load_settings(args.config)
     calendar = _build_calendar(settings)
     tz = ZoneInfo(settings.signal_engine.morning_plan.timezone)
@@ -2202,6 +2242,36 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     if isinstance(setup_cfg, dict):
         current_min_target_pct = float(setup_cfg.get("min_target_return_pct", 0.0) or 0.0)
         setup_cfg["min_target_return_pct"] = max(current_min_target_pct, max(float(args.goal_min_target_return_pct), 0.0))
+    news_gate_cfg = base_cfg.setdefault("news_gate", {})
+    if isinstance(news_gate_cfg, dict):
+        if bool(args.enable_news_gate):
+            news_gate_cfg["enabled"] = True
+        if bool(args.disable_news_gate):
+            news_gate_cfg["enabled"] = False
+        if args.news_gate_db_url:
+            news_gate_cfg["db_url"] = str(args.news_gate_db_url).strip()
+        if args.news_gate_lookback_minutes is not None:
+            news_gate_cfg["lookback_minutes"] = max(int(args.news_gate_lookback_minutes), 1)
+        if args.news_gate_min_impact_score is not None:
+            news_gate_cfg["min_impact_score"] = float(args.news_gate_min_impact_score)
+        if args.news_gate_min_confidence is not None:
+            news_gate_cfg["min_confidence"] = float(args.news_gate_min_confidence)
+        if args.news_gate_max_items is not None:
+            news_gate_cfg["max_items"] = max(int(args.news_gate_max_items), 1)
+        if args.news_gate_block_severity_threshold:
+            news_gate_cfg["block_severity_threshold"] = str(args.news_gate_block_severity_threshold).strip().lower()
+        if args.news_gate_reduce_severity_threshold:
+            news_gate_cfg["reduce_severity_threshold"] = str(args.news_gate_reduce_severity_threshold).strip().lower()
+        source_tokens = _parse_csv_tokens(list(args.news_gate_source or []))
+        if source_tokens:
+            news_gate_cfg["sources"] = source_tokens
+        commodity_map_overrides = _parse_news_commodity_map(list(args.news_gate_commodity_map or []))
+        if commodity_map_overrides:
+            merged_map = dict(news_gate_cfg.get("commodity_map") or {})
+            merged_map.update(commodity_map_overrides)
+            news_gate_cfg["commodity_map"] = merged_map
+        if args.news_gate_reduce_max_setups is not None:
+            news_gate_cfg["reduce_max_setups"] = max(int(args.news_gate_reduce_max_setups), 1)
     costs = CostAssumptions(
         commission_ticks_per_side=float(args.commission_ticks_per_side),
         slippage_ticks_per_side=float(args.slippage_ticks_per_side),
@@ -2639,6 +2709,23 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "effective_min_target_return_pct": float(
                 base_cfg.get("setups", {}).get("min_target_return_pct", 0.0)
             ),
+            "news_gate": {
+                "enabled": bool(base_cfg.get("news_gate", {}).get("enabled", False)),
+                "db_url": str(base_cfg.get("news_gate", {}).get("db_url", "")),
+                "lookback_minutes": int(base_cfg.get("news_gate", {}).get("lookback_minutes", 0)),
+                "block_severity_threshold": str(
+                    base_cfg.get("news_gate", {}).get("block_severity_threshold", "")
+                ),
+                "reduce_severity_threshold": str(
+                    base_cfg.get("news_gate", {}).get("reduce_severity_threshold", "")
+                ),
+                "min_impact_score": float(base_cfg.get("news_gate", {}).get("min_impact_score", 0.0)),
+                "min_confidence": float(base_cfg.get("news_gate", {}).get("min_confidence", 0.0)),
+                "max_items": int(base_cfg.get("news_gate", {}).get("max_items", 0)),
+                "reduce_max_setups": int(base_cfg.get("news_gate", {}).get("reduce_max_setups", 1)),
+                "sources": list(base_cfg.get("news_gate", {}).get("sources", []) or []),
+                "commodity_map": dict(base_cfg.get("news_gate", {}).get("commodity_map", {}) or {}),
+            },
             "front_roll_avoid_expiry_days": int(front_roll_avoid_expiry_days),
             "min_train_trades": min_train_trades,
             "min_train_instruments_with_trades": required_instruments,
@@ -2774,6 +2861,18 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--commission-ticks-per-side", type=float, default=0.5)
     parser.add_argument("--slippage-ticks-per-side", type=float, default=1.0)
     parser.add_argument("--spread-half-ticks", type=float, default=1.0)
+    parser.add_argument("--enable-news-gate", action="store_true")
+    parser.add_argument("--disable-news-gate", action="store_true")
+    parser.add_argument("--news-gate-db-url", type=str, default=None)
+    parser.add_argument("--news-gate-lookback-minutes", type=int, default=None)
+    parser.add_argument("--news-gate-min-impact-score", type=float, default=None)
+    parser.add_argument("--news-gate-min-confidence", type=float, default=None)
+    parser.add_argument("--news-gate-max-items", type=int, default=None)
+    parser.add_argument("--news-gate-block-severity-threshold", type=str, default=None)
+    parser.add_argument("--news-gate-reduce-severity-threshold", type=str, default=None)
+    parser.add_argument("--news-gate-source", action="append", default=[])
+    parser.add_argument("--news-gate-commodity-map", action="append", default=[])
+    parser.add_argument("--news-gate-reduce-max-setups", type=int, default=None)
     parser.add_argument(
         "--cache-db",
         type=str,
