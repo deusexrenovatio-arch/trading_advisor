@@ -2,6 +2,17 @@ version: 1
 updated_at: 2026-03-04
 
 decisions:
+  - id: ADM-2026-03-04-068
+    date: 2026-03-04
+    title: Use 3-day news lookback for effective gate activation on morning-plan windows and select lowest-risk setup on reduce
+    context: With default 180-minute lookback, real walk-forward windows had almost no commodity news overlap at setup timestamps, so gate had near-zero effect.
+    decision: Calibrate news-gate lookback to 4320 minutes (3 days) for experiments and change reduce behavior to keep setups with minimal risk_ticks instead of first emitted setup.
+    impact: Real-DB walk-forward showed fewer negative folds (3 -> 2) and improved net ticks (-225 -> -208) under dense scenario while preserving causal semantics.
+    links:
+      - src/moex_carry/signal_engine/news/gate.py
+      - src/moex_carry/signal_engine/plan/builder.py
+      - scripts/run_morning_plan_walk_forward.py
+      - artifacts/research/wf_news_realdb_dense_gate_lookback4320_riskpick_eval.json
   - id: ADM-2026-03-04-067
     date: 2026-03-04
     title: Enforce commodity news gate parity between MorningPlanBuilder and walk-forward eval-cache path
