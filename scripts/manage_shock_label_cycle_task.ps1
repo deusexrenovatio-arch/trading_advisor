@@ -11,6 +11,19 @@ param(
     [string]$RunAs = "",
     [string]$PowerShellExe = "",
     [string]$InputCsv = "data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv",
+    [switch]$UseDbInput,
+    [string]$InputDatabaseUrl = "sqlite:///./data/news_livecheck_ng.db",
+    [string]$InputDataDir = "./data",
+    [int]$InputBarMinutes = 5,
+    [int]$InputMaxRows = 0,
+    [switch]$RunShockBackfill,
+    [string]$ShockBackfillCursorKey = "shock_rows_backfill_cursor_utc",
+    [string]$ShockBackfillStartTs = "2025-01-01T00:00:00Z",
+    [string]$ShockBackfillEndTs = "",
+    [int]$ShockBackfillWindowHours = 24,
+    [int]$ShockBackfillWindowsPerRun = 5,
+    [switch]$ShockBackfillWriteSnapshotCsv,
+    [string]$ShockBackfillSnapshotDir = "data/output/shock_backfill_snapshots",
     [string]$OutputRoot = "data/output/shock_label_cycle_auto",
     [string]$StartTs = "",
     [string]$EndTs = "",
@@ -34,6 +47,8 @@ param(
     [int]$MaxGapMin = 2880,
     [string]$DirectionLabelsJsonl = "",
     [string]$CausalLabelsJsonl = "",
+    [string]$MainConfig = "",
+    [string]$NewsConfig = "configs/news-livecheck-ng.yaml",
     [switch]$NoLocalEnv,
     [switch]$DryRun
 )
@@ -69,9 +84,14 @@ function Build-TaskArguments {
 
     $parts = @(
         "-NoProfile",
+        "-WindowStyle", "Hidden",
         "-ExecutionPolicy", "Bypass",
         "-File", "`"$startScript`"",
         "-InputCsv", "`"$InputCsv`"",
+        "-InputDatabaseUrl", "`"$InputDatabaseUrl`"",
+        "-InputDataDir", "`"$InputDataDir`"",
+        "-InputBarMinutes", "$InputBarMinutes",
+        "-InputMaxRows", "$InputMaxRows",
         "-OutputRoot", "`"$OutputRoot`"",
         "-MinAbsZ", "$MinAbsZ",
         "-MaxDelayMin", "$MaxDelayMin",
@@ -89,6 +109,12 @@ function Build-TaskArguments {
         "-EpisodeWindowMin", "$EpisodeWindowMin",
         "-MaxGapMin", "$MaxGapMin"
     )
+    if (-not [string]::IsNullOrWhiteSpace($MainConfig)) {
+        $parts += @("-MainConfig", "`"$MainConfig`"")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($NewsConfig)) {
+        $parts += @("-NewsConfig", "`"$NewsConfig`"")
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($StartTs)) {
         $parts += @("-StartTs", "`"$StartTs`"")
@@ -104,6 +130,25 @@ function Build-TaskArguments {
     }
     if (-not [string]::IsNullOrWhiteSpace($CausalLabelsJsonl)) {
         $parts += @("-CausalLabelsJsonl", "`"$CausalLabelsJsonl`"")
+    }
+    if ($UseDbInput) {
+        $parts += "-UseDbInput"
+    }
+    if ($RunShockBackfill) {
+        $parts += @(
+            "-RunShockBackfill",
+            "-ShockBackfillCursorKey", "`"$ShockBackfillCursorKey`"",
+            "-ShockBackfillStartTs", "`"$ShockBackfillStartTs`"",
+            "-ShockBackfillWindowHours", "$ShockBackfillWindowHours",
+            "-ShockBackfillWindowsPerRun", "$ShockBackfillWindowsPerRun",
+            "-ShockBackfillSnapshotDir", "`"$ShockBackfillSnapshotDir`""
+        )
+        if (-not [string]::IsNullOrWhiteSpace($ShockBackfillEndTs)) {
+            $parts += @("-ShockBackfillEndTs", "`"$ShockBackfillEndTs`"")
+        }
+        if ($ShockBackfillWriteSnapshotCsv) {
+            $parts += "-ShockBackfillWriteSnapshotCsv"
+        }
     }
     if ($NoTelegramFeed) {
         $parts += "-NoTelegramFeed"

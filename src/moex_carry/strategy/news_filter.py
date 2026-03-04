@@ -27,7 +27,7 @@ def apply_news_filter(
     lookback_minutes: int,
     block_severity_threshold: str,
     reduce_severity_threshold: str,
-    *,
+    as_of_utc: datetime | None = None,
     allowed_sources: Iterable[str] | None = None,
     enforce_source_allowlist: bool = False,
 ) -> NewsGateResult:
@@ -37,20 +37,24 @@ def apply_news_filter(
     if block_value <= reduce_value:
         errors.append("invalid_severity_thresholds")
 
-    now = datetime.now(timezone.utc)
-    lookback_cutoff = now - timedelta(minutes=lookback_minutes)
-    normalized_allowed_sources = {
-        str(source).strip().lower()
-        for source in (allowed_sources or [])
-        if str(source).strip()
+    as_of = as_of_utc if as_of_utc is not None else datetime.now(timezone.utc)
+    if as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=timezone.utc)
+    else:
+        as_of = as_of.astimezone(timezone.utc)
+    lookback_cutoff = as_of - timedelta(minutes=lookback_minutes)
+    normalized_sources = {
+        str(source).strip().lower() for source in (allowed_sources or []) if str(source).strip()
     }
-    source_filter_enabled = bool(enforce_source_allowlist and normalized_allowed_sources)
     matched: list[NewsItem] = []
     highest = "low"
 
     for item in news_items:
-        source_name = str(item.source or "").strip().lower()
-        if source_filter_enabled and source_name not in normalized_allowed_sources:
+        if (
+            enforce_source_allowlist
+            and normalized_sources
+            and str(item.source).strip().lower() not in normalized_sources
+        ):
             continue
         severity_value = _severity_value(item.severity)
         if severity_value < 0:

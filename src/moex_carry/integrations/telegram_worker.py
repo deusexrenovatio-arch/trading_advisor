@@ -16,6 +16,7 @@ from moex_carry.integrations.telegram_runtime_utils import (
     parse_hhmm,
     resolve_display_timezone,
 )
+from moex_carry.integrations.telegram_news_broadcast import broadcast_news_alerts
 from moex_carry.integrations.telegram_shock_broadcast import broadcast_shock_alerts
 from moex_carry.signals_ack import build_ack_note, build_signal_fingerprint
 from moex_carry.signals_delivery import (
@@ -72,6 +73,7 @@ class TelegramWorker:
             if isinstance(self.cfg.shock_feed_path, str) and self.cfg.shock_feed_path.strip()
             else None
         )
+        self._news_feed_path = self._resolve_state_path(self.cfg.news_feed_path, settings.data.data_dir) if isinstance(self.cfg.news_feed_path, str) and self.cfg.news_feed_path.strip() else None
         self._telegram_session = telegram_session or requests.Session()
         self._backend_session = backend_session or requests.Session()
         self._sleep_fn = sleep_fn
@@ -110,6 +112,7 @@ class TelegramWorker:
             "registered_chats": {},
             "sent_fingerprints": {},
             "sent_shock_fingerprints": {},
+            "sent_news_fingerprints": {},
             "hold_open_last_sent_date_by_pair": {},
             "enter_last_sent_at_by_pair": {},
             "enter_tracking_by_fingerprint": {},
@@ -117,6 +120,7 @@ class TelegramWorker:
             "pending_callbacks": {},
             "shock_topics": {},
             "shock_last_processed_ts": None,
+            "news_last_processed_ts": None,
             "shock_episode_counter": 0,
         }
 
@@ -142,11 +146,12 @@ class TelegramWorker:
             for key, value in (payload.get("sent_fingerprints") or {}).items()
             if isinstance(key, str) and isinstance(value, str)
         }
-        state["sent_shock_fingerprints"] = {
-            str(key): str(value)
-            for key, value in (payload.get("sent_shock_fingerprints") or {}).items()
-            if isinstance(key, str) and isinstance(value, str)
-        }
+        for map_key in ("sent_shock_fingerprints", "sent_news_fingerprints"):
+            state[map_key] = {
+                str(key): str(value)
+                for key, value in (payload.get(map_key) or {}).items()
+                if isinstance(key, str) and isinstance(value, str)
+            }
         state["hold_open_last_sent_date_by_pair"] = {
             str(key): str(value)
             for key, value in (payload.get("hold_open_last_sent_date_by_pair") or {}).items()
@@ -186,9 +191,10 @@ class TelegramWorker:
                     continue
                 normalized_topics[key] = dict(value)
             state["shock_topics"] = normalized_topics
-        last_processed_ts = payload.get("shock_last_processed_ts")
-        if isinstance(last_processed_ts, str) and last_processed_ts.strip():
-            state["shock_last_processed_ts"] = last_processed_ts
+        for key in ("shock_last_processed_ts", "news_last_processed_ts"):
+            processed_ts = payload.get(key)
+            if isinstance(processed_ts, str) and processed_ts.strip():
+                state[key] = processed_ts
         state["shock_episode_counter"] = _safe_int(payload.get("shock_episode_counter")) or 0
         return state
 
@@ -1349,6 +1355,15 @@ class TelegramWorker:
                 state=self._state,
                 registered_chats=self._registered_chats(),
                 shock_feed_path=self._shock_feed_path,
+                send_text=self._send_text,
+                save_state=self._save_state,
+                logger=logger,
+            )
+            broadcast_news_alerts(
+                cfg=self.cfg,
+                state=self._state,
+                registered_chats=self._registered_chats(),
+                news_feed_path=self._news_feed_path,
                 send_text=self._send_text,
                 save_state=self._save_state,
                 logger=logger,

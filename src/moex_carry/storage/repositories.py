@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import moex_carry.storage.repositories_core as _core
 import moex_carry.storage.repositories_news_base as _news_base
 import moex_carry.storage.repositories_news_events as _news_events
 import moex_carry.storage.repositories_news_governance as _news_governance
 import moex_carry.storage.repositories_v2 as _v2
+from sqlalchemy.orm import Session
+
+from moex_carry.storage import models as db
 
 upsert_instruments = _core.upsert_instruments
 upsert_contract_specs = _core.upsert_contract_specs
@@ -22,6 +27,7 @@ load_latest_signal_run = _core.load_latest_signal_run
 load_signal_history = _core.load_signal_history
 load_active_signals = _core.load_active_signals
 load_open_executions = _core.load_open_executions
+load_signal_execution_by_idempotency = _core.load_signal_execution_by_idempotency
 upsert_quotes = _core.upsert_quotes
 load_signal_executions = _core.load_signal_executions
 upsert_decision_view_projection = _core.upsert_decision_view_projection
@@ -76,6 +82,69 @@ load_model_pred_v2 = _v2.load_model_pred_v2
 upsert_gate_run_v2 = _v2.upsert_gate_run_v2
 load_gate_run_v2 = _v2.load_gate_run_v2
 
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def try_acquire_runtime_lease(
+    session: Session,
+    *,
+    lease_name: str,
+    owner_id: str,
+    ttl_sec: int,
+) -> bool:
+    now = _utc_now_naive()
+    lease_until = now + timedelta(seconds=max(int(ttl_sec), 1))
+    lease = session.get(db.RuntimeLeaseModel, lease_name)
+    if lease is not None and lease.owner_id != owner_id and lease.lease_until > now:
+        return False
+    if lease is None:
+        session.add(
+            db.RuntimeLeaseModel(
+                lease_name=lease_name,
+                owner_id=owner_id,
+                acquired_at=now,
+                lease_until=lease_until,
+            )
+        )
+    else:
+        lease.owner_id = owner_id
+        lease.acquired_at = now
+        lease.lease_until = lease_until
+    session.commit()
+    return True
+
+
+def renew_runtime_lease(
+    session: Session,
+    *,
+    lease_name: str,
+    owner_id: str,
+    ttl_sec: int,
+) -> bool:
+    now = _utc_now_naive()
+    lease = session.get(db.RuntimeLeaseModel, lease_name)
+    if lease is None or lease.owner_id != owner_id or lease.lease_until < now:
+        return False
+    lease.lease_until = now + timedelta(seconds=max(int(ttl_sec), 1))
+    session.commit()
+    return True
+
+
+def release_runtime_lease(
+    session: Session,
+    *,
+    lease_name: str,
+    owner_id: str,
+) -> bool:
+    lease = session.get(db.RuntimeLeaseModel, lease_name)
+    if lease is None or lease.owner_id != owner_id:
+        return False
+    session.delete(lease)
+    session.commit()
+    return True
+
 __all__ = [
     "upsert_instruments",
     "upsert_contract_specs",
@@ -93,6 +162,7 @@ __all__ = [
     "load_signal_history",
     "load_active_signals",
     "load_open_executions",
+    "load_signal_execution_by_idempotency",
     "upsert_quotes",
     "load_signal_executions",
     "upsert_decision_view_projection",
@@ -146,4 +216,7 @@ __all__ = [
     "load_model_pred_v2",
     "upsert_gate_run_v2",
     "load_gate_run_v2",
+    "try_acquire_runtime_lease",
+    "renew_runtime_lease",
+    "release_runtime_lease",
 ]

@@ -11,6 +11,7 @@ from moex_carry.shock_alert_delivery import (
     apply_shock_alert_policy,
     format_shock_message,
     load_shock_rows,
+    load_shock_rows_from_db,
 )
 from moex_carry.signals_delivery import parse_iso_utc as parse_iso
 
@@ -24,22 +25,33 @@ def broadcast_shock_alerts(
     send_text: Callable[[int, str], None],
     save_state: Callable[[], None],
     logger: logging.Logger,
+    shock_database_url: str | None = None,
+    data_dir: str | Path | None = None,
 ) -> None:
     if not bool(cfg.shock_alerts_enabled):
         return
     if not registered_chats:
         return
-    if shock_feed_path is None:
+    if shock_feed_path is None and not (isinstance(shock_database_url, str) and shock_database_url.strip()):
         logger.warning("telegram.shock_alerts_enabled=true but shock_feed_path is empty.")
         return
 
     since_ts = parse_iso(state.get("shock_last_processed_ts"))
     max_rows = max(int(cfg.shock_max_alerts_per_cycle or 1), 1) * 10
-    rows = load_shock_rows(
-        shock_feed_path,
-        since_ts=since_ts,
-        max_rows=max_rows,
-    )
+    rows: list[dict[str, object]] = []
+    if isinstance(shock_database_url, str) and shock_database_url.strip() and data_dir is not None:
+        rows = load_shock_rows_from_db(
+            database_url=shock_database_url,
+            data_dir=data_dir,
+            since_ts=since_ts,
+            max_rows=max_rows,
+        )
+    if not rows and shock_feed_path is not None:
+        rows = load_shock_rows(
+            shock_feed_path,
+            since_ts=since_ts,
+            max_rows=max_rows,
+        )
     if not rows:
         return
 
@@ -47,6 +59,7 @@ def broadcast_shock_alerts(
     policy = ShockAlertPolicy(
         primary_min_z=float(cfg.shock_primary_min_z),
         aftershock_min_z=float(cfg.shock_aftershock_min_z),
+        aftershock_min_tier=str(cfg.shock_aftershock_min_tier or "minor"),
         topic_reopen_after_hours=max(int(cfg.shock_topic_reopen_after_hours), 1),
         aftershock_cooldown_minutes=max(int(cfg.shock_aftershock_cooldown_minutes), 0),
         max_alerts_per_cycle=max(int(cfg.shock_max_alerts_per_cycle), 1),

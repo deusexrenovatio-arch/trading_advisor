@@ -12,6 +12,10 @@ param(
     [int]$FreshCausalMaxTasks = 200,
     [int]$BackfillDirectionMaxTasks = 300,
     [int]$BackfillCausalMaxTasks = 900,
+    [string]$ShockBackfillStartTs = "2025-01-01T00:00:00Z",
+    [string]$ShockBackfillCursorKey = "shock_rows_backfill_cursor_utc",
+    [int]$BackfillShockWindowHours = 24,
+    [int]$BackfillShockWindowsPerRun = 8,
     [int]$NewsApiDailyQuota = 100,
     [int]$NewsApiRealtimeBudget = 55,
     [int]$NewsApiBackfillBudget = 35,
@@ -155,6 +159,12 @@ switch ($Action) {
             ScheduleMode = "Daily"
             DirectionMaxTasks = $BackfillDirectionMaxTasks
             CausalMaxTasks = $BackfillCausalMaxTasks
+            UseDbInput = $true
+            RunShockBackfill = $true
+            ShockBackfillStartTs = $ShockBackfillStartTs
+            ShockBackfillCursorKey = $ShockBackfillCursorKey
+            ShockBackfillWindowHours = $BackfillShockWindowHours
+            ShockBackfillWindowsPerRun = $BackfillShockWindowsPerRun
             NoTelegramFeed = $true
             DryRun = $DryRun
         }

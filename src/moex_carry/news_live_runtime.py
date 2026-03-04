@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import requests
 import yaml
+from moex_carry.news_live_feed import export_live_news_feed
 from moex_carry.news_live_clients import (
     fetch_gdelt_articles as _fetch_gdelt_articles,
     fetch_newsapi_articles as _fetch_newsapi_articles,
@@ -23,6 +23,22 @@ from moex_carry.news_live_scoring import (
     ModelScorer,
     ScoringModelConfig,
 )
+from moex_carry.news_storage import (
+    open_sqlite_connection,
+    parse_any_utc,
+    resolve_data_path,
+    sqlite_path_from_url,
+)
+from moex_carry.news_runtime_state import (
+    get_state,
+    iso_utc,
+    newsapi_usage,
+    reserve_newsapi_request,
+    set_state,
+    should_poll_newsapi_live,
+    utc_now,
+)
+from moex_carry.news_topic import build_story_fingerprint
 
 
 @dataclass(frozen=True)
@@ -38,6 +54,7 @@ class CommodityProfile:
 class NewsIngestConfig:
     database_url: str
     commodity_profiles: tuple[CommodityProfile, ...]
+    data_dir: str = "./data"
     gdelt_enabled: bool = True
     gdelt_max_records_per_call: int = 80
     gdelt_min_request_interval_sec: float = 2.0
@@ -59,9 +76,11 @@ class NewsIngestConfig:
     newsapi_retry_attempts: int = 2
     newsapi_retry_backoff_sec: float = 1.0
     newsapi_live_min_interval_minutes: int = 90
+    newsapi_backfill_chunk_days: int = 1
     newsapi_daily_quota: int = 100
     newsapi_realtime_budget: int = 55
     newsapi_backfill_budget: int = 35
+    newsapi_backfill_windows_per_commodity: int = 3
     newsapi_emergency_buffer: int = 10
     model_mode: str = "keyword"
     nli_model_name: str = "facebook/bart-large-mnli"
@@ -78,6 +97,7 @@ class NewsIngestConfig:
 
         database = raw.get("database") if isinstance(raw.get("database"), dict) else {}
         ingest = raw.get("news_ingest") if isinstance(raw.get("news_ingest"), dict) else {}
+        data = raw.get("data") if isinstance(raw.get("data"), dict) else {}
         newsapi = ingest.get("newsapi") if isinstance(ingest.get("newsapi"), dict) else {}
         models = raw.get("news_models") if isinstance(raw.get("news_models"), dict) else {}
 
@@ -111,6 +131,7 @@ class NewsIngestConfig:
 
         return NewsIngestConfig(
             database_url=str(database.get("url") or "sqlite:///./data/news_livecheck_ng.db"),
+            data_dir=str(data.get("data_dir") or "./data"),
             commodity_profiles=tuple(profiles),
             gdelt_enabled=bool(ingest.get("gdelt_enabled", True)),
             gdelt_max_records_per_call=int(ingest.get("gdelt_max_records_per_call", 80)),
@@ -133,51 +154,23 @@ class NewsIngestConfig:
             newsapi_retry_attempts=max(1, int(newsapi.get("retry_attempts", 2))),
             newsapi_retry_backoff_sec=max(0.0, float(newsapi.get("retry_backoff_sec", 1.0))),
             newsapi_live_min_interval_minutes=max(0, int(newsapi.get("live_min_interval_minutes", 90))),
+            newsapi_backfill_chunk_days=max(
+                1,
+                int(newsapi.get("backfill_chunk_days", 1)),
+            ),
             newsapi_daily_quota=max(1, int(newsapi.get("daily_quota", 100))),
             newsapi_realtime_budget=max(0, int(newsapi.get("realtime_budget", 55))),
             newsapi_backfill_budget=max(0, int(newsapi.get("backfill_budget", 35))),
+            newsapi_backfill_windows_per_commodity=max(
+                1,
+                int(newsapi.get("backfill_windows_per_commodity", 3)),
+            ),
             newsapi_emergency_buffer=max(0, int(newsapi.get("emergency_buffer", 10))),
             model_mode=str(models.get("primary_model") or "keyword").strip().lower(),
             nli_model_name=str(models.get("nli_model_name") or "facebook/bart-large-mnli"),
             finbert_model_name=str(models.get("finbert_model_name") or "ProsusAI/finbert"),
             model_device=str(models.get("device") or "auto").strip().lower(),
         )
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _iso_utc(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _parse_any_utc(value: object) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
-    raw = str(value).strip()
-    if not raw:
-        return None
-    parsed = pd.to_datetime(raw, utc=True, errors="coerce")
-    if pd.isna(parsed):
-        return None
-    return parsed.to_pydatetime()
-
-
-def _sqlite_path_from_url(database_url: str) -> Path:
-    normalized = str(database_url or "").strip()
-    if normalized.startswith("sqlite:///"):
-        path = normalized[len("sqlite:///") :]
-        return Path(path)
-    if normalized.startswith("sqlite://"):
-        path = normalized[len("sqlite://") :]
-        return Path(path)
-    raise ValueError(f"Only sqlite database URL is supported for news ingest: {database_url}")
-
 
 def _normalize_text(value: object) -> str:
     return " ".join(str(value or "").strip().split())
@@ -209,6 +202,15 @@ def _article_id(*, provider: str, commodity: str, title: str, url: str, publishe
     return f"{provider.lower()}-{commodity.upper()}-{digest}"
 
 
+def _story_id(*, provider: str, title: str, url: str, published_at: str) -> str:
+    return build_story_fingerprint(
+        title=title,
+        url=url,
+        published_at_utc=published_at,
+        provider=provider,
+    )
+
+
 def _safe_json(value: object) -> str:
     try:
         return json.dumps(value, ensure_ascii=False, default=str)
@@ -234,14 +236,33 @@ def _init_db(conn: sqlite3.Connection) -> None:
             url TEXT,
             language TEXT,
             query_text TEXT,
+            story_id TEXT,
             raw_json TEXT
         )
         """
     )
+    columns = {
+        str(row[1]).strip().lower()
+        for row in conn.execute("PRAGMA table_info(news_articles)").fetchall()
+    }
+    if "story_id" not in columns:
+        conn.execute("ALTER TABLE news_articles ADD COLUMN story_id TEXT")
     conn.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_news_articles_commodity_ts
         ON news_articles (commodity, published_at_utc DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_news_articles_published_ts
+        ON news_articles (published_at_utc DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_news_articles_story_id
+        ON news_articles (story_id, published_at_utc DESC)
         """
     )
     conn.execute(
@@ -258,6 +279,18 @@ def _init_db(conn: sqlite3.Connection) -> None:
             reason_terms_down TEXT,
             FOREIGN KEY (article_id) REFERENCES news_articles(article_id)
         )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_news_scores_confidence_impact
+        ON news_scores (confidence DESC, impact_score DESC, article_id)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_news_scores_impact_confidence
+        ON news_scores (impact_score DESC, confidence DESC, article_id)
         """
     )
     conn.execute(
@@ -297,67 +330,28 @@ def _init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def _get_state(conn: sqlite3.Connection, key: str) -> str | None:
-    row = conn.execute("SELECT state_value FROM news_state WHERE state_key = ?", (key,)).fetchone()
-    if row is None:
-        return None
-    return str(row[0])
-
-
-def _set_state(conn: sqlite3.Connection, key: str, value: str) -> None:
-    conn.execute(
+def _backfill_story_ids(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
         """
-        INSERT INTO news_state (state_key, state_value, updated_at_utc)
-        VALUES (?, ?, ?)
-        ON CONFLICT(state_key) DO UPDATE SET
-            state_value = excluded.state_value,
-            updated_at_utc = excluded.updated_at_utc
-        """,
-        (key, value, _iso_utc(_utc_now())),
-    )
-    conn.commit()
-
-
-def _newsapi_usage(conn: sqlite3.Connection, day_utc: str) -> tuple[int, int]:
-    row = conn.execute(
-        "SELECT used_live, used_backfill FROM newsapi_usage WHERE day_utc = ?",
-        (day_utc,),
-    ).fetchone()
-    if row is None:
-        return (0, 0)
-    return (int(row[0] or 0), int(row[1] or 0))
-
-
-def _reserve_newsapi_request(conn: sqlite3.Connection, cfg: NewsIngestConfig, *, mode: str) -> bool:
-    day_utc = _utc_now().strftime("%Y-%m-%d")
-    used_live, used_backfill = _newsapi_usage(conn, day_utc)
-    used_total = used_live + used_backfill
-    max_non_emergency = max(cfg.newsapi_daily_quota - cfg.newsapi_emergency_buffer, 0)
-    if used_total >= max_non_emergency:
-        return False
-    if mode == "live" and used_live >= cfg.newsapi_realtime_budget:
-        return False
-    if mode == "backfill" and used_backfill >= cfg.newsapi_backfill_budget:
-        return False
-
-    if mode == "live":
-        used_live += 1
-    elif mode == "backfill":
-        used_backfill += 1
-
-    conn.execute(
+        SELECT article_id, provider, title, url, published_at_utc
+        FROM news_articles
+        WHERE COALESCE(story_id, '') = ''
         """
-        INSERT INTO newsapi_usage (day_utc, used_live, used_backfill, updated_at_utc)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(day_utc) DO UPDATE SET
-            used_live = excluded.used_live,
-            used_backfill = excluded.used_backfill,
-            updated_at_utc = excluded.updated_at_utc
-        """,
-        (day_utc, used_live, used_backfill, _iso_utc(_utc_now())),
-    )
+    ).fetchall()
+    if not rows:
+        return
+    for article_id, provider, title, url, published_at_utc in rows:
+        story_id = _story_id(
+            provider=_normalize_text(provider),
+            title=_normalize_text(title),
+            url=_normalize_url(url),
+            published_at=_normalize_text(published_at_utc),
+        )
+        conn.execute(
+            "UPDATE news_articles SET story_id = ? WHERE article_id = ?",
+            (story_id, str(article_id)),
+        )
     conn.commit()
-    return True
 
 
 def _retry_fetch(
@@ -378,27 +372,6 @@ def _retry_fetch(
     if last_exc is not None:
         raise last_exc
     return []
-
-
-def _should_poll_newsapi_live(
-    conn: sqlite3.Connection,
-    *,
-    commodity: str,
-    now_utc: datetime,
-    min_interval_minutes: int,
-) -> bool:
-    interval = max(int(min_interval_minutes), 0)
-    if interval <= 0:
-        return True
-    state_key = f"newsapi_live_last_utc:{commodity.upper()}"
-    raw = _get_state(conn, state_key)
-    last_dt = _parse_any_utc(raw) if raw else None
-    if last_dt is not None:
-        elapsed = now_utc - last_dt
-        if elapsed < timedelta(minutes=interval):
-            return False
-    _set_state(conn, state_key, _iso_utc(now_utc))
-    return True
 
 
 def _insert_articles(
@@ -424,6 +397,12 @@ def _insert_articles(
             url=url,
             published_at=published_at_utc,
         )
+        story_id = _story_id(
+            provider=str(item.get("provider") or "unknown"),
+            title=title,
+            url=url,
+            published_at=published_at_utc,
+        )
         fetched += 1
         exists = conn.execute(
             "SELECT 1 FROM news_articles WHERE article_id = ?",
@@ -431,8 +410,8 @@ def _insert_articles(
         ).fetchone()
         if exists is not None:
             conn.execute(
-                "UPDATE news_articles SET fetched_at_utc = ?, raw_json = ? WHERE article_id = ?",
-                (fetched_at_utc, _safe_json(item.get("raw")), article_id),
+                "UPDATE news_articles SET fetched_at_utc = ?, raw_json = ?, story_id = ? WHERE article_id = ?",
+                (fetched_at_utc, _safe_json(item.get("raw")), story_id, article_id),
             )
             continue
         conn.execute(
@@ -450,8 +429,9 @@ def _insert_articles(
                 url,
                 language,
                 query_text,
+                story_id,
                 raw_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 article_id,
@@ -466,6 +446,7 @@ def _insert_articles(
                 url,
                 _normalize_text(item.get("language")),
                 query_text,
+                story_id,
                 _safe_json(item.get("raw")),
             ),
         )
@@ -477,7 +458,13 @@ def _insert_articles(
 def _score_new_articles(conn: sqlite3.Connection, scorer: ModelScorer) -> int:
     rows = conn.execute(
         """
-        SELECT a.article_id, a.commodity, a.title, a.description, a.content
+        SELECT
+            a.article_id,
+            a.story_id,
+            a.commodity,
+            a.title,
+            a.description,
+            a.content
         FROM news_articles a
         LEFT JOIN news_scores s ON a.article_id = s.article_id
         WHERE s.article_id IS NULL
@@ -486,15 +473,19 @@ def _score_new_articles(conn: sqlite3.Connection, scorer: ModelScorer) -> int:
     ).fetchall()
     if not rows:
         return 0
-    scored_at_utc = _iso_utc(_utc_now())
+    scored_at_utc = iso_utc(utc_now())
+    story_cache: dict[str, dict[str, Any]] = {}
     for row in rows:
-        article_id, commodity, title, description, content = row
-        score = scorer.score(
-            commodity=str(commodity),
-            title=str(title or ""),
-            description=str(description or ""),
-            content=str(content or ""),
-        )
+        article_id, story_id, commodity, title, description, content = row
+        story_key = str(story_id or "").strip() or f"article:{article_id}"
+        if story_key not in story_cache:
+            story_cache[story_key] = scorer.score(
+                commodity=str(commodity),
+                title=str(title or ""),
+                description=str(description or ""),
+                content=str(content or ""),
+            )
+        score = story_cache[story_key]
         severity = str(score["severity"]).lower()
         if severity not in SEVERITY_ORDER:
             severity = "medium"
@@ -528,61 +519,6 @@ def _score_new_articles(conn: sqlite3.Connection, scorer: ModelScorer) -> int:
     return len(rows)
 
 
-def _export_feed(
-    conn: sqlite3.Connection,
-    *,
-    feed_path: Path,
-    min_impact_score: float,
-    min_confidence: float,
-    max_rows: int,
-) -> int:
-    rows = conn.execute(
-        """
-        SELECT
-            a.published_at_utc,
-            a.commodity,
-            s.direction,
-            s.severity,
-            s.impact_score,
-            s.confidence,
-            a.source_name,
-            a.provider,
-            a.title,
-            a.url,
-            s.reason_terms_up,
-            s.reason_terms_down
-        FROM news_articles a
-        JOIN news_scores s ON a.article_id = s.article_id
-        WHERE s.impact_score >= ?
-          AND s.confidence >= ?
-        ORDER BY a.published_at_utc DESC
-        LIMIT ?
-        """,
-        (float(min_impact_score), float(min_confidence), int(max_rows)),
-    ).fetchall()
-    feed_path.parent.mkdir(parents=True, exist_ok=True)
-    columns = [
-        "published_at_utc",
-        "commodity",
-        "direction",
-        "severity",
-        "impact_score",
-        "confidence",
-        "source_name",
-        "provider",
-        "title",
-        "url",
-        "reason_terms_up",
-        "reason_terms_down",
-    ]
-    if not rows:
-        pd.DataFrame(columns=columns).to_csv(feed_path, index=False)
-        return 0
-    df = pd.DataFrame(rows, columns=columns)
-    df.to_csv(feed_path, index=False)
-    return int(len(df))
-
-
 def run_news_ingest_cycle(
     *,
     config: NewsIngestConfig,
@@ -592,14 +528,15 @@ def run_news_ingest_cycle(
     normalized_mode = str(mode or "").strip().lower()
     if normalized_mode not in {"live", "backfill"}:
         raise ValueError(f"Unsupported mode: {mode}")
-    ts_now = now_utc.astimezone(timezone.utc) if now_utc is not None else _utc_now()
-    started_at = _iso_utc(ts_now)
+    ts_now = now_utc.astimezone(timezone.utc) if now_utc is not None else utc_now()
+    started_at = iso_utc(ts_now)
 
-    db_path = _sqlite_path_from_url(config.database_url)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    db_path = sqlite_path_from_url(config.database_url, data_dir=config.data_dir)
+    feed_path = resolve_data_path(config.feed_path, data_dir=config.data_dir)
+    conn = open_sqlite_connection(db_path, timeout_sec=15.0, write=True)
     try:
         _init_db(conn)
+        _backfill_story_ids(conn)
         session = requests.Session()
         scorer = ModelScorer(
             ScoringModelConfig(
@@ -624,10 +561,11 @@ def run_news_ingest_cycle(
                         end_utc = ts_now
                         start_utc = end_utc - timedelta(minutes=max(config.live_lookback_minutes, 1))
                         windows = [(start_utc, end_utc)]
+                        cursor_key: str | None = None
                     else:
                         cursor_key = f"backfill_cursor_utc:gdelt:{profile.ticker}"
-                        cursor_raw = _get_state(conn, cursor_key)
-                        cursor_dt = _parse_any_utc(cursor_raw) if cursor_raw else ts_now
+                        cursor_raw = get_state(conn, cursor_key)
+                        cursor_dt = parse_any_utc(cursor_raw) if cursor_raw else ts_now
                         if cursor_dt is None:
                             cursor_dt = ts_now
                         windows = []
@@ -636,9 +574,9 @@ def run_news_ingest_cycle(
                             start_utc = end_utc - timedelta(days=max(config.backfill_chunk_days, 1))
                             windows.append((start_utc, end_utc))
                             cursor_dt = start_utc
-                        _set_state(conn, cursor_key, _iso_utc(cursor_dt))
 
                     for start_utc, end_utc in windows:
+                        fetch_ok = True
                         try:
                             fetched = _retry_fetch(
                                 lambda: _fetch_gdelt_articles(
@@ -654,6 +592,7 @@ def run_news_ingest_cycle(
                             )
                         except Exception:
                             fetched = []
+                            fetch_ok = False
                         got, inserted = _insert_articles(
                             conn,
                             commodity=profile.ticker,
@@ -665,74 +604,101 @@ def run_news_ingest_cycle(
                         inserted_total += inserted
                         commodity_inserted += inserted
                         provider_counts["gdelt"] = provider_counts.get("gdelt", 0) + inserted
+                        if cursor_key is not None and fetch_ok:
+                            set_state(conn, cursor_key, iso_utc(start_utc))
+                        if cursor_key is not None and not fetch_ok:
+                            break
                         if config.gdelt_min_request_interval_sec > 0:
                             time.sleep(config.gdelt_min_request_interval_sec)
                 else:
                     if not config.newsapi_enabled or not config.newsapi_api_key:
                         continue
-                    if normalized_mode == "live" and not _should_poll_newsapi_live(
+                    if normalized_mode == "live" and not should_poll_newsapi_live(
                         conn,
                         commodity=profile.ticker,
                         now_utc=ts_now,
                         min_interval_minutes=config.newsapi_live_min_interval_minutes,
                     ):
                         continue
-                    if not _reserve_newsapi_request(conn, config, mode=normalized_mode):
-                        continue
                     if normalized_mode == "live":
-                        end_utc = ts_now
-                        start_utc = end_utc - timedelta(minutes=max(config.live_lookback_minutes, 1))
+                        windows = [
+                            (
+                                ts_now - timedelta(minutes=max(config.live_lookback_minutes, 1)),
+                                ts_now,
+                            )
+                        ]
+                        cursor_key = None
                     else:
                         cursor_key = f"backfill_cursor_utc:newsapi:{profile.ticker}"
-                        cursor_raw = _get_state(conn, cursor_key)
-                        cursor_dt = _parse_any_utc(cursor_raw) if cursor_raw else ts_now
+                        cursor_raw = get_state(conn, cursor_key)
+                        cursor_dt = parse_any_utc(cursor_raw) if cursor_raw else ts_now
                         if cursor_dt is None:
                             cursor_dt = ts_now
-                        end_utc = cursor_dt
-                        start_utc = end_utc - timedelta(days=max(config.backfill_chunk_days, 1))
-                        _set_state(conn, cursor_key, _iso_utc(start_utc))
-                    try:
-                        fetched = _retry_fetch(
-                            lambda: _fetch_newsapi_articles(
-                                session,
-                                api_key=config.newsapi_api_key,
-                                query=profile.newsapi_query,
-                                start_utc=start_utc,
-                                end_utc=end_utc,
-                                language=profile.language,
-                                page_size=config.newsapi_page_size,
-                                sort_by=config.newsapi_sort_by,
-                                timeout_sec=max(config.newsapi_timeout_sec, 1.0),
-                            ),
-                            attempts=config.newsapi_retry_attempts,
-                            backoff_sec=config.newsapi_retry_backoff_sec,
+                        windows = []
+                        for _ in range(max(config.newsapi_backfill_windows_per_commodity, 1)):
+                            end_utc = cursor_dt
+                            start_utc = end_utc - timedelta(days=max(config.newsapi_backfill_chunk_days, 1))
+                            windows.append((start_utc, end_utc))
+                            cursor_dt = start_utc
+
+                    for start_utc, end_utc in windows:
+                        if not reserve_newsapi_request(
+                            conn,
+                            mode=normalized_mode,
+                            daily_quota=config.newsapi_daily_quota,
+                            realtime_budget=config.newsapi_realtime_budget,
+                            backfill_budget=config.newsapi_backfill_budget,
+                            emergency_buffer=config.newsapi_emergency_buffer,
+                        ):
+                            break
+                        fetch_ok = True
+                        try:
+                            fetched = _retry_fetch(
+                                lambda: _fetch_newsapi_articles(
+                                    session,
+                                    api_key=config.newsapi_api_key,
+                                    query=profile.newsapi_query,
+                                    start_utc=start_utc,
+                                    end_utc=end_utc,
+                                    language=profile.language,
+                                    page_size=config.newsapi_page_size,
+                                    sort_by=config.newsapi_sort_by,
+                                    timeout_sec=max(config.newsapi_timeout_sec, 1.0),
+                                ),
+                                attempts=config.newsapi_retry_attempts,
+                                backoff_sec=config.newsapi_retry_backoff_sec,
+                            )
+                        except Exception:
+                            fetched = []
+                            fetch_ok = False
+                        got, inserted = _insert_articles(
+                            conn,
+                            commodity=profile.ticker,
+                            query_text=profile.newsapi_query,
+                            fetched_at_utc=started_at,
+                            items=fetched,
                         )
-                    except Exception:
-                        fetched = []
-                    got, inserted = _insert_articles(
-                        conn,
-                        commodity=profile.ticker,
-                        query_text=profile.newsapi_query,
-                        fetched_at_utc=started_at,
-                        items=fetched,
-                    )
-                    fetched_total += got
-                    inserted_total += inserted
-                    commodity_inserted += inserted
-                    provider_counts["newsapi"] = provider_counts.get("newsapi", 0) + inserted
+                        fetched_total += got
+                        inserted_total += inserted
+                        commodity_inserted += inserted
+                        provider_counts["newsapi"] = provider_counts.get("newsapi", 0) + inserted
+                        if cursor_key is not None and fetch_ok:
+                            set_state(conn, cursor_key, iso_utc(start_utc))
+                        if cursor_key is not None and not fetch_ok:
+                            break
 
             commodity_counts[profile.ticker] = commodity_inserted
 
         scored_total = _score_new_articles(conn, scorer)
-        feed_rows = _export_feed(
+        feed_rows = export_live_news_feed(
             conn,
-            feed_path=Path(config.feed_path),
+            feed_path=feed_path,
             min_impact_score=config.feed_min_impact_score,
             min_confidence=config.feed_min_confidence,
             max_rows=max(config.feed_max_rows, 1),
         )
-        run_id = f"news-ingest-{ts_now.strftime('%Y%m%d%H%M%S')}-{normalized_mode}"
-        finished_at = _iso_utc(_utc_now())
+        run_id = f"news-ingest-{ts_now.strftime('%Y%m%d%H%M%S')}-{int(time.time() * 1000)}-{normalized_mode}"
+        finished_at = iso_utc(utc_now())
         conn.execute(
             """
             INSERT INTO news_fetch_runs (
@@ -761,13 +727,13 @@ def run_news_ingest_cycle(
         )
         conn.commit()
 
-        day_utc = _utc_now().strftime("%Y-%m-%d")
-        used_live, used_backfill = _newsapi_usage(conn, day_utc)
+        day_utc = utc_now().strftime("%Y-%m-%d")
+        used_live, used_backfill = newsapi_usage(conn, day_utc)
         return {
             "run_id": run_id,
             "mode": normalized_mode,
             "database_path": str(db_path),
-            "feed_path": str(Path(config.feed_path)),
+            "feed_path": str(feed_path),
             "fetched_total": int(fetched_total),
             "inserted_total": int(inserted_total),
             "scored_total": int(scored_total),

@@ -466,6 +466,8 @@ def ingest_chat_labels(
                 "primary_source": _norm_text(item.get("candidate_primary", {}).get("source")),
                 "primary_event_id": _norm_text(item.get("candidate_primary", {}).get("event_id")),
                 "primary_delay_min": _to_float(item.get("candidate_primary", {}).get("delay_min")),
+                "primary_title": _norm_text(item.get("candidate_primary", {}).get("title")),
+                "primary_url": _norm_text(item.get("candidate_primary", {}).get("url")),
             }
             for item in tasks
             if _norm_text(item.get("task_id"))

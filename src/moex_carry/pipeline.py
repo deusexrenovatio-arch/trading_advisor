@@ -35,11 +35,14 @@ from moex_carry.data import CbrKeyRateClient, MoexIssClient, build_fut_point, bu
 from moex_carry.data.cbr_rates import latest_rate
 from moex_carry.data.dividends import apply_overrides, load_dividends
 from moex_carry.decision_log import DecisionLogStore, build_decision_view, build_snapshot
+from moex_carry.domain.decision import NewsItem
 from moex_carry.domain.models import ContractSpec, DividendEvent, Instrument, KeyRate
 from moex_carry.execution.model import build_execution_prices
 from moex_carry.news import sync_news_runtime
+from moex_carry.news_live_bridge import load_news_gate_items
 from moex_carry.selection.ranking import score_pairs_alpha
 from moex_carry.selection.universe import build_pair_mappings
+from moex_carry.strategy.news_filter import apply_news_filter
 from moex_carry.strategy.overall_strategy import aggregate_strategy_signals, strategy_signal_to_dict
 from moex_carry.strategy.orchestrator import build_portfolio_proposal
 from moex_carry.strategy.risk_gate import evaluate_risk_profile
@@ -51,6 +54,7 @@ from moex_carry.pipeline_helpers import (
     _as_date,
     _as_naive_datetime,
     _build_cost_model,
+    _persist_unified_snapshot_csv,
     _build_unified_snapshot,
     _day_count_basis,
     _execution_band_ok,
@@ -1032,6 +1036,14 @@ def _apply_spread_carry_signals(
     force_exit_policy = str(getattr(alpha_cfg, "force_exit_policy", "next_anchor") or "next_anchor").lower().strip()
     if force_exit_policy not in {"next_anchor", "market_worse"}:
         force_exit_policy = "next_anchor"
+    sequential_exit_enabled = bool(getattr(alpha_cfg, "sequential_exit_enabled", False))
+    try:
+        sequential_exit_second_leg_wait_minutes = max(
+            int(getattr(alpha_cfg, "sequential_exit_second_leg_max_wait_minutes", 5) or 0),
+            0,
+        )
+    except (TypeError, ValueError):
+        sequential_exit_second_leg_wait_minutes = 5
     entry_tolerance = max(float(getattr(alpha_cfg, "entry_price_tolerance_pct", 0.0015) or 0.0015), 0.0)
     year_basis = _day_count_basis(alpha_cfg.day_count)
     annual_target_override_raw = getattr(alpha_cfg, "annual_target_threshold", None)
@@ -1334,8 +1346,35 @@ def _apply_spread_carry_signals(
                     spread_now=spread_mid_value,
                     tolerance=entry_tolerance,
                 )
-                if band_ok or timed_out:
-                    forced = timed_out
+                sequential_leg_timeout = False
+                if bool(pending_exit.get("sequential_exit_enabled")):
+                    first_leg_ts = pending_exit.get("sequential_first_leg_ts")
+                    second_leg_deadline_ts = pending_exit.get("sequential_second_leg_deadline_ts")
+                    if not isinstance(first_leg_ts, datetime):
+                        pending_exit["sequential_first_leg_ts"] = row_ts
+                        pending_exit["sequential_second_leg_deadline_ts"] = row_ts + timedelta(
+                            minutes=sequential_exit_second_leg_wait_minutes
+                        )
+                    if not isinstance(second_leg_deadline_ts, datetime):
+                        second_leg_deadline_ts = pending_exit.get("sequential_second_leg_deadline_ts")
+                    if isinstance(second_leg_deadline_ts, datetime) and row_ts > second_leg_deadline_ts:
+                        sequential_leg_timeout = True
+                    first_leg_ts = pending_exit.get("sequential_first_leg_ts")
+                    can_finalize_exit = (
+                        (isinstance(first_leg_ts, datetime) and row_ts > first_leg_ts and band_ok)
+                        or sequential_leg_timeout
+                        or timed_out
+                    )
+                else:
+                    can_finalize_exit = band_ok or timed_out
+
+                if can_finalize_exit:
+                    forced = timed_out or sequential_leg_timeout
+                    forced_reason = (
+                        "exit_second_leg_timeout_forced"
+                        if sequential_leg_timeout
+                        else "exit_timeout_forced"
+                    )
                     penalty = (
                         force_exit_penalty_bps / 10000.0
                         if forced and force_exit_policy == "market_worse"
@@ -1450,8 +1489,8 @@ def _apply_spread_carry_signals(
                                 exit_forced_flags[target_idx] = forced
                         if forced:
                             if 0 <= signal_idx < n:
-                                unfilled_reasons[signal_idx] = "exit_timeout_forced"
-                            unfilled_reasons[idx] = "exit_timeout_forced"
+                                unfilled_reasons[signal_idx] = forced_reason
+                            unfilled_reasons[idx] = forced_reason
 
                     pending_exit = None
                     open_position = None
@@ -1527,6 +1566,9 @@ def _apply_spread_carry_signals(
                         "target_future": future_mid,
                         "target_spread": spread_mid_value,
                         "reason": exit_reason,
+                        "sequential_exit_enabled": sequential_exit_enabled,
+                        "sequential_first_leg_ts": None,
+                        "sequential_second_leg_deadline_ts": None,
                     }
                     exit_submit_tss[idx] = _iso_or_none(submit_ts)
                     exit_fill_statuses[idx] = "pending"
@@ -2417,6 +2459,18 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     allocations = proposal["allocations"]
     risk_profile = _risk_profile_from_settings(settings)
     risk_gate = evaluate_risk_profile(risk_profile, allocations)
+    news_gate_as_of = datetime.now(timezone.utc)
+    try:
+        news_items: list[NewsItem] = load_news_gate_items(settings, as_of_utc=news_gate_as_of)
+    except Exception:
+        news_items = []
+    news_gate = apply_news_filter(
+        news_items,
+        lookback_minutes=settings.news_filter.lookback_minutes,
+        block_severity_threshold=settings.news_filter.block_severity_threshold,
+        reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
+        as_of_utc=news_gate_as_of,
+    )
     futures_path = dirs["raw"] / "futures.csv"
     futures_df = pd.read_csv(futures_path) if futures_path.exists() else pd.DataFrame()
     future_spec_map = {spec.secid: spec for spec in _parse_contract_specs(futures_df)} if not futures_df.empty else {}
@@ -2593,9 +2647,7 @@ def run_signal_cycle(
         if ranked.empty:
             return pd.DataFrame()
         if save_csv:
-            from moex_carry.unified_runtime import persist_snapshot_to_csv
-
-            persist_snapshot_to_csv(snapshot, paths.data_dir)
+            _persist_unified_snapshot_csv(snapshot, paths.data_dir)
 
         import uuid
 
@@ -2678,7 +2730,6 @@ def backfill_signal_history(
             data_dir=paths.data_dir,
             max_pairs=resolved_max_pairs,
         )
-        from moex_carry.unified_runtime import persist_snapshot_to_csv
 
         engine = create_engine_from_settings(settings)
         init_db(engine)
@@ -2699,7 +2750,7 @@ def backfill_signal_history(
                 if ranked.empty:
                     continue
                 if save_csv_latest and offset == 0:
-                    persist_snapshot_to_csv(snapshot, paths.data_dir)
+                    _persist_unified_snapshot_csv(snapshot, paths.data_dir)
                 run_id = f"signal-run-{as_of_date:%Y%m%d}"
                 if as_of_date == today:
                     as_of_dt = datetime.now(timezone.utc)
@@ -2768,11 +2819,6 @@ def backfill_signal_history(
 
 REFERENCE_DATA_MAX_AGE_HOURS = 12.0
 
-
-
-
-
-
 def _ensure_reference_data(settings: AppSettings) -> None:
     paths = resolve_paths(settings)
     dirs = _data_paths(paths.data_dir)
@@ -2783,9 +2829,4 @@ def _ensure_reference_data(settings: AppSettings) -> None:
     ]
     if _reference_data_stale(required, max_age_hours=REFERENCE_DATA_MAX_AGE_HOURS):
         fetch_data(settings)
-
-
-
-
-
 
