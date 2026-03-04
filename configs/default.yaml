@@ -403,3 +403,18 @@ signal_engine:
       enable_eligibility_filter: true
       min_atr_h1_cost_mult: 6.0
       min_atr_d1_cost_mult: 12.0
+    news_gate:
+      enabled: false
+      db_url: "sqlite:///./data/news_livecheck_ng.db"
+      lookback_minutes: 180
+      block_severity_threshold: "high"
+      reduce_severity_threshold: "medium"
+      min_impact_score: 0.35
+      min_confidence: 0.9
+      max_items: 200
+      sources: []
+      commodity_map:
+        BR: "BRN"
+        NG: "NG_US"
+        GD: "GOLD"
+      reduce_max_setups: 1
