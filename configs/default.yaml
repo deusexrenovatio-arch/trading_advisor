@@ -386,6 +386,10 @@ signal_engine:
       min_target_ticks: 3
       max_risk_atr_mult: 1.2
       sl_atr_mult: 0.8
+      stop_model: "structure"   # structure|volatility|local_extreme|volume_extreme
+      stop_lookback_bars: 24
+      stop_volume_quantile: 0.75
+      entry_range_half_width_ticks: 0
       qty_lots: 1
       horizon: "EOD"
       entry_tif: "GTT"

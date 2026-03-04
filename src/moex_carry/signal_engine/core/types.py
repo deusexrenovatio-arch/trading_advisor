@@ -169,6 +169,8 @@ class OrderIntent:
     price_ticks: int
     qty_lots: int
     tif: str
+    price_range_low_ticks: int | None = None
+    price_range_high_ticks: int | None = None
     activate_from_ts: datetime | None = None
     expire_ts: datetime | None = None
     link_group: str | None = None

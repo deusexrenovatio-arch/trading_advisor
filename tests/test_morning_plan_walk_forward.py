@@ -143,6 +143,62 @@ def test_simulate_setup_limit_no_fill_until_expiry():
     assert result.net_ticks == 0.0
 
 
+def test_simulate_setup_limit_uses_entry_range_fill_price():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2R",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            price_range_low_ticks=99,
+            price_range_high_ticks=101,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=10),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=110,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=104.0, high=106.0, low=101.0, close=105.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=103.0, high=105.0, low=102.0, close=104.0, volume=15.0),
+    ]
+    result = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    assert result.filled is True
+    assert result.entry_ticks == 101
+
+
 class _FakeIssClient:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self.rows = rows
@@ -360,6 +416,7 @@ def test_resolve_search_space_profile_and_algorithm():
     space_v3 = mod._resolve_search_space("intraday_goal_v3")
     assert space_v3["regime.d1.adx_trend_min"]["min"] == 20
     assert space_v3["setups.require_vol_not_low"] == [True, False]
+    assert "setups.stop_model" in space_v3
     assert mod._resolve_search_algorithm("grid") == "GRID"
     assert mod._resolve_search_algorithm("tpe") == "TPE"
     with pytest.raises(ValueError, match="unknown_search_space_profile"):
@@ -508,6 +565,115 @@ def test_goal_adjusted_selection_score_penalizes_out_of_band_trade_frequency():
     assert too_high < in_band
 
 
+def test_goal_adjusted_selection_score_applies_extra_penalty():
+    mod = _load_module()
+    goal = mod.GoalConstraints(min_trades_per_week=1.0, max_trades_per_week=10.0, trade_freq_penalty=0.0)
+    baseline = mod._goal_adjusted_selection_score(
+        base_score=5.0,
+        summary={"filled_trades": 3},
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 1, 7),
+        goal=goal,
+        extra_penalty=0.0,
+    )
+    penalized = mod._goal_adjusted_selection_score(
+        base_score=5.0,
+        summary={"filled_trades": 3},
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 1, 7),
+        goal=goal,
+        extra_penalty=1.25,
+    )
+    assert baseline == pytest.approx(5.0)
+    assert penalized == pytest.approx(3.75)
+
+
+def test_negative_subfold_metrics_counts_negative_periods():
+    mod = _load_module()
+    rows = [
+        mod.SetupResult(
+            instrument_id="BR",
+            trade_date="2026-01-02",
+            setup_id="S1",
+            setup_kind="BOX_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-01-02T12:00:00+03:00",
+            entry_ts="2026-01-02T12:05:00+03:00",
+            exit_ts="2026-01-02T12:20:00+03:00",
+            filled=True,
+            outcome="SL",
+            gross_ticks=-4.0,
+            net_ticks=-9.0,
+            cost_ticks=5.0,
+            entry_ticks=100,
+            exit_ticks=96,
+        ),
+        mod.SetupResult(
+            instrument_id="BR",
+            trade_date="2026-01-10",
+            setup_id="S2",
+            setup_kind="PULLBACK_LIMIT",
+            side="BUY",
+            as_of_ts="2026-01-10T12:00:00+03:00",
+            entry_ts="2026-01-10T12:05:00+03:00",
+            exit_ts="2026-01-10T12:20:00+03:00",
+            filled=True,
+            outcome="TP",
+            gross_ticks=8.0,
+            net_ticks=3.0,
+            cost_ticks=5.0,
+            entry_ticks=100,
+            exit_ticks=108,
+        ),
+    ]
+    metrics = mod._negative_subfold_metrics(
+        results=rows,
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 1, 14),
+        subfold_days=7,
+        penalty_weight=2.0,
+    )
+    assert metrics["train_subfolds_with_trades"] == pytest.approx(2.0)
+    assert metrics["train_negative_subfolds"] == pytest.approx(1.0)
+    assert metrics["train_positive_subfolds"] == pytest.approx(1.0)
+    assert metrics["train_negative_subfold_ratio"] == pytest.approx(0.5)
+    assert metrics["negative_subfold_penalty"] == pytest.approx(2.0)
+
+
+def test_parse_decision_times_deduplicates_and_sorts():
+    mod = _load_module()
+    parsed = mod._parse_decision_times(["12:00,10:30", "10:30", "14:00"], "11:00")
+    assert parsed == [time(10, 30), time(12, 0), time(14, 0)]
+    fallback = mod._parse_decision_times([], "11:00")
+    assert fallback == [time(11, 0)]
+
+
+def test_normalized_selection_components_penalize_concentration():
+    mod = _load_module()
+    summary = {
+        "by_instrument": {
+            "A": {"count": 6, "expectancy_net_ticks": 8.0, "abs_gross_ticks_sum": 60.0, "net_ticks_sum": 48.0},
+            "B": {"count": 6, "expectancy_net_ticks": 2.0, "abs_gross_ticks_sum": 60.0, "net_ticks_sum": 12.0},
+            "C": {"count": 6, "expectancy_net_ticks": -1.0, "abs_gross_ticks_sum": 60.0, "net_ticks_sum": -6.0},
+        }
+    }
+    scoring = mod.ObjectiveScoringConfig(
+        concentration_penalty_weight=2.0,
+        concentration_top_share_soft_cap=0.50,
+        normalization_floor_ticks=1.0,
+    )
+    components = mod._normalized_selection_components(
+        summary=summary,
+        min_trades_per_instrument=3,
+        mad_penalty=0.5,
+        scoring=scoring,
+    )
+    assert components["normalized_instruments"] == 3
+    assert components["normalized_robust_score"] > 0.0
+    assert components["concentration_top_share"] == pytest.approx(0.8)
+    assert components["concentration_penalty"] == pytest.approx(0.6)
+
+
 def test_probability_context_key_modes():
     mod = _load_module()
     setup = Setup(
@@ -525,6 +691,58 @@ def test_probability_context_key_modes():
     narrow = mod._probability_context_key(setup=setup, instrument_id="BRH6", mode="setup_group_side")
     assert broad == ("UNKNOWN", "ALL", "ALL")
     assert narrow == ("UNKNOWN", "BR", "SELL")
+
+
+def test_build_planned_signal_contains_entry_range_and_levels():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 21, 12, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S-PLAN",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            price_range_low_ticks=99,
+            price_range_high_ticks=101,
+            qty_lots=1,
+            tif="DAY",
+            meta={"setup_kind": "PULLBACK_LIMIT", "target_return_pct": 0.7},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={"stop_model": "volatility"},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=110,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    planned = mod._build_planned_signal(
+        instrument_id="BR",
+        as_of_ts=as_of,
+        setup=setup,
+        gate_status="DISABLED",
+        simulated=None,
+    )
+    assert planned.entry_range_low_ticks == 99
+    assert planned.entry_range_high_ticks == 101
+    assert planned.sl_ticks == 95
+    assert planned.tp_ticks == 110
+    assert planned.stop_model == "volatility"
 
 
 def test_summarize_counts_gated_out_rows():
@@ -684,7 +902,7 @@ def test_evaluate_window_fast_cache_keeps_parity_with_plain_evaluation():
         "period_start": date(2026, 2, 2),
         "period_end": date(2026, 2, 5),
         "instruments": ["BRH6"],
-        "decision_time": time(12, 0),
+        "decision_times": [time(12, 0)],
         "tz": tz,
         "cfg": cfg,
         "payload": payload,
@@ -697,9 +915,10 @@ def test_evaluate_window_fast_cache_keeps_parity_with_plain_evaluation():
         "initial_history": None,
         "collect_history": True,
     }
-    rows_plain, summary_plain, history_plain = mod._evaluate_window(**kwargs)
+    rows_plain, summary_plain, history_plain, planned_plain = mod._evaluate_window(**kwargs)
     cache = mod._build_window_eval_cache(payload)
-    rows_fast, summary_fast, history_fast = mod._evaluate_window(**kwargs, eval_cache=cache)
+    rows_fast, summary_fast, history_fast, planned_fast = mod._evaluate_window(**kwargs, eval_cache=cache)
     assert rows_plain == rows_fast
     assert summary_plain == summary_fast
     assert history_plain == history_fast
+    assert planned_plain == planned_fast

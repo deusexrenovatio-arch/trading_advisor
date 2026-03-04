@@ -110,6 +110,194 @@ def test_setup_generator_produces_trend_first_setups():
     assert first.entry_order.expire_ts is not None
 
 
+def test_setup_generator_supports_volatility_stop_model():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=40,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PIVOT_R2", price_ticks=140, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="BOX_H", price_ticks=101, score=0.9, meta={}),
+        Level(tf=TF.H1, kind="BOX_L", price_ticks=97, score=0.9, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 2,
+            "entry_expiry_policy": "EOD_BEFORE_EVENING_CLEARING",
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "stop_model": "volatility",
+            "sl_atr_mult": 0.5,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=102,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    assert len(setups) >= 1
+    first = setups[0]
+    expected_delta = 20  # 0.5 * h1_atr_ticks(40)
+    assert abs(first.entry_order.price_ticks - first.sl_order.price_ticks) == expected_delta
+    assert first.sl_order.meta.get("stop_model") in {"volatility", "volatility_fallback"}
+
+
+def test_setup_generator_supports_volume_extreme_stop_model():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PIVOT_R2", price_ticks=140, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="BOX_H", price_ticks=101, score=0.9, meta={}),
+        Level(tf=TF.H1, kind="BOX_L", price_ticks=97, score=0.9, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    m5_rows = _m5()
+    m5_rows[1] = Candle(
+        ts=m5_rows[1].ts,
+        open=m5_rows[1].open,
+        high=m5_rows[1].high,
+        low=96.0,
+        close=m5_rows[1].close,
+        volume=12_000.0,
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 2,
+            "entry_expiry_policy": "EOD_BEFORE_EVENING_CLEARING",
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "stop_model": "volume_extreme",
+            "stop_lookback_bars": 6,
+            "stop_volume_quantile": 0.70,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=102,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=m5_rows,
+    )
+    assert len(setups) >= 1
+    first = setups[0]
+    assert first.sl_order.meta.get("stop_model") in {"volume_extreme", "volatility_fallback"}
+
+
+def test_setup_generator_populates_entry_range_for_limit_setup():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=99, score=0.8, meta={}),
+        Level(tf=TF.D1, kind="PIVOT_R2", price_ticks=140, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="BOX_H", price_ticks=101, score=0.9, meta={}),
+        Level(tf=TF.H1, kind="BOX_L", price_ticks=97, score=0.9, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 2,
+            "entry_expiry_policy": "EOD_BEFORE_EVENING_CLEARING",
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "entry_range_half_width_ticks": 2,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=103,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    limit_setups = [item for item in setups if item.entry_order.order_type == OrderType.LIMIT]
+    assert len(limit_setups) >= 1
+    item = limit_setups[0]
+    assert item.entry_order.price_range_low_ticks == item.entry_order.price_ticks - 2
+    assert item.entry_order.price_range_high_ticks == item.entry_order.price_ticks + 2
+
+
 def test_setup_generator_blocks_when_regime_not_trend():
     tz = ZoneInfo("Europe/Moscow")
     as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
