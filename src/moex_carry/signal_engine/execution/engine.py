@@ -73,6 +73,58 @@ class ExecutionEngine:
             return int(entry_ticks + max(int(buffer_ticks), 1))
         return int(price_to_ticks(swing_price, tick_size) + max(int(buffer_ticks), 1))
 
+    def choose_stop_from_local_extreme(
+        self,
+        m5: list[Candle],
+        side: Side,
+        entry_ticks: int,
+        buffer_ticks: int,
+        lookback_bars: int,
+    ) -> int:
+        ordered = _ordered_if_needed(m5)
+        window = ordered[-max(int(lookback_bars), 1) :] if ordered else []
+        if not window:
+            shift = max(int(buffer_ticks), 1)
+            return int(entry_ticks - shift if side == Side.BUY else entry_ticks + shift)
+        tick_size = _infer_tick_size(window, entry_ticks)
+        if side == Side.BUY:
+            base = min(float(item.low) for item in window)
+            return int(price_to_ticks(base, tick_size) - max(int(buffer_ticks), 1))
+        base = max(float(item.high) for item in window)
+        return int(price_to_ticks(base, tick_size) + max(int(buffer_ticks), 1))
+
+    def choose_stop_from_volume_extreme(
+        self,
+        m5: list[Candle],
+        side: Side,
+        entry_ticks: int,
+        buffer_ticks: int,
+        lookback_bars: int,
+        volume_quantile: float,
+    ) -> int:
+        ordered = _ordered_if_needed(m5)
+        window = ordered[-max(int(lookback_bars), 1) :] if ordered else []
+        if not window:
+            return self.choose_stop_from_local_extreme(
+                m5=m5,
+                side=side,
+                entry_ticks=entry_ticks,
+                buffer_ticks=buffer_ticks,
+                lookback_bars=lookback_bars,
+            )
+        threshold = _quantile(
+            [float(max(item.volume, 0.0)) for item in window],
+            min(max(float(volume_quantile), 0.0), 1.0),
+        )
+        filtered = [item for item in window if float(item.volume) >= threshold]
+        selected = filtered if filtered else window
+        tick_size = _infer_tick_size(selected, entry_ticks)
+        if side == Side.BUY:
+            base = min(float(item.low) for item in selected)
+            return int(price_to_ticks(base, tick_size) - max(int(buffer_ticks), 1))
+        base = max(float(item.high) for item in selected)
+        return int(price_to_ticks(base, tick_size) + max(int(buffer_ticks), 1))
+
     def choose_tp_from_levels(
         self,
         side: Side,
@@ -147,3 +199,15 @@ def _ordered_if_needed(rows: list[Candle]) -> list[Candle]:
         if rows[idx - 1].ts > rows[idx].ts:
             return sorted(rows, key=lambda item: item.ts)
     return list(rows)
+
+
+def _quantile(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return float(ordered[0])
+    fraction = min(max(float(q), 0.0), 1.0)
+    idx = int(round(fraction * float(len(ordered) - 1)))
+    idx = min(max(idx, 0), len(ordered) - 1)
+    return float(ordered[idx])

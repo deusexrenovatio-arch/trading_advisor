@@ -137,6 +137,97 @@ class SetupGenerator:
     def _min_target_return_pct(self) -> float:
         return _safe_non_negative_float(self.cfg.get("min_target_return_pct"), 0.5)
 
+    def _stop_model(self) -> str:
+        return str(self.cfg.get("stop_model", "structure")).strip().lower()
+
+    def _stop_lookback_bars(self) -> int:
+        return max(int(self.cfg.get("stop_lookback_bars", 24)), 1)
+
+    def _stop_volume_quantile(self) -> float:
+        quantile = float(self.cfg.get("stop_volume_quantile", 0.75))
+        return min(max(quantile, 0.0), 1.0)
+
+    def _entry_range_half_width_ticks(self) -> int:
+        return max(int(self.cfg.get("entry_range_half_width_ticks", 0)), 0)
+
+    def _entry_range_ticks(
+        self,
+        *,
+        entry_ticks: int,
+        order_type: OrderType,
+        side: Side,
+        limit_ticks: int | None = None,
+    ) -> tuple[int, int]:
+        if order_type == OrderType.STOP_LIMIT and limit_ticks is not None:
+            low = min(int(entry_ticks), int(limit_ticks))
+            high = max(int(entry_ticks), int(limit_ticks))
+            return int(low), int(high)
+        half = self._entry_range_half_width_ticks()
+        if half <= 0:
+            return int(entry_ticks), int(entry_ticks)
+        low = int(entry_ticks) - int(half)
+        high = int(entry_ticks) + int(half)
+        if side == Side.BUY:
+            return int(low), int(high)
+        return int(low), int(high)
+
+    def _volatility_stop_ticks(
+        self,
+        *,
+        side: Side,
+        entry_ticks: int,
+        regime: RegimeState,
+        exec_params: ExecutionParams,
+    ) -> int:
+        sl_mult = float(self.cfg.get("sl_atr_mult", 0.8))
+        atr_ref_ticks = max(int(regime.h1_atr_ticks), int(exec_params.m5_atr_ticks), 1)
+        delta = max(round_half_away_from_zero(sl_mult * float(atr_ref_ticks)), 1)
+        return int(entry_ticks - delta if side == Side.BUY else entry_ticks + delta)
+
+    def _choose_stop_ticks(
+        self,
+        *,
+        side: Side,
+        entry_ticks: int,
+        regime: RegimeState,
+        exec_params: ExecutionParams,
+        m5: list[Candle],
+    ) -> tuple[int, str]:
+        model = self._stop_model()
+        if model == "volatility":
+            return self._volatility_stop_ticks(
+                side=side,
+                entry_ticks=entry_ticks,
+                regime=regime,
+                exec_params=exec_params,
+            ), "volatility"
+        if model == "local_extreme":
+            stop_ticks = self.execution_engine.choose_stop_from_local_extreme(
+                m5=m5,
+                side=side,
+                entry_ticks=int(entry_ticks),
+                buffer_ticks=max(int(exec_params.buffer_ticks), 1),
+                lookback_bars=self._stop_lookback_bars(),
+            )
+            return int(stop_ticks), "local_extreme"
+        if model == "volume_extreme":
+            stop_ticks = self.execution_engine.choose_stop_from_volume_extreme(
+                m5=m5,
+                side=side,
+                entry_ticks=int(entry_ticks),
+                buffer_ticks=max(int(exec_params.buffer_ticks), 1),
+                lookback_bars=self._stop_lookback_bars(),
+                volume_quantile=self._stop_volume_quantile(),
+            )
+            return int(stop_ticks), "volume_extreme"
+        stop_ticks = self.execution_engine.choose_stop_from_m5_structure(
+            m5=m5,
+            side=side,
+            entry_ticks=int(entry_ticks),
+            buffer_ticks=max(int(exec_params.buffer_ticks), 1),
+        )
+        return int(stop_ticks), "structure"
+
     def _generate_box_breakout(
         self,
         *,
@@ -169,12 +260,29 @@ class SetupGenerator:
         else:
             return None
 
-        sl_ticks = self.execution_engine.choose_stop_from_m5_structure(
-            m5=m5,
+        sl_ticks, stop_model = self._choose_stop_ticks(
             side=side,
             entry_ticks=entry_stop_ticks,
-            buffer_ticks=int(exec_params.buffer_ticks),
+            regime=regime,
+            exec_params=exec_params,
+            m5=m5,
         )
+        if side == Side.BUY and int(sl_ticks) >= int(entry_stop_ticks):
+            sl_ticks = self._volatility_stop_ticks(
+                side=side,
+                entry_ticks=entry_stop_ticks,
+                regime=regime,
+                exec_params=exec_params,
+            )
+            stop_model = "volatility_fallback"
+        if side == Side.SELL and int(sl_ticks) <= int(entry_stop_ticks):
+            sl_ticks = self._volatility_stop_ticks(
+                side=side,
+                entry_ticks=entry_stop_ticks,
+                regime=regime,
+                exec_params=exec_params,
+            )
+            stop_model = "volatility_fallback"
         risk_ticks = abs(int(entry_stop_ticks) - int(sl_ticks))
         if risk_ticks <= 0:
             return None
@@ -208,6 +316,12 @@ class SetupGenerator:
 
         expiry_policy = str(self.cfg.get("entry_expiry_policy", "EOD_BEFORE_EVENING_CLEARING"))
         expiry_ts = calendar.recommended_entry_expiry(as_of_ts, expiry_policy)
+        entry_range_low, entry_range_high = self._entry_range_ticks(
+            entry_ticks=entry_stop_ticks,
+            order_type=OrderType.STOP_LIMIT,
+            side=side,
+            limit_ticks=limit_ticks,
+        )
         setup_id = f"{instrument_id}:BOX_BREAKOUT:{side.value}:{entry_stop_ticks}"
         entry_level = box_h if side == Side.BUY else box_l
         if entry_level is None:
@@ -222,6 +336,8 @@ class SetupGenerator:
                 price_ticks=entry_stop_ticks,
                 qty_lots=max(int(self.cfg.get("qty_lots", 1)), 1),
                 tif=str(self.cfg.get("entry_tif", "GTT")),
+                price_range_low_ticks=int(entry_range_low),
+                price_range_high_ticks=int(entry_range_high),
                 activate_from_ts=None,
                 expire_ts=expiry_ts,
                 link_group=setup_id,
@@ -230,6 +346,9 @@ class SetupGenerator:
                     "setup_kind": "BOX_BREAKOUT",
                     "cost_gate": cost_gate,
                     "target_return_pct": float(target_return_pct),
+                    "stop_model": str(stop_model),
+                    "entry_range_low_ticks": int(entry_range_low),
+                    "entry_range_high_ticks": int(entry_range_high),
                 },
             ),
             sl_order=OrderIntent(
@@ -241,7 +360,7 @@ class SetupGenerator:
                 activate_from_ts=None,
                 expire_ts=None,
                 link_group=setup_id,
-                meta={"setup_kind": "BOX_BREAKOUT"},
+                meta={"setup_kind": "BOX_BREAKOUT", "stop_model": str(stop_model)},
             ),
             tp_order=OrderIntent(
                 order_type=OrderType.LIMIT,
@@ -292,16 +411,29 @@ class SetupGenerator:
 
         zone_offset = int(self.cfg.get("entry_zone_offset_ticks", 0))
         entry_ticks = int(selected.price_ticks + zone_offset) if side == Side.BUY else int(selected.price_ticks - zone_offset)
-        sl_ticks = self.execution_engine.choose_stop_from_m5_structure(
-            m5=m5,
+        sl_ticks, stop_model = self._choose_stop_ticks(
             side=side,
             entry_ticks=entry_ticks,
-            buffer_ticks=max(int(exec_params.buffer_ticks), 1),
+            regime=regime,
+            exec_params=exec_params,
+            m5=m5,
         )
-        if abs(int(entry_ticks) - int(sl_ticks)) <= 0:
-            sl_mult = float(self.cfg.get("sl_atr_mult", 0.8))
-            fallback_delta = max(round_half_away_from_zero(sl_mult * float(max(regime.h1_atr_ticks, 1))), 1)
-            sl_ticks = entry_ticks - fallback_delta if side == Side.BUY else entry_ticks + fallback_delta
+        if side == Side.BUY and int(sl_ticks) >= int(entry_ticks):
+            sl_ticks = self._volatility_stop_ticks(
+                side=side,
+                entry_ticks=entry_ticks,
+                regime=regime,
+                exec_params=exec_params,
+            )
+            stop_model = "volatility_fallback"
+        if side == Side.SELL and int(sl_ticks) <= int(entry_ticks):
+            sl_ticks = self._volatility_stop_ticks(
+                side=side,
+                entry_ticks=entry_ticks,
+                regime=regime,
+                exec_params=exec_params,
+            )
+            stop_model = "volatility_fallback"
 
         risk_ticks = abs(int(entry_ticks) - int(sl_ticks))
         if risk_ticks <= 0:
@@ -330,6 +462,11 @@ class SetupGenerator:
 
         expiry_policy = str(self.cfg.get("entry_expiry_policy", "EOD_BEFORE_EVENING_CLEARING"))
         expiry_ts = calendar.recommended_entry_expiry(as_of_ts, expiry_policy)
+        entry_range_low, entry_range_high = self._entry_range_ticks(
+            entry_ticks=entry_ticks,
+            order_type=OrderType.LIMIT,
+            side=side,
+        )
         setup_id = f"{instrument_id}:PULLBACK_LIMIT:{side.value}:{entry_ticks}"
         return Setup(
             setup_id=setup_id,
@@ -341,6 +478,8 @@ class SetupGenerator:
                 price_ticks=int(entry_ticks),
                 qty_lots=max(int(self.cfg.get("qty_lots", 1)), 1),
                 tif=str(self.cfg.get("entry_tif", "GTT")),
+                price_range_low_ticks=int(entry_range_low),
+                price_range_high_ticks=int(entry_range_high),
                 activate_from_ts=None,
                 expire_ts=expiry_ts,
                 link_group=setup_id,
@@ -348,6 +487,9 @@ class SetupGenerator:
                     "setup_kind": "PULLBACK_LIMIT",
                     "cost_gate": cost_gate,
                     "target_return_pct": float(target_return_pct),
+                    "stop_model": str(stop_model),
+                    "entry_range_low_ticks": int(entry_range_low),
+                    "entry_range_high_ticks": int(entry_range_high),
                 },
             ),
             sl_order=OrderIntent(
@@ -359,7 +501,7 @@ class SetupGenerator:
                 activate_from_ts=None,
                 expire_ts=None,
                 link_group=setup_id,
-                meta={"setup_kind": "PULLBACK_LIMIT"},
+                meta={"setup_kind": "PULLBACK_LIMIT", "stop_model": str(stop_model)},
             ),
             tp_order=OrderIntent(
                 order_type=OrderType.LIMIT,
