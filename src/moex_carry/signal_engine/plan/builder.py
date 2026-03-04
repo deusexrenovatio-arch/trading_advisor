@@ -8,6 +8,7 @@ from moex_carry.signal_engine.core.types import MorningPlan, TF
 from moex_carry.signal_engine.data.candles import DataProvider
 from moex_carry.signal_engine.execution.engine import ExecutionEngine
 from moex_carry.signal_engine.levels.engine import LevelEngine
+from moex_carry.signal_engine.news.gate import CommodityNewsGate
 from moex_carry.signal_engine.regime.engine import RegimeEngine
 from moex_carry.signal_engine.setups.generator import SetupGenerator
 
@@ -21,6 +22,7 @@ class MorningPlanBuilder:
         self.level_engine = LevelEngine(self.cfg.get("levels", {}))
         self.exec_engine = ExecutionEngine(self.cfg.get("execution", {}))
         self.setup_gen = SetupGenerator(self.cfg.get("setups", {}), execution_engine=self.exec_engine)
+        self.news_gate = CommodityNewsGate(self.cfg.get("news_gate", {}))
 
     def build_plan(self, as_of_ts: datetime, instrument_id: str, tick_size: float) -> MorningPlan:
         data_cfg = self.cfg.get("data", {})
@@ -69,7 +71,31 @@ class MorningPlanBuilder:
             m5=m5,
         )
 
-        warnings = sorted(set(list(regime.warnings) + list(exec_params.warnings)))
+        gate_decision = self.news_gate.evaluate(as_of_ts=as_of_ts, instrument_id=instrument_id)
+        news_warnings: list[str] = []
+        if gate_decision.action == "block":
+            setups = []
+            news_warnings.append(
+                "news_gate:block:"
+                f"commodity={gate_decision.commodity or 'UNKNOWN'}:"
+                f"severity={gate_decision.highest_severity}:"
+                f"matched={len(gate_decision.matched_items)}"
+            )
+        elif gate_decision.action == "reduce" and setups:
+            original_count = len(setups)
+            setups = setups[: self.news_gate.reduce_max_setups]
+            if len(setups) < original_count:
+                news_warnings.append(
+                    "news_gate:reduce:"
+                    f"commodity={gate_decision.commodity or 'UNKNOWN'}:"
+                    f"severity={gate_decision.highest_severity}:"
+                    f"kept={len(setups)}:"
+                    f"dropped={original_count - len(setups)}"
+                )
+        if self.news_gate.enabled and gate_decision.reasons:
+            news_warnings.extend([f"news_gate:{reason}" for reason in gate_decision.reasons])
+
+        warnings = sorted(set(list(regime.warnings) + list(exec_params.warnings) + news_warnings))
         return MorningPlan(
             as_of_ts=as_of_ts,
             instrument_id=instrument_id,
