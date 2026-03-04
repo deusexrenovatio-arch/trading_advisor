@@ -823,6 +823,10 @@ class SignalEngineMorningSetupsConfig(BaseModel):
     min_target_ticks: int = 3
     max_risk_atr_mult: float = 1.2
     sl_atr_mult: float = 0.8
+    stop_model: str = "structure"
+    stop_lookback_bars: int = 24
+    stop_volume_quantile: float = 0.75
+    entry_range_half_width_ticks: int = 0
     qty_lots: int = 1
     horizon: str = "EOD"
     entry_tif: str = "GTT"

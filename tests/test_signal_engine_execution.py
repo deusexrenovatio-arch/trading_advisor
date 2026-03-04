@@ -63,6 +63,66 @@ def test_execution_engine_chooses_stop_from_m5_structure():
     assert sl_sell == 107
 
 
+def test_execution_engine_chooses_stop_from_local_extreme():
+    engine = ExecutionEngine({})
+    sl_buy = engine.choose_stop_from_local_extreme(
+        m5=_candles_for_execution(),
+        side=Side.BUY,
+        entry_ticks=100,
+        buffer_ticks=1,
+        lookback_bars=6,
+    )
+    sl_sell = engine.choose_stop_from_local_extreme(
+        m5=_candles_for_execution(),
+        side=Side.SELL,
+        entry_ticks=100,
+        buffer_ticks=1,
+        lookback_bars=6,
+    )
+    assert sl_buy == 94
+    assert sl_sell == 107
+
+
+def test_execution_engine_chooses_stop_from_volume_extreme():
+    rows = _candles_for_execution()
+    # make second bar and fourth bar dominant by volume; lows/highs differ.
+    rows[1] = Candle(
+        ts=rows[1].ts,
+        open=rows[1].open,
+        high=102.0,
+        low=97.0,
+        close=rows[1].close,
+        volume=9_000.0,
+    )
+    rows[3] = Candle(
+        ts=rows[3].ts,
+        open=rows[3].open,
+        high=108.0,
+        low=98.0,
+        close=rows[3].close,
+        volume=8_000.0,
+    )
+    engine = ExecutionEngine({})
+    sl_buy = engine.choose_stop_from_volume_extreme(
+        m5=rows,
+        side=Side.BUY,
+        entry_ticks=100,
+        buffer_ticks=1,
+        lookback_bars=6,
+        volume_quantile=0.70,
+    )
+    sl_sell = engine.choose_stop_from_volume_extreme(
+        m5=rows,
+        side=Side.SELL,
+        entry_ticks=100,
+        buffer_ticks=1,
+        lookback_bars=6,
+        volume_quantile=0.70,
+    )
+    assert sl_buy == 95
+    assert sl_sell == 108
+
+
 def test_execution_engine_selects_nearest_target_level():
     engine = ExecutionEngine({})
     levels = [

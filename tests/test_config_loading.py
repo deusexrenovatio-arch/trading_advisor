@@ -128,6 +128,8 @@ signal_engine:
     setups:
       max_setups_per_instrument: 1
       rr_default: 2.0
+      stop_model: volatility
+      entry_range_half_width_ticks: 3
 """.strip(),
     )
     monkeypatch.setattr(config_module, "_default_config_path", lambda: default_path)
@@ -137,4 +139,6 @@ signal_engine:
     assert settings.signal_engine.morning_plan.calendar.forbid_new_positions_margin_min == 7
     assert settings.signal_engine.morning_plan.setups.max_setups_per_instrument == 1
     assert settings.signal_engine.morning_plan.setups.rr_default == 2.0
+    assert settings.signal_engine.morning_plan.setups.stop_model == "volatility"
+    assert settings.signal_engine.morning_plan.setups.entry_range_half_width_ticks == 3
     assert settings.signal_engine.morning_plan.setups.min_target_return_pct == 0.5
