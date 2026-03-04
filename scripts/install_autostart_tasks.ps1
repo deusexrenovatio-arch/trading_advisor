@@ -38,9 +38,9 @@ $backendTaskName = "$TaskPrefix-Backend"
 $workerTaskName = "$TaskPrefix-TelegramWorker"
 $frontendTaskName = "$TaskPrefix-Frontend"
 
-$backendArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$backendScript`" -ConfigPath `"$ConfigPath`" -LogLevel `"$LogLevel`""
-$workerArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$workerScript`" -ConfigPath `"$ConfigPath`" -LogLevel `"$LogLevel`""
-$frontendArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$frontendScript`" -FrontendHost `"$FrontendHost`" -FrontendPort `"$FrontendPort`""
+$backendArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$backendScript`" -ConfigPath `"$ConfigPath`" -LogLevel `"$LogLevel`""
+$workerArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$workerScript`" -ConfigPath `"$ConfigPath`" -LogLevel `"$LogLevel`""
+$frontendArguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$frontendScript`" -FrontendHost `"$FrontendHost`" -FrontendPort `"$FrontendPort`""
 
 $backendAction = New-ScheduledTaskAction -Execute $PowerShellExe -Argument $backendArguments
 $workerAction = New-ScheduledTaskAction -Execute $PowerShellExe -Argument $workerArguments

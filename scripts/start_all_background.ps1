@@ -30,6 +30,8 @@ else {
 }
 $backendScript = Join-Path $repoRoot "scripts\start_backend.ps1"
 $workerScript = Join-Path $repoRoot "scripts\start_telegram_worker.ps1"
+$frontendScript = Join-Path $repoRoot "scripts\start_frontend.ps1"
+$powerShellExe = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 $logDir = Join-Path $repoRoot "data\runtime-logs"
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
@@ -42,31 +44,31 @@ $frontendErr = Join-Path $logDir "frontend.err.log"
 
 if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli ui")) {
     Start-Process `
-        -FilePath "powershell.exe" `
+        -FilePath $powerShellExe `
         -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$backendScript`" -ConfigPath `"$configAbsolute`" -LogLevel `"$LogLevel`"" `
         -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $backendOut `
-        -RedirectStandardError $backendErr | Out-Null
+        -RedirectStandardError $backendErr `
+        -WindowStyle Hidden | Out-Null
 }
 
 if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli telegram_bot")) {
     Start-Process `
-        -FilePath "powershell.exe" `
+        -FilePath $powerShellExe `
         -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$workerScript`" -ConfigPath `"$configAbsolute`" -LogLevel `"$LogLevel`"" `
         -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $workerOut `
-        -RedirectStandardError $workerErr | Out-Null
+        -RedirectStandardError $workerErr `
+        -WindowStyle Hidden | Out-Null
 }
 
 $vitePathRegex = [regex]::Escape((Join-Path $repoRoot "ui-web")) + ".*vite[\\/]+bin[\\/]+vite\.js"
 if (-not (Is-ProcessRunning -NameRegex "^node" -CommandRegex $vitePathRegex)) {
     Start-Process `
-        -FilePath "cmd.exe" `
-        -ArgumentList @(
-            "/c",
-            "npm run dev -- --host 127.0.0.1 --port 5176"
-        ) `
-        -WorkingDirectory (Join-Path $repoRoot "ui-web") `
+        -FilePath $powerShellExe `
+        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$frontendScript`" -FrontendHost `"127.0.0.1`" -FrontendPort `"5176`"" `
+        -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $frontendOut `
-        -RedirectStandardError $frontendErr | Out-Null
+        -RedirectStandardError $frontendErr `
+        -WindowStyle Hidden | Out-Null
 }
