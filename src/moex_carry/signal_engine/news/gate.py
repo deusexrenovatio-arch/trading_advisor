@@ -7,6 +7,7 @@ import re
 import sqlite3
 from typing import Any
 
+from moex_carry.signal_engine.core.types import Setup
 
 SEVERITY_ORDER: dict[str, int] = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 _FUT_MONTH_CODE_RE = re.compile(r"^([A-Za-z0-9]+?)[FGHJKMNQUVXZ]\d{1,2}$")
@@ -100,6 +101,17 @@ class CommodityNewsGate:
             if normalized_key and normalized_value:
                 commodity_map[normalized_key] = normalized_value
         self.commodity_map = commodity_map
+
+    @staticmethod
+    def reduce_setups_by_risk(setups: list[Setup], max_setups: int) -> list[Setup]:
+        limit = max(int(max_setups), 1)
+        if len(setups) <= limit:
+            return list(setups)
+        ranked = sorted(
+            setups,
+            key=lambda item: (int(item.risk_ticks), str(item.setup_id), str(item.side.value)),
+        )
+        return ranked[:limit]
 
     def evaluate(self, *, as_of_ts: datetime, instrument_id: str) -> NewsGateDecision:
         if not self.enabled:

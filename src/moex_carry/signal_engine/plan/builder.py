@@ -83,7 +83,7 @@ class MorningPlanBuilder:
             )
         elif gate_decision.action == "reduce" and setups:
             original_count = len(setups)
-            setups = setups[: self.news_gate.reduce_max_setups]
+            setups = self.news_gate.reduce_setups_by_risk(setups, self.news_gate.reduce_max_setups)
             if len(setups) < original_count:
                 news_warnings.append(
                     "news_gate:reduce:"

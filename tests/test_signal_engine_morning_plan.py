@@ -124,6 +124,43 @@ def _sample_setup(setup_id: str, side: Side) -> Setup:
     )
 
 
+def _sample_setup_with_risk(setup_id: str, side: Side, risk_ticks: int) -> Setup:
+    direction = 1 if side == Side.BUY else -1
+    entry_ticks = 10_000
+    sl_ticks = entry_ticks - direction * max(int(risk_ticks), 1)
+    tp_ticks = entry_ticks + direction * 80
+    level = Level(tf=TF.H1, kind="BOX_H", price_ticks=entry_ticks, score=0.9, meta={})
+    return Setup(
+        setup_id=setup_id,
+        side=side,
+        entry_level=level,
+        entry_order=OrderIntent(
+            order_type=OrderType.STOP_LIMIT,
+            side=side,
+            price_ticks=entry_ticks,
+            qty_lots=1,
+            tif="GTT",
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL if side == Side.BUY else Side.BUY,
+            price_ticks=sl_ticks,
+            qty_lots=1,
+            tif="GTT",
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL if side == Side.BUY else Side.BUY,
+            price_ticks=tp_ticks,
+            qty_lots=1,
+            tif="GTT",
+        ),
+        horizon="EOD",
+        rationale=["unit_test"],
+        risk_ticks=int(risk_ticks),
+    )
+
+
 def test_morning_plan_builder_is_deterministic():
     tz = ZoneInfo("Europe/Moscow")
     start = datetime(2026, 1, 1, 10, 0, tzinfo=tz)
@@ -281,10 +318,13 @@ def test_morning_plan_news_gate_reduces_setups(tmp_path):
         },
     }
     builder = MorningPlanBuilder(provider, calendar, cfg)
-    builder.setup_gen.generate = lambda **_: [_sample_setup("S1", Side.BUY), _sample_setup("S2", Side.BUY)]  # type: ignore[assignment]
+    builder.setup_gen.generate = lambda **_: [  # type: ignore[assignment]
+        _sample_setup_with_risk("S1", Side.BUY, risk_ticks=90),
+        _sample_setup_with_risk("S2", Side.BUY, risk_ticks=30),
+    ]
 
     plan = builder.build_plan(as_of_ts=as_of_ts, instrument_id=instrument, tick_size=0.01)
 
     assert len(plan.setups) == 1
-    assert plan.setups[0].setup_id == "S1"
+    assert plan.setups[0].setup_id == "S2"
     assert any("news_gate:reduce" in item for item in plan.warnings)

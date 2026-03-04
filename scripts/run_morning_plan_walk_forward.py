@@ -1775,7 +1775,7 @@ def _compute_setups_cached(
     if decision.action == "block":
         return []
     if decision.action == "reduce" and setups:
-        setups = setups[: news_gate.reduce_max_setups]
+        setups = news_gate.reduce_setups_by_risk(setups, news_gate.reduce_max_setups)
     return setups
 
 
