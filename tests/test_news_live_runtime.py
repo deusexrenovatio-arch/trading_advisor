@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pandas as pd
 from moex_carry.config import AppSettings
 from moex_carry.news_live_bridge import load_news_gate_items
 from moex_carry.news_live_runtime import CommodityProfile, NewsIngestConfig, run_news_ingest_cycle
@@ -65,6 +66,162 @@ def test_run_news_ingest_cycle_persists_and_scores(monkeypatch, tmp_path):
         assert score is not None
         assert score[0] in {"up", "down", "hold"}
         assert float(score[1]) >= 0.0
+    finally:
+        conn.close()
+
+
+def test_run_news_ingest_cycle_expands_queries_with_event_first_terms(monkeypatch, tmp_path):
+    db_path = tmp_path / "news_live_query_expand.db"
+    seen_queries: list[str] = []
+
+    def _fake_gdelt(*args, **kwargs):
+        seen_queries.append(str(kwargs.get("query") or ""))
+        return []
+
+    monkeypatch.setattr("moex_carry.news_live_runtime._fetch_gdelt_articles", _fake_gdelt)
+    monkeypatch.setattr("moex_carry.news_live_runtime._fetch_newsapi_articles", lambda *args, **kwargs: [])
+
+    cfg = NewsIngestConfig(
+        database_url=_sqlite_path(db_path),
+        commodity_profiles=(
+            CommodityProfile(
+                ticker="BRN",
+                name="Brent",
+                gdelt_query="brent crude",
+                newsapi_query="brent crude",
+            ),
+        ),
+        newsapi_enabled=False,
+        model_mode="keyword",
+    )
+    run_news_ingest_cycle(config=cfg, mode="live", now_utc=datetime(2026, 3, 3, tzinfo=timezone.utc))
+
+    assert seen_queries
+    query = seen_queries[0].lower()
+    assert "brent crude" in query
+    assert "strait of hormuz" in query
+    assert "shipping halted" in query
+
+
+def test_run_news_ingest_cycle_backfills_causal_fields_for_legacy_scores(tmp_path):
+    db_path = tmp_path / "news_live_legacy_scores.db"
+    feed_path = tmp_path / "feed_legacy.csv"
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE news_articles (
+                article_id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL,
+                commodity TEXT NOT NULL,
+                source_name TEXT,
+                published_at_utc TEXT NOT NULL,
+                fetched_at_utc TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                content TEXT,
+                url TEXT,
+                language TEXT,
+                query_text TEXT,
+                raw_json TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE news_scores (
+                article_id TEXT PRIMARY KEY,
+                model_name TEXT NOT NULL,
+                scored_at_utc TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                impact_score REAL NOT NULL,
+                confidence REAL NOT NULL,
+                severity TEXT NOT NULL,
+                reason_terms_up TEXT,
+                reason_terms_down TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO news_articles (
+                article_id, provider, commodity, source_name, published_at_utc, fetched_at_utc,
+                title, description, content, url, language, query_text, raw_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-1",
+                "gdelt",
+                "BRN",
+                "legacy-feed",
+                "2026-03-03T10:00:00Z",
+                "2026-03-03T10:01:00Z",
+                "Pipeline attack disrupts crude exports",
+                "Export route outage increases supply risk.",
+                "",
+                "https://example.test/legacy-1",
+                "en",
+                "brent",
+                "{}",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO news_scores (
+                article_id, model_name, scored_at_utc, direction, impact_score, confidence, severity, reason_terms_up, reason_terms_down
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-1",
+                "legacy-model",
+                "2026-03-03T10:02:00Z",
+                "up",
+                0.8,
+                0.85,
+                "high",
+                '["supply risk","exports"]',
+                "[]",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    cfg = NewsIngestConfig(
+        database_url=_sqlite_path(db_path),
+        commodity_profiles=(
+            CommodityProfile(
+                ticker="BRN",
+                name="Brent",
+                gdelt_query="brent",
+                newsapi_query="brent",
+            ),
+        ),
+        gdelt_enabled=False,
+        newsapi_enabled=False,
+        feed_path=str(feed_path),
+        model_mode="keyword",
+    )
+    result = run_news_ingest_cycle(config=cfg, mode="live", now_utc=datetime(2026, 3, 3, 12, 0, tzinfo=timezone.utc))
+
+    assert result["inserted_total"] == 0
+    assert result["scored_total"] == 0
+    assert result["causal_backfilled_total"] == 1
+
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT cause_classification, cause_bucket, fundamental_score, is_primary_cause
+            FROM news_scores
+            WHERE article_id = 'legacy-1'
+            """
+        ).fetchone()
+        assert row is not None
+        assert str(row[0]).strip().lower() in {"unknown", "effect", "mixed", "cause"}
+        assert float(row[2]) >= 0.0
+        assert int(row[3]) in {0, 1}
     finally:
         conn.close()
 
@@ -188,7 +345,8 @@ def test_gdelt_retry_recovers_transient_failure(monkeypatch, tmp_path):
 
 def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
     db_path = tmp_path / "news_live_bridge.db"
-    feed_path = tmp_path / "feed_bridge.csv"
+    feed_path = tmp_path / "data" / "output" / "news_live" / "live_news_signals.csv"
+    feed_path.parent.mkdir(parents=True, exist_ok=True)
     now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     published_at = (now_utc - timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
 
@@ -198,8 +356,8 @@ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
                 "provider": "gdelt",
                 "published_at_utc": published_at,
                 "source_name": "trusted-feed",
-                "title": "Missile attack disrupts oil flow",
-                "description": "Shipping risk rises in the region.",
+                "title": "Official statement confirms Strait of Hormuz closure after missile attack",
+                "description": "Shipping halted as tanker transit is suspended.",
                 "content": "",
                 "url": "https://example.test/brent-shock",
                 "language": "en",
@@ -225,14 +383,12 @@ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
         model_mode="keyword",
     )
     run_news_ingest_cycle(config=cfg, mode="live", now_utc=now_utc)
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute("UPDATE news_scores SET confidence = 0.5")
-        conn.commit()
-    finally:
-        conn.close()
+    feed_df = pd.read_csv(feed_path)
+    feed_df["confidence"] = 0.5
+    feed_df.to_csv(feed_path, index=False)
 
     settings = AppSettings()
+    settings.data.data_dir = str(tmp_path / "data")
     settings.news_filter.live_ingest_enabled = True
     settings.news_filter.live_db_url = _sqlite_path(db_path)
     settings.news_filter.live_min_impact_score = 0.0

@@ -27,6 +27,11 @@ news_ingest:
     backfill_budget: 35
     backfill_windows_per_commodity: 3
     emergency_buffer: 10
+  feed_min_confidence: 0.6
+  feed_min_fundamental_score: 0.45
+  feed_require_primary_cause: true
+  feed_require_verified_move: true
+  feed_require_verified_both_horizons: true
   qc_min_news_per_ticker: 50
   qc_min_price_points_per_ticker: 500
   commodity_profiles:
