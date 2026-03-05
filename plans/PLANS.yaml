@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-04
+updated_at: 2026-03-05
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -1037,3 +1037,31 @@ items:
       - P1-SELF-LEARN-LOOP-040
     started_at: 2026-03-04
     completed_at: 2026-03-04
+
+  - id: P1-ARCH-AI-042
+    title: Verify architecture alignment for AI development and harden documentation entrypoints
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: architecture-owner
+    acceptance:
+      - canonical architecture entry point exists and links to current architecture map, layers, modules, and ADRs
+      - AI workflow skill references in development workflow use repository-relative paths
+      - architecture verification report includes findings and requirement traceability matrix
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_architecture_policy.py
+    docs:
+      - docs/ARCHITECTURE.md
+      - docs/README.md
+      - docs/DEV_WORKFLOW.md
+      - docs/workflows/architecture-ai-verification-2026-03-05.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-EXTERNAL-ADVICE-MAP-041
+    started_at: 2026-03-05
+    completed_at: 2026-03-05
+
