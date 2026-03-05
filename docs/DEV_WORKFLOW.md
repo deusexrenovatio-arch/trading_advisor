@@ -52,17 +52,17 @@ Policy:
   - Only local `.cursor/skills` are CI-gated by `python scripts/validate_skills.py`.
 - Before editing a skill, run deterministic intent routing:
   - `python scripts/skill_update_decision.py --from-git --request "short reason/intent"`.
-  - If the command returns `UPDATE_EXISTING`, patch existing skill(s); if `ADD_NEW`, follow new-skill onboarding via `C:/New Project/.cursor/skills/skill-creator/SKILL.md` and `D:/New Project/.cursor/skills/skill-installer/SKILL.md` when needed.
+  - If the command returns `UPDATE_EXISTING`, patch existing skill(s); if `ADD_NEW`, follow new-skill onboarding via `.cursor/skills/skill-creator/SKILL.md` and `.cursor/skills/skill-installer/SKILL.md` when needed.
 - Commit-time enforcement:
   - `.githooks/pre-commit` runs `python scripts/skill_precommit_gate.py` for staged skill/governance files.
   - Commit is blocked when decision is `NO_CHANGE`.
   - Use `SKILL_UPDATE_INTENT="<intent>"` for explicit routing and `SKILL_DECISION_STRICT=1` to also fail `ADD_NEW`.
 - Start of any new development stream:
-  - Run `D:/New Project/.cursor/skills/parallel-worktree-flow/SKILL.md`.
+  - Run `.cursor/skills/parallel-worktree-flow/SKILL.md`.
 - UI stream (`ui-web`, API projection, dashboard behavior):
-  - Run `D:/New Project/.cursor/skills/trading-ui-dashboard/SKILL.md`.
-  - Run `D:/New Project/.cursor/skills/ui-decision-log/SKILL.md` when `decision_log`/`decision_view` projection changes.
-  - Run `D:/New Project/.cursor/skills/frontend-behavior-check/SKILL.md` on recheck and before push.
+  - Run `.cursor/skills/trading-ui-dashboard/SKILL.md`.
+  - Run `.cursor/skills/ui-decision-log/SKILL.md` when `decision_log`/`decision_view` projection changes.
+  - Run `.cursor/skills/frontend-behavior-check/SKILL.md` on recheck and before push.
 - Strategy/risk stream:
   - Run `intraday-futures-trading-advisor` + `moex-instruments-costs` + `risk-profile-gates`.
   - Add `news-geopolitics-filter` for event risk and `spread-arbitrage` for spread pair logic.
@@ -205,7 +205,7 @@ Blockers:
   - Requires backend at `http://127.0.0.1:8050` and UI at `http://127.0.0.1:5176`
   - Scenarios live in `configs/acceptance_scenarios.yaml`
 - Frontend behavior check (API + proxy + spread-series):
-  - Follow `D:/New Project/.cursor/skills/frontend-behavior-check/SKILL.md`
+  - Follow `.cursor/skills/frontend-behavior-check/SKILL.md`
 - E2E UI: `cd ui-web && npm run test:e2e`
   - Requires backend running with data
 - Demo pipeline: `python scripts/build.py`
@@ -279,3 +279,4 @@ Examples:
 - Archctl is not configured yet. When added, CI should run:
   - `archctl validate`
   - `archctl policy --from <base> --to <head>`
+

@@ -12,6 +12,7 @@ This directory is the repository knowledge system for agent-first engineering.
 - `CODEOWNERS`
 
 ## Architecture
+- `docs/ARCHITECTURE.md` (entry point)
 - `docs/architecture/trading-advisor.md`
 - `docs/architecture/layers-v2.md`
 - `docs/architecture/entities-v2.md`
@@ -56,3 +57,4 @@ This directory is the repository knowledge system for agent-first engineering.
 
 ## Update Rule
 When adding a new first-class document domain, update this index in the same change.
+
