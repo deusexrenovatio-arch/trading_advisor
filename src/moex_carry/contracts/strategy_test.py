@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import date
 from typing import Any, Literal
@@ -207,6 +207,9 @@ class HpoOptimizationConfig(BaseModel):
     max_trials: int = 50
     random_seed: int | None = None
     timeout_sec: int | None = None
+    parallel_fold_workers: int = 1
+    max_fold_evaluations_per_trial: int = 0
+    refit_top_n_full_folds: int = 0
     negative_fold_penalty: float = 0.0
     negative_fold_threshold: float = 0.0
     negative_fold_metric: str | None = None
