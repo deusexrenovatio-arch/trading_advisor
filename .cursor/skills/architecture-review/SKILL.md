@@ -1,35 +1,94 @@
-﻿---
+---
 name: architecture-review
 description: >
-  Архитектурный ревью изменений: границы модулей, зависимости, события, отсутствие shared DB.
-  Активируй при: "архитектура", "микросервис", "границы модулей", "рефакторинг домена",
-  "GraphQL federation", "event-driven". For high-load compute boundary changes, co-use with minute-candle-performance.
+  Цельный архитектурный аудит приложения или конкретного модуля: bounded contexts,
+  направление зависимостей, anti-corruption слои, события/контракты и запрет shared-storage shortcuts.
+  Активируй при: "архитектура", "границы модулей", "bounded context", "dependency direction",
+  "anti-corruption", "event contracts", "shared DB", "монолитизация gateway".
 ---
 
 ## Цель
-Поймать архитектурные ошибки до merge: неправильные зависимости, нарушение bounded contexts.
+Дать целостный архитектурный вывод по приложению (или модулю), а не ограниченный governance-чеклист.
 
-## Шаги
-1) Прочитай `/docs/ARCHITECTURE.md` и релевантные `module.yaml`.
-2) Проверь:
-   - нет прямого доступа к чужим хранилищам
-   - синхронные зависимости минимальны и оправданы
-   - события описаны и версионированы
-   - изменения не превращают GraphQL gateway в “монолит резолверов”
-3) Если видишь нарушение — предложи альтернативу:
-   - вынести в новый модуль
-   - заменить sync на async event
-   - добавить data product вместо “чужих запросов”
-4) Сформируй список P0/P1 проблем и рекомендации.
+## Режимы ревью
+- `app-wide`: полный обход bounded contexts и межконтекстных связей.
+- `module-focused`: глубокий аудит одного модуля + его входящих/исходящих контрактов.
 
-## Co-use with minute-candle-performance
-- Use `minute-candle-performance` together with this skill when architecture changes affect high-load compute paths (minute replay, batch scoring, HPO runtime).
-- Apply in order:
-  1) `architecture-review`: approve module boundaries and dependency direction.
-  2) `minute-candle-performance`: choose numeric stack and optimize kernels/orchestration inside approved boundaries.
-- Reject changes that mix boundary violations with performance optimizations in one undecoupled step.
+## Source of Truth (перед ревью)
+1) Архитектурные документы:
+- `docs/architecture/architecture-map-v2.md`
+- `docs/architecture/layers-v2.md`
+- `docs/architecture/entities-v2.md`
+- `docs/architecture/modules/*.md`
+- `docs/architecture/adr/*.md`
+2) Контракты и правила:
+- `docs/contracts/api-v2.yaml`
+- `contracts/*.json`
+- `configs/architecture_policy.yaml`
+- `scripts/validate_import_boundaries.py`
+- `scripts/validate_api_v2_contract_parity.py`
+3) Если `docs/ARCHITECTURE.md` или `module.yaml` отсутствуют, используй перечисленные файлы как фактический SoT и явно фиксируй этот gap в Findings.
 
+## Архитектурные инварианты (обязательная проверка)
+1) Bounded contexts
+- Контексты разделены по ответственности, нет скрытого смешения доменов в одном модуле.
+- Взаимодействие между контекстами идёт через явные контракты/сервисы, а не через прямой доступ к внутренностям.
 
+2) Dependency direction
+- Зависимости направлены от orchestration к доменным/infra адаптерам без обратных импортов.
+- Нет shortcut-импортов, которые обходят публичные интерфейсы контекста.
+
+3) Anti-corruption layers (ACL)
+- Внешние источники/хранилища изолированы в адаптерах/bridge-слоях.
+- Доменный код не должен напрямую парсить/читать чужой формат/хранилище.
+
+4) Events and contracts
+- Важные события и API-контракты явно описаны и версионированы.
+- Любое изменение поведения сопровождается синхронизацией контракта и обработки совместимости.
+
+5) Shared-storage shortcuts
+- Запрещён прямой доступ модулей к "чужим" таблицам/файлам/БД в обход репозиториев/bridge.
+- Любой общий storage допускается только через явно задокументированный контракт доступа.
+
+6) Gateway/API composition
+- API composition не превращается в монолит business-логики.
+- Сложная логика выносится в специализированные сервисы/модули с чёткими границами.
+
+## Результат ревью (обязательный формат)
+Выдавай строго секциями:
+1) `Findings`
+- Только реальные проблемы с приоритетом `P0/P1/P2`.
+- Для каждой: `причина -> риск -> доказательство (файл:строка) -> рекомендуемый fix`.
+
+2) `Fixes`
+- Исправь `P0/P1`, если можно сделать безопасно в текущем контексте.
+- Если исправление блокировано средой/данными, зафиксируй blocker и минимальный путь разблокировки.
+
+3) `Residual Risks`
+- Что остаётся после фиксов (долги, частичное покрытие, компромиссы).
+
+4) `Next Checks`
+- Конкретные проверки/тесты/валидаторы для подтверждения архитектурной целостности.
+
+## Матрица трассируемости (обязательна)
+Добавляй матрицу вида:
+`requirement/scenario -> bounded context/module -> contract/event -> check/test -> status`.
+
+## Machine-check integration
+После существенных правок запускай:
+- `python scripts/validate_import_boundaries.py`
+- `python scripts/validate_api_v2_contract_parity.py`
+- `python scripts/validate_architecture_policy.py`
+- `python scripts/run_lean_gate.py`
+
+Если среда блокирует запуск, это не причина пропускать аудит:
+- явно фиксируй blocker,
+- указывай минимальный путь разблокировки,
+- продолжай статический архитектурный анализ.
+
+## Co-use
+- Для high-load compute границ: co-use с `minute-candle-performance` после фикса архитектурных границ.
+- Для полноты сценариев/приемки/traceability: co-use с `business-analyst`.
 
 ## Skill dependencies and lifecycle gates
 - Start phase: use this skill at the beginning of the matching task stream.
@@ -39,9 +98,3 @@ description: >
 ## Repository governance baseline (mandatory)
 - Follow `docs/workflows/skill-governance-sync.md` for mandatory repository gates (worktree guard, lean loop, plans/memory/handoff, pre-push blockers, repeated-issue escalation).
 - Keep this skill focused on domain workflow; do not duplicate repository governance details here.
-## Mandatory pre-push guidance
-- Run `python scripts/sync_architecture_map.py --check` when boundaries or integrations are touched.
-- Run required checks from `docs/DEV_WORKFLOW.md` for touched areas; treat failures as blockers.
-- If contracts/registry/docs changed, update source-of-truth artifacts before push and keep notes in AGENTS or PR summary.
-
-
