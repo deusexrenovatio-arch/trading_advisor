@@ -1,7 +1,31 @@
 version: 1
-updated_at: 2026-03-04
+updated_at: 2026-03-05
 
 decisions:
+  - id: ADM-2026-03-05-077
+    date: 2026-03-05
+    title: Stabilize news gate bridge behavior for tests via explicit as-of timestamp
+    context: Full pre-push pytest exposed a wall-clock sensitive bridge test where fixed fixture timestamps aged out of lookback window over time.
+    decision: Extend load_news_gate_items with optional as_of_utc override and use fixed as-of in time-sensitive test.
+    impact: Bridge tests are deterministic across calendar dates while production behavior keeps current-time default.
+    links:
+      - src/moex_carry/news_live_bridge.py
+      - tests/test_news_live_runtime.py
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-076
+    date: 2026-03-05
+    title: Surface task-request contract in scorecards and bind advisory findings to explicit remediation queue
+    context: Harness-oriented review showed the task-contract gate was enforced in lean loop but not visible as a scorecard check, while recurring advisory findings had no mandatory planning path.
+    decision: Add task-request-contract check to quality scorecards, add deterministic preflight in workflow, and document advisory debt routing into plans plus memory artifacts.
+    impact: Request-quality regressions become visible in scorecard runs; non-blocking advisories are captured as explicit follow-up work instead of drifting.
+    links:
+      - configs/quality_scorecards.yaml
+      - docs/DEV_WORKFLOW.md
+      - docs/runbooks/governance-remediation.md
+      - plans/PLANS.yaml
+      - .cursor/skills/parallel-worktree-flow/SKILL.md
+      - .cursor/skills/ai-agent-architect/SKILL.md
+      - .cursor/skills/docs-sync/SKILL.md
   - id: ADM-2026-03-04-075
     date: 2026-03-04
     title: Complete advice-by-advice external practices mapping and enforce recurrence-signature learning
@@ -546,6 +570,24 @@ incidents:
       - .github/workflows/self-heal.yml
       - scripts/self_heal.py
       - docs/runbooks/self-heal-escalation.md
+  - id: AMI-2026-03-05-009
+    date: 2026-03-05
+    title: Replay refresh failed on timezone mismatch and blocked parity gate
+    symptom: python -m moex_carry.cli signals --no-csv failed with tz-aware vs tz-naive exec_ts comparisons; pre-push data integrity parity then blocked push.
+    root_cause: Incremental replay compared mixed timestamp types from existing replay output/checkpoints and could write pickle fallback under `.parquet` path that integrity checker read only as parquet.
+    remediation: Normalize replay timestamp comparisons to UTC-naive in incremental engine and add pickle fallback read path in data integrity checker.
+    remediation_type: capability
+    incident_signature: replay_tz_mismatch_parity_block
+    prevention_change: Enforced UTC-naive `exec_ts` normalization for prefix/tail merge and comparisons in incremental replay path.
+    prevention_artifact: src/moex_carry/signal_replay/incremental.py
+    prevention_check: python -m moex_carry.cli signals --no-csv && python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+    loop_breaker_trigger: Signal refresh failed twice on the same tz comparison class while trying to clear parity gate.
+    search_space_reset: Switched from retrying refresh command to code-level timestamp normalization and checker fallback hardening.
+    same_path_attempts: 2
+    links:
+      - src/moex_carry/signal_replay/incremental.py
+      - scripts/check_data_integrity.py
+      - docs/DEV_WORKFLOW.md
 
 patterns:
   - id: AMP-2026-02-20-001
@@ -817,4 +859,22 @@ patterns:
       - docs/workflows/external-advice-mapping-2026-03-04.md
       - docs/workflows/agent-practices-alignment.md
       - plans/PLANS.yaml
+  - id: AMP-2026-03-05-031
+    date: 2026-03-05
+    title: Convert non-blocking governance warnings into explicit follow-up tasks
+    pattern: When validators emit advisory/non-blocking findings, record one concrete follow-up in `plans/PLANS.yaml` and link rationale in `memory/agent_memory.yaml` to avoid repeating the same warning without ownership.
+    when_to_use: Any run where lean gate passes but advisories recur across sessions.
+    links:
+      - docs/runbooks/governance-remediation.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
+  - id: AMP-2026-03-05-032
+    date: 2026-03-05
+    title: Make time-window tests explicit about evaluation clock
+    pattern: Any logic with lookback/time-cutoff gates should accept optional as-of timestamp and tests should pass fixed as-of values instead of relying on datetime.now().
+    when_to_use: Filtering, gating, or ranking code where fixture timestamps can drift outside windows as real time advances.
+    links:
+      - src/moex_carry/news_live_bridge.py
+      - tests/test_news_live_runtime.py
+      - docs/checklists/first-time-right-gate.md
 

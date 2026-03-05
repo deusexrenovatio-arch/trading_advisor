@@ -98,6 +98,15 @@ Use this guide when a governance gate fails.
 - Run the failing command directly.
 - Fix and rerun until all dimensions meet thresholds.
 
+## Advisory debt queue (non-blocking findings)
+- If output says `advisory` or `non-blocking`, do not ignore it across runs.
+- Create or update one explicit task in `plans/PLANS.yaml` with owner and target date.
+- Link evidence in `memory/agent_memory.yaml` pattern or decision entry so repeated advisories are tracked.
+- Recommended advisory classes:
+  - target line-budget overruns from `python scripts/validate_taste_invariants.py`
+  - planned-but-unlinked cases from `python scripts/validate_test_cases.py`
+  - repeated deprecation warnings from test/runtime outputs
+
 ## `pytest tests/perf -q`
 - If runtime budgets fail, inspect thresholds and recent changes in hot paths.
 - Preserve correctness; optimize kernels/orchestration before raising budgets.

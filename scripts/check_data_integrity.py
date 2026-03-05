@@ -62,7 +62,17 @@ def _load_source_coverage(path: Path, *, stock: str, future: str) -> PairCoverag
 
 
 def _load_replay_coverage(path: Path, *, stock: str, future: str) -> PairCoverage:
-    frame = pd.read_parquet(path, columns=["date", "exec_ts"])
+    try:
+        frame = pd.read_parquet(path, columns=["date", "exec_ts"])
+    except Exception:
+        # Incremental replay writer can fallback to pickle while keeping the same path.
+        frame = pd.read_pickle(path)
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError(f"replay payload is not a DataFrame: {path}")
+        missing_columns = [col for col in ("date", "exec_ts") if col not in frame.columns]
+        if missing_columns:
+            raise KeyError(f"missing replay columns {missing_columns} in {path}")
+        frame = frame[["date", "exec_ts"]]
     days, rows, min_day, max_day = _to_day_summary(frame)
     return PairCoverage(stock=stock, future=future, days=days, rows=rows, min_day=min_day, max_day=max_day)
 

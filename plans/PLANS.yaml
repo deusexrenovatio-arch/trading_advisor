@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-04
+updated_at: 2026-03-05
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -1037,3 +1037,86 @@ items:
       - P1-SELF-LEARN-LOOP-040
     started_at: 2026-03-04
     completed_at: 2026-03-04
+
+  - id: P1-HARNESS-SCORECARD-SELFLEARN-042
+    title: Make task-contract visibility explicit in scorecards and align governance skills/docs with advisory debt routing
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - quality scorecards include an explicit task request contract check
+      - development workflow includes deterministic local preflight before gates
+      - governance remediation runbook includes advisory debt queue handling
+      - active governance skills include request-contract and loop-breaker alignment
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/validate_skills.py
+      - python scripts/validate_quality_scorecards.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - configs/quality_scorecards.yaml
+      - docs/DEV_WORKFLOW.md
+      - docs/runbooks/governance-remediation.md
+      - .cursor/skills/parallel-worktree-flow/SKILL.md
+      - .cursor/skills/ai-agent-architect/SKILL.md
+      - .cursor/skills/docs-sync/SKILL.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-EXTERNAL-ADVICE-MAP-041
+    started_at: 2026-03-05
+    completed_at: 2026-03-05
+
+  - id: P1-REPLAY-TZ-PARITY-043
+    title: Fix incremental replay timezone mismatch and parity checker format fallback to unblock deterministic pre-push
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - unified signal refresh no longer fails on tz-aware vs tz-naive exec_ts comparisons
+      - replay merge path normalizes timestamp columns before sort/dedup
+      - data integrity checker reads replay files with parquet-first and pickle fallback
+      - python scripts/check_data_integrity.py --data-dir data --max-day-gap 2 passes after refresh
+    checks:
+      - python -m moex_carry.cli signals --no-csv
+      - python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/signal_replay/incremental.py
+      - scripts/check_data_integrity.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-HARNESS-SCORECARD-SELFLEARN-042
+    started_at: 2026-03-05
+    completed_at: 2026-03-05
+
+  - id: P1-NEWS-GATE-ASOF-TEST-044
+    title: Make news gate bridge tests deterministic with explicit as-of timestamp
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - news gate loader supports explicit as-of timestamp without changing default runtime behavior
+      - time-sensitive bridge test uses fixed as-of value and no longer depends on wall-clock date
+      - focused regression test for bridge confidence threshold passes
+    checks:
+      - python -m pytest tests/test_news_live_runtime.py::test_load_news_gate_items_reads_scored_rows -q
+      - python -m ruff check src/moex_carry/news_live_bridge.py tests/test_news_live_runtime.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/news_live_bridge.py
+      - tests/test_news_live_runtime.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-REPLAY-TZ-PARITY-043
+    started_at: 2026-03-05
+    completed_at: 2026-03-05

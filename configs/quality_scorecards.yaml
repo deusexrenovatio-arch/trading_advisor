@@ -35,6 +35,8 @@ dimensions:
     checks:
       - id: handoff-budget
         command: ["{python}", "scripts/validate_session_handoff.py"]
+      - id: task-request-contract
+        command: ["{python}", "scripts/validate_task_request_contract.py"]
 
   - id: security
     threshold: 1.0

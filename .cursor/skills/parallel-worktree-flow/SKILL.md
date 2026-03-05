@@ -51,7 +51,12 @@ git fetch origin
 git pull --ff-only
 ```
 
-2. Create worktrees from `origin/main` (if missing):
+2. Validate task request contract before coding:
+```bash
+python scripts/validate_task_request_contract.py
+```
+
+3. Create worktrees from `origin/main` (if missing):
 ```bash
 git worktree add ../wt-refactor -b refactor/app-core origin/main
 git worktree add ../wt-signals-backtest -b chat/signals-backtest-lab origin/main
@@ -59,7 +64,7 @@ git worktree add ../wt-bot -b feat/bot-integration origin/main
 git worktree add ../wt-integration -b chore/integration-sync origin/main
 ```
 
-3. Validate setup:
+4. Validate setup:
 ```bash
 git worktree list
 ```
