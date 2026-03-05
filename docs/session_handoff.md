@@ -1,43 +1,46 @@
 # Session Handoff
-Updated: 2026-03-04 15:13 UTC
+Updated: 2026-03-05 16:24 UTC
 
 ## Goal
-- Remove popup console windows when worker/background processes are started locally.
+- Apply harness-oriented governance/self-learning hardening from latest review and merge to `main` via PR-only flow.
 
 ## Task Request Contract
-- Objective: audit current worker launchers and enforce hidden/headless process start so new console windows do not interrupt work.
-- In Scope: PowerShell launch scripts and scheduled-task argument templates used to start backend, Telegram worker, frontend, news ingest, and shock label cycle workers.
-- Out of Scope: worker business logic, API behavior, and trading/news processing algorithms.
-- Constraints: keep existing singleton checks and log redirection behavior; preserve task names/schedules.
-- Done Evidence: `python scripts/validate_task_request_contract.py`, `python scripts/run_lean_gate.py`, and launcher search output showing hidden-window flags on worker paths.
-- Priority Rule: prioritize zero popup windows while preserving current automation behavior.
+- Objective: convert harness review recommendations into minimal deterministic repo changes that improve governance visibility and self-learning enforcement.
+- In Scope: governance docs, scorecard config, and skill instructions tied to task-contract gate and repeated-issue loop-breakers.
+- Out of Scope: runtime strategy logic, ingestion algorithms, and non-governance product features.
+- Constraints: keep PR small/single-concern, preserve existing passing gates, and retain PR-only merge policy for `main`.
+- Done Evidence: `python scripts/validate_task_request_contract.py`, `python scripts/validate_session_handoff.py`, `python scripts/validate_skills.py`, `python scripts/validate_quality_scorecards.py`, `python scripts/run_lean_gate.py`.
+- Priority Rule: prioritize machine-checkable governance coverage and recurrence prevention over broad refactors.
 
 ## Current Delta
-- Identified popup source: `scripts/start_all_background.ps1` starts backend/worker/frontend via `Start-Process` without hidden window flags.
-- Confirmed active worker wrappers are running under `powershell.exe` parent processes for backend and Telegram worker.
-- Scoped scheduled-task launcher paths for autostart, news ingest, and shock label cycle workers.
-- Updated installed `MoexCarry-NewsIngest*` and `MoexCarry-ShockLabelCycle*` tasks to include `-WindowStyle Hidden` in action arguments.
-- Relaunched backend and Telegram worker in hidden mode; frontend launch still depends on local `vite` availability.
+- Worktree context confirmed on feature branch for governance-only patch.
+- Implemented targeted harness updates: scorecard visibility, preflight clarity, advisory debt routing, and governance skill alignment.
+- Updated machine-readable governance artifacts: `plans/PLANS.yaml` and `memory/agent_memory.yaml`.
+- Required validators and lean gate rerun: all requested checks pass.
+- Remaining step: publish PR and merge via PR-only flow.
 
 ## First-Time-Right Report
-1. Confirmed coverage: manual background launcher and scheduled-task templates for all recurring workers are included.
-2. Missing or risky scenarios: already installed scheduled tasks keep old arguments until they are reinstalled/updated.
-3. Resource/time risks and chosen controls: low-risk script-only changes with pre/post lean gate enforcement.
-4. Highest-priority fixes or follow-ups: patch all worker launch paths to hidden window mode and provide update step for existing scheduled tasks.
+1. Confirmed coverage: governance loop, quality scorecards, remediation runbook, and active skills are all included in patch scope.
+2. Missing or risky scenarios: advisory findings may remain non-blocking after this patch unless future policy changes make them hard gates.
+3. Resource/time risks and chosen controls: low runtime risk; control via strict pre/post gate execution and minimal file-touch scope.
+4. Highest-priority fixes or follow-ups: add scorecard check for request contract and make self-learning/advisory handling explicit in docs and skills.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
-- Stop Trigger: two launcher-edit attempts fail to suppress popup windows during real run.
-- Reset Action: stop patching, snapshot effective scheduled-task actions/process tree, then switch to one-worker minimal repro.
-- New Search Space: (1) `Start-Process` flags and host executable choice, (2) ScheduledTask action arguments/logon mode, (3) direct executable launch without shell wrapper.
-- Next Probe: run one clean launch per worker path and verify no visible console window appears.
+- Stop Trigger: two consecutive governance patch iterations fail the same validator class.
+- Reset Action: stop patching and rebuild change set from failing validator contract plus remediation runbook checklist.
+- New Search Space: (1) scorecard wiring only, (2) docs/runbook harmonization only, (3) skill text alignment only.
+- Next Probe: run the single failing validator first, then rerun `run_lean_gate.py` only after it turns green.
 
 ## Blockers
 - No blockers.
 
 ## Next Step
-- Apply hidden-window changes to worker launchers, then rerun task-contract validation and lean gate.
+- Push branch, create PR with governance evidence, merge to `main`, and sync local `main`.
 
 ## Validation
 - `python scripts/validate_task_request_contract.py`
+- `python scripts/validate_session_handoff.py`
+- `python scripts/validate_skills.py`
+- `python scripts/validate_quality_scorecards.py`
 - `python scripts/run_lean_gate.py`

@@ -1,7 +1,21 @@
 version: 1
-updated_at: 2026-03-04
+updated_at: 2026-03-05
 
 decisions:
+  - id: ADM-2026-03-05-076
+    date: 2026-03-05
+    title: Surface task-request contract in scorecards and bind advisory findings to explicit remediation queue
+    context: Harness-oriented review showed the task-contract gate was enforced in lean loop but not visible as a scorecard check, while recurring advisory findings had no mandatory planning path.
+    decision: Add task-request-contract check to quality scorecards, add deterministic preflight in workflow, and document advisory debt routing into plans plus memory artifacts.
+    impact: Request-quality regressions become visible in scorecard runs; non-blocking advisories are captured as explicit follow-up work instead of drifting.
+    links:
+      - configs/quality_scorecards.yaml
+      - docs/DEV_WORKFLOW.md
+      - docs/runbooks/governance-remediation.md
+      - plans/PLANS.yaml
+      - .cursor/skills/parallel-worktree-flow/SKILL.md
+      - .cursor/skills/ai-agent-architect/SKILL.md
+      - .cursor/skills/docs-sync/SKILL.md
   - id: ADM-2026-03-04-075
     date: 2026-03-04
     title: Complete advice-by-advice external practices mapping and enforce recurrence-signature learning
@@ -817,4 +831,13 @@ patterns:
       - docs/workflows/external-advice-mapping-2026-03-04.md
       - docs/workflows/agent-practices-alignment.md
       - plans/PLANS.yaml
+  - id: AMP-2026-03-05-031
+    date: 2026-03-05
+    title: Convert non-blocking governance warnings into explicit follow-up tasks
+    pattern: When validators emit advisory/non-blocking findings, record one concrete follow-up in `plans/PLANS.yaml` and link rationale in `memory/agent_memory.yaml` to avoid repeating the same warning without ownership.
+    when_to_use: Any run where lean gate passes but advisories recur across sessions.
+    links:
+      - docs/runbooks/governance-remediation.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
 

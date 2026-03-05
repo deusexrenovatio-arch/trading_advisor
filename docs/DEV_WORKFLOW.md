@@ -7,6 +7,9 @@
 - Keep team context overhead bounded and machine-checked.
 
 ## Mandatory worktree preflight
+- Verify local runtime before any gate command:
+  - `python --version`
+  - `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
 - Before any code change, lock expected worktree + branch for the current session:
   - `./scripts/worktree_guard.ps1 -Action Init -WorktreePath "D:\\wt-<name>" -Branch "<branch>" -ContextTtlHours 12`
 - Before every development task, verify context:

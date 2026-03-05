@@ -19,6 +19,11 @@ description: >
 2) Обнови generated‑секции (между маркерами BEGIN/END).
 3) Если archctl/registry не настроены — обнови docs вручную (архитектура, data‑sources, contracts).
 4) Проверь, что docs закоммичены в PR.
+5) Для governance-изменений проверь синхронность артефактов:
+   - `docs/DEV_WORKFLOW.md`
+   - `docs/session_handoff.md`
+   - `docs/runbooks/governance-remediation.md`
+   - `configs/agent_incident_policy.yaml`
 
 ## Skill dependencies and lifecycle gates
 - Start phase: use this skill at the beginning of the matching task stream.

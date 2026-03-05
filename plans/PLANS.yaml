@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-04
+updated_at: 2026-03-05
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -1037,3 +1037,35 @@ items:
       - P1-SELF-LEARN-LOOP-040
     started_at: 2026-03-04
     completed_at: 2026-03-04
+
+  - id: P1-HARNESS-SCORECARD-SELFLEARN-042
+    title: Make task-contract visibility explicit in scorecards and align governance skills/docs with advisory debt routing
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - quality scorecards include an explicit task request contract check
+      - development workflow includes deterministic local preflight before gates
+      - governance remediation runbook includes advisory debt queue handling
+      - active governance skills include request-contract and loop-breaker alignment
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/validate_skills.py
+      - python scripts/validate_quality_scorecards.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - configs/quality_scorecards.yaml
+      - docs/DEV_WORKFLOW.md
+      - docs/runbooks/governance-remediation.md
+      - .cursor/skills/parallel-worktree-flow/SKILL.md
+      - .cursor/skills/ai-agent-architect/SKILL.md
+      - .cursor/skills/docs-sync/SKILL.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-EXTERNAL-ADVICE-MAP-041
+    started_at: 2026-03-05
+    completed_at: 2026-03-05
