@@ -1,0 +1,17 @@
+signal_engine:
+  morning_plan:
+    setups:
+      enable_box_breakout: false
+      enable_pullback_limit: false
+      enable_orb_breakout: false
+      enable_ema_pullback: false
+      enable_vwap_pullback: true
+      vwap_require_side_alignment: false
+      vwap_pullback_max_dist_atr_mult: 3.0
+      vwap_pullback_offset_ticks: 0
+      stop_model: volatility
+      sl_atr_mult: 0.6
+      max_risk_atr_mult: 5.0
+      enable_cost_net_gate: false
+      enable_eligibility_filter: false
+      max_setups_per_instrument: 4

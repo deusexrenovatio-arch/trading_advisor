@@ -8,6 +8,18 @@ and the async API endpoints (`/api/hpo/run`, `/api/hpo/status`).
 - Reference data under `data/raw/` (`shares.csv`, `futures.csv`, `key_rates.csv`).
 - Dependencies installed (`pip install -e .[dev]`).
 
+## Morning-plan baseline (current)
+- Canonical baseline decisions are tracked in:
+  - `docs/research/wf-baseline-v6-decisions-2026-03-04.md`
+- Active default runner profile is aligned to `v6` baseline:
+  - weekly causal walk-forward (`train/test/step = 28/7/7`),
+  - `cost_aware_v2` + `intraday_goal_v3`,
+  - robust objective with negative-subfold penalty.
+- Retired from active tuning loop:
+  - `intraday_goal_v4_clustered`,
+  - `fold_stability` objective,
+  - probability-gate threshold-only sweeps (no measurable effect in latest reruns).
+
 ## 1) Prepare a base BacktestRequest
 Create a YAML file with a minimal Backtest v2 request:
 
@@ -121,6 +133,25 @@ You can switch the metric and mode:
   - `optimization.hard_max_negative_fold_share` (for example `0.35`)
   - `optimization.aggregation=p25` (more conservative than median)
 
+For morning-plan walk-forward (`scripts/run_morning_plan_walk_forward.py`) keep
+optimization on active baseline knobs:
+- `--selection-objective {robust_median_mad|robust_normalized}`
+- `--objective-negative-fold-penalty`
+- `--objective-subfold-days`
+- `--objective-concentration-penalty-weight`
+- `--objective-concentration-top-share-soft-cap`
+
+Retired from active loop:
+- `fold_stability` selection objective,
+- cluster-prefixed v4 search profile (`intraday_goal_v4_clustered`).
+
+Strict walk-forward controls:
+- `--embargo-days`, `--purge-days`
+- fixed holdout window: `--holdout-start-date`, `--holdout-end-date`
+- acceptance gates: `--accept-max-negative-fold-share`,
+  `--accept-min-median-fold-net-ticks`, `--accept-min-tail-cvar-ticks`
+- cost stress: `--cost-stress-mult` (for example `1.5`)
+
 ### 3.2 Portfolio utility objective (default)
 
 ```
@@ -203,39 +234,6 @@ print(best.objective, best.params)
   in the status/result payload.
 - `rates.use_trading_days=true` switches annualization to 252 trading days
   (affects ExcessAnn, Vol_ann, IR, Sharpe).
-
-## 5) Morning-plan intraday HPO (causal walk-forward)
-Use `scripts/run_morning_plan_walk_forward.py` with TPE search to avoid brute-force grids.
-
-Strategy objective for this stream:
-- potential setup target from `0.5%` and higher (`setups.min_target_return_pct`),
-- several entries per week (default search target band `2..12`),
-- mandatory intraday exit (`EOD` / before evening clearing).
-
-Example command:
-
-```bash
-PYTHONPATH=src python scripts/run_morning_plan_walk_forward.py \
-  --search-algorithm TPE \
-  --search-space-profile intraday_goal_v1 \
-  --hpo-trials 24 \
-  --hpo-startup-trials 8 \
-  --goal-min-target-return-pct 0.5 \
-  --goal-min-trades-per-week 2 \
-  --goal-max-trades-per-week 12 \
-  --goal-trade-freq-penalty 3.0 \
-  --tuning-profile cost_aware_v2 \
-  --cost-model-profile fixed_v1 \
-  --offline-only \
-  --start-date 2026-01-05 \
-  --end-date 2026-03-02 \
-  --decision-time 12:00 \
-  --train-days 20 \
-  --test-days 7 \
-  --step-days 7 \
-  --instrument BRH6 --instrument NGH6 ... \
-  --out-json data/output/research/morning_offline_wf_tpe_intraday_goal_v1.json
-```
 
 ## Spread tolerance profile (ready-to-run)
 Use `configs/hpo_spread_tolerance_portfolio.yaml` to tune spread entry bands in

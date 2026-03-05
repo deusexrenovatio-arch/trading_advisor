@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Any
 
 from moex_carry.signal_engine.core.calendar import MarketCalendar
 from moex_carry.signal_engine.core.math_utils import round_half_away_from_zero
@@ -18,12 +19,54 @@ from moex_carry.signal_engine.core.types import (
     TrendState,
 )
 from moex_carry.signal_engine.execution.engine import ExecutionEngine
+from moex_carry.signal_engine.setups.extended_families import (
+    generate_ema_pullback_limit,
+    generate_orb_breakout,
+    generate_vwap_pullback_limit,
+)
+from moex_carry.signal_engine.setups.volatility_compression_family import (
+    generate_volatility_compression_breakout,
+)
 
 
 class SetupGenerator:
     def __init__(self, cfg: dict, execution_engine: ExecutionEngine | None = None):
         self.cfg = cfg or {}
         self.execution_engine = execution_engine or ExecutionEngine({})
+        self._rejection_trace: list[dict[str, Any]] = []
+
+    def _reset_rejection_trace(self) -> None:
+        self._rejection_trace = []
+
+    def _record_rejection(
+        self,
+        *,
+        setup_kind: str,
+        rule: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        payload = {
+            "setup_kind": str(setup_kind).strip().upper() or "UNKNOWN",
+            "rule": str(rule).strip().lower() or "unspecified",
+        }
+        if details:
+            normalized = {
+                str(key): _trace_scalar(value)
+                for key, value in details.items()
+                if value is not None
+            }
+            if normalized:
+                payload["details"] = normalized
+        self._rejection_trace.append(payload)
+
+    def _reject(self, *, setup_kind: str, rule: str, **details: Any) -> None:
+        self._record_rejection(setup_kind=setup_kind, rule=rule, details=details or None)
+        return None
+
+    def consume_rejection_trace(self) -> list[dict[str, Any]]:
+        rows = list(self._rejection_trace)
+        self._rejection_trace = []
+        return rows
 
     def generate(
         self,
@@ -37,15 +80,25 @@ class SetupGenerator:
         calendar: MarketCalendar,
         m5: list[Candle] | None = None,
     ) -> list[Setup]:
+        self._reset_rejection_trace()
         if regime.daily_trend_state != TrendState.TREND:
+            self._reject(
+                setup_kind="ALL",
+                rule="daily_trend_not_trend",
+                daily_trend_state=str(regime.daily_trend_state.value),
+            )
             return []
         if regime.daily_dir == Direction.NEUTRAL:
+            self._reject(setup_kind="ALL", rule="daily_dir_neutral")
             return []
         if not regime.h1_alignment:
+            self._reject(setup_kind="ALL", rule="h1_not_aligned")
             return []
         if regime.liquidity_state == LiquidityState.VACUUM:
+            self._reject(setup_kind="ALL", rule="liquidity_vacuum")
             return []
         if calendar.forbid_new_position(as_of_ts):
+            self._reject(setup_kind="ALL", rule="calendar_forbid_new_position")
             return []
         if self._eligibility_filter_enabled():
             cost_ticks = self._estimated_round_trip_cost_ticks()
@@ -54,44 +107,145 @@ class SetupGenerator:
             min_h1_ticks = max(round_half_away_from_zero(min_h1_mult * cost_ticks), 1)
             min_d1_ticks = max(round_half_away_from_zero(min_d1_mult * cost_ticks), 1)
             if int(regime.h1_atr_ticks) < int(min_h1_ticks):
+                self._reject(
+                    setup_kind="ALL",
+                    rule="eligibility_h1_atr_below_min",
+                    h1_atr_ticks=int(regime.h1_atr_ticks),
+                    min_h1_ticks=int(min_h1_ticks),
+                )
                 return []
             if int(regime.daily_atr_ticks) < int(min_d1_ticks):
+                self._reject(
+                    setup_kind="ALL",
+                    rule="eligibility_d1_atr_below_min",
+                    daily_atr_ticks=int(regime.daily_atr_ticks),
+                    min_d1_ticks=int(min_d1_ticks),
+                )
                 return []
 
         setups: list[Setup] = []
-        s1 = self._generate_box_breakout(
-            as_of_ts=as_of_ts,
-            instrument_id=instrument_id,
-            regime=regime,
-            levels_d1=levels_d1,
-            levels_h1=levels_h1,
-            exec_params=exec_params,
-            calendar=calendar,
-            m5=m5 or [],
-        )
-        if s1 is not None:
-            setups.append(s1)
-        s2 = self._generate_pullback_limit(
-            as_of_ts=as_of_ts,
-            instrument_id=instrument_id,
-            last_price_ticks=int(last_price_ticks),
-            regime=regime,
-            levels_d1=levels_d1,
-            exec_params=exec_params,
-            calendar=calendar,
-            m5=m5 or [],
-        )
-        if s2 is not None:
-            setups.append(s2)
+        m5_rows = m5 or []
+        if self._setup_kind_enabled("BOX_BREAKOUT", default_enabled=True):
+            s1 = self._generate_box_breakout(
+                as_of_ts=as_of_ts,
+                instrument_id=instrument_id,
+                regime=regime,
+                levels_d1=levels_d1,
+                levels_h1=levels_h1,
+                exec_params=exec_params,
+                calendar=calendar,
+                m5=m5_rows,
+            )
+            if s1 is not None:
+                setups.append(s1)
+        if self._setup_kind_enabled("PULLBACK_LIMIT", default_enabled=True):
+            s2 = self._generate_pullback_limit(
+                as_of_ts=as_of_ts,
+                instrument_id=instrument_id,
+                last_price_ticks=int(last_price_ticks),
+                regime=regime,
+                levels_d1=levels_d1,
+                exec_params=exec_params,
+                calendar=calendar,
+                m5=m5_rows,
+            )
+            if s2 is not None:
+                setups.append(s2)
+        if self._setup_kind_enabled("ORB_BREAKOUT", default_enabled=False):
+            s3 = generate_orb_breakout(
+                self,
+                as_of_ts=as_of_ts,
+                instrument_id=instrument_id,
+                last_price_ticks=int(last_price_ticks),
+                regime=regime,
+                levels_d1=levels_d1,
+                exec_params=exec_params,
+                calendar=calendar,
+                m5=m5_rows,
+            )
+            if s3 is not None:
+                setups.append(s3)
+        if self._setup_kind_enabled("EMA_PULLBACK_LIMIT", default_enabled=False):
+            s4 = generate_ema_pullback_limit(
+                self,
+                as_of_ts=as_of_ts,
+                instrument_id=instrument_id,
+                last_price_ticks=int(last_price_ticks),
+                regime=regime,
+                levels_d1=levels_d1,
+                levels_h1=levels_h1,
+                exec_params=exec_params,
+                calendar=calendar,
+                m5=m5_rows,
+            )
+            if s4 is not None:
+                setups.append(s4)
+        if self._setup_kind_enabled("VWAP_PULLBACK_LIMIT", default_enabled=False):
+            s5 = generate_vwap_pullback_limit(
+                self,
+                as_of_ts=as_of_ts,
+                instrument_id=instrument_id,
+                last_price_ticks=int(last_price_ticks),
+                regime=regime,
+                levels_d1=levels_d1,
+                exec_params=exec_params,
+                calendar=calendar,
+                m5=m5_rows,
+            )
+            if s5 is not None:
+                setups.append(s5)
+        if self._setup_kind_enabled("VOLATILITY_COMPRESSION_BREAKOUT", default_enabled=False):
+            s6 = generate_volatility_compression_breakout(
+                self,
+                as_of_ts=as_of_ts,
+                instrument_id=instrument_id,
+                last_price_ticks=int(last_price_ticks),
+                regime=regime,
+                levels_d1=levels_d1,
+                exec_params=exec_params,
+                calendar=calendar,
+                m5=m5_rows,
+            )
+            if s6 is not None:
+                setups.append(s6)
 
         max_setups = max(int(self.cfg.get("max_setups_per_instrument", 2)), 0)
         if max_setups <= 0:
+            self._reject(
+                setup_kind="ALL",
+                rule="max_setups_per_instrument_non_positive",
+                max_setups_per_instrument=int(max_setups),
+            )
             return []
         ranked = sorted(
             setups,
             key=lambda item: (int(item.risk_ticks), abs(item.tp_order.price_ticks - item.entry_order.price_ticks)),
         )
         return ranked[:max_setups]
+
+    def _setup_kind_enabled(self, setup_kind: str, *, default_enabled: bool) -> bool:
+        kind = str(setup_kind).strip().upper()
+        if not kind:
+            return bool(default_enabled)
+        allowed = _normalize_setup_kind_tokens(self.cfg.get("enabled_setup_kinds"))
+        if allowed and kind not in allowed:
+            return False
+        disabled = _normalize_setup_kind_tokens(self.cfg.get("disabled_setup_kinds"))
+        if kind in disabled:
+            return False
+        if kind == "BOX_BREAKOUT":
+            return bool(self.cfg.get("enable_box_breakout", default_enabled))
+        if kind == "PULLBACK_LIMIT":
+            return bool(self.cfg.get("enable_pullback_limit", default_enabled))
+        if kind == "ORB_BREAKOUT":
+            return bool(self.cfg.get("enable_orb_breakout", default_enabled))
+        if kind == "EMA_PULLBACK_LIMIT":
+            return bool(self.cfg.get("enable_ema_pullback", default_enabled))
+        if kind == "VWAP_PULLBACK_LIMIT":
+            return bool(self.cfg.get("enable_vwap_pullback", default_enabled))
+        if kind == "VOLATILITY_COMPRESSION_BREAKOUT":
+            return bool(self.cfg.get("enable_volatility_compression_breakout", default_enabled))
+        return bool(default_enabled)
 
     def _cost_gate_metrics(self, *, reward_gross_ticks: int, risk_gross_ticks: int) -> dict[str, float | bool]:
         cost_ticks = self._estimated_round_trip_cost_ticks()
@@ -149,6 +303,18 @@ class SetupGenerator:
 
     def _entry_range_half_width_ticks(self) -> int:
         return max(int(self.cfg.get("entry_range_half_width_ticks", 0)), 0)
+
+    def _entry_ttl_minutes(self) -> int:
+        return max(int(self.cfg.get("entry_ttl_minutes", 0) or 0), 0)
+
+    def _stop_limit_fallback_to_market_min(self) -> int:
+        return max(int(self.cfg.get("stop_limit_fallback_to_market_min", 0) or 0), 0)
+
+    def _stop_limit_fallback_slip_ticks(self) -> int:
+        return max(int(self.cfg.get("stop_limit_fallback_slip_ticks", 1) or 1), 0)
+
+    def _time_stop_minutes(self) -> int:
+        return max(int(self.cfg.get("time_stop_minutes", 0) or 0), 0)
 
     def _entry_range_ticks(
         self,
@@ -241,24 +407,28 @@ class SetupGenerator:
         m5: list[Candle],
     ) -> Setup | None:
         if bool(self.cfg.get("require_vol_not_low", True)) and regime.daily_vol_state.value == "LOW":
-            return None
+            return self._reject(
+                setup_kind="BOX_BREAKOUT",
+                rule="daily_vol_low",
+                daily_vol_state=str(regime.daily_vol_state.value),
+            )
 
         box_h = _find_level(levels_h1, "BOX_H")
         box_l = _find_level(levels_h1, "BOX_L")
         if regime.daily_dir == Direction.UP:
             if box_h is None:
-                return None
+                return self._reject(setup_kind="BOX_BREAKOUT", rule="missing_box_h")
             side = Side.BUY
             entry_stop_ticks = int(box_h.price_ticks) + int(exec_params.buffer_ticks)
             limit_ticks = entry_stop_ticks + int(exec_params.limit_slip_ticks)
         elif regime.daily_dir == Direction.DOWN:
             if box_l is None:
-                return None
+                return self._reject(setup_kind="BOX_BREAKOUT", rule="missing_box_l")
             side = Side.SELL
             entry_stop_ticks = int(box_l.price_ticks) - int(exec_params.buffer_ticks)
             limit_ticks = entry_stop_ticks - int(exec_params.limit_slip_ticks)
         else:
-            return None
+            return self._reject(setup_kind="BOX_BREAKOUT", rule="daily_dir_neutral")
 
         sl_ticks, stop_model = self._choose_stop_ticks(
             side=side,
@@ -285,12 +455,21 @@ class SetupGenerator:
             stop_model = "volatility_fallback"
         risk_ticks = abs(int(entry_stop_ticks) - int(sl_ticks))
         if risk_ticks <= 0:
-            return None
+            return self._reject(
+                setup_kind="BOX_BREAKOUT",
+                rule="non_positive_risk_ticks",
+                risk_ticks=int(risk_ticks),
+            )
         max_risk_atr_mult = float(self.cfg.get("max_risk_atr_mult", 1.2))
         if regime.h1_atr_ticks > 0:
             max_risk = max(round_half_away_from_zero(max_risk_atr_mult * float(regime.h1_atr_ticks)), 1)
             if risk_ticks > max_risk:
-                return None
+                return self._reject(
+                    setup_kind="BOX_BREAKOUT",
+                    rule="risk_above_max_atr_mult",
+                    risk_ticks=int(risk_ticks),
+                    max_risk_ticks=int(max_risk),
+                )
 
         min_target_ticks = int(self.cfg.get("min_target_ticks", 3))
         tp_ticks = self.execution_engine.choose_tp_from_levels(
@@ -305,17 +484,32 @@ class SetupGenerator:
             tp_ticks = entry_stop_ticks + delta if side == Side.BUY else entry_stop_ticks - delta
         target_return_pct = _potential_return_pct(entry_stop_ticks, tp_ticks)
         if float(target_return_pct) < float(self._min_target_return_pct()):
-            return None
+            return self._reject(
+                setup_kind="BOX_BREAKOUT",
+                rule="target_return_pct_below_min",
+                target_return_pct=float(target_return_pct),
+                min_target_return_pct=float(self._min_target_return_pct()),
+            )
 
         cost_gate = self._cost_gate_metrics(
             reward_gross_ticks=abs(int(tp_ticks) - int(entry_stop_ticks)),
             risk_gross_ticks=int(risk_ticks),
         )
         if self._cost_gate_enabled() and not bool(cost_gate.get("pass")):
-            return None
+            return self._reject(
+                setup_kind="BOX_BREAKOUT",
+                rule="cost_gate_blocked",
+                reward_net_ticks=float(cost_gate.get("reward_net_ticks", 0.0)),
+                min_reward_net_ticks=float(cost_gate.get("min_reward_net_ticks", 0.0)),
+                rr_net=float(cost_gate.get("rr_net", 0.0)),
+                min_rr_net=float(cost_gate.get("min_rr_net", 0.0)),
+            )
 
         expiry_policy = str(self.cfg.get("entry_expiry_policy", "EOD_BEFORE_EVENING_CLEARING"))
         expiry_ts = calendar.recommended_entry_expiry(as_of_ts, expiry_policy)
+        ttl_minutes = self._entry_ttl_minutes()
+        if ttl_minutes > 0:
+            expiry_ts = min(expiry_ts, as_of_ts + timedelta(minutes=ttl_minutes))
         entry_range_low, entry_range_high = self._entry_range_ticks(
             entry_ticks=entry_stop_ticks,
             order_type=OrderType.STOP_LIMIT,
@@ -325,7 +519,7 @@ class SetupGenerator:
         setup_id = f"{instrument_id}:BOX_BREAKOUT:{side.value}:{entry_stop_ticks}"
         entry_level = box_h if side == Side.BUY else box_l
         if entry_level is None:
-            return None
+            return self._reject(setup_kind="BOX_BREAKOUT", rule="entry_level_missing")
         return Setup(
             setup_id=setup_id,
             side=side,
@@ -349,6 +543,9 @@ class SetupGenerator:
                     "stop_model": str(stop_model),
                     "entry_range_low_ticks": int(entry_range_low),
                     "entry_range_high_ticks": int(entry_range_high),
+                    "stop_limit_fallback_to_market_min": int(self._stop_limit_fallback_to_market_min()),
+                    "stop_limit_fallback_slip_ticks": int(self._stop_limit_fallback_slip_ticks()),
+                    "time_stop_minutes": int(self._time_stop_minutes()),
                 },
             ),
             sl_order=OrderIntent(
@@ -401,13 +598,22 @@ class SetupGenerator:
         else:
             pullback_levels = [level for level in pullback_levels if int(level.price_ticks) >= int(last_price_ticks)]
         if not pullback_levels:
-            return None
+            return self._reject(
+                setup_kind="PULLBACK_LIMIT",
+                rule="missing_pullback_levels",
+                candidate_levels=int(len(levels_d1)),
+            )
         selected = sorted(pullback_levels, key=lambda level: abs(int(level.price_ticks) - int(last_price_ticks)))[0]
 
         max_dist_mult = float(self.cfg.get("pullback_max_dist_atr_mult", 1.0))
         max_dist_ticks = max(round_half_away_from_zero(max_dist_mult * float(max(regime.h1_atr_ticks, 1))), 1)
         if abs(int(last_price_ticks) - int(selected.price_ticks)) > max_dist_ticks:
-            return None
+            return self._reject(
+                setup_kind="PULLBACK_LIMIT",
+                rule="entry_level_too_far_from_last_price",
+                distance_ticks=int(abs(int(last_price_ticks) - int(selected.price_ticks))),
+                max_dist_ticks=int(max_dist_ticks),
+            )
 
         zone_offset = int(self.cfg.get("entry_zone_offset_ticks", 0))
         entry_ticks = int(selected.price_ticks + zone_offset) if side == Side.BUY else int(selected.price_ticks - zone_offset)
@@ -437,7 +643,11 @@ class SetupGenerator:
 
         risk_ticks = abs(int(entry_ticks) - int(sl_ticks))
         if risk_ticks <= 0:
-            return None
+            return self._reject(
+                setup_kind="PULLBACK_LIMIT",
+                rule="non_positive_risk_ticks",
+                risk_ticks=int(risk_ticks),
+            )
         min_target_ticks = int(self.cfg.get("min_target_ticks", 3))
         tp_ticks = self.execution_engine.choose_tp_from_levels(
             side=side,
@@ -451,17 +661,32 @@ class SetupGenerator:
             tp_ticks = entry_ticks + delta if side == Side.BUY else entry_ticks - delta
         target_return_pct = _potential_return_pct(entry_ticks, tp_ticks)
         if float(target_return_pct) < float(self._min_target_return_pct()):
-            return None
+            return self._reject(
+                setup_kind="PULLBACK_LIMIT",
+                rule="target_return_pct_below_min",
+                target_return_pct=float(target_return_pct),
+                min_target_return_pct=float(self._min_target_return_pct()),
+            )
 
         cost_gate = self._cost_gate_metrics(
             reward_gross_ticks=abs(int(tp_ticks) - int(entry_ticks)),
             risk_gross_ticks=int(risk_ticks),
         )
         if self._cost_gate_enabled() and not bool(cost_gate.get("pass")):
-            return None
+            return self._reject(
+                setup_kind="PULLBACK_LIMIT",
+                rule="cost_gate_blocked",
+                reward_net_ticks=float(cost_gate.get("reward_net_ticks", 0.0)),
+                min_reward_net_ticks=float(cost_gate.get("min_reward_net_ticks", 0.0)),
+                rr_net=float(cost_gate.get("rr_net", 0.0)),
+                min_rr_net=float(cost_gate.get("min_rr_net", 0.0)),
+            )
 
         expiry_policy = str(self.cfg.get("entry_expiry_policy", "EOD_BEFORE_EVENING_CLEARING"))
         expiry_ts = calendar.recommended_entry_expiry(as_of_ts, expiry_policy)
+        ttl_minutes = self._entry_ttl_minutes()
+        if ttl_minutes > 0:
+            expiry_ts = min(expiry_ts, as_of_ts + timedelta(minutes=ttl_minutes))
         entry_range_low, entry_range_high = self._entry_range_ticks(
             entry_ticks=entry_ticks,
             order_type=OrderType.LIMIT,
@@ -490,6 +715,7 @@ class SetupGenerator:
                     "stop_model": str(stop_model),
                     "entry_range_low_ticks": int(entry_range_low),
                     "entry_range_high_ticks": int(entry_range_high),
+                    "time_stop_minutes": int(self._time_stop_minutes()),
                 },
             ),
             sl_order=OrderIntent(
@@ -523,7 +749,6 @@ class SetupGenerator:
             risk_ticks=int(risk_ticks),
         )
 
-
 def _find_level(levels: list[Level], kind: str) -> Level | None:
     for level in levels:
         if str(level.kind) == str(kind):
@@ -541,7 +766,32 @@ def _safe_non_negative_float(value: object, default: float) -> float:
     return float(parsed)
 
 
+def _normalize_setup_kind_tokens(raw: object) -> set[str]:
+    if raw is None:
+        return set()
+    if isinstance(raw, str):
+        tokens = [raw]
+    elif isinstance(raw, (list, tuple, set)):
+        tokens = [str(item) for item in raw]
+    else:
+        return set()
+    normalized: set[str] = set()
+    for token in tokens:
+        value = str(token).strip().upper()
+        if value:
+            normalized.add(value)
+    return normalized
+
+
 def _potential_return_pct(entry_ticks: int, tp_ticks: int) -> float:
     base = max(abs(int(entry_ticks)), 1)
     distance = abs(int(tp_ticks) - int(entry_ticks))
     return float(100.0 * distance / base)
+
+
+def _trace_scalar(value: object) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)

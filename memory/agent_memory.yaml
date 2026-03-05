@@ -2,29 +2,137 @@ version: 1
 updated_at: 2026-03-04
 
 decisions:
+  - id: ADM-2026-03-04-075
+    date: 2026-03-04
+    title: Expand morning-plan recall families and enforce hard-goal acceptance, then map feasible frontier
+    context: Precision-only loops were unable to satisfy the joint target (`winrate>=0.75` and `~2 trades/week`), while baseline acceptance remained optimistic without explicit hard constraints and concentration accounting.
+    decision: Added hard-goal scoring/acceptance controls, introduced new setup families (`ORB_BREAKOUT`, `EMA_PULLBACK_LIMIT`), added per-setup `time_stop_minutes`, and ran constrained WF iterations H18-H23 with deterministic artifacts.
+    impact: Pipeline now supports structural recall experiments and hard KPI gating; empirical frontier is documented (`win~0.58-0.62` at `tpw~1-4`) and confirms current geometry is insufficient for `75%` target without a new two-stage policy; added VWAP family currently shows zero effective coverage in isolated probes.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/signal_engine/setups/extended_families.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_setups.py
+      - artifacts/research/wf_goal_v6_h18_recall_families_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h23_orb_sell_prob_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26c_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h18_h26_iteration_summary_20260304.json
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
+  - id: ADM-2026-03-04-074
+    date: 2026-03-04
+    title: Shift WF improvement roadmap to constrained multi-objective methodology (winrate + frequency + concentration)
+    context: Chat-Pro review plus local scans showed simple precision filters cannot satisfy the combined target (`winrate>=75%` and `~2 trades/week`) on current setup space.
+    decision: Fix a new methodology stack with constrained optimization, anti-data-snooping tests (White RC / SPA / MCS), regime-conditional validation, and a recall-first hypothesis queue before precision filtering.
+    impact: Next hypothesis cycles are now evaluated against joint constraints and robustness, reducing repeated low-frequency overfit loops.
+    links:
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+      - artifacts/research/wf_goal_v6_methodology_probe_20260304.json
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
+  - id: ADM-2026-03-04-073
+    date: 2026-03-04
+    title: Validate precision-filter hypotheses in full causal reruns and select H3 as current precision candidate
+    context: After adding precision-filter controls, offline H1 estimate looked promising but needed end-to-end confirmation under causal walk-forward retuning.
+    decision: Run sequential full reruns (H1-H5) on frozen v6 baseline spec and persist comparison artifact; accept H3 (`min_risk_ticks=114`, `min_target_return_pct=1.5`, `dedup`) as current precision-first candidate because it meets winrate target and has highest net among target-meeting variants.
+    impact: Winrate target (`>=75%`) is now achieved in causal mode (`H3=87.5%`, `H5=77.8%`), while remaining risks (low trade count and instrument concentration) are explicit and tracked for next hypothesis cycle.
+    links:
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp2_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp3_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp4_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp5_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_precision_hypothesis_compare_20260304.json
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - docs/session_handoff.md
+  - id: ADM-2026-03-04-072
+    date: 2026-03-04
+    title: Add precision-filter gate to walk-forward runner and lock first hypothesis artifact
+    context: Baseline analysis showed duplicate setup_id rows across decision slots and unstable winrate concentration, while requested target is precision-first improvement with explicit impact tracking.
+    decision: Extend `run_morning_plan_walk_forward.py` with optional precision filter controls (`--enable-precision-filter`, side/setup/stop/time allowlists, `min_risk_ticks`, `min_target_return_pct`, and `--precision-dedup-setup-ids`) and serialize filter config in `tuning_points`; evaluate Hypothesis #1 (`min_risk_ticks>=114 + dedup`) on baseline planned signals and persist results artifact.
+    impact: Team can run controlled precision experiments without changing default baseline path, and each hypothesis now has deterministic metrics artifact to prevent repeated analysis loops.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_eval_20260304.json
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
+  - id: ADM-2026-03-04-071
+    date: 2026-03-04
+    title: Freeze v6 walk-forward baseline and retire non-performing tuning axes
+    context: Latest full-window reruns on 66 instruments showed result drift versus earlier artifacts, and several added tuning axes produced no measurable uplift.
+    decision: Select `robust_median_mad + objective_negative_fold_penalty=8` as active morning-plan baseline for `28/7/7` weekly causal WF; remove `intraday_goal_v4_clustered` and `fold_stability` from active CLI choices; keep probability-gate code but stop threshold-only retunes until structural signal changes.
+    impact: Baseline is now explicit and reproducible, tuning surface is smaller, and non-productive experiment loops are blocked by documented do-not-retest decisions.
+    links:
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_mad_neg8_seed111_wt_signal_engine_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_negpen0_seed111_wt_signal_engine_rerun_20260304.json
+  - id: ADM-2026-03-04-070
+    date: 2026-03-04
+    title: Add cluster-aware fold-stability objective and strict WF acceptance to morning-plan walk-forward
+    context: Wide-universe runs needed stable behavior across folds, with lower negative-period incidence and conservative tail-risk handling without per-instrument overfit.
+    decision: Extend morning-plan WF runner with cluster-prefixed params (`cluster.<name>.*`), fold-stability objective (median subfold net ticks + negative subfold + tail-risk penalties), KPI penalties (SL/EXIT rates), strict WF controls (embargo/purge), fixed holdout evaluation, acceptance summary, and cost stress multiplier; add execution knobs for TTL and stop-limit fallback and corresponding tests.
+    impact: Hyperparameter selection can now optimize for stability (not single lucky windows), tune per cluster (energy/metals), and enforce acceptance by fold robustness under stressed costs.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_setups.py
+      - docs/hpo-howto.md
+  - id: ADM-2026-03-04-069
+    date: 2026-03-04
+    title: Make news-gate timing explicit via as-of timestamp to preserve causal replay semantics
+    context: News gate and bridge lookback logic were tied to wall-clock `datetime.now()`, which can break walk-forward/replay behavior and hide news effects when evaluating historical timestamps.
+    decision: Add optional `as_of_utc` to `load_news_gate_items` and `apply_news_filter`, and pass one shared timestamp from pipeline decision flow to both components.
+    impact: News gating behavior is deterministic for a fixed decision timestamp and now supports causal replay/walk-forward without implicit time drift.
+    links:
+      - src/moex_carry/strategy/news_filter.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/pipeline.py
+      - tests/test_news_filter.py
+      - tests/test_news_live_runtime.py
   - id: ADM-2026-03-04-068
     date: 2026-03-04
-    title: Use 3-day news lookback for effective gate activation on morning-plan windows and select lowest-risk setup on reduce
-    context: With default 180-minute lookback, real walk-forward windows had almost no commodity news overlap at setup timestamps, so gate had near-zero effect.
-    decision: Calibrate news-gate lookback to 4320 minutes (3 days) for experiments and change reduce behavior to keep setups with minimal risk_ticks instead of first emitted setup.
-    impact: Real-DB walk-forward showed fewer negative folds (3 -> 2) and improved net ticks (-225 -> -208) under dense scenario while preserving causal semantics.
+    title: Consolidate news runtime storage semantics into shared helper with atomic feed export
+    context: Live news runtime, bridge reads, and shock input builder duplicated sqlite URL/path parsing and could produce partial feed CSV snapshots under concurrent reads.
+    decision: Add `news_storage.py` as a single storage utility for sqlite path resolution and connection settings; switch runtime/bridge/shock input to shared helper; export live feed via atomic temp-file replace; add indexes for bridge query patterns and warning logs on sqlite read errors.
+    impact: Reduced storage divergence and race windows across ingest, bridge, and shock pipelines; improved operational diagnosability without silent data drops.
     links:
-      - src/moex_carry/signal_engine/news/gate.py
-      - src/moex_carry/signal_engine/plan/builder.py
-      - scripts/run_morning_plan_walk_forward.py
-      - artifacts/research/wf_news_realdb_dense_gate_lookback4320_riskpick_eval.json
+      - src/moex_carry/news_storage.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/news_shock_live_input.py
+      - tests/test_news_live_runtime.py
   - id: ADM-2026-03-04-067
     date: 2026-03-04
-    title: Enforce commodity news gate parity between MorningPlanBuilder and walk-forward eval-cache path
-    context: Morning-plan news gate integration initially affected only builder path, while walk-forward fast-path computed setups directly and bypassed gate logic.
-    decision: Add signal_engine-local causal news gate module and apply it both in `MorningPlanBuilder` and `_compute_setups_cached` in walk-forward runner, with shared config and CLI overrides.
-    impact: News gating behavior is now deterministic and identical across normal and accelerated backtest paths; synthetic smoke confirms setup suppression under high-severity commodity events.
+    title: Route fresh shock cycles through live MOEX plus live-news input and stabilize topic identity
+    context: Shock labeling and Telegram alerts were running on stale static CSV input, while repeated stories fragmented into unstable topic keys and duplicate commodity alerts.
+    decision: Auto-build fresh shock input from MOEX front contracts plus live news DB when FreshLookbackHours is used; introduce shared topic utility for stable root keys and impact tiers; deduplicate live feed and Telegram news by story fingerprint across commodities.
+    impact: Fresh cycles now evaluate current market moves instead of stale snapshots; root-vs-aftershock continuity is stable; duplicate multi-commodity echoes are reduced.
     links:
-      - src/moex_carry/signal_engine/news/gate.py
-      - src/moex_carry/signal_engine/plan/builder.py
-      - scripts/run_morning_plan_walk_forward.py
-      - tests/test_signal_engine_news_gate.py
-      - tests/test_signal_engine_morning_plan.py
+      - scripts/build_live_shock_input.py
+      - src/moex_carry/news_shock_live_input.py
+      - scripts/start_shock_label_cycle.ps1
+      - src/moex_carry/news_topic.py
+      - src/moex_carry/news_shock_automation.py
+      - src/moex_carry/shock_alert_delivery.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
   - id: ADM-2026-03-03-066
     date: 2026-03-03
     title: Add live polling stability controls for commodity news ingestion

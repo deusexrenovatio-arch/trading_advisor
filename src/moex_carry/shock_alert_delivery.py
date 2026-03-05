@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -9,35 +8,18 @@ from typing import Any
 
 import pandas as pd
 
-
-_TOPIC_STOPWORDS = {
-    "the",
-    "and",
-    "for",
-    "with",
-    "from",
-    "that",
-    "this",
-    "will",
-    "into",
-    "over",
-    "after",
-    "amid",
-    "news",
-    "report",
-    "reports",
-    "update",
-    "market",
-    "markets",
-    "prices",
-    "price",
-}
+from moex_carry.news_topic import (
+    classify_shock_impact_tier,
+    derive_root_topic_key,
+    impact_tier_rank,
+)
 
 
 @dataclass(frozen=True)
 class ShockAlertPolicy:
     primary_min_z: float = 2.5
     aftershock_min_z: float = 2.0
+    aftershock_min_tier: str = "minor"
     topic_reopen_after_hours: int = 168
     aftershock_cooldown_minutes: int = 60
     max_alerts_per_cycle: int = 20
@@ -62,40 +44,26 @@ def _normalize_text(value: object) -> str:
     return " ".join(str(value or "").strip().split())
 
 
-def _topic_tokens(text: str) -> list[str]:
-    lowered = text.lower()
-    tokens = re.findall(r"[a-z0-9]{3,}", lowered)
-    return [token for token in tokens if token not in _TOPIC_STOPWORDS]
-
-
 def derive_topic_key(row: dict[str, Any]) -> str:
-    for key in (
-        "root_topic_id",
-        "topic_key",
-        "theme_key",
-        "root_event_id",
-        "selected_event_id",
-        "event_id",
-    ):
-        value = _normalize_text(row.get(key))
-        if value:
-            return value.lower()
-
-    headline = _normalize_text(
-        row.get("headline")
-        or row.get("selected_title")
-        or row.get("v2_title")
-        or row.get("broad_title")
-        or row.get("title")
+    return derive_root_topic_key(
+        symbol=row.get("symbol"),
+        headline=(
+            row.get("headline")
+            or row.get("selected_title")
+            or row.get("v2_title")
+            or row.get("broad_title")
+            or row.get("title")
+        ),
+        url=(
+            row.get("url")
+            or row.get("selected_url")
+            or row.get("v2_url")
+            or row.get("broad_url")
+        ),
+        selected_event_id=(row.get("selected_event_id") or row.get("event_id")),
+        selected_source=(row.get("selected_source") or row.get("selected_event_source")),
+        explicit_root_topic_id=(row.get("root_topic_id") or row.get("topic_key")),
     )
-    if headline:
-        tokens = _topic_tokens(headline)[:6]
-        if tokens:
-            return "topic:" + "-".join(tokens)
-
-    symbol = _normalize_text(row.get("symbol")).upper() or "UNK"
-    direction = _normalize_text(row.get("shock_direction")).lower() or "neutral"
-    return f"fallback:{symbol}:{direction}"
 
 
 def derive_shock_fingerprint(row: dict[str, Any]) -> str:
@@ -183,10 +151,11 @@ def _fmt_msk(ts: datetime) -> str:
 
 def format_shock_message(alert: dict[str, Any]) -> str:
     role = str(alert.get("role") or "").strip().lower()
-    role_header = "⚡ SHOCK PRIMARY" if role == "primary" else "🌊 SHOCK AFTERSHOCK"
+    role_header = "SHOCK PRIMARY" if role == "primary" else "SHOCK AFTERSHOCK"
     symbol = str(alert.get("symbol") or "").strip().upper() or "N/A"
     direction = str(alert.get("shock_direction") or "").strip().upper() or "N/A"
     z_abs = float(alert.get("z_score_abs") or 0.0)
+    impact_tier = str(alert.get("impact_tier") or "minor").strip().lower()
     abs_move = alert.get("abs_move_pct")
     abs_move_numeric = pd.to_numeric(abs_move, errors="coerce")
     abs_move_str = "n/a" if pd.isna(abs_move_numeric) else f"{float(abs_move_numeric):.3f}%"
@@ -205,21 +174,20 @@ def format_shock_message(alert: dict[str, Any]) -> str:
 
     lines = [
         role_header,
-        f"🧩 Topic: {topic_key}",
-        f"📈 Symbol: {symbol}",
-        f"🧭 Direction: {direction}",
-        f"📊 |z|={z_abs:.2f} | move={abs_move_str}",
-        f"🕒 Root: {root_label}",
-        f"🕒 Now:  {now_label}",
-        f"⏳ Topic age: {age}",
-        f"🆔 Episode: {episode_id} #{episode_idx}",
+        f"Topic: {topic_key}",
+        f"Symbol: {symbol}",
+        f"Direction: {direction}",
+        f"|z|={z_abs:.2f} | move={abs_move_str} | tier={impact_tier}",
+        f"Root: {root_label}",
+        f"Now:  {now_label}",
+        f"Topic age: {age}",
+        f"Episode: {episode_id} #{episode_idx}",
     ]
     if headline:
-        lines.append(f"📰 {headline}")
+        lines.append(f"Headline: {headline}")
     if url:
-        lines.append(f"🔗 {url}")
+        lines.append(f"URL: {url}")
     return "\n".join(lines)
-
 
 def apply_shock_alert_policy(
     rows: list[dict[str, Any]],
@@ -255,6 +223,12 @@ def apply_shock_alert_policy(
         z_abs = float(abs(z_score)) if pd.notna(z_score) else 0.0
         if z_abs < float(policy.aftershock_min_z):
             continue
+        impact_tier = str(row.get("impact_tier") or "").strip().lower()
+        if not impact_tier:
+            impact_tier = classify_shock_impact_tier(
+                z_score_abs=z_abs,
+                abs_move_pct=pd.to_numeric(row.get("abs_move_pct"), errors="coerce"),
+            )
 
         fingerprint = derive_shock_fingerprint(row)
         if fingerprint in sent:
@@ -273,6 +247,8 @@ def apply_shock_alert_policy(
             # Do not open a new topic with weak move.
             continue
         if role == "aftershock":
+            if impact_tier_rank(impact_tier) < impact_tier_rank(policy.aftershock_min_tier):
+                continue
             last_sent_ts = _parse_iso_utc(topic.get("last_alert_ts")) if topic else None
             if last_sent_ts is not None and shock_ts < last_sent_ts + timedelta(
                 minutes=int(policy.aftershock_cooldown_minutes)
@@ -311,6 +287,7 @@ def apply_shock_alert_policy(
             "shock_direction": _normalize_text(row.get("shock_direction")).lower(),
             "z_score_abs": z_abs,
             "abs_move_pct": pd.to_numeric(row.get("abs_move_pct"), errors="coerce"),
+            "impact_tier": impact_tier,
             "headline": _normalize_text(
                 row.get("headline")
                 or row.get("selected_title")

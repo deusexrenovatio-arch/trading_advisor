@@ -82,6 +82,11 @@ TUNING_SEARCH_SPACE_PROFILES: dict[str, dict[str, Any]] = {
         "setups.stop_lookback_bars": {"type": "int", "min": 12, "max": 48, "step": 6},
         "setups.stop_volume_quantile": {"type": "float", "min": 0.60, "max": 0.90, "step": 0.05},
         "setups.require_vol_not_low": [True, False],
+        "setups.entry_range_half_width_ticks": {"type": "int", "min": 0, "max": 4, "step": 1},
+        "setups.entry_zone_offset_ticks": {"type": "int", "min": 0, "max": 3, "step": 1},
+        "setups.entry_ttl_minutes": {"type": "int", "min": 20, "max": 180, "step": 20},
+        "setups.stop_limit_fallback_to_market_min": {"type": "int", "min": 0, "max": 10, "step": 1},
+        "setups.stop_limit_fallback_slip_ticks": {"type": "int", "min": 1, "max": 3, "step": 1},
         "setups.rr_default": {"type": "float", "min": 1.4, "max": 2.2, "step": 0.1},
         "setups.pullback_max_dist_atr_mult": {"type": "float", "min": 0.6, "max": 1.2, "step": 0.1},
         "setups.max_risk_atr_mult": {"type": "float", "min": 0.9, "max": 1.4, "step": 0.1},
@@ -93,9 +98,64 @@ TUNING_SEARCH_SPACE_PROFILES: dict[str, dict[str, Any]] = {
         "setups.min_atr_h1_cost_mult": {"type": "float", "min": 4.0, "max": 8.0, "step": 1.0},
         "setups.min_atr_d1_cost_mult": {"type": "float", "min": 8.0, "max": 14.0, "step": 2.0},
     },
+    "intraday_goal_precision_recall_v1": {
+        "execution.buffer_atr_mult": {"type": "float", "min": 0.05, "max": 0.14, "step": 0.01},
+        "levels.h1.box_range_atr_mult": {"type": "float", "min": 0.8, "max": 1.8, "step": 0.1},
+        "regime.d1.adx_trend_min": {"type": "int", "min": 18, "max": 26, "step": 1},
+        "regime.d1.er_trend_min": {"type": "float", "min": 0.15, "max": 0.32, "step": 0.01},
+        "regime.h1.dir_band_atr_mult": {"type": "float", "min": 0.12, "max": 0.28, "step": 0.01},
+        "setups.max_setups_per_instrument": {"type": "int", "min": 2, "max": 6, "step": 1},
+        "setups.enable_box_breakout": [True, False],
+        "setups.enable_pullback_limit": [True, False],
+        "setups.enable_orb_breakout": [True, False],
+        "setups.enable_ema_pullback": [True, False],
+        "setups.enable_vwap_pullback": [True, False],
+        "setups.enable_volatility_compression_breakout": [True, False],
+        "setups.orb_opening_range_minutes": {"type": "int", "min": 10, "max": 45, "step": 5},
+        "setups.orb_min_range_atr_mult": {"type": "float", "min": 0.0, "max": 0.4, "step": 0.1},
+        "setups.orb_max_range_atr_mult": {"type": "float", "min": 0.8, "max": 2.2, "step": 0.2},
+        "setups.orb_require_price_break": [True, False],
+        "setups.ema_pullback_max_dist_atr_mult": {"type": "float", "min": 0.4, "max": 1.8, "step": 0.2},
+        "setups.ema_pullback_offset_ticks": {"type": "int", "min": 0, "max": 3, "step": 1},
+        "setups.vwap_pullback_max_dist_atr_mult": {"type": "float", "min": 0.4, "max": 1.8, "step": 0.2},
+        "setups.vwap_pullback_offset_ticks": {"type": "int", "min": 0, "max": 3, "step": 1},
+        "setups.vwap_require_side_alignment": [True, False],
+        "setups.vol_comp_lookback_bars": {"type": "int", "min": 8, "max": 36, "step": 4},
+        "setups.vol_comp_recent_bars": {"type": "int", "min": 2, "max": 8, "step": 1},
+        "setups.vol_comp_max_recent_to_prev_ratio": {"type": "float", "min": 0.25, "max": 0.90, "step": 0.05},
+        "setups.vol_comp_min_range_atr_mult": {"type": "float", "min": 0.0, "max": 0.6, "step": 0.1},
+        "setups.vol_comp_max_range_atr_mult": {"type": "float", "min": 0.8, "max": 2.2, "step": 0.2},
+        "setups.vol_comp_require_price_break": [True, False],
+        "setups.vol_comp_breakout_buffer_ticks": {"type": "int", "min": 0, "max": 3, "step": 1},
+        "setups.stop_model": ["structure", "volatility", "local_extreme", "volume_extreme"],
+        "setups.stop_lookback_bars": {"type": "int", "min": 12, "max": 60, "step": 6},
+        "setups.stop_volume_quantile": {"type": "float", "min": 0.55, "max": 0.90, "step": 0.05},
+        "setups.require_vol_not_low": [True, False],
+        "setups.entry_range_half_width_ticks": {"type": "int", "min": 0, "max": 4, "step": 1},
+        "setups.entry_zone_offset_ticks": {"type": "int", "min": 0, "max": 3, "step": 1},
+        "setups.entry_ttl_minutes": {"type": "int", "min": 20, "max": 180, "step": 20},
+        "setups.time_stop_minutes": {"type": "int", "min": 0, "max": 210, "step": 30},
+        "setups.stop_limit_fallback_to_market_min": {"type": "int", "min": 0, "max": 12, "step": 1},
+        "setups.stop_limit_fallback_slip_ticks": {"type": "int", "min": 1, "max": 4, "step": 1},
+        "setups.rr_default": {"type": "float", "min": 0.2, "max": 1.8, "step": 0.1},
+        "setups.pullback_max_dist_atr_mult": {"type": "float", "min": 0.5, "max": 1.2, "step": 0.1},
+        "setups.max_risk_atr_mult": {"type": "float", "min": 0.6, "max": 1.2, "step": 0.1},
+        "setups.sl_atr_mult": {"type": "float", "min": 0.4, "max": 1.0, "step": 0.1},
+        "setups.min_rr_net": {"type": "float", "min": 0.0, "max": 1.1, "step": 0.1},
+        "setups.min_reward_net_ticks": {"type": "float", "min": 0.0, "max": 3.0, "step": 1.0},
+        "setups.min_reward_gross_ticks": {"type": "float", "min": 4.0, "max": 18.0, "step": 2.0},
+        "setups.min_target_return_pct": {"type": "float", "min": 0.1, "max": 0.8, "step": 0.1},
+        "setups.min_atr_h1_cost_mult": {"type": "float", "min": 2.0, "max": 7.0, "step": 1.0},
+        "setups.min_atr_d1_cost_mult": {"type": "float", "min": 4.0, "max": 12.0, "step": 2.0},
+    },
 }
 
-COST_MODEL_PROFILES: tuple[str, ...] = ("fixed_v1", "train_proxy_v1")
+COST_MODEL_PROFILES: tuple[str, ...] = ("fixed_v1", "train_proxy_v1", "train_proxy_regime_v1")
+
+DEFAULT_CLUSTER_ROOTS: dict[str, tuple[str, ...]] = {
+    "energy": ("BR", "NG"),
+    "metals": ("GD", "SV", "PL", "PT"),
+}
 
 COMPARISON_POINTS: list[str] = [
     "setups_total",
@@ -212,10 +272,26 @@ class ProbabilityGateConfig:
 
 
 @dataclass(frozen=True)
+class PrecisionFilterConfig:
+    enabled: bool
+    min_risk_ticks: int | None
+    min_target_return_pct: float | None
+    allowed_sides: tuple[str, ...]
+    allowed_setup_kinds: tuple[str, ...]
+    allowed_stop_models: tuple[str, ...]
+    allowed_decision_times: tuple[str, ...]
+    dedup_setup_ids: bool
+
+
+@dataclass(frozen=True)
 class GoalConstraints:
     min_trades_per_week: float
     max_trades_per_week: float
     trade_freq_penalty: float
+    hard_min_win_rate_net: float = 0.0
+    hard_min_trades_per_week: float = 0.0
+    hard_max_concentration_top_share: float = 1.0
+    hard_violation_penalty: float = 1_000_000.0
 
 
 @dataclass(frozen=True)
@@ -223,6 +299,13 @@ class ObjectiveScoringConfig:
     concentration_penalty_weight: float
     concentration_top_share_soft_cap: float
     normalization_floor_ticks: float
+    tail_penalty_weight: float = 0.0
+    tail_metric: str = "cvar"
+    tail_alpha: float = 0.2
+    lower_quantile: float = 0.2
+    sl_rate_penalty_weight: float = 0.0
+    exit_rate_penalty_weight: float = 0.0
+    exit_rate_soft_cap: float = 0.35
 
 
 @dataclass(frozen=True)
@@ -843,6 +926,21 @@ def _trades_per_week(*, filled_trades: int, period_start: date, period_end: date
     return float(max(int(filled_trades), 0) * 7.0 / float(days))
 
 
+def _summary_concentration_top_share(summary: dict[str, Any]) -> float:
+    by_instrument = summary.get("by_instrument")
+    if not isinstance(by_instrument, dict) or not by_instrument:
+        return 0.0
+    abs_nets: list[float] = []
+    for payload in by_instrument.values():
+        if not isinstance(payload, dict):
+            continue
+        abs_nets.append(abs(float(payload.get("net_ticks_sum", 0.0))))
+    total_abs = float(sum(abs_nets))
+    if total_abs <= 0.0:
+        return 0.0
+    return float(max(abs_nets) / total_abs)
+
+
 def _goal_adjusted_selection_score(
     *,
     base_score: float,
@@ -860,6 +958,17 @@ def _goal_adjusted_selection_score(
     under = max(float(goal.min_trades_per_week) - float(weekly), 0.0)
     over = max(float(weekly) - float(goal.max_trades_per_week), 0.0)
     penalty = float(goal.trade_freq_penalty) * float(under + over)
+    hard_penalty = max(float(goal.hard_violation_penalty), 0.0)
+    if float(goal.hard_min_trades_per_week) > 0.0 and float(weekly) < float(goal.hard_min_trades_per_week):
+        penalty += hard_penalty * (float(goal.hard_min_trades_per_week) - float(weekly))
+    win_rate = float(summary.get("win_rate_net", 0.0) or 0.0)
+    if float(goal.hard_min_win_rate_net) > 0.0 and float(win_rate) < float(goal.hard_min_win_rate_net):
+        penalty += hard_penalty * (float(goal.hard_min_win_rate_net) - float(win_rate))
+    max_top_share = min(max(float(goal.hard_max_concentration_top_share), 0.0), 1.0)
+    if max_top_share < 1.0:
+        top_share = _summary_concentration_top_share(summary)
+        if float(top_share) > max_top_share:
+            penalty += hard_penalty * (float(top_share) - max_top_share)
     penalty += max(float(extra_penalty), 0.0)
     return float(base_score - penalty)
 
@@ -873,6 +982,12 @@ def _negative_subfold_metrics(
     penalty_weight: float,
 ) -> dict[str, float]:
     window_days = max(int(subfold_days), 0)
+    bucket_metrics = _subfold_bucket_metrics(
+        results=results,
+        period_start=period_start,
+        period_end=period_end,
+        subfold_days=window_days,
+    )
     if window_days <= 0:
         return {
             "train_subfold_days": 0.0,
@@ -882,6 +997,31 @@ def _negative_subfold_metrics(
             "train_negative_subfold_ratio": 0.0,
             "negative_subfold_penalty": 0.0,
         }
+    negative = sum(1 for item in bucket_metrics if float(item["expectancy"]) < 0.0)
+    positive = sum(1 for item in bucket_metrics if float(item["expectancy"]) > 0.0)
+    with_trades = len(bucket_metrics)
+    ratio = float(negative / max(with_trades, 1)) if with_trades > 0 else 0.0
+    penalty = max(float(penalty_weight), 0.0) * float(negative)
+    return {
+        "train_subfold_days": float(window_days),
+        "train_subfolds_with_trades": float(with_trades),
+        "train_negative_subfolds": float(negative),
+        "train_positive_subfolds": float(positive),
+        "train_negative_subfold_ratio": float(ratio),
+        "negative_subfold_penalty": float(penalty),
+    }
+
+
+def _subfold_bucket_metrics(
+    *,
+    results: list[SetupResult],
+    period_start: date,
+    period_end: date,
+    subfold_days: int,
+) -> list[dict[str, float]]:
+    window_days = max(int(subfold_days), 0)
+    if window_days <= 0:
+        return []
     filled_by_day: dict[date, list[SetupResult]] = {}
     for row in results:
         if not row.filled:
@@ -894,9 +1034,7 @@ def _negative_subfold_metrics(
             continue
         filled_by_day.setdefault(day, []).append(row)
     cursor = period_start
-    negative = 0
-    positive = 0
-    with_trades = 0
+    buckets: list[dict[str, float]] = []
     while cursor <= period_end:
         sub_start = cursor
         sub_end = min(period_end, sub_start + timedelta(days=window_days - 1))
@@ -908,22 +1046,74 @@ def _negative_subfold_metrics(
             day = day + timedelta(days=1)
         if not bucket:
             continue
-        with_trades += 1
         net_sum = float(sum(item.net_ticks for item in bucket))
         expectancy = float(net_sum / float(len(bucket)))
-        if expectancy < 0.0:
-            negative += 1
-        elif expectancy > 0.0:
-            positive += 1
-    ratio = float(negative / max(with_trades, 1)) if with_trades > 0 else 0.0
-    penalty = max(float(penalty_weight), 0.0) * float(negative)
+        buckets.append(
+            {
+                "net_ticks_sum": float(net_sum),
+                "expectancy": float(expectancy),
+                "count": float(len(bucket)),
+            }
+        )
+    return buckets
+
+
+def _sample_quantile(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return float(values[0])
+    ordered = sorted(float(item) for item in values)
+    clipped = min(max(float(q), 0.0), 1.0)
+    pos = (len(ordered) - 1) * clipped
+    lower = int(math.floor(pos))
+    upper = int(math.ceil(pos))
+    if lower == upper:
+        return float(ordered[lower])
+    weight = pos - lower
+    return float(ordered[lower] + (ordered[upper] - ordered[lower]) * weight)
+
+
+def _tail_risk_metrics(
+    *,
+    results: list[SetupResult],
+    period_start: date,
+    period_end: date,
+    subfold_days: int,
+    tail_alpha: float,
+    lower_quantile: float,
+) -> dict[str, float]:
+    window_days = max(int(subfold_days), 0)
+    bucket_metrics = _subfold_bucket_metrics(
+        results=results,
+        period_start=period_start,
+        period_end=period_end,
+        subfold_days=window_days,
+    )
+    net_sums = [float(item["net_ticks_sum"]) for item in bucket_metrics]
+    if not net_sums:
+        return {
+            "subfold_net_ticks_median": 0.0,
+            "subfold_net_ticks_lower_quantile": 0.0,
+            "subfold_net_ticks_cvar": 0.0,
+            "subfold_negative_count": 0.0,
+            "subfold_negative_share": 0.0,
+            "subfold_count": 0.0,
+        }
+    median = float(statistics.median(net_sums))
+    lower_q = _sample_quantile(net_sums, float(lower_quantile))
+    alpha = min(max(float(tail_alpha), 1e-6), 1.0)
+    tail_count = max(int(math.ceil(alpha * float(len(net_sums)))), 1)
+    tail_values = sorted(net_sums)[:tail_count]
+    cvar = float(sum(tail_values) / float(len(tail_values)))
+    negative_count = sum(1 for value in net_sums if value < 0.0)
     return {
-        "train_subfold_days": float(window_days),
-        "train_subfolds_with_trades": float(with_trades),
-        "train_negative_subfolds": float(negative),
-        "train_positive_subfolds": float(positive),
-        "train_negative_subfold_ratio": float(ratio),
-        "negative_subfold_penalty": float(penalty),
+        "subfold_net_ticks_median": median,
+        "subfold_net_ticks_lower_quantile": float(lower_q),
+        "subfold_net_ticks_cvar": float(cvar),
+        "subfold_negative_count": float(negative_count),
+        "subfold_negative_share": float(negative_count / float(len(net_sums))),
+        "subfold_count": float(len(net_sums)),
     }
 
 
@@ -1197,6 +1387,7 @@ def _derive_fold_instrument_costs(
             med_range_ticks_by_instrument[instrument_id] = float(statistics.median(ranges_ticks))
 
     volume_samples = list(med_volume_by_instrument.values())
+    range_samples = list(med_range_ticks_by_instrument.values())
     result: dict[str, CostAssumptions] = {}
     for instrument_id in instruments:
         med_volume = med_volume_by_instrument.get(instrument_id)
@@ -1212,6 +1403,7 @@ def _derive_fold_instrument_costs(
         else:
             spread_half = 1.0
 
+        range_rank = _value_rank(float(med_range_ticks), range_samples)
         slippage = float(base_costs.slippage_ticks_per_side)
         if med_range_ticks >= 30.0:
             slippage += 0.5
@@ -1219,7 +1411,17 @@ def _derive_fold_instrument_costs(
             slippage += 0.25
         if volume_rank <= 0.33:
             slippage += 0.25
+        if profile == "train_proxy_regime_v1":
+            if range_rank >= 0.80:
+                spread_half += 0.25
+                slippage += 0.35
+            elif range_rank >= 0.60:
+                slippage += 0.20
+            if volume_rank <= 0.20:
+                spread_half += 0.25
+                slippage += 0.20
         slippage = min(max(slippage, 0.5), 3.0)
+        spread_half = min(max(float(spread_half), 0.5), 3.0)
         result[instrument_id] = CostAssumptions(
             commission_ticks_per_side=float(base_costs.commission_ticks_per_side),
             slippage_ticks_per_side=float(slippage),
@@ -1228,7 +1430,18 @@ def _derive_fold_instrument_costs(
     return result
 
 
-def _apply_overrides(base_cfg: dict[str, Any], overrides: dict[str, float]) -> dict[str, Any]:
+def _apply_cost_stress(costs: CostAssumptions, stress_mult: float) -> CostAssumptions:
+    mult = max(float(stress_mult), 1e-9)
+    if abs(mult - 1.0) <= 1e-12:
+        return costs
+    return CostAssumptions(
+        commission_ticks_per_side=float(costs.commission_ticks_per_side) * mult,
+        slippage_ticks_per_side=float(costs.slippage_ticks_per_side) * mult,
+        spread_half_ticks=float(costs.spread_half_ticks) * mult,
+    )
+
+
+def _apply_overrides(base_cfg: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
     cfg = copy.deepcopy(base_cfg)
     for dotted_path, value in overrides.items():
         parts = dotted_path.split(".")
@@ -1241,6 +1454,84 @@ def _apply_overrides(base_cfg: dict[str, Any], overrides: dict[str, float]) -> d
             cursor = nested
         cursor[parts[-1]] = value
     return cfg
+
+
+def _split_cluster_overrides(overrides: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    global_overrides: dict[str, Any] = {}
+    cluster_overrides: dict[str, dict[str, Any]] = {}
+    for dotted_path, value in overrides.items():
+        parts = str(dotted_path).split(".")
+        if len(parts) >= 3 and str(parts[0]).lower() == "cluster":
+            cluster_name = str(parts[1]).strip().lower()
+            if cluster_name:
+                cluster_overrides.setdefault(cluster_name, {})[".".join(parts[2:])] = value
+                continue
+        global_overrides[str(dotted_path)] = value
+    return global_overrides, cluster_overrides
+
+
+def _parse_cluster_roots(items: list[str]) -> dict[str, str]:
+    root_to_cluster: dict[str, str] = {}
+    seen_cluster = False
+    tokens: list[str] = []
+    for item in items:
+        for token in str(item).split(";"):
+            normalized = str(token).strip()
+            if normalized:
+                tokens.append(normalized)
+    for item in tokens:
+        if "=" not in item:
+            raise ValueError(f"invalid_cluster_pair:{item}")
+        cluster, roots_csv = item.split("=", 1)
+        cluster_name = str(cluster).strip().lower()
+        if not cluster_name:
+            raise ValueError(f"invalid_cluster_pair:{item}")
+        roots = [value.strip().upper() for value in str(roots_csv).split(",") if str(value).strip()]
+        if not roots:
+            raise ValueError(f"invalid_cluster_pair:{item}")
+        for root in roots:
+            root_to_cluster[root] = cluster_name
+        seen_cluster = True
+    if seen_cluster:
+        return root_to_cluster
+    for cluster_name, roots in DEFAULT_CLUSTER_ROOTS.items():
+        for root in roots:
+            root_to_cluster[str(root).upper()] = str(cluster_name).lower()
+    return root_to_cluster
+
+
+def _cluster_for_instrument(
+    *,
+    instrument_id: str,
+    root_to_cluster: dict[str, str] | None,
+) -> str | None:
+    if not root_to_cluster:
+        return None
+    root = _instrument_group(instrument_id)
+    cluster = root_to_cluster.get(root)
+    if cluster is not None:
+        return str(cluster)
+    return None
+
+
+def _cfg_for_instrument(
+    *,
+    base_cfg: dict[str, Any],
+    instrument_id: str,
+    cluster_overrides: dict[str, dict[str, Any]] | None,
+    root_to_cluster: dict[str, str] | None,
+    cfg_cache: dict[tuple[str, str], dict[str, Any]],
+) -> tuple[dict[str, Any], str | None]:
+    cluster_name = _cluster_for_instrument(instrument_id=instrument_id, root_to_cluster=root_to_cluster)
+    key = (str(instrument_id), str(cluster_name or ""))
+    cached = cfg_cache.get(key)
+    if cached is not None:
+        return cached, cluster_name
+    cfg = base_cfg
+    if cluster_name and cluster_overrides and cluster_name in cluster_overrides:
+        cfg = _apply_overrides(cfg, cluster_overrides[cluster_name])
+    cfg_cache[key] = cfg
+    return cfg, cluster_name
 
 
 def _horizon_deadline(as_of_ts: datetime, horizon: str, calendar: MarketCalendar) -> datetime:
@@ -1262,6 +1553,21 @@ def _setup_kind(setup: Setup) -> str:
     if isinstance(raw, str) and raw:
         return raw
     return "UNKNOWN"
+
+
+def _setup_stop_model(setup: Setup) -> str | None:
+    raw_stop_model = setup.sl_order.meta.get("stop_model") or setup.entry_order.meta.get("stop_model")
+    return str(raw_stop_model) if raw_stop_model is not None else None
+
+
+def _setup_target_return_pct(setup: Setup) -> float | None:
+    raw_target_return_pct = setup.entry_order.meta.get("target_return_pct")
+    try:
+        if raw_target_return_pct is not None:
+            return float(raw_target_return_pct)
+    except (TypeError, ValueError):
+        return None
+    return None
 
 
 def _entry_range_ticks(setup: Setup) -> tuple[int, int]:
@@ -1296,15 +1602,8 @@ def _build_planned_signal(
     simulated: SetupResult | None = None,
 ) -> PlannedSignal:
     range_low, range_high = _entry_range_ticks(setup)
-    target_return_pct: float | None = None
-    raw_target_return_pct = setup.entry_order.meta.get("target_return_pct")
-    try:
-        if raw_target_return_pct is not None:
-            target_return_pct = float(raw_target_return_pct)
-    except (TypeError, ValueError):
-        target_return_pct = None
-    raw_stop_model = setup.sl_order.meta.get("stop_model") or setup.entry_order.meta.get("stop_model")
-    stop_model = str(raw_stop_model) if raw_stop_model is not None else None
+    target_return_pct = _setup_target_return_pct(setup)
+    stop_model = _setup_stop_model(setup)
     return PlannedSignal(
         instrument_id=str(instrument_id),
         trade_date=as_of_ts.date().isoformat(),
@@ -1337,6 +1636,36 @@ def _build_planned_signal(
         simulated_gross_ticks=(float(simulated.gross_ticks) if simulated is not None else None),
         simulated_net_ticks=(float(simulated.net_ticks) if simulated is not None else None),
     )
+
+
+def _precision_filter_reason(
+    *,
+    setup: Setup,
+    as_of_ts: datetime,
+    precision_filter: PrecisionFilterConfig,
+) -> str | None:
+    if not bool(precision_filter.enabled):
+        return None
+    if precision_filter.allowed_decision_times:
+        decision_time = as_of_ts.time().isoformat(timespec="minutes")
+        if decision_time not in set(precision_filter.allowed_decision_times):
+            return "precision_decision_time"
+    side = setup.side.value.upper()
+    if precision_filter.allowed_sides and side not in set(precision_filter.allowed_sides):
+        return "precision_side"
+    setup_kind = _setup_kind(setup).upper()
+    if precision_filter.allowed_setup_kinds and setup_kind not in set(precision_filter.allowed_setup_kinds):
+        return "precision_setup_kind"
+    stop_model = (_setup_stop_model(setup) or "").strip().lower()
+    if precision_filter.allowed_stop_models and stop_model not in set(precision_filter.allowed_stop_models):
+        return "precision_stop_model"
+    if precision_filter.min_risk_ticks is not None and int(setup.risk_ticks) < int(precision_filter.min_risk_ticks):
+        return "precision_min_risk_ticks"
+    if precision_filter.min_target_return_pct is not None:
+        target_return_pct = _setup_target_return_pct(setup)
+        if target_return_pct is None or float(target_return_pct) < float(precision_filter.min_target_return_pct):
+            return "precision_min_target_return_pct"
+    return None
 
 
 def _entry_fill(
@@ -1378,21 +1707,43 @@ def _entry_fill(
             limit_ticks = int(raw_limit) if raw_limit is not None else int(entry_ticks)
         except (TypeError, ValueError):
             limit_ticks = int(entry_ticks)
+        raw_fallback_min = setup.entry_order.meta.get("stop_limit_fallback_to_market_min")
+        raw_fallback_slip = setup.entry_order.meta.get("stop_limit_fallback_slip_ticks")
+        try:
+            fallback_minutes = max(int(raw_fallback_min), 0) if raw_fallback_min is not None else 0
+        except (TypeError, ValueError):
+            fallback_minutes = 0
+        try:
+            fallback_slip_ticks = max(int(raw_fallback_slip), 0) if raw_fallback_slip is not None else 0
+        except (TypeError, ValueError):
+            fallback_slip_ticks = 0
         triggered = False
+        trigger_ts: datetime | None = None
         for bar in bars:
             high_ticks = price_to_ticks(float(bar.high), tick_size)
             low_ticks = price_to_ticks(float(bar.low), tick_size)
             if not triggered:
                 if side == Side.BUY and high_ticks >= entry_ticks:
                     triggered = True
+                    trigger_ts = bar.ts
                 if side == Side.SELL and low_ticks <= entry_ticks:
                     triggered = True
+                    trigger_ts = bar.ts
             if not triggered:
                 continue
             if side == Side.BUY and low_ticks <= limit_ticks:
                 return bar.ts, int(limit_ticks)
             if side == Side.SELL and high_ticks >= limit_ticks:
                 return bar.ts, int(limit_ticks)
+            if fallback_minutes > 0 and trigger_ts is not None:
+                elapsed_min = (bar.ts - trigger_ts).total_seconds() / 60.0
+                if elapsed_min >= float(fallback_minutes):
+                    fallback_fill = (
+                        int(entry_ticks + fallback_slip_ticks)
+                        if side == Side.BUY
+                        else int(entry_ticks - fallback_slip_ticks)
+                    )
+                    return bar.ts, int(fallback_fill)
         return None
 
     return None
@@ -1405,6 +1756,7 @@ def _exit_result(
     tick_size: float,
     fill_ts: datetime,
     fill_ticks: int,
+    time_stop_deadline: datetime | None = None,
 ) -> tuple[str, datetime, int]:
     tp_ticks = int(setup.tp_order.price_ticks)
     sl_ticks = int(setup.sl_order.price_ticks)
@@ -1425,6 +1777,8 @@ def _exit_result(
             return "TP", bar.ts, tp_ticks
         if sl_hit:
             return "SL", bar.ts, sl_ticks
+        if time_stop_deadline is not None and bar.ts >= time_stop_deadline:
+            return "EXIT", bar.ts, price_to_ticks(float(bar.close), tick_size)
     if not bars:
         return "EXIT", fill_ts, int(fill_ticks)
     last = bars[-1]
@@ -1467,6 +1821,16 @@ def _simulate_setup(
             exit_ticks=None,
         )
     fill_ts, fill_ticks = fill
+    raw_time_stop_minutes = setup.entry_order.meta.get("time_stop_minutes")
+    try:
+        time_stop_minutes = max(int(raw_time_stop_minutes), 0) if raw_time_stop_minutes is not None else 0
+    except (TypeError, ValueError):
+        time_stop_minutes = 0
+    time_stop_deadline = (
+        fill_ts + timedelta(minutes=int(time_stop_minutes))
+        if int(time_stop_minutes) > 0
+        else None
+    )
     exit_bars = [bar for bar in m5_rows if fill_ts < bar.ts <= horizon_deadline]
     outcome, exit_ts, exit_ticks = _exit_result(
         setup=setup,
@@ -1474,6 +1838,7 @@ def _simulate_setup(
         tick_size=tick_size,
         fill_ts=fill_ts,
         fill_ticks=fill_ticks,
+        time_stop_deadline=time_stop_deadline,
     )
     side_sign = 1.0 if setup.side == Side.BUY else -1.0
     gross_ticks = side_sign * float(exit_ticks - fill_ticks)
@@ -1512,9 +1877,27 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
     by_kind: dict[str, dict[str, float]] = {}
     by_instrument: dict[str, dict[str, float]] = {}
     for row in filled:
-        slot = by_kind.setdefault(row.setup_kind, {"count": 0.0, "net_ticks_sum": 0.0})
+        slot = by_kind.setdefault(
+            row.setup_kind,
+            {
+                "count": 0.0,
+                "net_ticks_sum": 0.0,
+                "win_count": 0.0,
+                "tp_count": 0.0,
+                "sl_count": 0.0,
+                "exit_count": 0.0,
+            },
+        )
         slot["count"] += 1.0
         slot["net_ticks_sum"] += float(row.net_ticks)
+        if row.net_ticks > 0.0:
+            slot["win_count"] += 1.0
+        if row.outcome == "TP":
+            slot["tp_count"] += 1.0
+        elif row.outcome == "SL":
+            slot["sl_count"] += 1.0
+        elif row.outcome == "EXIT":
+            slot["exit_count"] += 1.0
         inst_slot = by_instrument.setdefault(
             row.instrument_id,
             {
@@ -1543,7 +1926,15 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
     for kind, slot in by_kind.items():
         count = slot["count"]
         slot["expectancy_net_ticks"] = float(slot["net_ticks_sum"] / count) if count > 0 else 0.0
+        slot["win_rate_net"] = float(slot["win_count"] / count) if count > 0 else 0.0
+        slot["tp_rate"] = float(slot["tp_count"] / count) if count > 0 else 0.0
+        slot["sl_rate"] = float(slot["sl_count"] / count) if count > 0 else 0.0
+        slot["exit_rate"] = float(slot["exit_count"] / count) if count > 0 else 0.0
         slot["count"] = int(count)
+        slot["win_count"] = int(slot["win_count"])
+        slot["tp_count"] = int(slot["tp_count"])
+        slot["sl_count"] = int(slot["sl_count"])
+        slot["exit_count"] = int(slot["exit_count"])
         by_kind[kind] = slot
     for instrument_id, slot in by_instrument.items():
         count = slot["count"]
@@ -1659,6 +2050,37 @@ def _build_window_eval_cache(payload: dict[tuple[str, TF], list[Candle]]) -> Win
     )
 
 
+def _append_generator_rejection_trace(
+    *,
+    as_of_ts: datetime,
+    instrument_id: str,
+    trace_rows: list[dict[str, Any]],
+    counts: dict[str, int] | None,
+    sample: list[dict[str, Any]] | None,
+    sample_limit: int,
+) -> None:
+    sample_cap = max(int(sample_limit), 0)
+    for item in trace_rows:
+        if not isinstance(item, dict):
+            continue
+        setup_kind = str(item.get("setup_kind", "UNKNOWN")).strip().upper() or "UNKNOWN"
+        rule = str(item.get("rule", "unspecified")).strip().lower() or "unspecified"
+        key = f"{setup_kind}:{rule}"
+        if counts is not None:
+            counts[key] = int(counts.get(key, 0)) + 1
+        if sample is not None and (sample_cap <= 0 or len(sample) < sample_cap):
+            payload: dict[str, Any] = {
+                "instrument_id": str(instrument_id),
+                "as_of_ts": as_of_ts.isoformat(),
+                "setup_kind": setup_kind,
+                "rule": rule,
+            }
+            details = item.get("details")
+            if isinstance(details, dict) and details:
+                payload["details"] = details
+            sample.append(payload)
+
+
 def _compute_setups_cached(
     *,
     eval_cache: WindowEvalCache,
@@ -1667,6 +2089,10 @@ def _compute_setups_cached(
     as_of_ts: datetime,
     instrument_id: str,
     tick_size: float,
+    collect_generator_rejection_trace: bool = False,
+    generator_rejection_trace_counts: dict[str, int] | None = None,
+    generator_rejection_trace_sample: list[dict[str, Any]] | None = None,
+    generator_rejection_trace_sample_limit: int = 0,
 ) -> list[Setup]:
     data_cfg = _cfg_section(cfg, "data")
     d1_limit = int(data_cfg.get("d1_limit", 200))
@@ -1765,6 +2191,17 @@ def _compute_setups_cached(
         calendar=calendar,
         m5=base_slice.m5,
     )
+    if bool(collect_generator_rejection_trace) and hasattr(setup_generator, "consume_rejection_trace"):
+        trace_rows = setup_generator.consume_rejection_trace()
+        if trace_rows:
+            _append_generator_rejection_trace(
+                as_of_ts=as_of_ts,
+                instrument_id=instrument_id,
+                trace_rows=trace_rows,
+                counts=generator_rejection_trace_counts,
+                sample=generator_rejection_trace_sample,
+                sample_limit=generator_rejection_trace_sample_limit,
+            )
     news_cfg = _cfg_section(cfg, "news_gate")
     news_sig = _stable_signature(news_cfg)
     news_gate = eval_cache.news_gates.get(news_sig)
@@ -1796,6 +2233,7 @@ def _build_train_score_row(
     front_selector: FrontContractSelector | None,
     eval_cache: WindowEvalCache | None,
     train_probability_gate: ProbabilityGateConfig,
+    cluster_root_map: dict[str, str] | None,
     min_trades_per_instrument: int,
     robust_mad_penalty: float,
     selection_objective: str,
@@ -1803,8 +2241,10 @@ def _build_train_score_row(
     objective_scoring: ObjectiveScoringConfig,
     objective_negative_fold_penalty: float,
     objective_subfold_days: int,
+    precision_filter: PrecisionFilterConfig,
 ) -> dict[str, Any]:
-    cfg = _apply_overrides(base_cfg, combo)
+    global_overrides, cluster_overrides = _split_cluster_overrides(combo)
+    cfg = _apply_overrides(base_cfg, global_overrides)
     train_rows, train_summary, _, _ = _evaluate_window(
         period_start=period_start,
         period_end=period_end,
@@ -1820,7 +2260,10 @@ def _build_train_score_row(
         front_selector=front_selector,
         eval_cache=eval_cache,
         probability_gate=train_probability_gate,
+        cluster_overrides=cluster_overrides,
+        cluster_root_map=cluster_root_map,
         collect_history=False,
+        precision_filter=precision_filter,
     )
     metrics = asdict(
         _train_selection_metrics(
@@ -1844,8 +2287,33 @@ def _build_train_score_row(
         penalty_weight=objective_negative_fold_penalty,
     )
     metrics.update(negative_fold_metrics)
+    tail_metrics = _tail_risk_metrics(
+        results=train_rows,
+        period_start=period_start,
+        period_end=period_end,
+        subfold_days=objective_subfold_days,
+        tail_alpha=float(objective_scoring.tail_alpha),
+        lower_quantile=float(objective_scoring.lower_quantile),
+    )
+    metrics.update(tail_metrics)
     concentration_penalty = 0.0
     negative_subfold_penalty = float(negative_fold_metrics.get("negative_subfold_penalty", 0.0))
+    tail_reference = (
+        float(tail_metrics.get("subfold_net_ticks_cvar", 0.0))
+        if str(objective_scoring.tail_metric).strip().lower() == "cvar"
+        else float(tail_metrics.get("subfold_net_ticks_lower_quantile", 0.0))
+    )
+    tail_penalty = max(-tail_reference, 0.0) * max(float(objective_scoring.tail_penalty_weight), 0.0)
+    sl_rate = float(train_summary.get("sl_rate", 0.0))
+    exit_rate = float(train_summary.get("exit_rate", 0.0))
+    sl_penalty = sl_rate * max(float(objective_scoring.sl_rate_penalty_weight), 0.0)
+    exit_penalty = max(exit_rate - float(objective_scoring.exit_rate_soft_cap), 0.0)
+    exit_penalty *= max(float(objective_scoring.exit_rate_penalty_weight), 0.0)
+    kpi_penalty = float(sl_penalty + exit_penalty)
+    metrics["tail_penalty"] = float(tail_penalty)
+    metrics["sl_rate_penalty"] = float(sl_penalty)
+    metrics["exit_rate_penalty"] = float(exit_penalty)
+    metrics["kpi_penalty"] = float(kpi_penalty)
     if selection_objective == "expectancy_net_ticks":
         base_score = float(train_summary.get("expectancy_net_ticks", 0.0))
     elif selection_objective == "robust_normalized":
@@ -1859,7 +2327,7 @@ def _build_train_score_row(
         period_start=period_start,
         period_end=period_end,
         goal=goal,
-        extra_penalty=concentration_penalty + negative_subfold_penalty,
+        extra_penalty=concentration_penalty + negative_subfold_penalty + tail_penalty + kpi_penalty,
     )
     metrics["selection_score"] = float(selection_score)
     metrics["trades_per_week"] = _trades_per_week(
@@ -1905,18 +2373,36 @@ def _evaluate_window(
     front_selector: FrontContractSelector | None = None,
     eval_cache: WindowEvalCache | None = None,
     probability_gate: ProbabilityGateConfig | None = None,
+    cluster_overrides: dict[str, dict[str, Any]] | None = None,
+    cluster_root_map: dict[str, str] | None = None,
     initial_history: list[ProbHistoryEvent] | None = None,
     collect_history: bool = False,
+    precision_filter: PrecisionFilterConfig | None = None,
+    collect_generator_rejection_trace: bool = False,
+    generator_rejection_trace_sample_limit: int = 80,
 ) -> tuple[list[SetupResult], dict[str, Any], list[ProbHistoryEvent], list[PlannedSignal]]:
-    builders: dict[str, MorningPlanBuilder] = {}
+    builders: dict[tuple[str, str], MorningPlanBuilder] = {}
     if eval_cache is None:
         provider = InMemoryCandleProvider(payload)
-        builders = {instrument_id: MorningPlanBuilder(provider, calendar, cfg) for instrument_id in instruments}
+    cfg_cache: dict[tuple[str, str], dict[str, Any]] = {}
     rows: list[SetupResult] = []
     planned_rows: list[PlannedSignal] = []
     setups_total = 0
     history: list[ProbHistoryEvent] = list(initial_history or [])
+    generator_rejection_counts: dict[str, int] = {}
+    generator_rejection_sample: list[dict[str, Any]] = []
     gate_mode = str(probability_gate.context_mode) if probability_gate is not None else "setup_kind"
+    precision = precision_filter or PrecisionFilterConfig(
+        enabled=False,
+        min_risk_ticks=None,
+        min_target_return_pct=None,
+        allowed_sides=(),
+        allowed_setup_kinds=(),
+        allowed_stop_models=(),
+        allowed_decision_times=(),
+        dedup_setup_ids=False,
+    )
+    seen_setup_ids: set[str] = set()
     for day in _iter_days(period_start, period_end):
         day_targets = (
             front_selector.resolve_day(day)
@@ -1928,24 +2414,102 @@ def _evaluate_window(
             if not calendar.is_trading_time(as_of_ts):
                 continue
             for report_instrument_id, secid in day_targets:
+                effective_cfg, _ = _cfg_for_instrument(
+                    base_cfg=cfg,
+                    instrument_id=secid,
+                    cluster_overrides=cluster_overrides,
+                    root_to_cluster=cluster_root_map,
+                    cfg_cache=cfg_cache,
+                )
                 tick_size = float(tick_sizes[secid])
                 effective_costs = costs if instrument_costs is None else instrument_costs.get(secid, costs)
                 if eval_cache is None:
-                    builder = builders[secid]
+                    cfg_sig = _stable_signature(effective_cfg)
+                    builder_key = (secid, cfg_sig)
+                    builder = builders.get(builder_key)
+                    if builder is None:
+                        builder = MorningPlanBuilder(provider, calendar, effective_cfg)
+                        builders[builder_key] = builder
                     plan = builder.build_plan(as_of_ts=as_of_ts, instrument_id=secid, tick_size=tick_size)
                     setups = plan.setups
                 else:
                     setups = _compute_setups_cached(
                         eval_cache=eval_cache,
-                        cfg=cfg,
+                        cfg=effective_cfg,
                         calendar=calendar,
                         as_of_ts=as_of_ts,
                         instrument_id=secid,
                         tick_size=tick_size,
+                        collect_generator_rejection_trace=collect_generator_rejection_trace,
+                        generator_rejection_trace_counts=generator_rejection_counts,
+                        generator_rejection_trace_sample=generator_rejection_sample,
+                        generator_rejection_trace_sample_limit=generator_rejection_trace_sample_limit,
                     )
                 m5_rows = payload.get((secid, TF.M5), [])
                 setups_total += len(setups)
                 for setup in setups:
+                    if bool(precision.enabled):
+                        setup_id = str(setup.setup_id)
+                        if bool(precision.dedup_setup_ids):
+                            if setup_id in seen_setup_ids:
+                                reason = "precision_duplicate_setup_id"
+                                planned_rows.append(
+                                    _build_planned_signal(
+                                        instrument_id=report_instrument_id,
+                                        as_of_ts=as_of_ts,
+                                        setup=setup,
+                                        gate_status="BLOCK",
+                                        gate_reason=reason,
+                                        gate_expected_return_ticks=0.0,
+                                        gate_n_effective=0.0,
+                                        gate_p_tp=0.0,
+                                        gate_p_sl=0.0,
+                                        gate_p_exit=0.0,
+                                    )
+                                )
+                                rows.append(
+                                    _gated_out_result(
+                                        instrument_id=report_instrument_id,
+                                        as_of_ts=as_of_ts,
+                                        setup=setup,
+                                        reason=reason,
+                                        expected_return_ticks=0.0,
+                                        forecast={"n_effective": 0.0, "p_tp": 0.0, "p_sl": 0.0, "p_exit": 0.0},
+                                    )
+                                )
+                                continue
+                            seen_setup_ids.add(setup_id)
+                        precision_reason = _precision_filter_reason(
+                            setup=setup,
+                            as_of_ts=as_of_ts,
+                            precision_filter=precision,
+                        )
+                        if precision_reason is not None:
+                            planned_rows.append(
+                                _build_planned_signal(
+                                    instrument_id=report_instrument_id,
+                                    as_of_ts=as_of_ts,
+                                    setup=setup,
+                                    gate_status="BLOCK",
+                                    gate_reason=precision_reason,
+                                    gate_expected_return_ticks=0.0,
+                                    gate_n_effective=0.0,
+                                    gate_p_tp=0.0,
+                                    gate_p_sl=0.0,
+                                    gate_p_exit=0.0,
+                                )
+                            )
+                            rows.append(
+                                _gated_out_result(
+                                    instrument_id=report_instrument_id,
+                                    as_of_ts=as_of_ts,
+                                    setup=setup,
+                                    reason=precision_reason,
+                                    expected_return_ticks=0.0,
+                                    forecast={"n_effective": 0.0, "p_tp": 0.0, "p_sl": 0.0, "p_exit": 0.0},
+                                )
+                            )
+                            continue
                     if probability_gate is not None and bool(probability_gate.enabled):
                         context_key = _probability_context_key(
                             setup=setup,
@@ -2083,6 +2647,18 @@ def _evaluate_window(
                             )
                         )
     summary = _summarize(rows, setups_total=setups_total)
+    if bool(collect_generator_rejection_trace):
+        sorted_counts = dict(
+            sorted(
+                generator_rejection_counts.items(),
+                key=lambda item: (-int(item[1]), str(item[0])),
+            )
+        )
+        summary["generator_rejection_trace"] = {
+            "total": int(sum(generator_rejection_counts.values())),
+            "counts": sorted_counts,
+            "sample": list(generator_rejection_sample),
+        }
     return rows, summary, history, planned_rows
 
 
@@ -2133,13 +2709,17 @@ def _fold_windows(
     train_days: int,
     test_days: int,
     step_days: int,
+    embargo_days: int = 0,
+    purge_days: int = 0,
 ) -> list[dict[str, date]]:
     windows: list[dict[str, date]] = []
+    embargo = max(int(embargo_days), 0)
+    purge = max(int(purge_days), 0)
     cursor = start_date
     while cursor <= end_date:
         test_start = cursor
         test_end = min(end_date, test_start + timedelta(days=max(test_days, 1) - 1))
-        train_end = test_start - timedelta(days=1)
+        train_end = test_start - timedelta(days=embargo + 1)
         train_start = train_end - timedelta(days=max(train_days, 1) - 1)
         windows.append(
             {
@@ -2149,8 +2729,93 @@ def _fold_windows(
                 "test_end": test_end,
             }
         )
-        cursor = cursor + timedelta(days=max(step_days, 1))
+        next_cursor = cursor + timedelta(days=max(step_days, 1))
+        min_cursor = test_end + timedelta(days=purge + 1)
+        cursor = max(next_cursor, min_cursor)
     return windows
+
+
+def _acceptance_summary(
+    *,
+    folds: list[dict[str, Any]],
+    tail_alpha: float,
+    max_negative_fold_share: float,
+    min_median_fold_net_ticks: float,
+    min_tail_cvar_ticks: float,
+    holdout_summary: dict[str, Any] | None,
+    overall_summary: dict[str, Any] | None = None,
+    period_start: date | None = None,
+    period_end: date | None = None,
+    goal: GoalConstraints | None = None,
+) -> dict[str, Any]:
+    net_by_fold = [
+        float((row.get("test_summary") or {}).get("net_ticks_sum", 0.0))
+        for row in folds
+    ]
+    if net_by_fold:
+        negative_count = sum(1 for value in net_by_fold if value < 0.0)
+        negative_share = float(negative_count / float(len(net_by_fold)))
+        median_net = float(statistics.median(net_by_fold))
+        alpha = min(max(float(tail_alpha), 1e-6), 1.0)
+        tail_count = max(int(math.ceil(alpha * float(len(net_by_fold)))), 1)
+        tail_values = sorted(net_by_fold)[:tail_count]
+        tail_cvar = float(sum(tail_values) / float(len(tail_values)))
+    else:
+        negative_count = 0
+        negative_share = 1.0
+        median_net = 0.0
+        tail_cvar = 0.0
+    reasons: list[str] = []
+    if negative_share > float(max_negative_fold_share):
+        reasons.append("negative_fold_share")
+    if median_net < float(min_median_fold_net_ticks):
+        reasons.append("median_fold_net_ticks")
+    if tail_cvar < float(min_tail_cvar_ticks):
+        reasons.append("tail_cvar")
+    if holdout_summary is not None and float(holdout_summary.get("net_ticks_sum", 0.0)) <= 0.0:
+        reasons.append("holdout_net_ticks_non_positive")
+    overall_win_rate = 0.0
+    overall_tpw = 0.0
+    overall_top_share = 0.0
+    if overall_summary is not None:
+        overall_win_rate = float(overall_summary.get("win_rate_net", 0.0) or 0.0)
+        overall_top_share = _summary_concentration_top_share(overall_summary)
+        if period_start is not None and period_end is not None:
+            overall_tpw = _trades_per_week(
+                filled_trades=int(overall_summary.get("filled_trades", 0) or 0),
+                period_start=period_start,
+                period_end=period_end,
+            )
+    if goal is not None:
+        if float(goal.hard_min_win_rate_net) > 0.0 and float(overall_win_rate) < float(goal.hard_min_win_rate_net):
+            reasons.append("hard_min_win_rate_net")
+        if float(goal.hard_min_trades_per_week) > 0.0 and float(overall_tpw) < float(goal.hard_min_trades_per_week):
+            reasons.append("hard_min_trades_per_week")
+        max_top_share = min(max(float(goal.hard_max_concentration_top_share), 0.0), 1.0)
+        if max_top_share < 1.0 and float(overall_top_share) > max_top_share:
+            reasons.append("hard_max_concentration_top_share")
+    return {
+        "passed": len(reasons) == 0,
+        "failed_reasons": reasons,
+        "folds_total": int(len(net_by_fold)),
+        "negative_folds": int(negative_count),
+        "negative_fold_share": float(negative_share),
+        "median_fold_net_ticks": float(median_net),
+        "tail_cvar_ticks": float(tail_cvar),
+        "overall_win_rate_net": float(overall_win_rate),
+        "overall_trades_per_week": float(overall_tpw),
+        "overall_concentration_top_share": float(overall_top_share),
+        "thresholds": {
+            "max_negative_fold_share": float(max_negative_fold_share),
+            "min_median_fold_net_ticks": float(min_median_fold_net_ticks),
+            "min_tail_cvar_ticks": float(min_tail_cvar_ticks),
+            "hard_min_win_rate_net": float(goal.hard_min_win_rate_net) if goal is not None else 0.0,
+            "hard_min_trades_per_week": float(goal.hard_min_trades_per_week) if goal is not None else 0.0,
+            "hard_max_concentration_top_share": (
+                float(goal.hard_max_concentration_top_share) if goal is not None else 1.0
+            ),
+        },
+    }
 
 
 def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
@@ -2162,6 +2827,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     client = _build_client(settings)
 
     instruments = sorted(set(args.instrument))
+    cluster_root_map = _parse_cluster_roots(list(args.cluster or []))
     instrument_mode = str(args.instrument_mode or "fixed").strip().lower()
     if instrument_mode not in {"fixed", "front_nearest"}:
         raise ValueError("unknown_instrument_mode")
@@ -2178,6 +2844,12 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     end_date = _parse_iso_date(args.end_date)
     if end_date < start_date:
         raise ValueError("end_date_before_start_date")
+    holdout_start = _parse_iso_date(args.holdout_start_date) if args.holdout_start_date else None
+    holdout_end = _parse_iso_date(args.holdout_end_date) if args.holdout_end_date else None
+    if (holdout_start is None) ^ (holdout_end is None):
+        raise ValueError("holdout_window_incomplete")
+    if holdout_start is not None and holdout_end is not None and holdout_end < holdout_start:
+        raise ValueError("holdout_end_before_start")
     decision_times = _parse_decision_times(list(args.decision_times or []), str(args.decision_time))
     use_cache = not bool(args.no_cache)
     cache_db_path = Path(args.cache_db) if args.cache_db else None
@@ -2277,6 +2949,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         slippage_ticks_per_side=float(args.slippage_ticks_per_side),
         spread_half_ticks=float(args.spread_half_ticks),
     )
+    cost_stress_mult = max(float(args.cost_stress_mult), 1e-9)
+    stressed_base_costs = _apply_cost_stress(costs, cost_stress_mult)
     search_algorithm = _resolve_search_algorithm(args.search_algorithm)
     tuning_profile = str(args.tuning_profile).strip()
     grid = _resolve_tuning_grid(tuning_profile)
@@ -2297,6 +2971,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         train_days=int(args.train_days),
         test_days=int(args.test_days),
         step_days=int(args.step_days),
+        embargo_days=int(args.embargo_days),
+        purge_days=int(args.purge_days),
     )
 
     folds: list[dict[str, Any]] = []
@@ -2311,10 +2987,17 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     goal_min_trades_per_week = max(float(args.goal_min_trades_per_week), 0.0)
     if goal_max_trades_per_week > 0.0 and goal_max_trades_per_week < goal_min_trades_per_week:
         goal_max_trades_per_week = goal_min_trades_per_week
+    goal_hard_min_win_rate_net = min(max(float(args.goal_hard_min_winrate_net), 0.0), 1.0)
+    goal_hard_min_trades_per_week = max(float(args.goal_hard_min_trades_per_week), 0.0)
+    goal_hard_max_top_share = min(max(float(args.goal_hard_max_concentration_top_share), 0.0), 1.0)
     goal = GoalConstraints(
         min_trades_per_week=goal_min_trades_per_week,
         max_trades_per_week=goal_max_trades_per_week,
         trade_freq_penalty=max(float(args.goal_trade_freq_penalty), 0.0),
+        hard_min_win_rate_net=goal_hard_min_win_rate_net,
+        hard_min_trades_per_week=goal_hard_min_trades_per_week,
+        hard_max_concentration_top_share=goal_hard_max_top_share,
+        hard_violation_penalty=max(float(args.goal_hard_violation_penalty), 0.0),
     )
     objective_scoring = ObjectiveScoringConfig(
         concentration_penalty_weight=max(float(args.objective_concentration_penalty_weight), 0.0),
@@ -2322,6 +3005,13 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             max(float(args.objective_concentration_top_share_soft_cap), 0.0), 1.0
         ),
         normalization_floor_ticks=max(float(args.objective_normalization_floor_ticks), 1e-9),
+        tail_penalty_weight=max(float(args.objective_tail_penalty_weight), 0.0),
+        tail_metric=str(args.objective_tail_metric).strip().lower(),
+        tail_alpha=min(max(float(args.objective_tail_alpha), 1e-6), 1.0),
+        lower_quantile=min(max(float(args.objective_tail_lower_quantile), 0.0), 1.0),
+        sl_rate_penalty_weight=max(float(args.objective_sl_rate_penalty_weight), 0.0),
+        exit_rate_penalty_weight=max(float(args.objective_exit_rate_penalty_weight), 0.0),
+        exit_rate_soft_cap=min(max(float(args.objective_exit_rate_soft_cap), 0.0), 1.0),
     )
     objective_negative_fold_penalty = max(float(args.objective_negative_fold_penalty), 0.0)
     objective_subfold_days = max(int(args.objective_subfold_days), 0)
@@ -2333,6 +3023,38 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         dirichlet_alpha=max(float(args.prob_dirichlet_alpha), 1e-9),
         context_mode=str(args.prob_context_mode),
     )
+    precision_side_tokens = tuple(
+        sorted({token.upper() for token in _parse_csv_tokens(list(args.precision_allow_side or []))})
+    )
+    precision_setup_kind_tokens = tuple(
+        sorted({token.upper() for token in _parse_csv_tokens(list(args.precision_allow_setup_kind or []))})
+    )
+    precision_stop_model_tokens = tuple(
+        sorted({token.lower() for token in _parse_csv_tokens(list(args.precision_allow_stop_model or []))})
+    )
+    precision_time_tokens: list[str] = []
+    for token in _parse_csv_tokens(list(args.precision_allow_decision_time or [])):
+        precision_time_tokens.append(_parse_hhmm(token).isoformat(timespec="minutes"))
+    precision_min_risk_ticks = int(args.precision_min_risk_ticks) if args.precision_min_risk_ticks is not None else None
+    if precision_min_risk_ticks is not None and precision_min_risk_ticks < 0:
+        raise ValueError("precision_min_risk_ticks_negative")
+    precision_min_target_return_pct = (
+        float(args.precision_min_target_return_pct)
+        if args.precision_min_target_return_pct is not None
+        else None
+    )
+    precision_filter = PrecisionFilterConfig(
+        enabled=bool(args.enable_precision_filter),
+        min_risk_ticks=precision_min_risk_ticks,
+        min_target_return_pct=precision_min_target_return_pct,
+        allowed_sides=precision_side_tokens,
+        allowed_setup_kinds=precision_setup_kind_tokens,
+        allowed_stop_models=precision_stop_model_tokens,
+        allowed_decision_times=tuple(sorted(set(precision_time_tokens))),
+        dedup_setup_ids=bool(args.precision_dedup_setup_ids),
+    )
+    collect_generator_rejection_trace = bool(args.collect_generator_rejection_trace)
+    generator_rejection_trace_sample_limit = max(int(args.generator_rejection_trace_sample_limit), 0)
     min_prob_filled_per_fold = max(int(args.prob_min_filled_trades_per_fold), 0)
     retune_every_folds = max(int(args.retune_every_folds), 1)
     train_probability_gate = ProbabilityGateConfig(
@@ -2344,6 +3066,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         context_mode=str(probability_gate.context_mode),
     )
     cached_selected_params: dict[str, Any] | None = None
+    last_selected_cfg: dict[str, Any] | None = None
+    last_selected_cluster_overrides: dict[str, dict[str, Any]] | None = None
     for idx, window in enumerate(windows, start=1):
         train_start = window["train_start"]
         train_end = window["train_end"]
@@ -2355,7 +3079,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             tick_sizes=tick_sizes,
             train_start=train_start,
             train_end=train_end,
-            base_costs=costs,
+            base_costs=stressed_base_costs,
             profile=cost_model_profile,
         )
         train_scores: list[dict[str, Any]] = []
@@ -2375,11 +3099,12 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                             payload=payload,
                             tick_sizes=tick_sizes,
                             calendar=calendar,
-                            costs=costs,
+                            costs=stressed_base_costs,
                             instrument_costs=fold_instrument_costs,
                             front_selector=front_selector,
                             eval_cache=run_eval_cache,
                             train_probability_gate=train_probability_gate,
+                            cluster_root_map=cluster_root_map,
                             min_trades_per_instrument=min_trades_per_instrument,
                             robust_mad_penalty=robust_mad_penalty,
                             selection_objective=objective,
@@ -2387,6 +3112,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                             objective_scoring=objective_scoring,
                             objective_negative_fold_penalty=objective_negative_fold_penalty,
                             objective_subfold_days=objective_subfold_days,
+                            precision_filter=precision_filter,
                         )
                     )
             else:
@@ -2422,11 +3148,12 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                         payload=payload,
                         tick_sizes=tick_sizes,
                         calendar=calendar,
-                        costs=costs,
+                        costs=stressed_base_costs,
                         instrument_costs=fold_instrument_costs,
                         front_selector=front_selector,
                         eval_cache=run_eval_cache,
                         train_probability_gate=train_probability_gate,
+                        cluster_root_map=cluster_root_map,
                         min_trades_per_instrument=min_trades_per_instrument,
                         robust_mad_penalty=robust_mad_penalty,
                         selection_objective=objective,
@@ -2434,6 +3161,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                         objective_scoring=objective_scoring,
                         objective_negative_fold_penalty=objective_negative_fold_penalty,
                         objective_subfold_days=objective_subfold_days,
+                        precision_filter=precision_filter,
                     )
                     eligible_trial = _is_train_row_eligible(
                         row=row,
@@ -2459,11 +3187,12 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                             payload=payload,
                             tick_sizes=tick_sizes,
                             calendar=calendar,
-                            costs=costs,
+                            costs=stressed_base_costs,
                             instrument_costs=fold_instrument_costs,
                             front_selector=front_selector,
                             eval_cache=run_eval_cache,
                             train_probability_gate=train_probability_gate,
+                            cluster_root_map=cluster_root_map,
                             min_trades_per_instrument=min_trades_per_instrument,
                             robust_mad_penalty=robust_mad_penalty,
                             selection_objective=objective,
@@ -2471,6 +3200,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                             objective_scoring=objective_scoring,
                             objective_negative_fold_penalty=objective_negative_fold_penalty,
                             objective_subfold_days=objective_subfold_days,
+                            precision_filter=precision_filter,
                         )
                     )
             eligible = [
@@ -2500,7 +3230,10 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             cached_selected_params = dict(selected_row["params"])
 
         selected_params = dict(cached_selected_params or {})
-        selected_cfg = _apply_overrides(base_cfg, selected_params)
+        selected_global_overrides, selected_cluster_overrides = _split_cluster_overrides(selected_params)
+        selected_cfg = _apply_overrides(base_cfg, selected_global_overrides)
+        last_selected_cfg = selected_cfg
+        last_selected_cluster_overrides = selected_cluster_overrides
         selected_train_rows, selected_train_summary, train_history, _ = _evaluate_window(
             period_start=train_start,
             period_end=train_end,
@@ -2511,12 +3244,15 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             payload=payload,
             tick_sizes=tick_sizes,
             calendar=calendar,
-            costs=costs,
+            costs=stressed_base_costs,
             instrument_costs=fold_instrument_costs,
             front_selector=front_selector,
             eval_cache=run_eval_cache,
             probability_gate=train_probability_gate,
+            cluster_overrides=selected_cluster_overrides,
+            cluster_root_map=cluster_root_map,
             collect_history=True,
+            precision_filter=precision_filter,
         )
         selected_train_metrics = asdict(
             _train_selection_metrics(
@@ -2540,7 +3276,33 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             penalty_weight=objective_negative_fold_penalty,
         )
         selected_train_metrics.update(selected_negative_metrics)
+        selected_tail_metrics = _tail_risk_metrics(
+            results=selected_train_rows,
+            period_start=train_start,
+            period_end=train_end,
+            subfold_days=objective_subfold_days,
+            tail_alpha=float(objective_scoring.tail_alpha),
+            lower_quantile=float(objective_scoring.lower_quantile),
+        )
+        selected_train_metrics.update(selected_tail_metrics)
         selected_extra_penalty = 0.0
+        selected_tail_reference = (
+            float(selected_tail_metrics.get("subfold_net_ticks_cvar", 0.0))
+            if str(objective_scoring.tail_metric).strip().lower() == "cvar"
+            else float(selected_tail_metrics.get("subfold_net_ticks_lower_quantile", 0.0))
+        )
+        selected_tail_penalty = max(-selected_tail_reference, 0.0) * max(float(objective_scoring.tail_penalty_weight), 0.0)
+        selected_sl_penalty = float(selected_train_summary.get("sl_rate", 0.0)) * max(
+            float(objective_scoring.sl_rate_penalty_weight), 0.0
+        )
+        selected_exit_penalty = max(
+            float(selected_train_summary.get("exit_rate", 0.0)) - float(objective_scoring.exit_rate_soft_cap), 0.0
+        ) * max(float(objective_scoring.exit_rate_penalty_weight), 0.0)
+        selected_kpi_penalty = float(selected_sl_penalty + selected_exit_penalty)
+        selected_train_metrics["tail_penalty"] = float(selected_tail_penalty)
+        selected_train_metrics["sl_rate_penalty"] = float(selected_sl_penalty)
+        selected_train_metrics["exit_rate_penalty"] = float(selected_exit_penalty)
+        selected_train_metrics["kpi_penalty"] = float(selected_kpi_penalty)
         if objective == "expectancy_net_ticks":
             selected_base_score = float(selected_train_summary.get("expectancy_net_ticks", 0.0))
         elif objective == "robust_normalized":
@@ -2549,6 +3311,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         else:
             selected_base_score = float(selected_train_metrics.get("robust_score", float("-inf")))
         selected_extra_penalty += float(selected_negative_metrics.get("negative_subfold_penalty", 0.0))
+        selected_extra_penalty += float(selected_tail_penalty + selected_kpi_penalty)
         selected_train_metrics["selection_score"] = _goal_adjusted_selection_score(
             base_score=selected_base_score,
             summary=selected_train_summary,
@@ -2572,13 +3335,18 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             payload=payload,
             tick_sizes=tick_sizes,
             calendar=calendar,
-            costs=costs,
+            costs=stressed_base_costs,
             instrument_costs=fold_instrument_costs,
             front_selector=front_selector,
             eval_cache=run_eval_cache,
             probability_gate=probability_gate,
+            cluster_overrides=selected_cluster_overrides,
+            cluster_root_map=cluster_root_map,
             initial_history=train_history,
             collect_history=True,
+            precision_filter=precision_filter,
+            collect_generator_rejection_trace=collect_generator_rejection_trace,
+            generator_rejection_trace_sample_limit=generator_rejection_trace_sample_limit,
         )
         probability_gate_fallback: dict[str, Any] = {
             "applied": False,
@@ -2604,13 +3372,18 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 payload=payload,
                 tick_sizes=tick_sizes,
                 calendar=calendar,
-                costs=costs,
+                costs=stressed_base_costs,
                 instrument_costs=fold_instrument_costs,
                 front_selector=front_selector,
                 eval_cache=run_eval_cache,
                 probability_gate=None,
+                cluster_overrides=selected_cluster_overrides,
+                cluster_root_map=cluster_root_map,
                 initial_history=None,
                 collect_history=False,
+                precision_filter=precision_filter,
+                collect_generator_rejection_trace=collect_generator_rejection_trace,
+                generator_rejection_trace_sample_limit=generator_rejection_trace_sample_limit,
             )
             probability_gate_fallback = {
                 "applied": True,
@@ -2645,7 +3418,125 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             }
         )
 
+    holdout_payload: dict[str, Any] | None = None
+    if (
+        holdout_start is not None
+        and holdout_end is not None
+        and last_selected_cfg is not None
+        and last_selected_cluster_overrides is not None
+    ):
+        holdout_history: list[ProbHistoryEvent] | None = None
+        if bool(probability_gate.enabled) and holdout_start > start_date:
+            history_end = holdout_start - timedelta(days=1)
+            if history_end >= start_date:
+                _, _, holdout_history, _ = _evaluate_window(
+                    period_start=start_date,
+                    period_end=history_end,
+                    instruments=instruments,
+                    decision_times=decision_times,
+                    tz=tz,
+                    cfg=last_selected_cfg,
+                    payload=payload,
+                    tick_sizes=tick_sizes,
+                    calendar=calendar,
+                    costs=stressed_base_costs,
+                    instrument_costs=None,
+                    front_selector=front_selector,
+                    eval_cache=run_eval_cache,
+                    probability_gate=train_probability_gate,
+                    cluster_overrides=last_selected_cluster_overrides,
+                    cluster_root_map=cluster_root_map,
+                    collect_history=True,
+                    precision_filter=precision_filter,
+                )
+        holdout_rows, holdout_summary, _, holdout_planned = _evaluate_window(
+            period_start=holdout_start,
+            period_end=holdout_end,
+            instruments=instruments,
+            decision_times=decision_times,
+            tz=tz,
+            cfg=last_selected_cfg,
+            payload=payload,
+            tick_sizes=tick_sizes,
+            calendar=calendar,
+            costs=stressed_base_costs,
+            instrument_costs=None,
+            front_selector=front_selector,
+            eval_cache=run_eval_cache,
+            probability_gate=probability_gate,
+            cluster_overrides=last_selected_cluster_overrides,
+            cluster_root_map=cluster_root_map,
+            initial_history=holdout_history,
+            collect_history=False,
+            precision_filter=precision_filter,
+            collect_generator_rejection_trace=collect_generator_rejection_trace,
+            generator_rejection_trace_sample_limit=generator_rejection_trace_sample_limit,
+        )
+        holdout_payload = {
+            "start_date": holdout_start.isoformat(),
+            "end_date": holdout_end.isoformat(),
+            "summary": holdout_summary,
+            "planned_signals_count": int(len(holdout_planned)),
+            "sample_test_results": [asdict(item) for item in holdout_rows[: min(len(holdout_rows), 50)]],
+            "sample_planned_signals": [asdict(item) for item in holdout_planned[: min(len(holdout_planned), 50)]],
+        }
+
     overall = _summarize(aggregate_results, setups_total=sum(int(item["test_summary"]["setups_total"]) for item in folds))
+    acceptance = _acceptance_summary(
+        folds=folds,
+        tail_alpha=float(objective_scoring.tail_alpha),
+        max_negative_fold_share=float(args.accept_max_negative_fold_share),
+        min_median_fold_net_ticks=float(args.accept_min_median_fold_net_ticks),
+        min_tail_cvar_ticks=float(args.accept_min_tail_cvar_ticks),
+        holdout_summary=(holdout_payload.get("summary") if holdout_payload is not None else None),
+        overall_summary=overall,
+        period_start=start_date,
+        period_end=end_date,
+        goal=goal,
+    )
+    generator_trace_counts_overall: dict[str, int] = {}
+    generator_trace_samples_overall: list[dict[str, Any]] = []
+    for fold in folds:
+        test_summary = fold.get("test_summary") if isinstance(fold, dict) else None
+        trace = test_summary.get("generator_rejection_trace") if isinstance(test_summary, dict) else None
+        if not isinstance(trace, dict):
+            continue
+        counts = trace.get("counts")
+        if isinstance(counts, dict):
+            for key, value in counts.items():
+                try:
+                    parsed = int(value)
+                except (TypeError, ValueError):
+                    continue
+                generator_trace_counts_overall[str(key)] = int(generator_trace_counts_overall.get(str(key), 0)) + parsed
+        sample = trace.get("sample")
+        if isinstance(sample, list):
+            generator_trace_samples_overall.extend(sample[:10])
+    if holdout_payload is not None:
+        holdout_summary = holdout_payload.get("summary")
+        trace = holdout_summary.get("generator_rejection_trace") if isinstance(holdout_summary, dict) else None
+        if isinstance(trace, dict):
+            counts = trace.get("counts")
+            if isinstance(counts, dict):
+                for key, value in counts.items():
+                    try:
+                        parsed = int(value)
+                    except (TypeError, ValueError):
+                        continue
+                    generator_trace_counts_overall[str(key)] = int(generator_trace_counts_overall.get(str(key), 0)) + parsed
+            sample = trace.get("sample")
+            if isinstance(sample, list):
+                generator_trace_samples_overall.extend(sample[:10])
+    generator_trace_payload = {
+        "total": int(sum(generator_trace_counts_overall.values())),
+        "counts": dict(
+            sorted(
+                generator_trace_counts_overall.items(),
+                key=lambda item: (-int(item[1]), str(item[0])),
+            )
+        ),
+        "sample": list(generator_trace_samples_overall[:100]),
+    }
     return {
         "generated_at": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
         "mode": "causal_walk_forward",
@@ -2668,6 +3559,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "timezone": settings.signal_engine.morning_plan.timezone,
         },
         "cost_assumptions_ticks": asdict(costs),
+        "cost_assumptions_ticks_stressed": asdict(stressed_base_costs),
         "tuning_points": {
             "objective": objective,
             "search_algorithm": search_algorithm,
@@ -2679,6 +3571,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "hpo_seed": int(hpo_seed),
             "retune_every_folds": int(retune_every_folds),
             "cost_model_profile": cost_model_profile,
+            "cost_stress_mult": float(cost_stress_mult),
+            "cluster_root_map": dict(cluster_root_map),
             "probability_gate": {
                 "enabled": bool(probability_gate.enabled),
                 "apply_on_test_only": True,
@@ -2696,6 +3590,10 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "min_trades_per_week": float(goal.min_trades_per_week),
                 "max_trades_per_week": float(goal.max_trades_per_week),
                 "trade_freq_penalty": float(goal.trade_freq_penalty),
+                "hard_min_win_rate_net": float(goal.hard_min_win_rate_net),
+                "hard_min_trades_per_week": float(goal.hard_min_trades_per_week),
+                "hard_max_concentration_top_share": float(goal.hard_max_concentration_top_share),
+                "hard_violation_penalty": float(goal.hard_violation_penalty),
             },
             "objective_scoring": {
                 "concentration_penalty_weight": float(objective_scoring.concentration_penalty_weight),
@@ -2705,10 +3603,39 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "normalization_floor_ticks": float(objective_scoring.normalization_floor_ticks),
                 "negative_fold_penalty": float(objective_negative_fold_penalty),
                 "subfold_days": int(objective_subfold_days),
+                "tail_penalty_weight": float(objective_scoring.tail_penalty_weight),
+                "tail_metric": str(objective_scoring.tail_metric),
+                "tail_alpha": float(objective_scoring.tail_alpha),
+                "tail_lower_quantile": float(objective_scoring.lower_quantile),
+                "sl_rate_penalty_weight": float(objective_scoring.sl_rate_penalty_weight),
+                "exit_rate_penalty_weight": float(objective_scoring.exit_rate_penalty_weight),
+                "exit_rate_soft_cap": float(objective_scoring.exit_rate_soft_cap),
             },
             "effective_min_target_return_pct": float(
                 base_cfg.get("setups", {}).get("min_target_return_pct", 0.0)
             ),
+            "precision_filter": {
+                "enabled": bool(precision_filter.enabled),
+                "min_risk_ticks": (
+                    int(precision_filter.min_risk_ticks)
+                    if precision_filter.min_risk_ticks is not None
+                    else None
+                ),
+                "min_target_return_pct": (
+                    float(precision_filter.min_target_return_pct)
+                    if precision_filter.min_target_return_pct is not None
+                    else None
+                ),
+                "allow_side": list(precision_filter.allowed_sides),
+                "allow_setup_kind": list(precision_filter.allowed_setup_kinds),
+                "allow_stop_model": list(precision_filter.allowed_stop_models),
+                "allow_decision_time": list(precision_filter.allowed_decision_times),
+                "dedup_setup_ids": bool(precision_filter.dedup_setup_ids),
+            },
+            "generator_rejection_trace": {
+                "enabled": bool(collect_generator_rejection_trace),
+                "sample_limit": int(generator_rejection_trace_sample_limit),
+            },
             "news_gate": {
                 "enabled": bool(base_cfg.get("news_gate", {}).get("enabled", False)),
                 "db_url": str(base_cfg.get("news_gate", {}).get("db_url", "")),
@@ -2734,10 +3661,15 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "train_days": int(args.train_days),
             "test_days": int(args.test_days),
             "step_days": int(args.step_days),
+            "embargo_days": int(args.embargo_days),
+            "purge_days": int(args.purge_days),
         },
         "comparison_points": COMPARISON_POINTS,
         "folds": folds,
         "overall_test_summary": overall,
+        "acceptance": acceptance,
+        "generator_rejection_trace_overall": generator_trace_payload,
+        "holdout": holdout_payload,
         "planned_signals_total": int(len(aggregate_planned_signals)),
         "planned_signals": [asdict(item) for item in aggregate_planned_signals],
         "sample_planned_signals": [
@@ -2757,6 +3689,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         required=True,
         help="Instrument id (repeatable), e.g. --instrument BRH6 --instrument NGH6",
+    )
+    parser.add_argument(
+        "--cluster",
+        action="append",
+        default=[],
+        help="Optional cluster mapping 'cluster=ROOT,ROOT'. Defaults: energy=BR,NG and metals=GD,SV,PL,PT.",
     )
     parser.add_argument(
         "--instrument-mode",
@@ -2780,13 +3718,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Optional repeated/comma-separated HH:MM list; overrides --decision-time when provided.",
     )
-    parser.add_argument("--train-days", type=int, default=20)
-    parser.add_argument("--test-days", type=int, default=5)
-    parser.add_argument("--step-days", type=int, default=5)
+    parser.add_argument("--train-days", type=int, default=28)
+    parser.add_argument("--test-days", type=int, default=7)
+    parser.add_argument("--step-days", type=int, default=7)
+    parser.add_argument("--embargo-days", type=int, default=0)
+    parser.add_argument("--purge-days", type=int, default=0)
     parser.add_argument(
         "--tuning-profile",
         type=str,
-        default="baseline_v1",
+        default="cost_aware_v2",
         choices=sorted(TUNING_GRID_PROFILES.keys()),
     )
     parser.add_argument(
@@ -2798,7 +3738,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--search-space-profile",
         type=str,
-        default="intraday_goal_v1",
+        default="intraday_goal_v3",
         choices=sorted(TUNING_SEARCH_SPACE_PROFILES.keys()),
     )
     parser.add_argument("--hpo-trials", type=int, default=24)
@@ -2840,7 +3780,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--objective-negative-fold-penalty",
         type=float,
-        default=0.0,
+        default=8.0,
         help="Penalty per negative train subfold (expectancy<0) when selecting params.",
     )
     parser.add_argument(
@@ -2849,18 +3789,63 @@ def _build_parser() -> argparse.ArgumentParser:
         default=7,
         help="Train subfold length in days for negative-period penalty; 0 disables.",
     )
+    parser.add_argument("--objective-tail-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--objective-tail-metric", type=str, default="cvar", choices=["cvar", "lower_quantile"])
+    parser.add_argument("--objective-tail-alpha", type=float, default=0.2)
+    parser.add_argument("--objective-tail-lower-quantile", type=float, default=0.2)
+    parser.add_argument("--objective-sl-rate-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--objective-exit-rate-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--objective-exit-rate-soft-cap", type=float, default=0.35)
+    parser.add_argument("--holdout-start-date", type=str, default=None, help="Optional fixed holdout start YYYY-MM-DD.")
+    parser.add_argument("--holdout-end-date", type=str, default=None, help="Optional fixed holdout end YYYY-MM-DD.")
+    parser.add_argument("--accept-max-negative-fold-share", type=float, default=0.6)
+    parser.add_argument("--accept-min-median-fold-net-ticks", type=float, default=0.0)
+    parser.add_argument("--accept-min-tail-cvar-ticks", type=float, default=-999999.0)
     parser.add_argument("--goal-min-target-return-pct", type=float, default=0.5)
     parser.add_argument("--goal-min-trades-per-week", type=float, default=2.0)
-    parser.add_argument("--goal-max-trades-per-week", type=float, default=12.0)
-    parser.add_argument("--goal-trade-freq-penalty", type=float, default=3.0)
-    parser.add_argument("--min-train-trades", type=int, default=12)
-    parser.add_argument("--min-train-instruments-with-trades", type=int, default=4)
-    parser.add_argument("--min-trades-per-instrument", type=int, default=1)
+    parser.add_argument("--goal-max-trades-per-week", type=float, default=10.0)
+    parser.add_argument("--goal-trade-freq-penalty", type=float, default=1.5)
+    parser.add_argument("--goal-hard-min-winrate-net", type=float, default=0.0)
+    parser.add_argument("--goal-hard-min-trades-per-week", type=float, default=0.0)
+    parser.add_argument("--goal-hard-max-concentration-top-share", type=float, default=1.0)
+    parser.add_argument("--goal-hard-violation-penalty", type=float, default=1_000_000.0)
+    parser.add_argument("--min-train-trades", type=int, default=80)
+    parser.add_argument("--min-train-instruments-with-trades", type=int, default=10)
+    parser.add_argument("--min-trades-per-instrument", type=int, default=5)
     parser.add_argument("--robust-mad-penalty", type=float, default=0.5)
     parser.add_argument("--tick-size", action="append", default=[], help="Optional SECID=tick_size override.")
     parser.add_argument("--commission-ticks-per-side", type=float, default=0.5)
     parser.add_argument("--slippage-ticks-per-side", type=float, default=1.0)
     parser.add_argument("--spread-half-ticks", type=float, default=1.0)
+    parser.add_argument(
+        "--cost-stress-mult",
+        type=float,
+        default=1.0,
+        help="Scale per-side cost assumptions for conservative stress (e.g. 1.5).",
+    )
+    parser.add_argument("--enable-precision-filter", action="store_true")
+    parser.add_argument("--precision-min-risk-ticks", type=int, default=None)
+    parser.add_argument("--precision-min-target-return-pct", type=float, default=None)
+    parser.add_argument("--precision-allow-side", action="append", default=[])
+    parser.add_argument("--precision-allow-setup-kind", action="append", default=[])
+    parser.add_argument("--precision-allow-stop-model", action="append", default=[])
+    parser.add_argument("--precision-allow-decision-time", action="append", default=[])
+    parser.add_argument(
+        "--collect-generator-rejection-trace",
+        action="store_true",
+        help="Collect setup-generator rule rejection trace in fold summaries.",
+    )
+    parser.add_argument(
+        "--generator-rejection-trace-sample-limit",
+        type=int,
+        default=80,
+        help="Max sampled rejection rows per window when trace collection is enabled (0 = unlimited).",
+    )
+    parser.add_argument(
+        "--precision-dedup-setup-ids",
+        action="store_true",
+        help="When precision filter is enabled, keep only first occurrence of each setup_id per run.",
+    )
     parser.add_argument("--enable-news-gate", action="store_true")
     parser.add_argument("--disable-news-gate", action="store_true")
     parser.add_argument("--news-gate-db-url", type=str, default=None)

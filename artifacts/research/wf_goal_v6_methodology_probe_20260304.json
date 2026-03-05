@@ -1,0 +1,91 @@
+{
+  "generated_at_utc": "2026-03-04T15:13:36Z",
+  "objective": {
+    "winrate_min": 0.75,
+    "trades_per_week_target": 2.0,
+    "net_ticks_sum_min": 0
+  },
+  "empirical_checks": {
+    "baseline_dedup_integrity": {
+      "rows_total": 154,
+      "setup_id_unique": 109,
+      "setup_id_with_dupes": 34,
+      "extra_rows_from_dupes": 45,
+      "setup_id_with_multi_filled": 14,
+      "baseline_slots_present": [
+        "10:30",
+        "12:00"
+      ],
+      "slot_1400_present": false
+    },
+    "historical_runs_scan": {
+      "parsed_reports": 58,
+      "candidates_win_ge_0_75_and_tpw_ge_2_0": 0,
+      "candidates_win_ge_0_70_and_tpw_ge_1_5": 0,
+      "best_recall_examples": [
+        {
+          "report": "wf_goal_v6_negpen6_seed105.json",
+          "filled_trades": 158,
+          "trades_per_week": 3.014,
+          "win_rate_net": 0.3797,
+          "net_ticks_sum": 7830.0
+        },
+        {
+          "report": "wf_goal_v6_seed110_neg0.json",
+          "filled_trades": 131,
+          "trades_per_week": 2.499,
+          "win_rate_net": 0.5267,
+          "net_ticks_sum": 8182.0
+        }
+      ]
+    },
+    "simple_precision_filter_feasibility_on_high_recall_runs": {
+      "filter_axes": [
+        "min_risk_ticks",
+        "min_target_return_pct",
+        "side",
+        "decision_time",
+        "setup_kind",
+        "stop_model"
+      ],
+      "target_constraints": [
+        "win_rate_net>=0.75",
+        "trades_per_week>=2.0",
+        "net_ticks_sum>0"
+      ],
+      "feasible_candidates_found": 0,
+      "tested_reports": [
+        "wf_goal_v6_negpen6_seed105.json",
+        "wf_goal_v6_seed110_neg0.json"
+      ],
+      "conclusion": "Current simple precision filters are insufficient; need recall expansion + structural changes (exit/model/risk routing)."
+    }
+  },
+  "methodology_adoptions": {
+    "adopt_now": [
+      "Constrained optimization on winrate/frequency/net/concentration (not single-metric tuning).",
+      "Data-snooping controls: White RC / Hansen SPA / Model Confidence Set.",
+      "Regime-conditional evaluation blocks (monthly + regime slices) and stress costs.",
+      "Event-risk gating from official macro calendars with point-in-time schedules.",
+      "Liquidity modeling beyond depth: impact- and fill-quality-oriented metrics."
+    ],
+    "next_wave_requires_new_features": [
+      "Recall expansion with additional setup families (ORB/VWAP MR/volatility compression).",
+      "Two-stage decision policy: candidate generation (recall) + precision model.",
+      "Exit redesign for high-hit-rate objective (TP1/partial/time-stop/trailing remainder).",
+      "Portfolio concentration caps (top1 share / cluster risk budgets)."
+    ]
+  },
+  "sources": [
+    "https://www.econometricsociety.org/publications/econometrica/2000/09/01/reality-check-data-snooping",
+    "https://www.jstor.org/stable/27638834",
+    "https://pure.au.dk/portal/en/publications/the-model-confidence-set",
+    "https://arxiv.org/abs/2505.21278",
+    "https://www.cmegroup.com/news/2025/reassessing-liquidity-beyond-order-book-depth.html",
+    "https://www.cmegroup.com/market-data/datamine-faq.html",
+    "https://www.cmegroup.com/market-data/datamine-api.html",
+    "https://fred.stlouisfed.org/docs/api/fred/releases_dates.html",
+    "https://www.bls.gov/schedule/news_release/",
+    "https://www.bls.gov/bls/2025-lapse-revised-release-dates.htm"
+  ]
+}

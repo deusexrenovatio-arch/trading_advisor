@@ -1,27 +1,42 @@
 # Session Handoff
-Updated: 2026-03-04 09:35 UTC
+Updated: 2026-03-05 13:40 UTC
 
 ## Goal
-- Validate news-gate impact on morning-plan walk-forward using real commodity news data and keep causal execution.
+- Consolidate current `wt-signal-engine` changes into a stable, documented branch state and push it for review.
+
+## Task Request Contract
+- Objective: finalize all accumulated strategy/HPO/news/runtime edits in this worktree, ensure no local syntax regressions, document run methodology and changed controls, and push branch updates.
+- In Scope: current modified/untracked files in this worktree related to signal engine setups, morning WF/HPO controls, news/shock runtime modules, tests, and research docs/artifacts already produced.
+- Out of Scope: new strategy redesign, new external data collection, and additional long experiment waves beyond already generated artifacts.
+- Constraints: do not drop existing user changes; keep branch history coherent; preserve causal WF assumptions; run deterministic repository gates before push.
+- Done Evidence: `python scripts/validate_task_request_contract.py`, `python scripts/validate_session_handoff.py`, `python scripts/run_lean_gate.py`, and successful `git push` for `feat/two-layer-signal-engine`.
+- Priority Rule: repository consistency and reproducibility first, then completeness of packaged changes.
 
 ## Current Delta
-- Imported real data from `D:/New Project`: `data/news_livecheck_ng.db` and `data/output/news_live/live_news_signals.csv`.
-- Confirmed DB coverage: `BRN`, `GOLD`, `NG_US` with >13k scored items total.
-- Ran baseline and gate-on comparisons on real DB; default 180m lookback had near-zero overlap with setup timestamps.
-- Performed lookback sweep; 4320m (3 days) reduced negative folds in dense scenario.
-- Added risk-first reduce logic: on `reduce`, keep lowest `risk_ticks` setup(s) instead of first emitted setup.
-- Applied the same reduce logic in both builder path and eval-cache fast-path.
-- Updated tests for reduce behavior and preserved causal/news gate validation.
+- Cleaned interrupted edit debris in `scripts/run_morning_plan_walk_forward.py` (removed accidental literal newline tokens from a partial patch attempt).
+- Kept existing feature set and research packaging changes in place without reverting user-side deltas.
+- Prepared branch for gate validation and push.
+
+## First-Time-Right Report
+1. Confirmed coverage: WF runner, HPO runtime/contract changes, setup family additions, news/shock integration updates, tests, and research documentation are included in the staged scope.
+2. Missing or risky scenarios: full runtime/performance validation can still depend on local data cache size and machine-specific execution time; gate outcomes must be trusted over assumptions.
+3. Resource/time risks and chosen controls: large dirty worktree increases merge risk; controlled by deterministic validators and lean gate before push.
+4. Highest-priority fixes or follow-ups: if any gate fails, remediate immediately before pushing and record durable decision/incident notes.
+
+## Repetition Control
+- Max Same-Path Attempts: 2
+- Stop Trigger: two consecutive gate-fix cycles fail on the same blocker.
+- Reset Action: freeze new edits, capture failing command outputs, and isolate blocker in minimal file/test scope before next attempt.
+- New Search Space: (1) fix offending module directly, (2) adjust governance docs/contracts if drift-only, (3) split unstable changes into follow-up branch.
+- Next Probe: run validators and lean gate in sequence, then address first failing check only.
 
 ## Blockers
-- No hard blockers.
-- News overlap still depends on sparse setup timestamps; calibration should remain data-window specific.
+- None currently.
 
 ## Next Step
-- Move to next optimization block: cost/risk modulation with same protocol (integrate -> measure -> accept/reject).
-- Keep `news_gate.lookback_minutes=4320` as experimental override, then re-validate on extended folds.
+- Run required validators and lean gate, then commit and push all prepared changes.
 
 ## Validation
-- `python -m pytest tests/test_signal_engine_morning_plan.py tests/test_signal_engine_news_gate.py -q`
-- `python scripts/run_morning_plan_walk_forward.py --config artifacts/research/tmp_disable_eligibility.yaml --instrument BRZ5 --instrument BRH6 --instrument NGU5 --instrument NGH6 --instrument GDZ5 --instrument GDH6 --instrument GDM6 --instrument-mode front_nearest --front-roll-avoid-expiry-days 3 --start-date 2025-08-01 --end-date 2026-02-20 --decision-times 10:30,12:00,14:00 --train-days 60 --test-days 20 --step-days 20 --search-algorithm RANDOM --search-space-profile intraday_goal_v2 --hpo-trials 8 --hpo-startup-trials 3 --hpo-seed 77 --cache-db data/cache/morning_plan_candles.sqlite --offline-only --enable-news-gate --news-gate-lookback-minutes 4320 --tick-size BRZ5=0.01 --tick-size BRH6=0.01 --tick-size NGU5=0.001 --tick-size NGH6=0.001 --tick-size GDZ5=0.1 --tick-size GDH6=0.1 --tick-size GDM6=0.1 --out-json artifacts/research/wf_news_realdb_dense_gate_lookback4320_riskpick_eval.json`
+- `python scripts/validate_task_request_contract.py`
+- `python scripts/validate_session_handoff.py`
 - `python scripts/run_lean_gate.py`

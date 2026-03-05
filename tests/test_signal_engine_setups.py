@@ -298,6 +298,71 @@ def test_setup_generator_populates_entry_range_for_limit_setup():
     assert item.entry_order.price_range_high_ticks == item.entry_order.price_ticks + 2
 
 
+def test_setup_generator_supports_entry_ttl_and_stop_limit_fallback_meta():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PIVOT_R2", price_ticks=140, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="BOX_H", price_ticks=101, score=0.9, meta={}),
+        Level(tf=TF.H1, kind="BOX_L", price_ticks=97, score=0.9, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 2,
+            "entry_expiry_policy": "SESSION_END",
+            "entry_ttl_minutes": 30,
+            "time_stop_minutes": 90,
+            "stop_limit_fallback_to_market_min": 6,
+            "stop_limit_fallback_slip_ticks": 2,
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=102,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    stop_limit_setups = [item for item in setups if item.entry_order.order_type == OrderType.STOP_LIMIT]
+    assert stop_limit_setups
+    setup = stop_limit_setups[0]
+    assert setup.entry_order.expire_ts is not None
+    assert setup.entry_order.expire_ts <= as_of_ts + timedelta(minutes=30)
+    assert setup.entry_order.meta.get("stop_limit_fallback_to_market_min") == 6
+    assert setup.entry_order.meta.get("stop_limit_fallback_slip_ticks") == 2
+    assert setup.entry_order.meta.get("time_stop_minutes") == 90
+
+
 def test_setup_generator_blocks_when_regime_not_trend():
     tz = ZoneInfo("Europe/Moscow")
     as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
@@ -613,3 +678,387 @@ def test_setup_generator_blocks_when_target_return_pct_below_threshold():
         m5=_m5(),
     )
     assert setups == []
+
+
+def test_setup_generator_supports_orb_breakout_family():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PDH", price_ticks=112, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="BOX_H", price_ticks=101, score=0.9, meta={}),
+        Level(tf=TF.H1, kind="BOX_L", price_ticks=97, score=0.9, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 4,
+            "enable_box_breakout": False,
+            "enable_pullback_limit": False,
+            "enable_orb_breakout": True,
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "orb_opening_range_minutes": 15,
+            "orb_require_price_break": True,
+        }
+    )
+    m5_rows = _m5()
+    m5_rows[-1] = Candle(
+        ts=m5_rows[-1].ts,
+        open=105.8,
+        high=106.5,
+        low=104.0,
+        close=106.0,
+        volume=1_200.0,
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=106,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=m5_rows,
+    )
+    assert len(setups) >= 1
+    assert any(item.entry_order.meta.get("setup_kind") == "ORB_BREAKOUT" for item in setups)
+
+
+def test_setup_generator_supports_ema_pullback_family():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PDH", price_ticks=112, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="EMA20_H1", price_ticks=100, score=0.7, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 4,
+            "enable_box_breakout": False,
+            "enable_pullback_limit": False,
+            "enable_ema_pullback": True,
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "ema_pullback_max_dist_atr_mult": 1.5,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=103,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    assert len(setups) >= 1
+    assert any(item.entry_order.meta.get("setup_kind") == "EMA_PULLBACK_LIMIT" for item in setups)
+
+
+def test_setup_generator_respects_enabled_setup_kinds_allowlist():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PDH", price_ticks=112, score=0.95, meta={}),
+    ]
+    levels_h1 = [
+        Level(tf=TF.H1, kind="EMA20_H1", price_ticks=100, score=0.7, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 4,
+            "enable_box_breakout": True,
+            "enable_pullback_limit": True,
+            "enable_orb_breakout": True,
+            "enable_ema_pullback": True,
+            "enabled_setup_kinds": ["EMA_PULLBACK_LIMIT"],
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "ema_pullback_max_dist_atr_mult": 1.5,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=103,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    assert len(setups) >= 1
+    assert {str(item.entry_order.meta.get("setup_kind")) for item in setups} == {"EMA_PULLBACK_LIMIT"}
+
+
+def test_setup_generator_supports_vwap_pullback_family():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PDH", price_ticks=112, score=0.95, meta={}),
+    ]
+    levels_h1: list[Level] = []
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 4,
+            "enable_box_breakout": False,
+            "enable_pullback_limit": False,
+            "enable_orb_breakout": False,
+            "enable_ema_pullback": False,
+            "enable_vwap_pullback": True,
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "vwap_pullback_max_dist_atr_mult": 1.5,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=103,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=_m5(),
+    )
+    assert len(setups) >= 1
+    assert any(item.entry_order.meta.get("setup_kind") == "VWAP_PULLBACK_LIMIT" for item in setups)
+
+
+def test_setup_generator_supports_volatility_compression_breakout_family():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=40,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PDH", price_ticks=124, score=0.95, meta={}),
+    ]
+    levels_h1: list[Level] = []
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    start = datetime(2026, 2, 10, 10, 0, tzinfo=tz)
+    m5_rows = [
+        Candle(ts=start + timedelta(minutes=idx * 5), open=100.0, high=108.0, low=96.0, close=101.0, volume=1200.0)
+        for idx in range(4)
+    ]
+    m5_rows.extend(
+        [
+            Candle(ts=start + timedelta(minutes=20), open=101.0, high=103.0, low=99.0, close=102.0, volume=900.0),
+            Candle(ts=start + timedelta(minutes=25), open=102.0, high=103.0, low=100.0, close=102.0, volume=920.0),
+            Candle(ts=start + timedelta(minutes=30), open=102.0, high=103.0, low=101.0, close=103.0, volume=940.0),
+            Candle(ts=start + timedelta(minutes=35), open=103.0, high=109.0, low=102.0, close=109.0, volume=1300.0),
+        ]
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 4,
+            "enable_box_breakout": False,
+            "enable_pullback_limit": False,
+            "enable_orb_breakout": False,
+            "enable_ema_pullback": False,
+            "enable_vwap_pullback": False,
+            "enable_volatility_compression_breakout": True,
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "vol_comp_lookback_bars": 8,
+            "vol_comp_recent_bars": 3,
+            "vol_comp_max_recent_to_prev_ratio": 0.7,
+            "vol_comp_min_range_atr_mult": 0.1,
+            "vol_comp_max_range_atr_mult": 2.0,
+        }
+    )
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=109,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=levels_h1,
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=m5_rows,
+    )
+    assert len(setups) >= 1
+    assert any(item.entry_order.meta.get("setup_kind") == "VOLATILITY_COMPRESSION_BREAKOUT" for item in setups)
+
+
+def test_setup_generator_records_rejection_trace_for_vwap_alignment_fail():
+    tz = ZoneInfo("Europe/Moscow")
+    as_of_ts = datetime(2026, 2, 10, 10, 45, tzinfo=tz)
+    regime = RegimeState(
+        as_of_ts=as_of_ts,
+        daily_trend_state=TrendState.TREND,
+        daily_dir=Direction.UP,
+        daily_strength=0.8,
+        daily_atr_ticks=120,
+        daily_vol_state=VolState.NORMAL,
+        h1_dir=Direction.UP,
+        h1_alignment=True,
+        h1_atr_ticks=60,
+        liquidity_state=LiquidityState.OK,
+        components={},
+        warnings=[],
+    )
+    levels_d1 = [
+        Level(tf=TF.D1, kind="PDC", price_ticks=100, score=0.9, meta={}),
+        Level(tf=TF.D1, kind="PDH", price_ticks=112, score=0.95, meta={}),
+    ]
+    exec_params = ExecutionParams(
+        buffer_ticks=1,
+        limit_slip_ticks=2,
+        m5_atr_ticks=8,
+        m5_noise_ratio=1.0,
+        warnings=[],
+    )
+    generator = SetupGenerator(
+        {
+            "max_setups_per_instrument": 4,
+            "enable_box_breakout": False,
+            "enable_pullback_limit": False,
+            "enable_orb_breakout": False,
+            "enable_ema_pullback": False,
+            "enable_vwap_pullback": True,
+            "enable_cost_net_gate": False,
+            "enable_eligibility_filter": False,
+            "vwap_pullback_max_dist_atr_mult": 2.0,
+            "vwap_require_side_alignment": True,
+        }
+    )
+    start = datetime(2026, 2, 10, 10, 0, tzinfo=tz)
+    m5_rows = [
+        Candle(ts=start, open=109.0, high=111.0, low=108.0, close=110.0, volume=5_000.0),
+        Candle(ts=start + timedelta(minutes=5), open=108.0, high=109.0, low=106.0, close=108.0, volume=4_000.0),
+        Candle(ts=start + timedelta(minutes=10), open=91.0, high=92.0, low=89.0, close=90.0, volume=200.0),
+    ]
+    setups = generator.generate(
+        as_of_ts=as_of_ts,
+        instrument_id="BRH6",
+        last_price_ticks=90,
+        regime=regime,
+        levels_d1=levels_d1,
+        levels_h1=[],
+        exec_params=exec_params,
+        calendar=_calendar(),
+        m5=m5_rows,
+    )
+    trace = generator.consume_rejection_trace()
+    assert setups == []
+    assert any(
+        str(item.get("setup_kind")) == "VWAP_PULLBACK_LIMIT"
+        and str(item.get("rule")) == "vwap_side_alignment_failed_buy"
+        for item in trace
+    )

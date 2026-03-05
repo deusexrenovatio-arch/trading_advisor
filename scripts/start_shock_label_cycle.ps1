@@ -2,6 +2,8 @@
 param(
     [string]$InputCsv = "data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv",
     [string]$OutputRoot = "data/output/shock_label_cycle_auto",
+    [string]$MainConfig = "",
+    [string]$NewsConfig = "configs/news-livecheck-ng.yaml",
     [string]$StartTs = "",
     [string]$EndTs = "",
     [int]$FreshLookbackHours = 0,
@@ -74,13 +76,37 @@ $outputRootAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $OutputRoot
 $directionLabelsAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $DirectionLabelsJsonl
 $causalLabelsAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $CausalLabelsJsonl
 $telegramFeedAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $TelegramFeedPath
+$mainConfigAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $MainConfig
+$newsConfigAbs = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $NewsConfig
 
-if (-not (Test-Path $inputCsvAbs)) {
+if ($FreshLookbackHours -le 0 -and -not (Test-Path $inputCsvAbs)) {
     throw "Input CSV not found: $inputCsvAbs"
+}
+if (-not (Test-Path $newsConfigAbs)) {
+    throw "News config not found: $newsConfigAbs"
 }
 
 $stamp = [DateTime]::UtcNow.ToString("yyyyMMdd_HHmmss")
 $outputDir = Join-Path $outputRootAbs $stamp
+$liveInputCsvAbs = Join-Path $outputDir "live_shocks_input.csv"
+
+$buildLiveInput = $FreshLookbackHours -gt 0
+if ($buildLiveInput) {
+    $inputCsvAbs = $liveInputCsvAbs
+    $liveArgs = @(
+        "scripts/build_live_shock_input.py",
+        "--news-config", $newsConfigAbs,
+        "--output-csv", $liveInputCsvAbs,
+        "--lookback-hours", "$FreshLookbackHours",
+        "--bar-minutes", "5",
+        "--min-abs-z", "$MinAbsZ",
+        "--max-delay-min", "$MaxDelayMin",
+        "--news-min-confidence", "$IngestMinConfidence"
+    )
+    if (-not [string]::IsNullOrWhiteSpace($mainConfigAbs)) {
+        $liveArgs += @("--config", $mainConfigAbs)
+    }
+}
 
 $argsList = @(
     "scripts/run_shock_label_cycle.py",
@@ -143,6 +169,17 @@ if ($CheckOnly) {
 }
 
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+if ($buildLiveInput) {
+    Write-Host "[moex] Building live shock input: $python $($liveArgs -join ' ')"
+    Set-Location $repoRoot
+    & $python @liveArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "build_live_shock_input.py failed with exit code $LASTEXITCODE"
+    }
+    if (-not (Test-Path $liveInputCsvAbs)) {
+        throw "Live shock input was not created: $liveInputCsvAbs"
+    }
+}
 Set-Location $repoRoot
 & $python @argsList
 exit $LASTEXITCODE

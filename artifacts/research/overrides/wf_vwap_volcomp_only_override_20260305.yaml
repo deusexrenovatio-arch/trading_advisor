@@ -1,0 +1,20 @@
+﻿signal_engine:
+  morning_plan:
+    setups:
+      max_setups_per_instrument: 4
+      enable_box_breakout: false
+      enable_pullback_limit: false
+      enable_orb_breakout: false
+      enable_ema_pullback: false
+      enable_vwap_pullback: true
+      enable_volatility_compression_breakout: true
+      enabled_setup_kinds:
+        - VWAP_PULLBACK_LIMIT
+        - VOLATILITY_COMPRESSION_BREAKOUT
+      vol_comp_lookback_bars: 18
+      vol_comp_recent_bars: 4
+      vol_comp_max_recent_to_prev_ratio: 0.65
+      vol_comp_min_range_atr_mult: 0.2
+      vol_comp_max_range_atr_mult: 1.8
+      vol_comp_require_price_break: true
+      vol_comp_breakout_buffer_ticks: 0

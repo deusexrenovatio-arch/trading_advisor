@@ -853,55 +853,144 @@ items:
     started_at: 2026-03-03
     completed_at: 2026-03-03
 
-  - id: P2-SIGNAL-NEWS-GATE-036
-    title: Integrate live commodity news gate into signal_engine morning-plan and walk-forward fast-path
+  - id: P2-NEWS-SHOCK-LIVE-FEED-036
+    title: Wire fresh MOEX shock input and topic-stable story dedup into live shock and Telegram flow
     lane: strategy
     status: completed
     execution_mode: autonomous
     owner: product-engineering
     acceptance:
-      - signal_engine morning-plan supports config-driven causal news gating by commodity with allow/reduce/block actions.
-      - walk-forward runner exposes news gate overrides and applies the same gate in both builder and eval-cache fast-path.
-      - tests cover causal cutoff and builder-level reduce/block behavior.
-      - smoke run demonstrates that gate can suppress setups when high-severity commodity events are present.
+      - fresh shock cycles auto-build input from live MOEX candles and live news DB when FreshLookbackHours is set
+      - shock feed rows include stable root topic keys and impact tiers for primary/aftershock policy
+      - live news feed and Telegram news dedup use story fingerprints across commodities
+      - line-budget hard gate remains passing after runtime refactor
     checks:
-      - python -m pytest tests/test_signal_engine_news_gate.py tests/test_signal_engine_morning_plan.py tests/test_config_loading.py -q
+      - python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml --output-csv data/output/tmp_live_shocks_input.csv --lookback-hours 1 --bar-minutes 5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6
+      - powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours 1 -DirectionMaxTasks 20 -CausalMaxTasks 40 -NoTelegramFeed
+      - python -m pytest tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py tests/test_news_live_runtime.py tests/test_telegram_worker.py -q
       - python scripts/run_lean_gate.py
-      - python scripts/run_morning_plan_walk_forward.py --instrument BRZ5 --instrument BRH6 --instrument NGU5 --instrument NGH6 --instrument GDZ5 --instrument GDH6 --instrument GDM6 --instrument-mode front_nearest --front-roll-avoid-expiry-days 3 --start-date 2025-08-01 --end-date 2026-02-20 --decision-times 10:30,12:00,14:00 --train-days 60 --test-days 20 --step-days 20 --search-algorithm RANDOM --search-space-profile intraday_goal_v2 --hpo-trials 8 --hpo-startup-trials 3 --hpo-seed 77 --cache-db data/cache/morning_plan_candles.sqlite --offline-only --enable-news-gate --news-gate-db-url sqlite:///./artifacts/research/news_gate_synth_smoke.db --tick-size BRZ5=0.01 --tick-size BRH6=0.01 --tick-size NGU5=0.001 --tick-size NGH6=0.001 --tick-size GDZ5=0.1 --tick-size GDH6=0.1 --tick-size GDM6=0.1 --out-json artifacts/research/wf_news_gate_step1_front_news_synth_eval.json
+      - python scripts/validate_quality_scorecards.py
     docs:
-      - src/moex_carry/signal_engine/news/gate.py
-      - src/moex_carry/signal_engine/plan/builder.py
-      - scripts/run_morning_plan_walk_forward.py
-      - configs/default.yaml
-      - tests/test_signal_engine_news_gate.py
-      - tests/test_signal_engine_morning_plan.py
+      - scripts/build_live_shock_input.py
+      - src/moex_carry/news_shock_live_input.py
+      - scripts/start_shock_label_cycle.ps1
+      - src/moex_carry/news_topic.py
+      - src/moex_carry/news_shock_automation.py
+      - src/moex_carry/shock_alert_delivery.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - src/moex_carry/integrations/telegram_shock_broadcast.py
     dependencies:
       - P2-NEWS-LIVE-INGEST-035
     started_at: 2026-03-04
     completed_at: 2026-03-04
 
-  - id: P2-SIGNAL-NEWS-GATE-CALIBRATION-037
-    title: Calibrate news-gate lookback on real commodity news DB and enforce risk-first reduce selection
+  - id: P2-NEWS-ARCH-HARDEN-037
+    title: Harden news live storage architecture and path resolution for reliable runtime and bridge reads
+    lane: architecture
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - runtime, bridge, and live shock input use one shared sqlite/path helper instead of ad-hoc URL parsing
+      - csv feed writes are atomic to prevent partial reads by downstream workers
+      - sqlite connections use busy timeout and WAL for write paths; read paths avoid silent failures
+      - db indexes support bridge filters by published timestamp and confidence/impact
+    checks:
+      - python -m pytest tests/test_news_live_runtime.py tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py tests/test_telegram_worker.py -q
+      - powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours 1 -DirectionMaxTasks 10 -CausalMaxTasks 20 -NoTelegramFeed -CheckOnly
+      - python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml --output-csv data/output/tmp_live_shocks_input_archfix.csv --lookback-hours 1 --bar-minutes 5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - src/moex_carry/news_storage.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/news_shock_live_input.py
+      - tests/test_news_live_runtime.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-SHOCK-LIVE-FEED-036
+    started_at: 2026-03-04
+    completed_at: 2026-03-04
+
+  - id: P2-NEWS-CAUSAL-GATE-038
+    title: Add as-of timestamp semantics to news gate for causal replay and deterministic walk-forward
     lane: strategy
     status: completed
     execution_mode: autonomous
     owner: product-engineering
     acceptance:
-      - news DB from `New Project` is imported into signal-engine worktree with BRN/NG_US/GOLD coverage.
-      - walk-forward comparison on real DB evaluates news-gate lookback sensitivity.
-      - reduce action keeps lowest-risk setup rather than first emitted setup.
-      - tests verify reduce behavior and parity remains in fast-path.
+      - news gate logic accepts explicit as-of timestamp instead of hard dependency on wall-clock now
+      - live bridge loader accepts optional as-of timestamp and uses it for lookback cutoff
+      - pipeline passes one shared as-of timestamp to bridge and gate in the same decision cycle
+      - tests cover replay-safe behavior where historical events are evaluated against explicit as-of
     checks:
-      - python -m pytest tests/test_signal_engine_morning_plan.py tests/test_signal_engine_news_gate.py -q
-      - python scripts/run_morning_plan_walk_forward.py --config artifacts/research/tmp_disable_eligibility.yaml --instrument BRZ5 --instrument BRH6 --instrument NGU5 --instrument NGH6 --instrument GDZ5 --instrument GDH6 --instrument GDM6 --instrument-mode front_nearest --front-roll-avoid-expiry-days 3 --start-date 2025-08-01 --end-date 2026-02-20 --decision-times 10:30,12:00,14:00 --train-days 60 --test-days 20 --step-days 20 --search-algorithm RANDOM --search-space-profile intraday_goal_v2 --hpo-trials 8 --hpo-startup-trials 3 --hpo-seed 77 --cache-db data/cache/morning_plan_candles.sqlite --offline-only --enable-news-gate --news-gate-lookback-minutes 4320 --tick-size BRZ5=0.01 --tick-size BRH6=0.01 --tick-size NGU5=0.001 --tick-size NGH6=0.001 --tick-size GDZ5=0.1 --tick-size GDH6=0.1 --tick-size GDM6=0.1 --out-json artifacts/research/wf_news_realdb_dense_gate_lookback4320_riskpick_eval.json
+      - python -m pytest tests/test_news_filter.py tests/test_news_live_runtime.py tests/test_signal_cycle.py -q
+      - python -m ruff check src/moex_carry/strategy/news_filter.py src/moex_carry/news_live_bridge.py src/moex_carry/pipeline.py tests/test_news_filter.py tests/test_news_live_runtime.py
       - python scripts/run_lean_gate.py
     docs:
-      - src/moex_carry/signal_engine/news/gate.py
-      - src/moex_carry/signal_engine/plan/builder.py
-      - scripts/run_morning_plan_walk_forward.py
-      - tests/test_signal_engine_morning_plan.py
+      - src/moex_carry/strategy/news_filter.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/pipeline.py
+      - tests/test_news_filter.py
+      - tests/test_news_live_runtime.py
       - docs/session_handoff.md
+      - memory/agent_memory.yaml
     dependencies:
-      - P2-SIGNAL-NEWS-GATE-036
+      - P2-NEWS-ARCH-HARDEN-037
     started_at: 2026-03-04
     completed_at: 2026-03-04
+
+  - id: P2-WF-PRECISION-HYP-039
+    title: Integrate precision-filter hypothesis loop with deterministic impact artifacts for morning-plan WF
+    lane: strategy
+    status: active
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - walk-forward runner supports optional precision filter rules without changing default baseline behavior
+      - precision filter supports setup-id dedup and rule-based gating by side/setup kind/stop model/decision time/risk and target return
+      - impact of each integrated hypothesis is written to a versioned artifact under artifacts/research
+      - docs and operational memory capture accepted/rejected hypotheses to avoid repeated loops
+    checks:
+      - python -m pytest tests/test_morning_plan_walk_forward.py -q
+      - python -m ruff check scripts/run_morning_plan_walk_forward.py tests/test_morning_plan_walk_forward.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/signal_engine/setups/extended_families.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_setups.py
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_eval_20260304.json
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp2_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp3_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp4_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp5_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_h18_recall_families_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h23_orb_sell_prob_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h25_vwap_only_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26b_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26c_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h18_h26_iteration_summary_20260304.json
+      - artifacts/research/wf_goal_v6_precision_hypothesis_compare_20260304.json
+      - artifacts/research/wf_goal_v6_methodology_probe_20260304.json
+      - docs/session_handoff.md
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-CAUSAL-GATE-038
+    started_at: 2026-03-04
