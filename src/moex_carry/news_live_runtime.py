@@ -12,6 +12,11 @@ from typing import Any
 
 import requests
 import yaml
+from moex_carry.news_causal import analyze_causal_news
+from moex_carry.news_live_causal_ops import (
+    augment_query_with_event_terms,
+    backfill_missing_causal_scores,
+)
 from moex_carry.news_live_feed import export_live_news_feed
 from moex_carry.news_live_clients import (
     fetch_gdelt_articles as _fetch_gdelt_articles,
@@ -23,6 +28,7 @@ from moex_carry.news_live_scoring import (
     ModelScorer,
     ScoringModelConfig,
 )
+from moex_carry.news_live_schema import init_news_live_db
 from moex_carry.news_storage import (
     open_sqlite_connection,
     parse_any_utc,
@@ -67,7 +73,11 @@ class NewsIngestConfig:
     feed_path: str = "data/output/news_live/live_news_signals.csv"
     feed_min_impact_score: float = 0.35
     feed_min_confidence: float = 0.9
+    feed_min_fundamental_score: float = 0.45
     feed_max_rows: int = 5000
+    feed_require_primary_cause: bool = True
+    feed_require_verified_move: bool = False
+    feed_require_verified_both_horizons: bool = True
     newsapi_enabled: bool = True
     newsapi_api_key: str | None = None
     newsapi_timeout_sec: float = 30.0
@@ -145,7 +155,11 @@ class NewsIngestConfig:
             feed_path=str(ingest.get("feed_path") or "data/output/news_live/live_news_signals.csv"),
             feed_min_impact_score=float(ingest.get("feed_min_impact_score", 0.35)),
             feed_min_confidence=float(ingest.get("feed_min_confidence", 0.9)),
+            feed_min_fundamental_score=float(ingest.get("feed_min_fundamental_score", 0.45)),
             feed_max_rows=int(ingest.get("feed_max_rows", 5000)),
+            feed_require_primary_cause=bool(ingest.get("feed_require_primary_cause", True)),
+            feed_require_verified_move=bool(ingest.get("feed_require_verified_move", False)),
+            feed_require_verified_both_horizons=bool(ingest.get("feed_require_verified_both_horizons", True)),
             newsapi_enabled=bool(newsapi.get("enabled", True)),
             newsapi_api_key=api_key,
             newsapi_timeout_sec=float(newsapi.get("timeout_sec", 30.0)),
@@ -218,116 +232,8 @@ def _safe_json(value: object) -> str:
         return "{}"
 
 
-
-
 def _init_db(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS news_articles (
-            article_id TEXT PRIMARY KEY,
-            provider TEXT NOT NULL,
-            commodity TEXT NOT NULL,
-            source_name TEXT,
-            published_at_utc TEXT NOT NULL,
-            fetched_at_utc TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            content TEXT,
-            url TEXT,
-            language TEXT,
-            query_text TEXT,
-            story_id TEXT,
-            raw_json TEXT
-        )
-        """
-    )
-    columns = {
-        str(row[1]).strip().lower()
-        for row in conn.execute("PRAGMA table_info(news_articles)").fetchall()
-    }
-    if "story_id" not in columns:
-        conn.execute("ALTER TABLE news_articles ADD COLUMN story_id TEXT")
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_news_articles_commodity_ts
-        ON news_articles (commodity, published_at_utc DESC)
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_news_articles_published_ts
-        ON news_articles (published_at_utc DESC)
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_news_articles_story_id
-        ON news_articles (story_id, published_at_utc DESC)
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS news_scores (
-            article_id TEXT PRIMARY KEY,
-            model_name TEXT NOT NULL,
-            scored_at_utc TEXT NOT NULL,
-            direction TEXT NOT NULL,
-            impact_score REAL NOT NULL,
-            confidence REAL NOT NULL,
-            severity TEXT NOT NULL,
-            reason_terms_up TEXT,
-            reason_terms_down TEXT,
-            FOREIGN KEY (article_id) REFERENCES news_articles(article_id)
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_news_scores_confidence_impact
-        ON news_scores (confidence DESC, impact_score DESC, article_id)
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_news_scores_impact_confidence
-        ON news_scores (impact_score DESC, confidence DESC, article_id)
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS news_state (
-            state_key TEXT PRIMARY KEY,
-            state_value TEXT NOT NULL,
-            updated_at_utc TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS newsapi_usage (
-            day_utc TEXT PRIMARY KEY,
-            used_live INTEGER NOT NULL DEFAULT 0,
-            used_backfill INTEGER NOT NULL DEFAULT 0,
-            updated_at_utc TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS news_fetch_runs (
-            run_id TEXT PRIMARY KEY,
-            mode TEXT NOT NULL,
-            started_at_utc TEXT NOT NULL,
-            finished_at_utc TEXT NOT NULL,
-            fetched_total INTEGER NOT NULL,
-            inserted_total INTEGER NOT NULL,
-            scored_total INTEGER NOT NULL,
-            provider_counts_json TEXT NOT NULL,
-            commodity_counts_json TEXT NOT NULL
-        )
-        """
-    )
-    conn.commit()
+    init_news_live_db(conn)
 
 
 def _backfill_story_ids(conn: sqlite3.Connection) -> None:
@@ -486,6 +392,15 @@ def _score_new_articles(conn: sqlite3.Connection, scorer: ModelScorer) -> int:
                 content=str(content or ""),
             )
         score = story_cache[story_key]
+        causal = analyze_causal_news(
+            commodity=str(commodity),
+            title=str(title or ""),
+            description=str(description or ""),
+            content=str(content or ""),
+            direction=str(score.get("direction") or "hold"),
+            reason_terms_up=score.get("reason_terms_up") or [],
+            reason_terms_down=score.get("reason_terms_down") or [],
+        )
         severity = str(score["severity"]).lower()
         if severity not in SEVERITY_ORDER:
             severity = "medium"
@@ -500,8 +415,22 @@ def _score_new_articles(conn: sqlite3.Connection, scorer: ModelScorer) -> int:
                 confidence,
                 severity,
                 reason_terms_up,
-                reason_terms_down
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                reason_terms_down,
+                cause_classification,
+                cause_bucket,
+                cause_event,
+                transmission_channel,
+                cause_cluster_key,
+                cause_confidence,
+                fundamental_score,
+                direction_alignment,
+                is_primary_cause,
+                cause_route_key,
+                cause_claim_status,
+                cause_entities_json,
+                cause_terms_json,
+                effect_terms_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(article_id),
@@ -513,6 +442,20 @@ def _score_new_articles(conn: sqlite3.Connection, scorer: ModelScorer) -> int:
                 severity,
                 _safe_json(score.get("reason_terms_up") or []),
                 _safe_json(score.get("reason_terms_down") or []),
+                str(causal.get("cause_classification") or "unknown"),
+                str(causal.get("cause_bucket") or ""),
+                str(causal.get("cause_event") or ""),
+                str(causal.get("transmission_channel") or ""),
+                str(causal.get("cause_cluster_key") or ""),
+                float(causal.get("cause_confidence") or 0.0),
+                float(causal.get("fundamental_score") or 0.0),
+                float(causal.get("direction_alignment") or 0.5),
+                1 if bool(causal.get("is_primary_cause")) else 0,
+                str(causal.get("cause_route_key") or ""),
+                str(causal.get("cause_claim_status") or "unknown"),
+                _safe_json(causal.get("cause_entities") or []),
+                _safe_json(causal.get("cause_terms") or []),
+                _safe_json(causal.get("effect_terms") or []),
             ),
         )
     conn.commit()
@@ -553,6 +496,16 @@ def run_news_ingest_cycle(
 
         for profile in config.commodity_profiles:
             commodity_inserted = 0
+            gdelt_query = augment_query_with_event_terms(
+                profile.gdelt_query,
+                commodity=profile.ticker,
+                max_terms=8,
+            )
+            newsapi_query = augment_query_with_event_terms(
+                profile.newsapi_query,
+                commodity=profile.ticker,
+                max_terms=8,
+            )
             for provider in ("gdelt", "newsapi"):
                 if provider == "gdelt":
                     if not config.gdelt_enabled:
@@ -581,7 +534,7 @@ def run_news_ingest_cycle(
                             fetched = _retry_fetch(
                                 lambda: _fetch_gdelt_articles(
                                     session,
-                                    query=profile.gdelt_query,
+                                    query=gdelt_query,
                                     start_utc=start_utc,
                                     end_utc=end_utc,
                                     max_records=max(config.gdelt_max_records_per_call, 1),
@@ -596,7 +549,7 @@ def run_news_ingest_cycle(
                         got, inserted = _insert_articles(
                             conn,
                             commodity=profile.ticker,
-                            query_text=profile.gdelt_query,
+                            query_text=gdelt_query,
                             fetched_at_utc=started_at,
                             items=fetched,
                         )
@@ -657,7 +610,7 @@ def run_news_ingest_cycle(
                                 lambda: _fetch_newsapi_articles(
                                     session,
                                     api_key=config.newsapi_api_key,
-                                    query=profile.newsapi_query,
+                                    query=newsapi_query,
                                     start_utc=start_utc,
                                     end_utc=end_utc,
                                     language=profile.language,
@@ -674,7 +627,7 @@ def run_news_ingest_cycle(
                         got, inserted = _insert_articles(
                             conn,
                             commodity=profile.ticker,
-                            query_text=profile.newsapi_query,
+                            query_text=newsapi_query,
                             fetched_at_utc=started_at,
                             items=fetched,
                         )
@@ -690,12 +643,17 @@ def run_news_ingest_cycle(
             commodity_counts[profile.ticker] = commodity_inserted
 
         scored_total = _score_new_articles(conn, scorer)
+        causal_backfilled_total = backfill_missing_causal_scores(conn)
         feed_rows = export_live_news_feed(
             conn,
             feed_path=feed_path,
             min_impact_score=config.feed_min_impact_score,
             min_confidence=config.feed_min_confidence,
+            min_fundamental_score=config.feed_min_fundamental_score,
             max_rows=max(config.feed_max_rows, 1),
+            require_primary_cause=bool(config.feed_require_primary_cause),
+            require_verified_move=bool(config.feed_require_verified_move),
+            require_verified_both_horizons=bool(config.feed_require_verified_both_horizons),
         )
         run_id = f"news-ingest-{ts_now.strftime('%Y%m%d%H%M%S')}-{int(time.time() * 1000)}-{normalized_mode}"
         finished_at = iso_utc(utc_now())
@@ -737,6 +695,7 @@ def run_news_ingest_cycle(
             "fetched_total": int(fetched_total),
             "inserted_total": int(inserted_total),
             "scored_total": int(scored_total),
+            "causal_backfilled_total": int(causal_backfilled_total),
             "feed_rows": int(feed_rows),
             "provider_counts": provider_counts,
             "commodity_counts": commodity_counts,

@@ -38,6 +38,15 @@ def _to_float(value: object, *, default: float = 0.0) -> float:
     return float(parsed)
 
 
+def _to_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return int(value) != 0
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "yes", "y", "on"}
+
+
 def _coerce_reason_terms(value: object) -> str:
     if isinstance(value, (list, tuple, set)):
         parts = [_normalize_text(item) for item in value]
@@ -156,6 +165,22 @@ def format_news_message(alert: dict[str, Any]) -> str:
     story_key = _normalize_text(alert.get("story_key"))
     reason_terms_up = _coerce_reason_terms(alert.get("reason_terms_up"))
     reason_terms_down = _coerce_reason_terms(alert.get("reason_terms_down"))
+    cause_classification = _normalize_text(alert.get("cause_classification")).lower() or "unknown"
+    cause_bucket = _normalize_text(alert.get("cause_bucket")).lower()
+    cause_event = _normalize_text(alert.get("cause_event")).lower()
+    transmission_channel = _normalize_text(alert.get("transmission_channel")).lower()
+    cause_route_key = _normalize_text(alert.get("cause_route_key"))
+    cause_claim_status = _normalize_text(alert.get("cause_claim_status")).lower() or "unknown"
+    cause_entities = _coerce_reason_terms(alert.get("cause_entities_json"))
+    fundamental_score = _to_float(alert.get("fundamental_score"))
+    cause_confidence = _to_float(alert.get("cause_confidence"))
+    is_primary_cause = _to_bool(alert.get("is_primary_cause"))
+    verified_1h = _to_bool(alert.get("verified_move_1h"))
+    verified_1d = _to_bool(alert.get("verified_move_1d"))
+    max_move_1h = _to_float(alert.get("max_abs_move_pct_1h"))
+    max_move_1d = _to_float(alert.get("max_abs_move_pct_1d"))
+    max_z_1h = _to_float(alert.get("max_abs_z_1h"))
+    max_z_1d = _to_float(alert.get("max_abs_z_1d"))
     url = _normalize_text(alert.get("url"))
 
     lines = [
@@ -176,6 +201,22 @@ def format_news_message(alert: dict[str, Any]) -> str:
         lines.append(f"⚠️ Драйверы снижения: {reason_terms_down}")
     if url:
         lines.append(f"🔗 Ссылка: {url}")
+    lines.append(
+        "Cause profile: "
+        f"{cause_classification.upper()} | bucket={cause_bucket or 'n/a'} | event={cause_event or 'n/a'} "
+        f"| channel={transmission_channel or 'n/a'} | fundamental={fundamental_score:.2f} "
+        f"| cause_conf={cause_confidence:.2f} | primary={'yes' if is_primary_cause else 'no'} "
+        f"| claim={cause_claim_status}"
+    )
+    if cause_entities:
+        lines.append(f"Cause entities: {cause_entities}")
+    if cause_route_key:
+        lines.append(f"Cause route: {cause_route_key}")
+    lines.append(
+        "Move verification: "
+        f"1H={'yes' if verified_1h else 'no'} ({max_move_1h:.2f}%, |z|={max_z_1h:.2f}) | "
+        f"1D={'yes' if verified_1d else 'no'} ({max_move_1d:.2f}%, |z|={max_z_1d:.2f})"
+    )
     return "\n".join(lines)
 
 

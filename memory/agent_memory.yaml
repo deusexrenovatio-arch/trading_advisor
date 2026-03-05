@@ -2,6 +2,48 @@ version: 1
 updated_at: 2026-03-06
 
 decisions:
+  - id: ADM-2026-03-05-080
+    date: 2026-03-05
+    title: Add event-first commodity dependency graph to extract root causes beyond financial recap headlines
+    context: Cause-first ranking still surfaced many finance-recapped stories because source queries and taxonomy relied on commodity-keyword mentions, while true trigger headlines often mention chokepoints, operators, or policy actions without ticker terms.
+    decision: Introduce `news_commodity_graph.py` with wide role catalogs (exporters, producers, importers, chokepoints), directed transmission edges, and event-first inference with claim status and route context; augment live ingestion queries with graph-derived event terms and persist route/status/entities in `news_scores`.
+    impact: Pipeline can detect and prioritize primary trigger events from non-financial news sources and provide auditable path context from trigger node to commodity impact channel.
+    links:
+      - src/moex_carry/news_commodity_graph.py
+      - src/moex_carry/news_causal.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_schema.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - tests/test_news_commodity_graph.py
+      - tests/test_news_causal.py
+      - tests/test_news_live_runtime.py
+  - id: ADM-2026-03-05-079
+    date: 2026-03-05
+    title: Auto-backfill causal fields for legacy live-news scores and lock strict verified-feed defaults
+    context: Prepared historical `news_livecheck_ng.db` had populated legacy `news_scores` rows without new causal columns, which made cause-first feed gating return empty or near-empty output under strict verification settings.
+    decision: Add runtime path to backfill missing causal fields for existing `news_scores` rows on each ingest cycle, and lock NG livecheck feed defaults to primary-cause + `require_verified_move=true` + `require_verified_both_horizons=true` with calibrated `feed_min_confidence=0.6`.
+    impact: Existing databases can be reused immediately without manual rescoring migration; Telegram/live feed now emits only fundamental items with realized move confirmation when available.
+    links:
+      - src/moex_carry/news_live_runtime.py
+      - configs/news-livecheck-ng.yaml
+      - tests/test_news_live_runtime.py
+      - docs/session_handoff.md
+  - id: ADM-2026-03-05-078
+    date: 2026-03-05
+    title: Enforce cause-first commodity news feed with deterministic taxonomy and post-factum 1H/1D verification
+    context: Telegram/live-news flow contained many fact-only market-commentary items ("price rose/fell") that lacked primary causal triggers and reduced signal quality.
+    decision: Add commodity-aware causal taxonomy (`news_causal.py`) into live scoring, persist causal fields in `news_scores`, filter feed by primary-cause/fundamental score, and enrich feed rows with 1H/1D directional verification from `news_shock_rows`; expose cause and verification context in Telegram message formatting.
+    impact: Runtime news output is now biased toward fundamental drivers and has explicit verification telemetry for later calibration against realized moves.
+    links:
+      - src/moex_carry/news_causal.py
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - tests/test_news_causal.py
+      - tests/test_news_live_feed.py
+      - docs/session_handoff.md
   - id: ADM-2026-03-05-077
     date: 2026-03-05
     title: Stabilize news gate bridge behavior for tests via explicit as-of timestamp

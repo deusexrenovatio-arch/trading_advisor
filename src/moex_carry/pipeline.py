@@ -42,7 +42,7 @@ from moex_carry.news import sync_news_runtime
 from moex_carry.news_live_bridge import load_news_gate_items
 from moex_carry.selection.ranking import score_pairs_alpha
 from moex_carry.selection.universe import build_pair_mappings
-from moex_carry.strategy.news_filter import apply_news_filter
+from moex_carry.strategy.news_filter import NewsGateResult, apply_news_filter
 from moex_carry.strategy.overall_strategy import aggregate_strategy_signals, strategy_signal_to_dict
 from moex_carry.strategy.orchestrator import build_portfolio_proposal
 from moex_carry.strategy.risk_gate import evaluate_risk_profile
@@ -2462,15 +2462,21 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     news_gate_as_of = datetime.now(timezone.utc)
     try:
         news_items: list[NewsItem] = load_news_gate_items(settings, as_of_utc=news_gate_as_of)
+        news_gate = apply_news_filter(
+            news_items,
+            lookback_minutes=settings.news_filter.lookback_minutes,
+            block_severity_threshold=settings.news_filter.block_severity_threshold,
+            reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
+            as_of_utc=news_gate_as_of,
+        )
     except Exception:
         news_items = []
-    news_gate = apply_news_filter(
-        news_items,
-        lookback_minutes=settings.news_filter.lookback_minutes,
-        block_severity_threshold=settings.news_filter.block_severity_threshold,
-        reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
-        as_of_utc=news_gate_as_of,
-    )
+        news_gate = NewsGateResult(
+            action="block",
+            highest_severity="high",
+            matched_items=[],
+            errors=["news_gate_source_unavailable"],
+        )
     futures_path = dirs["raw"] / "futures.csv"
     futures_df = pd.read_csv(futures_path) if futures_path.exists() else pd.DataFrame()
     future_spec_map = {spec.secid: spec for spec in _parse_contract_specs(futures_df)} if not futures_df.empty else {}
