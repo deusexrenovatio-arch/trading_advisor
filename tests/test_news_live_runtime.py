@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from moex_carry.config import AppSettings
@@ -189,12 +189,14 @@ def test_gdelt_retry_recovers_transient_failure(monkeypatch, tmp_path):
 def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
     db_path = tmp_path / "news_live_bridge.db"
     feed_path = tmp_path / "feed_bridge.csv"
+    now_utc = datetime.now(timezone.utc)
+    published_iso = (now_utc - timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
 
     def _fake_gdelt(*args, **kwargs):
         return [
             {
                 "provider": "gdelt",
-                "published_at_utc": "2026-03-03T09:10:00Z",
+                "published_at_utc": published_iso,
                 "source_name": "trusted-feed",
                 "title": "Missile attack disrupts oil flow",
                 "description": "Shipping risk rises in the region.",
@@ -222,7 +224,7 @@ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
         feed_path=str(feed_path),
         model_mode="keyword",
     )
-    run_news_ingest_cycle(config=cfg, mode="live", now_utc=datetime(2026, 3, 3, 9, 30, tzinfo=timezone.utc))
+    run_news_ingest_cycle(config=cfg, mode="live", now_utc=now_utc)
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("UPDATE news_scores SET confidence = 0.5")
