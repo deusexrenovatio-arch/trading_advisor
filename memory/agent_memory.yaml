@@ -560,6 +560,24 @@ incidents:
       - .github/workflows/self-heal.yml
       - scripts/self_heal.py
       - docs/runbooks/self-heal-escalation.md
+  - id: AMI-2026-03-05-009
+    date: 2026-03-05
+    title: Replay refresh failed on timezone mismatch and blocked parity gate
+    symptom: python -m moex_carry.cli signals --no-csv failed with tz-aware vs tz-naive exec_ts comparisons; pre-push data integrity parity then blocked push.
+    root_cause: Incremental replay compared mixed timestamp types from existing replay output/checkpoints and could write pickle fallback under `.parquet` path that integrity checker read only as parquet.
+    remediation: Normalize replay timestamp comparisons to UTC-naive in incremental engine and add pickle fallback read path in data integrity checker.
+    remediation_type: capability
+    incident_signature: replay_tz_mismatch_parity_block
+    prevention_change: Enforced UTC-naive `exec_ts` normalization for prefix/tail merge and comparisons in incremental replay path.
+    prevention_artifact: src/moex_carry/signal_replay/incremental.py
+    prevention_check: python -m moex_carry.cli signals --no-csv && python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+    loop_breaker_trigger: Signal refresh failed twice on the same tz comparison class while trying to clear parity gate.
+    search_space_reset: Switched from retrying refresh command to code-level timestamp normalization and checker fallback hardening.
+    same_path_attempts: 2
+    links:
+      - src/moex_carry/signal_replay/incremental.py
+      - scripts/check_data_integrity.py
+      - docs/DEV_WORKFLOW.md
 
 patterns:
   - id: AMP-2026-02-20-001

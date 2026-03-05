@@ -232,7 +232,7 @@ def run_true_incremental_replay(
                 if existing_output is not None and not existing_output.empty:
                     cutoff_ts = latest.last_processed_exec_ts
                     base_prefix = existing_output[
-                        pd.to_datetime(existing_output["exec_ts"], errors="coerce") <= cutoff_ts
+                        _to_utc_naive_series(existing_output["exec_ts"]) <= cutoff_ts
                     ].copy()
             else:
                 if latest.last_processed_exec_ts is None:
@@ -254,7 +254,7 @@ def run_true_incremental_replay(
                             if existing_output is not None and not existing_output.empty and checkpoint.last_processed_exec_ts is not None:
                                 cutoff_ts = checkpoint.last_processed_exec_ts
                                 base_prefix = existing_output[
-                                    pd.to_datetime(existing_output["exec_ts"], errors="coerce") <= cutoff_ts
+                                    _to_utc_naive_series(existing_output["exec_ts"]) <= cutoff_ts
                                 ].copy()
 
     if force_full:
@@ -271,7 +271,7 @@ def run_true_incremental_replay(
     if tail_start_ts is None or run_mode == "full":
         tail = series.copy()
     else:
-        tail = series[pd.to_datetime(series["exec_ts"], errors="coerce") > tail_start_ts].copy()
+        tail = series[_to_utc_naive_series(series["exec_ts"]) > tail_start_ts].copy()
 
     if tail.empty and not base_prefix.empty:
         merged_frame = base_prefix.reset_index(drop=True)
@@ -324,12 +324,13 @@ def run_true_incremental_replay(
     if not isinstance(replay_tail_result, tuple):
         raise RuntimeError("incremental_replay_state_unavailable")
     replay_tail, final_state_payload = replay_tail_result
+    replay_tail = _with_utc_naive_exec_ts(replay_tail)
     final_state = ReplayRuntimeState.from_payload(final_state_payload)
 
     if base_prefix.empty:
         merged_frame = replay_tail.reset_index(drop=True)
     else:
-        merged_frame = pd.concat([base_prefix, replay_tail], ignore_index=True)
+        merged_frame = pd.concat([_with_utc_naive_exec_ts(base_prefix), replay_tail], ignore_index=True)
         merged_frame = merged_frame.sort_values(["date", "exec_ts"]).reset_index(drop=True)
         if "exec_ts" in merged_frame.columns:
             merged_frame = merged_frame.drop_duplicates(subset=["exec_ts"], keep="last")
@@ -498,6 +499,21 @@ def _as_utc_naive_datetime(value: object) -> datetime | None:
             return ts.astimezone(timezone.utc).replace(tzinfo=None)
         return ts
     return None
+
+
+def _to_utc_naive_series(values: pd.Series) -> pd.Series:
+    series = pd.to_datetime(values, errors="coerce", utc=True)
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+    return series.dt.tz_convert("UTC").dt.tz_localize(None)
+
+
+def _with_utc_naive_exec_ts(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty or "exec_ts" not in frame.columns:
+        return frame
+    normalized = frame.copy()
+    normalized["exec_ts"] = _to_utc_naive_series(normalized["exec_ts"])
+    return normalized
 
 
 def _serialize_mapping(value: dict[str, Any] | None) -> dict[str, Any] | None:

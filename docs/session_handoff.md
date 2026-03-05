@@ -1,5 +1,5 @@
 # Session Handoff
-Updated: 2026-03-05 16:24 UTC
+Updated: 2026-03-05 17:08 UTC
 
 ## Goal
 - Apply harness-oriented governance/self-learning hardening from latest review and merge to `main` via PR-only flow.
@@ -16,8 +16,8 @@ Updated: 2026-03-05 16:24 UTC
 - Worktree context confirmed on feature branch for governance-only patch.
 - Implemented targeted harness updates: scorecard visibility, preflight clarity, advisory debt routing, and governance skill alignment.
 - Updated machine-readable governance artifacts: `plans/PLANS.yaml` and `memory/agent_memory.yaml`.
-- Required validators and lean gate rerun: all requested checks pass.
-- Remaining step: publish PR and merge via PR-only flow.
+- While clearing pre-push parity blocker, fixed incremental replay timezone mismatch and added replay format fallback in integrity checker.
+- Required validators, integrity check, and lean gate rerun: all pass.
 
 ## First-Time-Right Report
 1. Confirmed coverage: governance loop, quality scorecards, remediation runbook, and active skills are all included in patch scope.
@@ -36,11 +36,13 @@ Updated: 2026-03-05 16:24 UTC
 - No blockers.
 
 ## Next Step
-- Push branch, create PR with governance evidence, merge to `main`, and sync local `main`.
+- Push branch, create PR with governance and parity-fix evidence, merge to `main`, and sync local `main`.
 
 ## Validation
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
 - `python scripts/validate_skills.py`
 - `python scripts/validate_quality_scorecards.py`
+- `python -m moex_carry.cli signals --no-csv`
+- `python scripts/check_data_integrity.py --data-dir data --max-day-gap 2`
 - `python scripts/run_lean_gate.py`

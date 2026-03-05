@@ -1069,3 +1069,29 @@ items:
       - P1-EXTERNAL-ADVICE-MAP-041
     started_at: 2026-03-05
     completed_at: 2026-03-05
+
+  - id: P1-REPLAY-TZ-PARITY-043
+    title: Fix incremental replay timezone mismatch and parity checker format fallback to unblock deterministic pre-push
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - unified signal refresh no longer fails on tz-aware vs tz-naive exec_ts comparisons
+      - replay merge path normalizes timestamp columns before sort/dedup
+      - data integrity checker reads replay files with parquet-first and pickle fallback
+      - python scripts/check_data_integrity.py --data-dir data --max-day-gap 2 passes after refresh
+    checks:
+      - python -m moex_carry.cli signals --no-csv
+      - python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/signal_replay/incremental.py
+      - scripts/check_data_integrity.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-HARNESS-SCORECARD-SELFLEARN-042
+    started_at: 2026-03-05
+    completed_at: 2026-03-05
