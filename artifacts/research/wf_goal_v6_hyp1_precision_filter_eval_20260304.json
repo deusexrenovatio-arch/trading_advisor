@@ -1,0 +1,59 @@
+{
+  "generated_at": "2026-03-04T13:50:43.785748+00:00",
+  "source_report": "artifacts/research/wf_goal_v6_mad_neg8_seed111_wt_signal_engine_rerun_20260304.json",
+  "method": "offline_filter_on_planned_signals",
+  "hypothesis_id": "H1_PRECISION_MIN_RISK_114_DEDUP",
+  "filter": {
+    "dedup_setup_ids": true,
+    "min_risk_ticks": 114,
+    "allow_side": [],
+    "allow_setup_kind": [],
+    "allow_stop_model": [],
+    "allow_decision_time": []
+  },
+  "metrics": {
+    "raw_from_planned_signals": {
+      "setups_total": 154,
+      "filled_trades": 71,
+      "fill_rate": 0.461038961038961,
+      "winning_trades": 34,
+      "losing_trades": 37,
+      "win_rate": 0.4788732394366197,
+      "net_ticks_sum": 6203.0,
+      "expectancy_net_ticks": 87.36619718309859,
+      "profit_factor": 2.9228146311221326,
+      "top1_instrument_by_net": "PD",
+      "top1_instrument_net_share": 0.7994518781234886
+    },
+    "dedup_only": {
+      "setups_total": 109,
+      "filled_trades": 55,
+      "fill_rate": 0.5045871559633027,
+      "winning_trades": 24,
+      "losing_trades": 31,
+      "win_rate": 0.43636363636363634,
+      "net_ticks_sum": 4482.0,
+      "expectancy_net_ticks": 81.49090909090908,
+      "profit_factor": 2.6357664233576643,
+      "top1_instrument_by_net": "PD",
+      "top1_instrument_net_share": 0.8544176706827309
+    },
+    "dedup_plus_filter": {
+      "setups_total": 25,
+      "filled_trades": 9,
+      "fill_rate": 0.36,
+      "winning_trades": 7,
+      "losing_trades": 2,
+      "win_rate": 0.7777777777777778,
+      "net_ticks_sum": 4851.5,
+      "expectancy_net_ticks": 539.0555555555555,
+      "profit_factor": 4.5130340333091965,
+      "top1_instrument_by_net": "PD",
+      "top1_instrument_net_share": 0.7893435020096877
+    }
+  },
+  "notes": [
+    "This is a fast offline impact estimate based on existing planned_signals from baseline rerun.",
+    "Needs full walk-forward rerun with --enable-precision-filter for final acceptance."
+  ]
+}

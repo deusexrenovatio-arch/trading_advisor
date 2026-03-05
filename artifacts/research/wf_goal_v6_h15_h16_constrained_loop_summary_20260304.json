@@ -1,0 +1,32 @@
+{
+  "generated_at": "2026-03-04T16:51:23Z",
+  "runs": [
+    {
+      "tag": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304",
+      "out": "artifacts/research/wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "filled": 245,
+      "tpw": 4.6730245231607626,
+      "wr": 0.5265306122448979,
+      "net": 15096.0,
+      "top_share": 0.6247025740860913,
+      "acceptance_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_max_concentration_top_share"
+      ]
+    },
+    {
+      "tag": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304",
+      "out": "artifacts/research/wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "filled": 238,
+      "tpw": 4.539509536784741,
+      "wr": 0.5252100840336135,
+      "net": 10998.0,
+      "top_share": 0.45477466120390797,
+      "acceptance_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net"
+      ]
+    }
+  ]
+}

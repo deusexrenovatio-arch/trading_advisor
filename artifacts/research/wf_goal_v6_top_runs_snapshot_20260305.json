@@ -1,0 +1,826 @@
+{
+  "wf_goal_v6_h20_orb_sell_precision_constrained_20260304": {
+    "path": "artifacts\\research\\wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json",
+    "overall": {
+      "setups_total": 729,
+      "filled_trades": 53,
+      "fill_rate": 0.07270233196159122,
+      "win_rate_net": 0.6226415094339622,
+      "tp_rate": 0.5849056603773585,
+      "sl_rate": 0.32075471698113206,
+      "exit_rate": 0.09433962264150944,
+      "expectancy_net_ticks": 41.65094339622642,
+      "net_ticks_sum": 2207.5,
+      "trades_per_week": 1.0108991825613078,
+      "concentration_top_share": 0.4273190621814475,
+      "negative_fold_share": 0.15217391304347827,
+      "median_fold_net_ticks": 0.0,
+      "tail_cvar_ticks": -23.083333333333332,
+      "accept_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_min_trades_per_week"
+      ]
+    },
+    "by_setup_kind": {
+      "ORB_BREAKOUT": {
+        "count": 53,
+        "net_ticks_sum": 2207.5,
+        "win_count": 33,
+        "tp_count": 31,
+        "sl_count": 17,
+        "exit_count": 5,
+        "expectancy_net_ticks": 41.65094339622642,
+        "win_rate_net": 0.6226415094339622,
+        "tp_rate": 0.5849056603773585,
+        "sl_rate": 0.32075471698113206,
+        "exit_rate": 0.09433962264150944
+      }
+    },
+    "top_instruments_by_abs_net": [
+      {
+        "instrument": "SF",
+        "count": 2,
+        "win_rate_net": 1.0,
+        "net_ticks_sum": 1048.0,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "MM",
+        "count": 5,
+        "win_rate_net": 0.8,
+        "net_ticks_sum": 698.5,
+        "tp_rate": 0.8,
+        "sl_rate": 0.2,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "CC",
+        "count": 20,
+        "win_rate_net": 0.65,
+        "net_ticks_sum": 320.0,
+        "tp_rate": 0.65,
+        "sl_rate": 0.3,
+        "exit_rate": 0.05
+      },
+      {
+        "instrument": "MX",
+        "count": 5,
+        "win_rate_net": 0.8,
+        "net_ticks_sum": 100.5,
+        "tp_rate": 0.8,
+        "sl_rate": 0.2,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "RI",
+        "count": 1,
+        "win_rate_net": 1.0,
+        "net_ticks_sum": 80.5,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "NG",
+        "count": 10,
+        "win_rate_net": 0.5,
+        "net_ticks_sum": 75.0,
+        "tp_rate": 0.4,
+        "sl_rate": 0.4,
+        "exit_rate": 0.2
+      },
+      {
+        "instrument": "SU",
+        "count": 1,
+        "win_rate_net": 0.0,
+        "net_ticks_sum": -52.5,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "NR",
+        "count": 7,
+        "win_rate_net": 0.42857142857142855,
+        "net_ticks_sum": -48.5,
+        "tp_rate": 0.2857142857142857,
+        "sl_rate": 0.42857142857142855,
+        "exit_rate": 0.2857142857142857
+      }
+    ]
+  },
+  "wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304": {
+    "path": "artifacts\\research\\wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json",
+    "overall": {
+      "setups_total": 737,
+      "filled_trades": 57,
+      "fill_rate": 0.0773405698778833,
+      "win_rate_net": 0.5964912280701754,
+      "tp_rate": 0.543859649122807,
+      "sl_rate": 0.2807017543859649,
+      "exit_rate": 0.17543859649122806,
+      "expectancy_net_ticks": 27.29824561403509,
+      "net_ticks_sum": 1556.0,
+      "trades_per_week": 1.0871934604904632,
+      "concentration_top_share": 0.4,
+      "negative_fold_share": 0.15217391304347827,
+      "median_fold_net_ticks": 0.0,
+      "tail_cvar_ticks": -41.708333333333336,
+      "accept_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_min_trades_per_week"
+      ]
+    },
+    "by_setup_kind": {
+      "ORB_BREAKOUT": {
+        "count": 57,
+        "net_ticks_sum": 1556.0,
+        "win_count": 34,
+        "tp_count": 31,
+        "sl_count": 16,
+        "exit_count": 10,
+        "expectancy_net_ticks": 27.29824561403509,
+        "win_rate_net": 0.5964912280701754,
+        "tp_rate": 0.543859649122807,
+        "sl_rate": 0.2807017543859649,
+        "exit_rate": 0.17543859649122806
+      }
+    },
+    "top_instruments_by_abs_net": [
+      {
+        "instrument": "PD",
+        "count": 2,
+        "win_rate_net": 1.0,
+        "net_ticks_sum": 714.0,
+        "tp_rate": 0.5,
+        "sl_rate": 0.0,
+        "exit_rate": 0.5
+      },
+      {
+        "instrument": "CC",
+        "count": 31,
+        "win_rate_net": 0.6451612903225806,
+        "net_ticks_sum": 487.5,
+        "tp_rate": 0.6129032258064516,
+        "sl_rate": 0.3225806451612903,
+        "exit_rate": 0.06451612903225806
+      },
+      {
+        "instrument": "MM",
+        "count": 5,
+        "win_rate_net": 0.4,
+        "net_ticks_sum": 217.0,
+        "tp_rate": 0.4,
+        "sl_rate": 0.4,
+        "exit_rate": 0.2
+      },
+      {
+        "instrument": "NG",
+        "count": 4,
+        "win_rate_net": 0.75,
+        "net_ticks_sum": 85.0,
+        "tp_rate": 0.5,
+        "sl_rate": 0.25,
+        "exit_rate": 0.25
+      },
+      {
+        "instrument": "MX",
+        "count": 5,
+        "win_rate_net": 0.6,
+        "net_ticks_sum": 77.5,
+        "tp_rate": 0.6,
+        "sl_rate": 0.4,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "RI",
+        "count": 1,
+        "win_rate_net": 1.0,
+        "net_ticks_sum": 69.5,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "HS",
+        "count": 1,
+        "win_rate_net": 0.0,
+        "net_ticks_sum": -57.5,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "NR",
+        "count": 6,
+        "win_rate_net": 0.16666666666666666,
+        "net_ticks_sum": -57.0,
+        "tp_rate": 0.3333333333333333,
+        "sl_rate": 0.0,
+        "exit_rate": 0.6666666666666666
+      }
+    ]
+  },
+  "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304": {
+    "path": "artifacts\\research\\wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+    "overall": {
+      "setups_total": 1118,
+      "filled_trades": 503,
+      "fill_rate": 0.44991055456171736,
+      "win_rate_net": 0.5407554671968191,
+      "tp_rate": 0.29025844930417494,
+      "sl_rate": 0.2485089463220676,
+      "exit_rate": 0.46123260437375746,
+      "expectancy_net_ticks": 19.450298210735586,
+      "net_ticks_sum": 9783.5,
+      "trades_per_week": 9.59400544959128,
+      "concentration_top_share": 0.27165864881823887,
+      "negative_fold_share": 0.2826086956521739,
+      "median_fold_net_ticks": 6.75,
+      "tail_cvar_ticks": -251.91666666666666,
+      "accept_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net"
+      ]
+    },
+    "by_setup_kind": {
+      "PULLBACK_LIMIT": {
+        "count": 91,
+        "net_ticks_sum": 1317.0,
+        "win_count": 36,
+        "tp_count": 17,
+        "sl_count": 29,
+        "exit_count": 45,
+        "expectancy_net_ticks": 14.472527472527473,
+        "win_rate_net": 0.3956043956043956,
+        "tp_rate": 0.18681318681318682,
+        "sl_rate": 0.31868131868131866,
+        "exit_rate": 0.4945054945054945
+      },
+      "ORB_BREAKOUT": {
+        "count": 322,
+        "net_ticks_sum": 7588.0,
+        "win_count": 196,
+        "tp_count": 109,
+        "sl_count": 70,
+        "exit_count": 143,
+        "expectancy_net_ticks": 23.565217391304348,
+        "win_rate_net": 0.6086956521739131,
+        "tp_rate": 0.3385093167701863,
+        "sl_rate": 0.21739130434782608,
+        "exit_rate": 0.4440993788819876
+      },
+      "EMA_PULLBACK_LIMIT": {
+        "count": 78,
+        "net_ticks_sum": 724.5,
+        "win_count": 35,
+        "tp_count": 18,
+        "sl_count": 25,
+        "exit_count": 35,
+        "expectancy_net_ticks": 9.288461538461538,
+        "win_rate_net": 0.44871794871794873,
+        "tp_rate": 0.23076923076923078,
+        "sl_rate": 0.32051282051282054,
+        "exit_rate": 0.44871794871794873
+      },
+      "BOX_BREAKOUT": {
+        "count": 12,
+        "net_ticks_sum": 154.0,
+        "win_count": 5,
+        "tp_count": 2,
+        "sl_count": 1,
+        "exit_count": 9,
+        "expectancy_net_ticks": 12.833333333333334,
+        "win_rate_net": 0.4166666666666667,
+        "tp_rate": 0.16666666666666666,
+        "sl_rate": 0.08333333333333333,
+        "exit_rate": 0.75
+      }
+    },
+    "top_instruments_by_abs_net": [
+      {
+        "instrument": "PT",
+        "count": 51,
+        "win_rate_net": 0.6078431372549019,
+        "net_ticks_sum": 3247.0,
+        "tp_rate": 0.39215686274509803,
+        "sl_rate": 0.23529411764705882,
+        "exit_rate": 0.37254901960784315
+      },
+      {
+        "instrument": "PD",
+        "count": 14,
+        "win_rate_net": 0.6428571428571429,
+        "net_ticks_sum": 2756.0,
+        "tp_rate": 0.35714285714285715,
+        "sl_rate": 0.21428571428571427,
+        "exit_rate": 0.42857142857142855
+      },
+      {
+        "instrument": "GD",
+        "count": 61,
+        "win_rate_net": 0.5901639344262295,
+        "net_ticks_sum": 1898.5,
+        "tp_rate": 0.16393442622950818,
+        "sl_rate": 0.2459016393442623,
+        "exit_rate": 0.5901639344262295
+      },
+      {
+        "instrument": "SV",
+        "count": 63,
+        "win_rate_net": 0.47619047619047616,
+        "net_ticks_sum": 730.0,
+        "tp_rate": 0.2222222222222222,
+        "sl_rate": 0.31746031746031744,
+        "exit_rate": 0.4603174603174603
+      },
+      {
+        "instrument": "S1",
+        "count": 28,
+        "win_rate_net": 0.6428571428571429,
+        "net_ticks_sum": 656.0,
+        "tp_rate": 0.25,
+        "sl_rate": 0.14285714285714285,
+        "exit_rate": 0.6071428571428571
+      },
+      {
+        "instrument": "CC",
+        "count": 60,
+        "win_rate_net": 0.5333333333333333,
+        "net_ticks_sum": 358.0,
+        "tp_rate": 0.4166666666666667,
+        "sl_rate": 0.21666666666666667,
+        "exit_rate": 0.36666666666666664
+      },
+      {
+        "instrument": "N2",
+        "count": 7,
+        "win_rate_net": 0.5714285714285714,
+        "net_ticks_sum": -231.5,
+        "tp_rate": 0.14285714285714285,
+        "sl_rate": 0.2857142857142857,
+        "exit_rate": 0.5714285714285714
+      },
+      {
+        "instrument": "HS",
+        "count": 7,
+        "win_rate_net": 0.5714285714285714,
+        "net_ticks_sum": 227.5,
+        "tp_rate": 0.14285714285714285,
+        "sl_rate": 0.0,
+        "exit_rate": 0.8571428571428571
+      }
+    ]
+  },
+  "wf_goal_v6_h21_orb_biside_precision_constrained_20260304": {
+    "path": "artifacts\\research\\wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+    "overall": {
+      "setups_total": 632,
+      "filled_trades": 205,
+      "fill_rate": 0.32436708860759494,
+      "win_rate_net": 0.5804878048780487,
+      "tp_rate": 0.375609756097561,
+      "sl_rate": 0.35609756097560974,
+      "exit_rate": 0.2682926829268293,
+      "expectancy_net_ticks": 127.72439024390243,
+      "net_ticks_sum": 26183.5,
+      "trades_per_week": 3.9100817438692097,
+      "concentration_top_share": 0.7059722921444687,
+      "negative_fold_share": 0.2391304347826087,
+      "median_fold_net_ticks": 0.0,
+      "tail_cvar_ticks": -162.54166666666666,
+      "accept_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_max_concentration_top_share"
+      ]
+    },
+    "by_setup_kind": {
+      "ORB_BREAKOUT": {
+        "count": 205,
+        "net_ticks_sum": 26183.5,
+        "win_count": 119,
+        "tp_count": 77,
+        "sl_count": 73,
+        "exit_count": 55,
+        "expectancy_net_ticks": 127.72439024390243,
+        "win_rate_net": 0.5804878048780487,
+        "tp_rate": 0.375609756097561,
+        "sl_rate": 0.35609756097560974,
+        "exit_rate": 0.2682926829268293
+      }
+    },
+    "top_instruments_by_abs_net": [
+      {
+        "instrument": "PD",
+        "count": 17,
+        "win_rate_net": 0.8235294117647058,
+        "net_ticks_sum": 18931.0,
+        "tp_rate": 0.47058823529411764,
+        "sl_rate": 0.17647058823529413,
+        "exit_rate": 0.35294117647058826
+      },
+      {
+        "instrument": "N2",
+        "count": 12,
+        "win_rate_net": 0.8333333333333334,
+        "net_ticks_sum": 1954.0,
+        "tp_rate": 0.25,
+        "sl_rate": 0.16666666666666666,
+        "exit_rate": 0.5833333333333334
+      },
+      {
+        "instrument": "MM",
+        "count": 9,
+        "win_rate_net": 0.6666666666666666,
+        "net_ticks_sum": 1733.5,
+        "tp_rate": 0.3333333333333333,
+        "sl_rate": 0.3333333333333333,
+        "exit_rate": 0.3333333333333333
+      },
+      {
+        "instrument": "PT",
+        "count": 23,
+        "win_rate_net": 0.5217391304347826,
+        "net_ticks_sum": 1531.5,
+        "tp_rate": 0.4782608695652174,
+        "sl_rate": 0.30434782608695654,
+        "exit_rate": 0.21739130434782608
+      },
+      {
+        "instrument": "GD",
+        "count": 36,
+        "win_rate_net": 0.5555555555555556,
+        "net_ticks_sum": 1017.5,
+        "tp_rate": 0.25,
+        "sl_rate": 0.3888888888888889,
+        "exit_rate": 0.3611111111111111
+      },
+      {
+        "instrument": "CC",
+        "count": 23,
+        "win_rate_net": 0.5652173913043478,
+        "net_ticks_sum": 303.5,
+        "tp_rate": 0.5652173913043478,
+        "sl_rate": 0.391304347826087,
+        "exit_rate": 0.043478260869565216
+      },
+      {
+        "instrument": "MX",
+        "count": 11,
+        "win_rate_net": 0.7272727272727273,
+        "net_ticks_sum": 298.5,
+        "tp_rate": 0.5454545454545454,
+        "sl_rate": 0.18181818181818182,
+        "exit_rate": 0.2727272727272727
+      },
+      {
+        "instrument": "S1",
+        "count": 8,
+        "win_rate_net": 0.75,
+        "net_ticks_sum": 276.0,
+        "tp_rate": 0.625,
+        "sl_rate": 0.25,
+        "exit_rate": 0.125
+      }
+    ]
+  },
+  "wf_goal_v6_h18_recall_families_constrained_20260304": {
+    "path": "artifacts\\research\\wf_goal_v6_h18_recall_families_constrained_20260304.json",
+    "overall": {
+      "setups_total": 1644,
+      "filled_trades": 815,
+      "fill_rate": 0.4957420924574209,
+      "win_rate_net": 0.5496932515337424,
+      "tp_rate": 0.45521472392638035,
+      "sl_rate": 0.4,
+      "exit_rate": 0.14478527607361963,
+      "expectancy_net_ticks": 136.55460122699387,
+      "net_ticks_sum": 111292.0,
+      "trades_per_week": 15.544959128065395,
+      "concentration_top_share": 0.663704790303963,
+      "negative_fold_share": 0.21739130434782608,
+      "median_fold_net_ticks": 24.75,
+      "tail_cvar_ticks": -1404.375,
+      "accept_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_max_concentration_top_share"
+      ]
+    },
+    "by_setup_kind": {
+      "PULLBACK_LIMIT": {
+        "count": 189,
+        "net_ticks_sum": -101.0,
+        "expectancy_net_ticks": -0.5343915343915344
+      },
+      "ORB_BREAKOUT": {
+        "count": 407,
+        "net_ticks_sum": 107105.5,
+        "expectancy_net_ticks": 263.1584766584767
+      },
+      "EMA_PULLBACK_LIMIT": {
+        "count": 193,
+        "net_ticks_sum": 4437.5,
+        "expectancy_net_ticks": 22.992227979274613
+      },
+      "BOX_BREAKOUT": {
+        "count": 26,
+        "net_ticks_sum": -150.0,
+        "expectancy_net_ticks": -5.769230769230769
+      }
+    },
+    "top_instruments_by_abs_net": [
+      {
+        "instrument": "PD",
+        "count": 55,
+        "win_rate_net": 0.6,
+        "net_ticks_sum": 82798.5,
+        "tp_rate": 0.5272727272727272,
+        "sl_rate": 0.38181818181818183,
+        "exit_rate": 0.09090909090909091
+      },
+      {
+        "instrument": "GD",
+        "count": 69,
+        "win_rate_net": 0.7391304347826086,
+        "net_ticks_sum": 10852.5,
+        "tp_rate": 0.6086956521739131,
+        "sl_rate": 0.2608695652173913,
+        "exit_rate": 0.13043478260869565
+      },
+      {
+        "instrument": "N2",
+        "count": 36,
+        "win_rate_net": 0.9444444444444444,
+        "net_ticks_sum": 6531.0,
+        "tp_rate": 0.3333333333333333,
+        "sl_rate": 0.05555555555555555,
+        "exit_rate": 0.6111111111111112
+      },
+      {
+        "instrument": "PT",
+        "count": 106,
+        "win_rate_net": 0.6132075471698113,
+        "net_ticks_sum": 5533.5,
+        "tp_rate": 0.5849056603773585,
+        "sl_rate": 0.29245283018867924,
+        "exit_rate": 0.12264150943396226
+      },
+      {
+        "instrument": "MM",
+        "count": 13,
+        "win_rate_net": 0.6153846153846154,
+        "net_ticks_sum": 3041.5,
+        "tp_rate": 0.0,
+        "sl_rate": 0.38461538461538464,
+        "exit_rate": 0.6153846153846154
+      },
+      {
+        "instrument": "CE",
+        "count": 36,
+        "win_rate_net": 0.4722222222222222,
+        "net_ticks_sum": 2779.0,
+        "tp_rate": 0.3888888888888889,
+        "sl_rate": 0.4722222222222222,
+        "exit_rate": 0.1388888888888889
+      },
+      {
+        "instrument": "CC",
+        "count": 119,
+        "win_rate_net": 0.5714285714285714,
+        "net_ticks_sum": 1730.5,
+        "tp_rate": 0.5714285714285714,
+        "sl_rate": 0.33613445378151263,
+        "exit_rate": 0.09243697478991597
+      },
+      {
+        "instrument": "SF",
+        "count": 10,
+        "win_rate_net": 0.0,
+        "net_ticks_sum": -1697.0,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0
+      }
+    ]
+  },
+  "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304": {
+    "path": "artifacts\\research\\wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+    "overall": {
+      "setups_total": 639,
+      "filled_trades": 238,
+      "fill_rate": 0.37245696400625977,
+      "win_rate_net": 0.5252100840336135,
+      "tp_rate": 0.39915966386554624,
+      "sl_rate": 0.40756302521008403,
+      "exit_rate": 0.19327731092436976,
+      "expectancy_net_ticks": 46.21008403361345,
+      "net_ticks_sum": 10998.0,
+      "trades_per_week": 4.539509536784741,
+      "concentration_top_share": 0.45477466120390797,
+      "negative_fold_share": 0.37037037037037035,
+      "median_fold_net_ticks": 14.0,
+      "tail_cvar_ticks": -469.2857142857143,
+      "accept_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net"
+      ]
+    },
+    "by_setup_kind": {
+      "PULLBACK_LIMIT": {
+        "count": 186,
+        "net_ticks_sum": 5010.0,
+        "expectancy_net_ticks": 26.93548387096774
+      },
+      "BOX_BREAKOUT": {
+        "count": 52,
+        "net_ticks_sum": 5988.0,
+        "expectancy_net_ticks": 115.15384615384616
+      }
+    },
+    "top_instruments_by_abs_net": [
+      {
+        "instrument": "PD",
+        "count": 9,
+        "win_rate_net": 0.5555555555555556,
+        "net_ticks_sum": 5772.0,
+        "tp_rate": 0.5555555555555556,
+        "sl_rate": 0.4444444444444444,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "MM",
+        "count": 9,
+        "win_rate_net": 0.5555555555555556,
+        "net_ticks_sum": 1549.0,
+        "tp_rate": 0.3333333333333333,
+        "sl_rate": 0.4444444444444444,
+        "exit_rate": 0.2222222222222222
+      },
+      {
+        "instrument": "PT",
+        "count": 34,
+        "win_rate_net": 0.47058823529411764,
+        "net_ticks_sum": 1341.0,
+        "tp_rate": 0.38235294117647056,
+        "sl_rate": 0.4117647058823529,
+        "exit_rate": 0.20588235294117646
+      },
+      {
+        "instrument": "S1",
+        "count": 12,
+        "win_rate_net": 0.75,
+        "net_ticks_sum": 648.0,
+        "tp_rate": 0.6666666666666666,
+        "sl_rate": 0.25,
+        "exit_rate": 0.08333333333333333
+      },
+      {
+        "instrument": "SV",
+        "count": 27,
+        "win_rate_net": 0.5925925925925926,
+        "net_ticks_sum": 592.0,
+        "tp_rate": 0.48148148148148145,
+        "sl_rate": 0.4074074074074074,
+        "exit_rate": 0.1111111111111111
+      },
+      {
+        "instrument": "CE",
+        "count": 10,
+        "win_rate_net": 0.7,
+        "net_ticks_sum": 539.0,
+        "tp_rate": 0.5,
+        "sl_rate": 0.2,
+        "exit_rate": 0.3
+      },
+      {
+        "instrument": "GD",
+        "count": 20,
+        "win_rate_net": 0.5,
+        "net_ticks_sum": 437.0,
+        "tp_rate": 0.45,
+        "sl_rate": 0.5,
+        "exit_rate": 0.05
+      },
+      {
+        "instrument": "AN",
+        "count": 6,
+        "win_rate_net": 0.8333333333333334,
+        "net_ticks_sum": 257.0,
+        "tp_rate": 0.5,
+        "sl_rate": 0.16666666666666666,
+        "exit_rate": 0.3333333333333333
+      }
+    ]
+  },
+  "wf_goal_v6_h17_breakout_dense_slots_rerun_20260304": {
+    "path": "artifacts\\research\\wf_goal_v6_h17_breakout_dense_slots_rerun_20260304.json",
+    "overall": {
+      "setups_total": 1994,
+      "filled_trades": 87,
+      "fill_rate": 0.043630892678034106,
+      "win_rate_net": 0.4942528735632184,
+      "tp_rate": 0.39080459770114945,
+      "sl_rate": 0.4942528735632184,
+      "exit_rate": 0.11494252873563218,
+      "expectancy_net_ticks": 21.551724137931036,
+      "net_ticks_sum": 1875.0,
+      "trades_per_week": 1.659400544959128,
+      "concentration_top_share": 0.21032585696148964,
+      "negative_fold_share": 0.14814814814814814,
+      "median_fold_net_ticks": 0.0,
+      "tail_cvar_ticks": -54.857142857142854,
+      "accept_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_min_trades_per_week"
+      ]
+    },
+    "by_setup_kind": {
+      "BOX_BREAKOUT": {
+        "count": 87,
+        "net_ticks_sum": 1875.0,
+        "expectancy_net_ticks": 21.551724137931036
+      }
+    },
+    "top_instruments_by_abs_net": [
+      {
+        "instrument": "PT",
+        "count": 7,
+        "win_rate_net": 0.42857142857142855,
+        "net_ticks_sum": 497.0,
+        "tp_rate": 0.2857142857142857,
+        "sl_rate": 0.5714285714285714,
+        "exit_rate": 0.14285714285714285
+      },
+      {
+        "instrument": "MM",
+        "count": 1,
+        "win_rate_net": 1.0,
+        "net_ticks_sum": 442.0,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "S1",
+        "count": 6,
+        "win_rate_net": 0.6666666666666666,
+        "net_ticks_sum": 245.0,
+        "tp_rate": 0.5,
+        "sl_rate": 0.3333333333333333,
+        "exit_rate": 0.16666666666666666
+      },
+      {
+        "instrument": "CE",
+        "count": 5,
+        "win_rate_net": 0.6,
+        "net_ticks_sum": 228.0,
+        "tp_rate": 0.2,
+        "sl_rate": 0.4,
+        "exit_rate": 0.4
+      },
+      {
+        "instrument": "NG",
+        "count": 6,
+        "win_rate_net": 0.6666666666666666,
+        "net_ticks_sum": 183.0,
+        "tp_rate": 0.6666666666666666,
+        "sl_rate": 0.3333333333333333,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "SV",
+        "count": 10,
+        "win_rate_net": 0.5,
+        "net_ticks_sum": 148.0,
+        "tp_rate": 0.3,
+        "sl_rate": 0.5,
+        "exit_rate": 0.2
+      },
+      {
+        "instrument": "DX",
+        "count": 1,
+        "win_rate_net": 1.0,
+        "net_ticks_sum": 104.0,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0
+      },
+      {
+        "instrument": "SF",
+        "count": 1,
+        "win_rate_net": 1.0,
+        "net_ticks_sum": 92.0,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0
+      }
+    ]
+  }
+}

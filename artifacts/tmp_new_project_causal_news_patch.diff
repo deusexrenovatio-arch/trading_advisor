@@ -1,0 +1,507 @@
+﻿diff --git a/docs/session_handoff.md b/docs/session_handoff.md
+index 9db03bb..b02ec0f 100644
+--- a/docs/session_handoff.md
++++ b/docs/session_handoff.md
+@@ -1,31 +1,30 @@
+ # Session Handoff
+-Updated: 2026-03-03 14:00 UTC
++Updated: 2026-03-04 10:30 UTC
+ 
+ ## Goal
+ - Run live commodity-news ingestion (GDELT + NewsAPI), score incoming news with model fallback, and feed runtime news gate.
+ 
+ ## Current Delta
+-- Added `news_ingest` CLI command (`moex-carry news_ingest --news-config ... --mode live|backfill`).
+-- Implemented runtime ingestion with SQLite persistence, dedup, quota-aware NewsAPI usage, and rolling feed export.
+-- Added `NLI/FinBERT` primary scoring with auto GPU device selection and keyword fallback.
+-- Added bridge `load_news_gate_items` and wired `pipeline` to use live scored news instead of `news_items=[]`.
+-- Added scripts: `scripts/run_news_ingest_cycle.py`, `scripts/start_news_ingest_cycle.ps1`, `scripts/manage_news_ingest_tasks.ps1`.
+-- Updated config defaults for live gate fields and expanded `configs/news-livecheck-ng.yaml` for three commodities.
+-- Added live stability controls: GDELT/NewsAPI retry+backoff and NewsAPI per-commodity live interval throttling.
+-- Lean gate and quality scorecards pass after module split (`news_live_runtime`/`news_live_clients`/`news_live_scoring`).
++- Runtime news ingest stays active (SQLite + retry/backoff + NewsAPI quota control); pipeline consumes scored items via `load_news_gate_items`.
++- News gate timing is now explicit and causal-ready: `load_news_gate_items` and `apply_news_filter` accept `as_of_utc`, and pipeline passes one shared timestamp for both stages.
++- Added shared topic utils (`news_topic.py`) for stable `root_topic_id` and `impact_tier`.
++- Shock feed and Telegram aftershock policy now use tier-aware filtering (`shock_aftershock_min_tier`).
++- Live feed export now deduplicates stories across commodities (`story_key`, `commodity_scope`).
++- Added live shock input build (`build_live_shock_input.py`) from MOEX + live news DB.
++- `start_shock_label_cycle.ps1` auto-builds fresh input when `FreshLookbackHours > 0`.
++- `news_live_runtime.py` was split with `news_live_feed.py`, and shared `news_storage.py` now provides common sqlite/path helpers plus atomic feed CSV writes.
+ 
+ ## Blockers
+ - No code blockers.
+ - Runtime model quality still depends on available local model weights and GPU drivers; fallback is active by design.
+ 
+ ## Next Step
+-- Keep 5-minute live scheduler active, monitor 24h commodity coverage and provider reliability, then tune profile queries for `BRN/GOLD` if coverage remains low.
++- Run A/B evaluation on identical walk-forward windows (`news_gate on/off`) with explicit decision timestamps and report fold-level deltas (net ticks, negative fold share, trade count) before changing thresholds.
+ 
+ ## Validation
+-- `python -m pytest tests/test_news_live_runtime.py tests/test_news_filter.py -q`
+-- `python -m ruff check src/moex_carry/news_live_runtime.py src/moex_carry/news_live_clients.py src/moex_carry/news_live_scoring.py src/moex_carry/news_live_bridge.py src/moex_carry/cli.py src/moex_carry/pipeline.py scripts/run_news_ingest_cycle.py tests/test_news_live_runtime.py`
+-- `powershell -ExecutionPolicy Bypass -File scripts/start_news_ingest_cycle.ps1 -Mode live -CheckOnly`
+-- `powershell -ExecutionPolicy Bypass -File scripts/manage_news_ingest_tasks.ps1 -Action Install -DryRun`
+-- `python -m moex_carry.cli news_ingest --news-config configs/news-livecheck-ng.yaml --mode live`
++- `python -m pytest tests/test_news_filter.py tests/test_news_live_runtime.py tests/test_signal_cycle.py -q`
++- `python -m pytest tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py tests/test_news_live_runtime.py tests/test_telegram_worker.py -q`
++- `python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml --output-csv data/output/tmp_live_shocks_input.csv --lookback-hours 1 --bar-minutes 5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6`
++- `powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours 1 -DirectionMaxTasks 20 -CausalMaxTasks 40 -NoTelegramFeed`
+ - `python scripts/run_lean_gate.py`
+ - `python scripts/validate_quality_scorecards.py`
+diff --git a/memory/agent_memory.yaml b/memory/agent_memory.yaml
+index 05c71aa..1ab7773 100644
+--- a/memory/agent_memory.yaml
++++ b/memory/agent_memory.yaml
+@@ -1,7 +1,49 @@
+ version: 1
+-updated_at: 2026-03-03
++updated_at: 2026-03-04
+ 
+ decisions:
++  - id: ADM-2026-03-04-069
++    date: 2026-03-04
++    title: Make news-gate timing explicit via as-of timestamp to preserve causal replay semantics
++    context: News gate and bridge lookback logic were tied to wall-clock `datetime.now()`, which can break walk-forward/replay behavior and hide news effects when evaluating historical timestamps.
++    decision: Add optional `as_of_utc` to `load_news_gate_items` and `apply_news_filter`, and pass one shared timestamp from pipeline decision flow to both components.
++    impact: News gating behavior is deterministic for a fixed decision timestamp and now supports causal replay/walk-forward without implicit time drift.
++    links:
++      - src/moex_carry/strategy/news_filter.py
++      - src/moex_carry/news_live_bridge.py
++      - src/moex_carry/pipeline.py
++      - tests/test_news_filter.py
++      - tests/test_news_live_runtime.py
++  - id: ADM-2026-03-04-068
++    date: 2026-03-04
++    title: Consolidate news runtime storage semantics into shared helper with atomic feed export
++    context: Live news runtime, bridge reads, and shock input builder duplicated sqlite URL/path parsing and could produce partial feed CSV snapshots under concurrent reads.
++    decision: Add `news_storage.py` as a single storage utility for sqlite path resolution and connection settings; switch runtime/bridge/shock input to shared helper; export live feed via atomic temp-file replace; add indexes for bridge query patterns and warning logs on sqlite read errors.
++    impact: Reduced storage divergence and race windows across ingest, bridge, and shock pipelines; improved operational diagnosability without silent data drops.
++    links:
++      - src/moex_carry/news_storage.py
++      - src/moex_carry/news_live_runtime.py
++      - src/moex_carry/news_live_feed.py
++      - src/moex_carry/news_live_bridge.py
++      - src/moex_carry/news_shock_live_input.py
++      - tests/test_news_live_runtime.py
++  - id: ADM-2026-03-04-067
++    date: 2026-03-04
++    title: Route fresh shock cycles through live MOEX plus live-news input and stabilize topic identity
++    context: Shock labeling and Telegram alerts were running on stale static CSV input, while repeated stories fragmented into unstable topic keys and duplicate commodity alerts.
++    decision: Auto-build fresh shock input from MOEX front contracts plus live news DB when FreshLookbackHours is used; introduce shared topic utility for stable root keys and impact tiers; deduplicate live feed and Telegram news by story fingerprint across commodities.
++    impact: Fresh cycles now evaluate current market moves instead of stale snapshots; root-vs-aftershock continuity is stable; duplicate multi-commodity echoes are reduced.
++    links:
++      - scripts/build_live_shock_input.py
++      - src/moex_carry/news_shock_live_input.py
++      - scripts/start_shock_label_cycle.ps1
++      - src/moex_carry/news_topic.py
++      - src/moex_carry/news_shock_automation.py
++      - src/moex_carry/shock_alert_delivery.py
++      - src/moex_carry/news_live_feed.py
++      - src/moex_carry/news_live_runtime.py
++      - src/moex_carry/integrations/telegram_news_broadcast.py
++      - src/moex_carry/integrations/telegram_shock_broadcast.py
+   - id: ADM-2026-03-03-066
+     date: 2026-03-03
+     title: Add live polling stability controls for commodity news ingestion
+diff --git a/plans/PLANS.yaml b/plans/PLANS.yaml
+index 516c9d1..d16183f 100644
+--- a/plans/PLANS.yaml
++++ b/plans/PLANS.yaml
+@@ -1,5 +1,5 @@
+ version: 1
+-updated_at: 2026-03-03
++updated_at: 2026-03-04
+ items:
+   - id: P0-AGENT-PLANS-001
+     title: Machine-readable plans registry and schema validation
+@@ -852,3 +852,95 @@ items:
+       - P2-NEWS-SHOCK-SCHEDULER-034
+     started_at: 2026-03-03
+     completed_at: 2026-03-03
++
++  - id: P2-NEWS-SHOCK-LIVE-FEED-036
++    title: Wire fresh MOEX shock input and topic-stable story dedup into live shock and Telegram flow
++    lane: strategy
++    status: completed
++    execution_mode: autonomous
++    owner: product-engineering
++    acceptance:
++      - fresh shock cycles auto-build input from live MOEX candles and live news DB when FreshLookbackHours is set
++      - shock feed rows include stable root topic keys and impact tiers for primary/aftershock policy
++      - live news feed and Telegram news dedup use story fingerprints across commodities
++      - line-budget hard gate remains passing after runtime refactor
++    checks:
++      - python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml --output-csv data/output/tmp_live_shocks_input.csv --lookback-hours 1 --bar-minutes 5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6
++      - powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours 1 -DirectionMaxTasks 20 -CausalMaxTasks 40 -NoTelegramFeed
++      - python -m pytest tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py tests/test_news_live_runtime.py tests/test_telegram_worker.py -q
++      - python scripts/run_lean_gate.py
++      - python scripts/validate_quality_scorecards.py
++    docs:
++      - scripts/build_live_shock_input.py
++      - src/moex_carry/news_shock_live_input.py
++      - scripts/start_shock_label_cycle.ps1
++      - src/moex_carry/news_topic.py
++      - src/moex_carry/news_shock_automation.py
++      - src/moex_carry/shock_alert_delivery.py
++      - src/moex_carry/news_live_feed.py
++      - src/moex_carry/news_live_runtime.py
++      - src/moex_carry/integrations/telegram_news_broadcast.py
++      - src/moex_carry/integrations/telegram_shock_broadcast.py
++    dependencies:
++      - P2-NEWS-LIVE-INGEST-035
++    started_at: 2026-03-04
++    completed_at: 2026-03-04
++
++  - id: P2-NEWS-ARCH-HARDEN-037
++    title: Harden news live storage architecture and path resolution for reliable runtime and bridge reads
++    lane: architecture
++    status: completed
++    execution_mode: autonomous
++    owner: product-engineering
++    acceptance:
++      - runtime, bridge, and live shock input use one shared sqlite/path helper instead of ad-hoc URL parsing
++      - csv feed writes are atomic to prevent partial reads by downstream workers
++      - sqlite connections use busy timeout and WAL for write paths; read paths avoid silent failures
++      - db indexes support bridge filters by published timestamp and confidence/impact
++    checks:
++      - python -m pytest tests/test_news_live_runtime.py tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py tests/test_telegram_worker.py -q
++      - powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours 1 -DirectionMaxTasks 10 -CausalMaxTasks 20 -NoTelegramFeed -CheckOnly
++      - python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml --output-csv data/output/tmp_live_shocks_input_archfix.csv --lookback-hours 1 --bar-minutes 5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6
++      - python scripts/run_lean_gate.py
++      - python scripts/validate_quality_scorecards.py
++    docs:
++      - src/moex_carry/news_storage.py
++      - src/moex_carry/news_live_runtime.py
++      - src/moex_carry/news_live_feed.py
++      - src/moex_carry/news_live_bridge.py
++      - src/moex_carry/news_shock_live_input.py
++      - tests/test_news_live_runtime.py
++      - docs/session_handoff.md
++      - memory/agent_memory.yaml
++    dependencies:
++      - P2-NEWS-SHOCK-LIVE-FEED-036
++    started_at: 2026-03-04
++    completed_at: 2026-03-04
++
++  - id: P2-NEWS-CAUSAL-GATE-038
++    title: Add as-of timestamp semantics to news gate for causal replay and deterministic walk-forward
++    lane: strategy
++    status: completed
++    execution_mode: autonomous
++    owner: product-engineering
++    acceptance:
++      - news gate logic accepts explicit as-of timestamp instead of hard dependency on wall-clock now
++      - live bridge loader accepts optional as-of timestamp and uses it for lookback cutoff
++      - pipeline passes one shared as-of timestamp to bridge and gate in the same decision cycle
++      - tests cover replay-safe behavior where historical events are evaluated against explicit as-of
++    checks:
++      - python -m pytest tests/test_news_filter.py tests/test_news_live_runtime.py tests/test_signal_cycle.py -q
++      - python -m ruff check src/moex_carry/strategy/news_filter.py src/moex_carry/news_live_bridge.py src/moex_carry/pipeline.py tests/test_news_filter.py tests/test_news_live_runtime.py
++      - python scripts/run_lean_gate.py
++    docs:
++      - src/moex_carry/strategy/news_filter.py
++      - src/moex_carry/news_live_bridge.py
++      - src/moex_carry/pipeline.py
++      - tests/test_news_filter.py
++      - tests/test_news_live_runtime.py
++      - docs/session_handoff.md
++      - memory/agent_memory.yaml
++    dependencies:
++      - P2-NEWS-ARCH-HARDEN-037
++    started_at: 2026-03-04
++    completed_at: 2026-03-04
+diff --git a/src/moex_carry/news_live_bridge.py b/src/moex_carry/news_live_bridge.py
+index 1503835..1a3cbfa 100644
+--- a/src/moex_carry/news_live_bridge.py
++++ b/src/moex_carry/news_live_bridge.py
+@@ -1,56 +1,85 @@
+ from __future__ import annotations
+ 
++import logging
+ import sqlite3
++import time
+ from datetime import datetime, timedelta, timezone
+ 
+ from moex_carry.config import AppSettings
+ from moex_carry.domain.decision import NewsItem
+-from moex_carry.news_live_runtime import _parse_any_utc, _sqlite_path_from_url
++from moex_carry.news_storage import (
++    open_sqlite_connection,
++    parse_any_utc,
++    sqlite_path_from_url,
++)
+ 
+ 
+-def load_news_gate_items(settings: AppSettings) -> list[NewsItem]:
++logger = logging.getLogger(__name__)
++
++
++def load_news_gate_items(settings: AppSettings, *, as_of_utc: datetime | None = None) -> list[NewsItem]:
+     if not settings.news_filter.live_ingest_enabled:
+         return []
+-    db_path = _sqlite_path_from_url(settings.news_filter.live_db_url)
++    db_path = sqlite_path_from_url(settings.news_filter.live_db_url, data_dir=settings.data.data_dir)
+     if not db_path.exists():
+         return []
+-    now_utc = datetime.now(timezone.utc)
++    now_utc = as_of_utc if as_of_utc is not None else datetime.now(timezone.utc)
++    if now_utc.tzinfo is None:
++        now_utc = now_utc.replace(tzinfo=timezone.utc)
++    else:
++        now_utc = now_utc.astimezone(timezone.utc)
+     cutoff = now_utc - timedelta(minutes=max(settings.news_filter.lookback_minutes, 1))
+     cutoff_iso = cutoff.isoformat().replace("+00:00", "Z")
+ 
+-    conn = sqlite3.connect(db_path)
+-    try:
+-        rows = conn.execute(
+-            """
+-            SELECT
+-                a.article_id,
+-                a.published_at_utc,
+-                a.source_name,
+-                a.title,
+-                s.severity,
+-                s.impact_score,
+-                s.confidence,
+-                a.provider,
+-                a.commodity
+-            FROM news_articles a
+-            JOIN news_scores s ON a.article_id = s.article_id
+-            WHERE a.published_at_utc >= ?
+-              AND s.impact_score >= ?
+-              AND s.confidence >= ?
+-            ORDER BY a.published_at_utc DESC
+-            LIMIT ?
+-            """,
+-            (
+-                cutoff_iso,
+-                float(settings.news_filter.live_min_impact_score),
+-                float(settings.news_filter.live_min_confidence),
+-                int(settings.news_filter.live_max_items),
+-            ),
+-        ).fetchall()
+-    except sqlite3.Error:
+-        return []
+-    finally:
+-        conn.close()
++    rows: list[tuple[object, ...]] = []
++    attempts = 2
++    for attempt in range(1, attempts + 1):
++        conn: sqlite3.Connection | None = None
++        try:
++            conn = open_sqlite_connection(db_path, timeout_sec=5.0, write=False)
++            rows = conn.execute(
++                """
++                SELECT
++                    a.article_id,
++                    a.published_at_utc,
++                    a.source_name,
++                    a.title,
++                    s.severity,
++                    s.impact_score,
++                    s.confidence,
++                    a.provider,
++                    a.commodity
++                FROM news_articles a
++                JOIN news_scores s ON a.article_id = s.article_id
++                WHERE a.published_at_utc >= ?
++                  AND s.impact_score >= ?
++                  AND s.confidence >= ?
++                ORDER BY a.published_at_utc DESC
++                LIMIT ?
++                """,
++                (
++                    cutoff_iso,
++                    float(settings.news_filter.live_min_impact_score),
++                    float(settings.news_filter.live_min_confidence),
++                    int(settings.news_filter.live_max_items),
++                ),
++            ).fetchall()
++            break
++        except sqlite3.OperationalError as exc:
++            if attempt >= attempts:
++                logger.warning(
++                    "news_live_bridge sqlite operational error after retries: %s (db=%s)",
++                    exc,
++                    db_path,
++                )
++                return []
++            time.sleep(0.1 * attempt)
++        except sqlite3.Error as exc:
++            logger.warning("news_live_bridge sqlite error: %s (db=%s)", exc, db_path)
++            return []
++        finally:
++            if conn is not None:
++                conn.close()
+ 
+     allowed_sources = {item.strip().lower() for item in settings.news_filter.sources if item.strip()}
+     items: list[NewsItem] = []
+@@ -59,7 +88,7 @@ def load_news_gate_items(settings: AppSettings) -> list[NewsItem]:
+         source = str(source_name or provider or "news").strip()
+         if allowed_sources and source.lower() not in allowed_sources:
+             continue
+-        ts = _parse_any_utc(published_at_utc)
++        ts = parse_any_utc(published_at_utc)
+         if ts is None:
+             continue
+         items.append(
+diff --git a/src/moex_carry/pipeline.py b/src/moex_carry/pipeline.py
+index a72cc75..b742d10 100644
+--- a/src/moex_carry/pipeline.py
++++ b/src/moex_carry/pipeline.py
+@@ -2639,8 +2639,9 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
+     allocations = proposal["allocations"]
+     risk_profile = _risk_profile_from_settings(settings)
+     risk_gate = evaluate_risk_profile(risk_profile, allocations)
++    news_gate_as_of = datetime.now(timezone.utc)
+     try:
+-        news_items: list[NewsItem] = load_news_gate_items(settings)
++        news_items: list[NewsItem] = load_news_gate_items(settings, as_of_utc=news_gate_as_of)
+     except Exception:
+         news_items = []
+     news_gate = apply_news_filter(
+@@ -2648,6 +2649,7 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
+         lookback_minutes=settings.news_filter.lookback_minutes,
+         block_severity_threshold=settings.news_filter.block_severity_threshold,
+         reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
++        as_of_utc=news_gate_as_of,
+     )
+     futures_path = dirs["raw"] / "futures.csv"
+     futures_df = pd.read_csv(futures_path) if futures_path.exists() else pd.DataFrame()
+diff --git a/src/moex_carry/strategy/news_filter.py b/src/moex_carry/strategy/news_filter.py
+index c443227..1004e4a 100644
+--- a/src/moex_carry/strategy/news_filter.py
++++ b/src/moex_carry/strategy/news_filter.py
+@@ -27,6 +27,7 @@ def apply_news_filter(
+     lookback_minutes: int,
+     block_severity_threshold: str,
+     reduce_severity_threshold: str,
++    as_of_utc: datetime | None = None,
+ ) -> NewsGateResult:
+     errors: list[str] = []
+     block_value = _severity_value(block_severity_threshold)
+@@ -34,8 +35,12 @@ def apply_news_filter(
+     if block_value <= reduce_value:
+         errors.append("invalid_severity_thresholds")
+ 
+-    now = datetime.now(timezone.utc)
+-    lookback_cutoff = now - timedelta(minutes=lookback_minutes)
++    as_of = as_of_utc if as_of_utc is not None else datetime.now(timezone.utc)
++    if as_of.tzinfo is None:
++        as_of = as_of.replace(tzinfo=timezone.utc)
++    else:
++        as_of = as_of.astimezone(timezone.utc)
++    lookback_cutoff = as_of - timedelta(minutes=lookback_minutes)
+     matched: list[NewsItem] = []
+     highest = "low"
+ 
+diff --git a/tests/test_news_filter.py b/tests/test_news_filter.py
+index 3735baa..89511ac 100644
+--- a/tests/test_news_filter.py
++++ b/tests/test_news_filter.py
+@@ -5,7 +5,7 @@ from moex_carry.strategy.news_filter import apply_news_filter
+ 
+ 
+ def test_news_filter_blocks_high_severity():
+-    now = datetime.now(timezone.utc)
++    now = datetime(2026, 3, 4, 10, 0, tzinfo=timezone.utc)
+     items = [
+         NewsItem(
+             item_id="news-1",
+@@ -21,12 +21,14 @@ def test_news_filter_blocks_high_severity():
+         lookback_minutes=180,
+         block_severity_threshold="high",
+         reduce_severity_threshold="medium",
++        as_of_utc=now,
+     )
+     assert result.action == "block"
+ 
+ 
+ def test_news_filter_allows_old_items():
+-    old_time = datetime.now(timezone.utc) - timedelta(minutes=400)
++    as_of = datetime(2026, 3, 4, 10, 0, tzinfo=timezone.utc)
++    old_time = as_of - timedelta(minutes=400)
+     items = [
+         NewsItem(
+             item_id="news-2",
+@@ -42,5 +44,28 @@ def test_news_filter_allows_old_items():
+         lookback_minutes=180,
+         block_severity_threshold="high",
+         reduce_severity_threshold="medium",
++        as_of_utc=as_of,
+     )
+     assert result.action == "allow"
++
++
++def test_news_filter_uses_explicit_as_of_for_causal_replay():
++    news_time = datetime(2026, 1, 10, 12, 0, tzinfo=timezone.utc)
++    items = [
++        NewsItem(
++            item_id="news-3",
++            timestamp=news_time,
++            source="trusted-feed",
++            title="Pipeline disruption",
++            severity="high",
++            impact_score=0.9,
++        )
++    ]
++    result = apply_news_filter(
++        items,
++        lookback_minutes=180,
++        block_severity_threshold="high",
++        reduce_severity_threshold="medium",
++        as_of_utc=news_time + timedelta(minutes=60),
++    )
++    assert result.action == "block"
+diff --git a/tests/test_news_live_runtime.py b/tests/test_news_live_runtime.py
+index 1c544bb..013adf2 100644
+--- a/tests/test_news_live_runtime.py
++++ b/tests/test_news_live_runtime.py
+@@ -1,7 +1,7 @@
+ from __future__ import annotations
+ 
+ import sqlite3
+-from datetime import datetime, timezone
++from datetime import datetime, timedelta, timezone
+ from pathlib import Path
+ 
+ from moex_carry.config import AppSettings
+@@ -189,12 +189,14 @@ def test_gdelt_retry_recovers_transient_failure(monkeypatch, tmp_path):
+ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
+     db_path = tmp_path / "news_live_bridge.db"
+     feed_path = tmp_path / "feed_bridge.csv"
++    now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
++    published_at = (now_utc - timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
+ 
+     def _fake_gdelt(*args, **kwargs):
+         return [
+             {
+                 "provider": "gdelt",
+-                "published_at_utc": "2026-03-03T09:10:00Z",
++                "published_at_utc": published_at,
+                 "source_name": "trusted-feed",
+                 "title": "Missile attack disrupts oil flow",
+                 "description": "Shipping risk rises in the region.",
+@@ -222,7 +224,7 @@ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
+         feed_path=str(feed_path),
+         model_mode="keyword",
+     )
+-    run_news_ingest_cycle(config=cfg, mode="live", now_utc=datetime(2026, 3, 3, 9, 30, tzinfo=timezone.utc))
++    run_news_ingest_cycle(config=cfg, mode="live", now_utc=now_utc)
+     conn = sqlite3.connect(db_path)
+     try:
+         conn.execute("UPDATE news_scores SET confidence = 0.5")
+@@ -239,10 +241,10 @@ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
+     settings.news_filter.lookback_minutes = 24 * 60
+     settings.news_filter.sources = ["trusted-feed"]
+ 
+-    items = load_news_gate_items(settings)
++    items = load_news_gate_items(settings, as_of_utc=now_utc)
+     assert not items
+ 
+     settings.news_filter.live_min_confidence = 0.4
+-    items = load_news_gate_items(settings)
++    items = load_news_gate_items(settings, as_of_utc=now_utc)
+     assert items
+     assert items[0].source == "trusted-feed"

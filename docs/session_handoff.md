@@ -1,42 +1,42 @@
 # Session Handoff
-Updated: 2026-03-06 06:10 UTC
+Updated: 2026-03-05 13:40 UTC
 
 ## Goal
-- Deliver a whole-app architecture audit with findings prioritized as P0/P1/P2 and safe remediations for P0/P1 where feasible.
+- Consolidate current `wt-signal-engine` changes into a stable, documented branch state and push it for review.
 
 ## Task Request Contract
-- Objective: assess architecture integrity for bounded contexts, dependency direction, anti-corruption layers, events/API contracts, and shared-storage shortcuts.
-- In Scope: repository architecture artifacts, module boundaries in source code, and minimal safe fixes for confirmed P0/P1 defects.
-- Out of Scope: feature expansion, performance optimization not tied to architecture risk, and speculative refactors without direct finding linkage.
-- Constraints: follow skill sequence `parallel-worktree-flow -> architecture-review -> business-analyst`; governance checks are supporting gates only; keep changes minimal and reversible.
-- Done Evidence: final report with sections `Findings`, `Fixes`, `Residual Risks`, `Next Checks` plus requirement/scenario traceability matrix and file:line evidence.
-- Priority Rule: prevent high-impact architectural regressions first (P0/P1) before documentation completeness or stylistic concerns.
+- Objective: finalize all accumulated strategy/HPO/news/runtime edits in this worktree, ensure no local syntax regressions, document run methodology and changed controls, and push branch updates.
+- In Scope: current modified/untracked files in this worktree related to signal engine setups, morning WF/HPO controls, news/shock runtime modules, tests, and research docs/artifacts already produced.
+- Out of Scope: new strategy redesign, new external data collection, and additional long experiment waves beyond already generated artifacts.
+- Constraints: do not drop existing user changes; keep branch history coherent; preserve causal WF assumptions; run deterministic repository gates before push.
+- Done Evidence: `python scripts/validate_task_request_contract.py`, `python scripts/validate_session_handoff.py`, `python scripts/run_lean_gate.py`, and successful `git push` for `feat/two-layer-signal-engine`.
+- Priority Rule: repository consistency and reproducibility first, then completeness of packaged changes.
 
 ## Current Delta
-- Worktree context re-initialized and verified on `main`.
-- Architecture sources and contracts under review; findings triage in progress.
-- Supporting governance checks attempted; Python runtime tooling currently blocked in this shell environment.
+- Cleaned interrupted edit debris in `scripts/run_morning_plan_walk_forward.py` (removed accidental literal newline tokens from a partial patch attempt).
+- Kept existing feature set and research packaging changes in place without reverting user-side deltas.
+- Prepared branch for gate validation and push.
 
 ## First-Time-Right Report
-1. Confirmed coverage: audit scope includes contexts, dependency flow, ACL boundaries, events/contracts, and storage boundary shortcuts with code-level evidence.
-2. Missing or risky scenarios: validation scripts cannot run until Python interpreter path issue is resolved for this environment.
-3. Resource/time risks and chosen controls: medium analysis scope risk controlled by targeted file graph scan and P0/P1-first remediation.
-4. Highest-priority fixes or follow-ups: remediate any direct cross-context storage access and missing contract-version guards before broader cleanup.
+1. Confirmed coverage: WF runner, HPO runtime/contract changes, setup family additions, news/shock integration updates, tests, and research documentation are included in the staged scope.
+2. Missing or risky scenarios: full runtime/performance validation can still depend on local data cache size and machine-specific execution time; gate outcomes must be trusted over assumptions.
+3. Resource/time risks and chosen controls: large dirty worktree increases merge risk; controlled by deterministic validators and lean gate before push.
+4. Highest-priority fixes or follow-ups: if any gate fails, remediate immediately before pushing and record durable decision/incident notes.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
-- Stop Trigger: two consecutive unsuccessful remediation attempts on the same architectural violation path.
-- Reset Action: stop patching, map dependency/event path from module entrypoint, and choose alternative boundary enforcement mechanism.
-- New Search Space: (1) boundary enforcement in service layer, (2) contract adapter/ACL extraction, (3) event schema/version guard.
-- Next Probe: smallest failing architecture path reproduced by static import/call trace plus one focused test.
+- Stop Trigger: two consecutive gate-fix cycles fail on the same blocker.
+- Reset Action: freeze new edits, capture failing command outputs, and isolate blocker in minimal file/test scope before next attempt.
+- New Search Space: (1) fix offending module directly, (2) adjust governance docs/contracts if drift-only, (3) split unstable changes into follow-up branch.
+- Next Probe: run validators and lean gate in sequence, then address first failing check only.
 
 ## Blockers
-- Supporting validation scripts requiring Python are currently blocked by missing/invalid interpreter resolution in shell.
+- None currently.
 
 ## Next Step
-- Complete architecture scan, implement safe P0/P1 patches if present, then re-run supporting gates when interpreter is available.
+- Run required validators and lean gate, then commit and push all prepared changes.
 
 ## Validation
-- `python scripts/validate_task_request_contract.py` (blocked in current shell)
-- `python scripts/validate_session_handoff.py` (blocked in current shell)
-- `python scripts/run_lean_gate.py` (blocked in current shell)
+- `python scripts/validate_task_request_contract.py`
+- `python scripts/validate_session_handoff.py`
+- `python scripts/run_lean_gate.py`

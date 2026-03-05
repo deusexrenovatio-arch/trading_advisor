@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import requests
 import yaml
+from moex_carry.news_live_feed import export_live_news_feed
 from moex_carry.news_live_clients import (
     fetch_gdelt_articles as _fetch_gdelt_articles,
     fetch_newsapi_articles as _fetch_newsapi_articles,
@@ -22,6 +22,12 @@ from moex_carry.news_live_scoring import (
     SEVERITY_ORDER,
     ModelScorer,
     ScoringModelConfig,
+)
+from moex_carry.news_storage import (
+    open_sqlite_connection,
+    parse_any_utc,
+    resolve_data_path,
+    sqlite_path_from_url,
 )
 
 
@@ -38,6 +44,7 @@ class CommodityProfile:
 class NewsIngestConfig:
     database_url: str
     commodity_profiles: tuple[CommodityProfile, ...]
+    data_dir: str = "./data"
     gdelt_enabled: bool = True
     gdelt_max_records_per_call: int = 80
     gdelt_min_request_interval_sec: float = 2.0
@@ -78,6 +85,7 @@ class NewsIngestConfig:
 
         database = raw.get("database") if isinstance(raw.get("database"), dict) else {}
         ingest = raw.get("news_ingest") if isinstance(raw.get("news_ingest"), dict) else {}
+        data = raw.get("data") if isinstance(raw.get("data"), dict) else {}
         newsapi = ingest.get("newsapi") if isinstance(ingest.get("newsapi"), dict) else {}
         models = raw.get("news_models") if isinstance(raw.get("news_models"), dict) else {}
 
@@ -111,6 +119,7 @@ class NewsIngestConfig:
 
         return NewsIngestConfig(
             database_url=str(database.get("url") or "sqlite:///./data/news_livecheck_ng.db"),
+            data_dir=str(data.get("data_dir") or "./data"),
             commodity_profiles=tuple(profiles),
             gdelt_enabled=bool(ingest.get("gdelt_enabled", True)),
             gdelt_max_records_per_call=int(ingest.get("gdelt_max_records_per_call", 80)),
@@ -153,30 +162,13 @@ def _iso_utc(dt: datetime) -> str:
 
 
 def _parse_any_utc(value: object) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
-    raw = str(value).strip()
-    if not raw:
-        return None
-    parsed = pd.to_datetime(raw, utc=True, errors="coerce")
-    if pd.isna(parsed):
-        return None
-    return parsed.to_pydatetime()
+    # Compatibility alias for modules that still import private helper.
+    return parse_any_utc(value)
 
 
 def _sqlite_path_from_url(database_url: str) -> Path:
-    normalized = str(database_url or "").strip()
-    if normalized.startswith("sqlite:///"):
-        path = normalized[len("sqlite:///") :]
-        return Path(path)
-    if normalized.startswith("sqlite://"):
-        path = normalized[len("sqlite://") :]
-        return Path(path)
-    raise ValueError(f"Only sqlite database URL is supported for news ingest: {database_url}")
+    # Compatibility alias for modules that still import private helper.
+    return sqlite_path_from_url(database_url, data_dir="./data")
 
 
 def _normalize_text(value: object) -> str:
@@ -246,6 +238,12 @@ def _init_db(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         """
+        CREATE INDEX IF NOT EXISTS idx_news_articles_published_ts
+        ON news_articles (published_at_utc DESC)
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS news_scores (
             article_id TEXT PRIMARY KEY,
             model_name TEXT NOT NULL,
@@ -258,6 +256,18 @@ def _init_db(conn: sqlite3.Connection) -> None:
             reason_terms_down TEXT,
             FOREIGN KEY (article_id) REFERENCES news_articles(article_id)
         )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_news_scores_confidence_impact
+        ON news_scores (confidence DESC, impact_score DESC, article_id)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_news_scores_impact_confidence
+        ON news_scores (impact_score DESC, confidence DESC, article_id)
         """
     )
     conn.execute(
@@ -528,61 +538,6 @@ def _score_new_articles(conn: sqlite3.Connection, scorer: ModelScorer) -> int:
     return len(rows)
 
 
-def _export_feed(
-    conn: sqlite3.Connection,
-    *,
-    feed_path: Path,
-    min_impact_score: float,
-    min_confidence: float,
-    max_rows: int,
-) -> int:
-    rows = conn.execute(
-        """
-        SELECT
-            a.published_at_utc,
-            a.commodity,
-            s.direction,
-            s.severity,
-            s.impact_score,
-            s.confidence,
-            a.source_name,
-            a.provider,
-            a.title,
-            a.url,
-            s.reason_terms_up,
-            s.reason_terms_down
-        FROM news_articles a
-        JOIN news_scores s ON a.article_id = s.article_id
-        WHERE s.impact_score >= ?
-          AND s.confidence >= ?
-        ORDER BY a.published_at_utc DESC
-        LIMIT ?
-        """,
-        (float(min_impact_score), float(min_confidence), int(max_rows)),
-    ).fetchall()
-    feed_path.parent.mkdir(parents=True, exist_ok=True)
-    columns = [
-        "published_at_utc",
-        "commodity",
-        "direction",
-        "severity",
-        "impact_score",
-        "confidence",
-        "source_name",
-        "provider",
-        "title",
-        "url",
-        "reason_terms_up",
-        "reason_terms_down",
-    ]
-    if not rows:
-        pd.DataFrame(columns=columns).to_csv(feed_path, index=False)
-        return 0
-    df = pd.DataFrame(rows, columns=columns)
-    df.to_csv(feed_path, index=False)
-    return int(len(df))
-
-
 def run_news_ingest_cycle(
     *,
     config: NewsIngestConfig,
@@ -595,9 +550,9 @@ def run_news_ingest_cycle(
     ts_now = now_utc.astimezone(timezone.utc) if now_utc is not None else _utc_now()
     started_at = _iso_utc(ts_now)
 
-    db_path = _sqlite_path_from_url(config.database_url)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    db_path = sqlite_path_from_url(config.database_url, data_dir=config.data_dir)
+    feed_path = resolve_data_path(config.feed_path, data_dir=config.data_dir)
+    conn = open_sqlite_connection(db_path, timeout_sec=15.0, write=True)
     try:
         _init_db(conn)
         session = requests.Session()
@@ -724,9 +679,9 @@ def run_news_ingest_cycle(
             commodity_counts[profile.ticker] = commodity_inserted
 
         scored_total = _score_new_articles(conn, scorer)
-        feed_rows = _export_feed(
+        feed_rows = export_live_news_feed(
             conn,
-            feed_path=Path(config.feed_path),
+            feed_path=feed_path,
             min_impact_score=config.feed_min_impact_score,
             min_confidence=config.feed_min_confidence,
             max_rows=max(config.feed_max_rows, 1),
@@ -767,7 +722,7 @@ def run_news_ingest_cycle(
             "run_id": run_id,
             "mode": normalized_mode,
             "database_path": str(db_path),
-            "feed_path": str(Path(config.feed_path)),
+            "feed_path": str(feed_path),
             "fetched_total": int(fetched_total),
             "inserted_total": int(inserted_total),
             "scored_total": int(scored_total),

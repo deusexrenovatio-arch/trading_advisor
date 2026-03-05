@@ -7,6 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from moex_carry.news_topic import (
+    classify_shock_impact_tier,
+    derive_root_topic_key,
+)
 from moex_carry.news_shock_pipeline import (
     LabelPackConfig,
     ShockCurationConfig,
@@ -46,6 +50,7 @@ _TELEGRAM_FEED_COLUMNS = [
     "shock_direction",
     "z_score",
     "abs_move_pct",
+    "impact_tier",
     "topic_key",
     "root_topic_id",
     "selected_source",
@@ -150,21 +155,25 @@ def _build_telegram_feed(
     url = url.where(url.ne(""), v2_url.where(v2_url.ne(""), broad_url))
     df["url"] = url
 
-    df["topic_key"] = df["selected_event_id"]
-    topic_blank = df["topic_key"].eq("")
-    if topic_blank.any():
-        fallback = (
-            df.loc[topic_blank, "headline"]
-            .map(_slug_topic_token)
-            .replace("", pd.NA)
-            .fillna(
-                df.loc[topic_blank, "symbol"].astype(str).str.lower().str.strip()
-                + "-"
-                + df.loc[topic_blank, "shock_direction"].astype(str).str.lower().str.strip()
-            )
-        )
-        df.loc[topic_blank, "topic_key"] = "topic:" + fallback.astype(str)
-    df["root_topic_id"] = df["topic_key"]
+    df["impact_tier"] = df.apply(
+        lambda row: classify_shock_impact_tier(
+            z_score_abs=pd.to_numeric(row.get("z_score"), errors="coerce"),
+            abs_move_pct=pd.to_numeric(row.get("abs_move_pct"), errors="coerce"),
+        ),
+        axis=1,
+    )
+    df["root_topic_id"] = df.apply(
+        lambda row: derive_root_topic_key(
+            symbol=row.get("symbol"),
+            headline=row.get("headline"),
+            url=row.get("url"),
+            selected_event_id=row.get("selected_event_id"),
+            selected_source=row.get("selected_source"),
+            explicit_root_topic_id=row.get("root_topic_id"),
+        ),
+        axis=1,
+    )
+    df["topic_key"] = df["root_topic_id"]
 
     feed = df[
         [

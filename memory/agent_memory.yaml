@@ -1,113 +1,96 @@
 version: 1
-updated_at: 2026-03-06
+updated_at: 2026-03-04
 
 decisions:
-  - id: ADM-2026-03-05-077
-    date: 2026-03-05
-    title: Stabilize news gate bridge behavior for tests via explicit as-of timestamp
-    context: Full pre-push pytest exposed a wall-clock sensitive bridge test where fixed fixture timestamps aged out of lookback window over time.
-    decision: Extend load_news_gate_items with optional as_of_utc override and use fixed as-of in time-sensitive test.
-    impact: Bridge tests are deterministic across calendar dates while production behavior keeps current-time default.
-    links:
-      - src/moex_carry/news_live_bridge.py
-      - tests/test_news_live_runtime.py
-      - plans/PLANS.yaml
-  - id: ADM-2026-03-05-076
-    date: 2026-03-05
-    title: Surface task-request contract in scorecards and bind advisory findings to explicit remediation queue
-    context: Harness-oriented review showed the task-contract gate was enforced in lean loop but not visible as a scorecard check, while recurring advisory findings had no mandatory planning path.
-    decision: Add task-request-contract check to quality scorecards, add deterministic preflight in workflow, and document advisory debt routing into plans plus memory artifacts.
-    impact: Request-quality regressions become visible in scorecard runs; non-blocking advisories are captured as explicit follow-up work instead of drifting.
-    links:
-      - configs/quality_scorecards.yaml
-      - docs/DEV_WORKFLOW.md
-      - docs/runbooks/governance-remediation.md
-      - plans/PLANS.yaml
-      - .cursor/skills/parallel-worktree-flow/SKILL.md
-      - .cursor/skills/ai-agent-architect/SKILL.md
-      - .cursor/skills/docs-sync/SKILL.md
   - id: ADM-2026-03-04-075
     date: 2026-03-04
-    title: Complete advice-by-advice external practices mapping and enforce recurrence-signature learning
-    context: Full comparison request across Boris Way, Anthropic best-practices, and Claude-code tips required explicit mapping for each advice plus targeted implementation of high-fit gaps.
-    decision: Add one traceability matrix for all concrete advice items, enforce incident recurrence signatures and behavior-change deltas in memory validation, and enforce numeric same-path attempt caps against policy in task-contract validation.
-    impact: External guidance is now auditable against repository controls; repeated failure classes require measurable process/capability change instead of repeated patch loops.
+    title: Expand morning-plan recall families and enforce hard-goal acceptance, then map feasible frontier
+    context: Precision-only loops were unable to satisfy the joint target (`winrate>=0.75` and `~2 trades/week`), while baseline acceptance remained optimistic without explicit hard constraints and concentration accounting.
+    decision: Added hard-goal scoring/acceptance controls, introduced new setup families (`ORB_BREAKOUT`, `EMA_PULLBACK_LIMIT`), added per-setup `time_stop_minutes`, and ran constrained WF iterations H18-H23 with deterministic artifacts.
+    impact: Pipeline now supports structural recall experiments and hard KPI gating; empirical frontier is documented (`win~0.58-0.62` at `tpw~1-4`) and confirms current geometry is insufficient for `75%` target without a new two-stage policy; added VWAP family currently shows zero effective coverage in isolated probes.
     links:
-      - docs/workflows/external-advice-mapping-2026-03-04.md
-      - scripts/validate_agent_memory.py
-      - scripts/validate_task_request_contract.py
-      - configs/agent_incident_policy.yaml
-      - docs/DEV_WORKFLOW.md
-      - AGENTS.md
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/signal_engine/setups/extended_families.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_setups.py
+      - artifacts/research/wf_goal_v6_h18_recall_families_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h23_orb_sell_prob_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26c_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h18_h26_iteration_summary_20260304.json
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
   - id: ADM-2026-03-04-074
     date: 2026-03-04
-    title: Enforce repeated-issue self-learning with mandatory behavior-change fields and loop-breaker policy
-    context: Existing repeated-issue workflow emphasized deep analysis but did not strictly require future behavior change evidence or explicit stop/reset/new-search controls.
-    decision: Extend incident policy and memory validator with required learning fields for new incidents; extend task-contract validator with mandatory repetition control; update repeated-issue-review skill output requirements.
-    impact: Repeated failures now require explicit prevention artifacts and capped same-path attempts; context reset and new search-space probing are enforced before continued patching.
+    title: Shift WF improvement roadmap to constrained multi-objective methodology (winrate + frequency + concentration)
+    context: Chat-Pro review plus local scans showed simple precision filters cannot satisfy the combined target (`winrate>=75%` and `~2 trades/week`) on current setup space.
+    decision: Fix a new methodology stack with constrained optimization, anti-data-snooping tests (White RC / SPA / MCS), regime-conditional validation, and a recall-first hypothesis queue before precision filtering.
+    impact: Next hypothesis cycles are now evaluated against joint constraints and robustness, reducing repeated low-frequency overfit loops.
     links:
-      - configs/agent_incident_policy.yaml
-      - scripts/validate_agent_memory.py
-      - scripts/validate_task_request_contract.py
-      - docs/checklists/task-request-contract.md
-      - .cursor/skills/repeated-issue-review/SKILL.md
-      - docs/DEV_WORKFLOW.md
-      - AGENTS.md
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+      - artifacts/research/wf_goal_v6_methodology_probe_20260304.json
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
   - id: ADM-2026-03-04-073
     date: 2026-03-04
-    title: Promote task request quality to a hard governance gate
-    context: External agent-practice review showed that weak operator prompts still caused avoidable ambiguity despite strong code-quality gates.
-    decision: Add `validate_task_request_contract.py`, require explicit task contract and first-time-right report sections in session handoff, and run this validator inside `run_lean_gate.py`.
-    impact: Ambiguous or contradictory requests are now blocked early with deterministic remediation instead of leaking into implementation and review loops.
+    title: Validate precision-filter hypotheses in full causal reruns and select H3 as current precision candidate
+    context: After adding precision-filter controls, offline H1 estimate looked promising but needed end-to-end confirmation under causal walk-forward retuning.
+    decision: Run sequential full reruns (H1-H5) on frozen v6 baseline spec and persist comparison artifact; accept H3 (`min_risk_ticks=114`, `min_target_return_pct=1.5`, `dedup`) as current precision-first candidate because it meets winrate target and has highest net among target-meeting variants.
+    impact: Winrate target (`>=75%`) is now achieved in causal mode (`H3=87.5%`, `H5=77.8%`), while remaining risks (low trade count and instrument concentration) are explicit and tracked for next hypothesis cycle.
     links:
-      - scripts/validate_task_request_contract.py
-      - scripts/run_lean_gate.py
-      - docs/checklists/task-request-contract.md
-      - docs/workflows/agent-practices-alignment.md
-      - docs/DEV_WORKFLOW.md
-      - AGENTS.md
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp2_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp3_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp4_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp5_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_precision_hypothesis_compare_20260304.json
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
       - docs/session_handoff.md
   - id: ADM-2026-03-04-072
     date: 2026-03-04
-    title: Enable incremental shock-row backfill via cursor and scheduler wiring
-    context: "news_shock_rows backfill existed as a standalone script but was not integrated into the regular shock-label cycle and scheduler plan, so historical DB coverage depended on manual runs."
-    decision: Add CLI command `news_shock_backfill`, add optional pre-cycle shock backfill stage in `run_shock_label_cycle.py`, and wire daily backfill task to run `RunShockBackfill` with bounded windows and persistent cursor.
-    impact: Historical shock rows now fill gradually in DB (`news_state` cursor progression) without long one-shot jobs; daily automation can extend history while keeping runtime bounded.
+    title: Add precision-filter gate to walk-forward runner and lock first hypothesis artifact
+    context: Baseline analysis showed duplicate setup_id rows across decision slots and unstable winrate concentration, while requested target is precision-first improvement with explicit impact tracking.
+    decision: Extend `run_morning_plan_walk_forward.py` with optional precision filter controls (`--enable-precision-filter`, side/setup/stop/time allowlists, `min_risk_ticks`, `min_target_return_pct`, and `--precision-dedup-setup-ids`) and serialize filter config in `tuning_points`; evaluate Hypothesis #1 (`min_risk_ticks>=114 + dedup`) on baseline planned signals and persist results artifact.
+    impact: Team can run controlled precision experiments without changing default baseline path, and each hypothesis now has deterministic metrics artifact to prevent repeated analysis loops.
     links:
-      - src/moex_carry/cli.py
-      - src/moex_carry/news_shock_backfill.py
-      - scripts/run_shock_label_cycle.py
-      - scripts/start_shock_label_cycle.ps1
-      - scripts/manage_shock_label_cycle_task.ps1
-      - scripts/manage_news_shock_live_plan.ps1
-      - docs/runbooks/news-shock-go-live.md
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_eval_20260304.json
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
   - id: ADM-2026-03-04-071
     date: 2026-03-04
-    title: Switch news/shock alert pipeline to DB-first ingestion with CSV fallback
-    context: Silver and live shock/news pipelines were still partially coupled to CSV snapshots, which created drift between runtime state and alerting/label-cycle entrypoints.
-    decision: Add DB-first loaders for Telegram news/shock broadcasts, add SQLite reader for `news_shock_rows`, and allow `run_shock_label_cycle.py` to run directly from DB input while keeping CSV as compatibility fallback/snapshot.
-    impact: Runtime alerting and shock-label cycle now consume the same persisted SQLite state; CSV is no longer a mandatory source-of-truth for operational flow.
+    title: Freeze v6 walk-forward baseline and retire non-performing tuning axes
+    context: Latest full-window reruns on 66 instruments showed result drift versus earlier artifacts, and several added tuning axes produced no measurable uplift.
+    decision: Select `robust_median_mad + objective_negative_fold_penalty=8` as active morning-plan baseline for `28/7/7` weekly causal WF; remove `intraday_goal_v4_clustered` and `fold_stability` from active CLI choices; keep probability-gate code but stop threshold-only retunes until structural signal changes.
+    impact: Baseline is now explicit and reproducible, tuning surface is smaller, and non-productive experiment loops are blocked by documented do-not-retest decisions.
     links:
-      - src/moex_carry/integrations/telegram_news_broadcast.py
-      - src/moex_carry/integrations/telegram_shock_broadcast.py
-      - src/moex_carry/shock_alert_delivery.py
-      - src/moex_carry/news_shock_store.py
-      - src/moex_carry/news_shock_automation.py
-      - scripts/run_shock_label_cycle.py
-      - tests/test_telegram_worker.py
-      - tests/test_news_shock_store.py
-      - tests/test_news_shock_automation.py
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_mad_neg8_seed111_wt_signal_engine_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_negpen0_seed111_wt_signal_engine_rerun_20260304.json
   - id: ADM-2026-03-04-070
     date: 2026-03-04
-    title: Make NewsAPI backfill windowed with deterministic cursor progression
-    context: A single wide backfill request per commodity returned only the latest top-100 items, leaving recent historical days underfilled and breaking shock-to-news matching quality.
-    decision: Add per-commodity NewsAPI backfill windows per run (`newsapi_backfill_windows_per_commodity`) with independent day chunking (`newsapi_backfill_chunk_days`) and move runtime state/budget helpers into `news_runtime_state.py`.
-    impact: Backfill now advances history predictably and fills recent windows needed for live shock linking; runtime governance line-budget blocker on `news_live_runtime.py` was also removed.
+    title: Add cluster-aware fold-stability objective and strict WF acceptance to morning-plan walk-forward
+    context: Wide-universe runs needed stable behavior across folds, with lower negative-period incidence and conservative tail-risk handling without per-instrument overfit.
+    decision: Extend morning-plan WF runner with cluster-prefixed params (`cluster.<name>.*`), fold-stability objective (median subfold net ticks + negative subfold + tail-risk penalties), KPI penalties (SL/EXIT rates), strict WF controls (embargo/purge), fixed holdout evaluation, acceptance summary, and cost stress multiplier; add execution knobs for TTL and stop-limit fallback and corresponding tests.
+    impact: Hyperparameter selection can now optimize for stability (not single lucky windows), tune per cluster (energy/metals), and enforce acceptance by fold robustness under stressed costs.
     links:
-      - src/moex_carry/news_live_runtime.py
-      - src/moex_carry/news_runtime_state.py
-      - tests/test_news_live_runtime.py
-      - configs/news-livecheck-ng.yaml
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_setups.py
+      - docs/hpo-howto.md
   - id: ADM-2026-03-04-069
     date: 2026-03-04
     title: Make news-gate timing explicit via as-of timestamp to preserve causal replay semantics
@@ -489,19 +472,6 @@ decisions:
       - scripts/news_shock_readiness.py
       - docs/runbooks/news-shock-go-live.md
       - data/output/news_shock_readiness_2026_ytd/readiness_report.json
-  - id: ADM-2026-03-06-078
-    date: 2026-03-06
-    title: Remove research-route reverse import and classify remaining architecture boundary risks
-    context: Whole-app architecture audit found route module coupling to `ui.app` internals and replay context depending on private pipeline functions.
-    decision: Inject research runtime callables through composition root (`register_research_routes`) and keep replay↔pipeline private-function coupling as explicit blocker for separate extraction.
-    impact: API research route layer no longer depends on `ui.app` module import path; architecture debt inventory now highlights anti-corruption and shared-storage shortcut risks with concrete remediation path.
-    links:
-      - src/moex_carry/ui/routes_research.py
-      - src/moex_carry/ui/app.py
-      - src/moex_carry/signal_replay/incremental.py
-      - src/moex_carry/pipeline.py
-      - docs/session_handoff.md
-      - plans/PLANS.yaml
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20
@@ -583,24 +553,6 @@ incidents:
       - .github/workflows/self-heal.yml
       - scripts/self_heal.py
       - docs/runbooks/self-heal-escalation.md
-  - id: AMI-2026-03-05-009
-    date: 2026-03-05
-    title: Replay refresh failed on timezone mismatch and blocked parity gate
-    symptom: python -m moex_carry.cli signals --no-csv failed with tz-aware vs tz-naive exec_ts comparisons; pre-push data integrity parity then blocked push.
-    root_cause: Incremental replay compared mixed timestamp types from existing replay output/checkpoints and could write pickle fallback under `.parquet` path that integrity checker read only as parquet.
-    remediation: Normalize replay timestamp comparisons to UTC-naive in incremental engine and add pickle fallback read path in data integrity checker.
-    remediation_type: capability
-    incident_signature: replay_tz_mismatch_parity_block
-    prevention_change: Enforced UTC-naive `exec_ts` normalization for prefix/tail merge and comparisons in incremental replay path.
-    prevention_artifact: src/moex_carry/signal_replay/incremental.py
-    prevention_check: python -m moex_carry.cli signals --no-csv && python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
-    loop_breaker_trigger: Signal refresh failed twice on the same tz comparison class while trying to clear parity gate.
-    search_space_reset: Switched from retrying refresh command to code-level timestamp normalization and checker fallback hardening.
-    same_path_attempts: 2
-    links:
-      - src/moex_carry/signal_replay/incremental.py
-      - scripts/check_data_integrity.py
-      - docs/DEV_WORKFLOW.md
 
 patterns:
   - id: AMP-2026-02-20-001
@@ -842,52 +794,4 @@ patterns:
       - scripts/manage_shock_label_cycle_task.ps1
       - scripts/start_shock_label_cycle.ps1
       - src/moex_carry/news_shock_automation.py
-  - id: AMP-2026-03-04-028
-    date: 2026-03-04
-    title: Reject under-specified requests before coding
-    pattern: Define and validate objective/scope/constraints/done-evidence/priority rule in handoff before implementation; stop and request clarification when any field is missing.
-    when_to_use: Any non-trivial task where implicit assumptions can cause rework or hidden scope drift.
-    links:
-      - docs/checklists/task-request-contract.md
-      - scripts/validate_task_request_contract.py
-      - docs/session_handoff.md
-      - docs/DEV_WORKFLOW.md
-  - id: AMP-2026-03-04-029
-    date: 2026-03-04
-    title: Force loop-breaker reset after repeated same-path failures
-    pattern: Cap same-path attempts, stop on repeated failure signature, execute context reset, and run one falsifiable probe from a new search space before further patching.
-    when_to_use: Any recurring bug/incident where fixes repeat without changing failure mode.
-    links:
-      - configs/agent_incident_policy.yaml
-      - scripts/validate_agent_memory.py
-      - scripts/validate_task_request_contract.py
-      - docs/session_handoff.md
-      - .cursor/skills/repeated-issue-review/SKILL.md
-  - id: AMP-2026-03-04-030
-    date: 2026-03-04
-    title: Keep external-practice adoption explicit with per-advice decision traceability
-    pattern: For each external recommendation, record usefulness and decision (`ADOPT/ADAPT/DEFER/REJECT`) against architecture and active governance gates before implementing changes.
-    when_to_use: Any methodology import where generic advice may conflict with repository-specific safety, risk, or delivery constraints.
-    links:
-      - docs/workflows/external-advice-mapping-2026-03-04.md
-      - docs/workflows/agent-practices-alignment.md
-      - plans/PLANS.yaml
-  - id: AMP-2026-03-05-031
-    date: 2026-03-05
-    title: Convert non-blocking governance warnings into explicit follow-up tasks
-    pattern: When validators emit advisory/non-blocking findings, record one concrete follow-up in `plans/PLANS.yaml` and link rationale in `memory/agent_memory.yaml` to avoid repeating the same warning without ownership.
-    when_to_use: Any run where lean gate passes but advisories recur across sessions.
-    links:
-      - docs/runbooks/governance-remediation.md
-      - plans/PLANS.yaml
-      - memory/agent_memory.yaml
-  - id: AMP-2026-03-05-032
-    date: 2026-03-05
-    title: Make time-window tests explicit about evaluation clock
-    pattern: Any logic with lookback/time-cutoff gates should accept optional as-of timestamp and tests should pass fixed as-of values instead of relying on datetime.now().
-    when_to_use: Filtering, gating, or ranking code where fixture timestamps can drift outside windows as real time advances.
-    links:
-      - src/moex_carry/news_live_bridge.py
-      - tests/test_news_live_runtime.py
-      - docs/checklists/first-time-right-gate.md
 

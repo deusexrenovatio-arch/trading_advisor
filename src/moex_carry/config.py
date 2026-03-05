@@ -226,10 +226,17 @@ class TelegramConfig(BaseModel):
     shock_feed_path: str | None = None
     shock_primary_min_z: float = 2.5
     shock_aftershock_min_z: float = 2.0
+    shock_aftershock_min_tier: str = "minor"
     shock_topic_reopen_after_hours: int = 168
     shock_aftershock_cooldown_minutes: int = 60
     shock_max_alerts_per_cycle: int = 20
     shock_sent_fingerprint_ttl_hours: int = 24 * 21
+    news_alerts_enabled: bool = False
+    news_feed_path: str | None = "./data/output/news_live/live_news_signals.csv"
+    news_min_impact_score: float = 0.35
+    news_min_confidence: float = 0.9
+    news_max_alerts_per_cycle: int = 20
+    news_sent_fingerprint_ttl_hours: int = 24 * 21
 
 
 class DataConfig(BaseModel):
@@ -522,8 +529,32 @@ class SignalEngineMorningExecutionConfig(BaseModel):
 class SignalEngineMorningSetupsConfig(BaseModel):
     mode: str = "trend_first"
     max_setups_per_instrument: int = 2
+    enable_box_breakout: bool = True
+    enable_pullback_limit: bool = True
+    enable_orb_breakout: bool = False
+    enable_ema_pullback: bool = False
+    enable_vwap_pullback: bool = False
+    enable_volatility_compression_breakout: bool = False
+    enabled_setup_kinds: list[str] = Field(default_factory=list)
+    disabled_setup_kinds: list[str] = Field(default_factory=list)
     require_vol_not_low: bool = True
     pullback_max_dist_atr_mult: float = 1.0
+    ema_pullback_max_dist_atr_mult: float = 1.0
+    ema_pullback_offset_ticks: int = 0
+    vwap_pullback_max_dist_atr_mult: float = 1.2
+    vwap_pullback_offset_ticks: int = 0
+    vwap_require_side_alignment: bool = True
+    vol_comp_lookback_bars: int = 18
+    vol_comp_recent_bars: int = 4
+    vol_comp_max_recent_to_prev_ratio: float = 0.65
+    vol_comp_min_range_atr_mult: float = 0.2
+    vol_comp_max_range_atr_mult: float = 1.8
+    vol_comp_require_price_break: bool = True
+    vol_comp_breakout_buffer_ticks: int = 0
+    orb_opening_range_minutes: int = 30
+    orb_min_range_atr_mult: float = 0.1
+    orb_max_range_atr_mult: float = 1.8
+    orb_require_price_break: bool = True
     rr_default: float = 1.6
     min_target_return_pct: float = 0.5
     min_target_ticks: int = 3
@@ -537,7 +568,11 @@ class SignalEngineMorningSetupsConfig(BaseModel):
     horizon: str = "EOD"
     entry_tif: str = "GTT"
     entry_expiry_policy: str = "EOD_BEFORE_EVENING_CLEARING"
+    entry_ttl_minutes: int = 0
+    time_stop_minutes: int = 0
     entry_zone_offset_ticks: int = 0
+    stop_limit_fallback_to_market_min: int = 0
+    stop_limit_fallback_slip_ticks: int = 1
     enable_cost_net_gate: bool = True
     estimated_round_trip_cost_ticks: float = 5.0
     min_reward_net_ticks: float = 2.0

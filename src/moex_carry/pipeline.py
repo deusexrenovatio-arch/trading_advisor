@@ -50,10 +50,6 @@ from moex_carry.strategy.orchestrator import build_portfolio_proposal
 from moex_carry.strategy.risk_gate import evaluate_risk_profile
 from moex_carry.strategy.spread_carry_alpha import spread_pnl_pct
 from moex_carry.strategy.spread_adapter import load_spread_signals
-from moex_carry.strategy.two_layer_adapter import (
-    apply_runtime_adapter_to_frame,
-    evaluate_proposal_to_strategy_signal,
-)
 from moex_carry.backtest.engine import BacktestResult, backtest_pair
 from moex_carry.storage.db import create_engine_from_settings, create_session_factory, init_db
 from moex_carry.storage.repositories import (
@@ -2376,17 +2372,6 @@ def compute_pairs(
             "avg_trade_return_annual_operational_recent",
         ),
     )
-    adapter_as_of_ts = (
-        datetime.combine(as_of_date, datetime.max.time()).replace(tzinfo=timezone.utc)
-        if requested_as_of is not None
-        else datetime.now(timezone.utc)
-    )
-    ranked = apply_runtime_adapter_to_frame(
-        settings=settings,
-        ranked=ranked,
-        as_of_ts=adapter_as_of_ts,
-        evaluator=evaluate_proposal_to_strategy_signal,
-    )
     if save_csv:
         top_pairs = ranked.drop(columns=["signal_reasons", "signal_metrics"], errors="ignore")
         top_pairs.to_csv(dirs["output"] / "top_pairs.csv", index=False)
@@ -2654,8 +2639,9 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
     allocations = proposal["allocations"]
     risk_profile = _risk_profile_from_settings(settings)
     risk_gate = evaluate_risk_profile(risk_profile, allocations)
+    news_gate_as_of = datetime.now(timezone.utc)
     try:
-        news_items: list[NewsItem] = load_news_gate_items(settings)
+        news_items: list[NewsItem] = load_news_gate_items(settings, as_of_utc=news_gate_as_of)
     except Exception:
         news_items = []
     news_gate = apply_news_filter(
@@ -2663,6 +2649,7 @@ def run_paper_trading(settings: AppSettings, use_existing: bool = True) -> None:
         lookback_minutes=settings.news_filter.lookback_minutes,
         block_severity_threshold=settings.news_filter.block_severity_threshold,
         reduce_severity_threshold=settings.news_filter.reduce_severity_threshold,
+        as_of_utc=news_gate_as_of,
     )
     futures_path = dirs["raw"] / "futures.csv"
     futures_df = pd.read_csv(futures_path) if futures_path.exists() else pd.DataFrame()
@@ -2786,19 +2773,6 @@ def run_signal_cycle(
             as_of=None,
             ingest_cycle=ingest_cycle,
         )
-        adapter_as_of_ts = datetime.now(timezone.utc)
-        snapshot.top_pairs = apply_runtime_adapter_to_frame(
-            settings=settings,
-            ranked=snapshot.top_pairs,
-            as_of_ts=adapter_as_of_ts,
-            evaluator=evaluate_proposal_to_strategy_signal,
-        )
-        snapshot.signals = apply_runtime_adapter_to_frame(
-            settings=settings,
-            ranked=snapshot.signals,
-            as_of_ts=adapter_as_of_ts,
-            evaluator=evaluate_proposal_to_strategy_signal,
-        )
         ranked = snapshot.signals.copy()
         if ranked.empty:
             return pd.DataFrame()
@@ -2858,16 +2832,6 @@ def run_signal_cycle(
         if ranked is None or ranked.empty:
             return pd.DataFrame()
         ranked = ranked.copy()
-        if (
-            bool(settings.signal_engine.runtime_adapter.enabled)
-            and "signal_action_two_layer" not in ranked.columns
-        ):
-            ranked = apply_runtime_adapter_to_frame(
-                settings=settings,
-                ranked=ranked,
-                as_of_ts=as_of,
-                evaluator=evaluate_proposal_to_strategy_signal,
-            )
         store_signal_run(session, run_id, as_of, params)
         store_signal_history(
             session,
@@ -2913,24 +2877,6 @@ def backfill_signal_history(
                     max_pairs=resolved_max_pairs,
                     as_of=as_of_date,
                     ingest_cycle=ingest_cycle if offset == 0 else None,
-                )
-                if as_of_date == today:
-                    adapter_as_of_ts = datetime.now(timezone.utc)
-                else:
-                    adapter_as_of_ts = datetime.combine(as_of_date, datetime.max.time()).replace(
-                        tzinfo=timezone.utc
-                    )
-                snapshot.top_pairs = apply_runtime_adapter_to_frame(
-                    settings=settings,
-                    ranked=snapshot.top_pairs,
-                    as_of_ts=adapter_as_of_ts,
-                    evaluator=evaluate_proposal_to_strategy_signal,
-                )
-                snapshot.signals = apply_runtime_adapter_to_frame(
-                    settings=settings,
-                    ranked=snapshot.signals,
-                    as_of_ts=adapter_as_of_ts,
-                    evaluator=evaluate_proposal_to_strategy_signal,
                 )
                 ranked = snapshot.signals.copy()
                 if ranked.empty:

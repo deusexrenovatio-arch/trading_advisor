@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+import argparse
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+from moex_carry.config import load_settings
+from moex_carry.news_live_runtime import NewsIngestConfig
+from moex_carry.news_shock_live_input import LiveShockInputConfig, build_live_shock_input
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Build live shock input dataset from MOEX futures + live news DB.")
+    parser.add_argument("--config", type=str, default=None, help="Path to main YAML config.")
+    parser.add_argument("--news-config", type=str, default="configs/news-livecheck-ng.yaml")
+    parser.add_argument("--output-csv", type=Path, required=True)
+    parser.add_argument("--lookback-hours", type=int, default=6)
+    parser.add_argument("--bar-minutes", type=int, default=5)
+    parser.add_argument("--min-abs-z", type=float, default=2.0)
+    parser.add_argument("--rolling-window-bars", type=int, default=96)
+    parser.add_argument("--rolling-min-bars", type=int, default=24)
+    parser.add_argument("--max-delay-min", type=float, default=60.0)
+    parser.add_argument("--v2-min-relevance", type=float, default=0.4)
+    parser.add_argument("--news-min-impact-score", type=float, default=0.35)
+    parser.add_argument("--news-min-confidence", type=float, default=0.55)
+    parser.add_argument("--news-max-items-per-symbol", type=int, default=3000)
+    parser.add_argument("--front-contract-candidates", type=int, default=4)
+    parser.add_argument("--history-padding-days", type=int, default=10)
+    parser.add_argument("--end-ts", type=str, default=None)
+    args = parser.parse_args()
+
+    settings = load_settings(args.config)
+    news_cfg = NewsIngestConfig.from_yaml(Path(args.news_config))
+    end_ts = None
+    if args.end_ts:
+        parsed = datetime.fromisoformat(args.end_ts.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        end_ts = parsed.astimezone(timezone.utc)
+
+    frame = build_live_shock_input(
+        settings=settings,
+        news_config=news_cfg,
+        cfg=LiveShockInputConfig(
+            lookback_hours=args.lookback_hours,
+            bar_minutes=args.bar_minutes,
+            min_abs_z=args.min_abs_z,
+            rolling_window_bars=args.rolling_window_bars,
+            rolling_min_bars=args.rolling_min_bars,
+            max_delay_minutes=args.max_delay_min,
+            v2_min_relevance=args.v2_min_relevance,
+            news_min_impact_score=args.news_min_impact_score,
+            news_min_confidence=args.news_min_confidence,
+            news_max_items_per_symbol=args.news_max_items_per_symbol,
+            front_contract_candidates=args.front_contract_candidates,
+            history_padding_days=args.history_padding_days,
+        ),
+        end_utc=end_ts,
+    )
+    args.output_csv.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(args.output_csv, index=False)
+    payload = {
+        "output_csv": str(args.output_csv),
+        "rows": int(len(frame)),
+        "symbols": sorted(frame["symbol"].dropna().astype(str).unique().tolist()) if not frame.empty else [],
+    }
+    print(json.dumps(payload, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
+

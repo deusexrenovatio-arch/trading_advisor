@@ -27,6 +27,7 @@ def apply_news_filter(
     lookback_minutes: int,
     block_severity_threshold: str,
     reduce_severity_threshold: str,
+    as_of_utc: datetime | None = None,
 ) -> NewsGateResult:
     errors: list[str] = []
     block_value = _severity_value(block_severity_threshold)
@@ -34,8 +35,12 @@ def apply_news_filter(
     if block_value <= reduce_value:
         errors.append("invalid_severity_thresholds")
 
-    now = datetime.now(timezone.utc)
-    lookback_cutoff = now - timedelta(minutes=lookback_minutes)
+    as_of = as_of_utc if as_of_utc is not None else datetime.now(timezone.utc)
+    if as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=timezone.utc)
+    else:
+        as_of = as_of.astimezone(timezone.utc)
+    lookback_cutoff = as_of - timedelta(minutes=lookback_minutes)
     matched: list[NewsItem] = []
     highest = "low"
 

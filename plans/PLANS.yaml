@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-06
+updated_at: 2026-03-04
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -945,201 +945,52 @@ items:
     started_at: 2026-03-04
     completed_at: 2026-03-04
 
-  - id: P1-REQUEST-CONTRACT-039
-    title: Enforce task request contract and first-time-right report as governance blockers
-    lane: governance
-    status: completed
+  - id: P2-WF-PRECISION-HYP-039
+    title: Integrate precision-filter hypothesis loop with deterministic impact artifacts for morning-plan WF
+    lane: strategy
+    status: active
     execution_mode: autonomous
-    owner: engineering-platform
+    owner: product-engineering
     acceptance:
-      - session handoff includes explicit task request contract fields for objective, scope, constraints, done evidence, and priority rule
-      - first-time-right report block is machine-validated in handoff
-      - lean governance loop fails when request contract or report blocks are missing
-      - governance remediation and source-of-truth docs include deterministic operator guidance
+      - walk-forward runner supports optional precision filter rules without changing default baseline behavior
+      - precision filter supports setup-id dedup and rule-based gating by side/setup kind/stop model/decision time/risk and target return
+      - impact of each integrated hypothesis is written to a versioned artifact under artifacts/research
+      - docs and operational memory capture accepted/rejected hypotheses to avoid repeated loops
     checks:
-      - python scripts/validate_task_request_contract.py
+      - python -m pytest tests/test_morning_plan_walk_forward.py -q
+      - python -m ruff check scripts/run_morning_plan_walk_forward.py tests/test_morning_plan_walk_forward.py
       - python scripts/run_lean_gate.py
     docs:
-      - scripts/validate_task_request_contract.py
-      - scripts/run_lean_gate.py
-      - docs/checklists/task-request-contract.md
-      - docs/workflows/agent-practices-alignment.md
-      - docs/DEV_WORKFLOW.md
-      - AGENTS.md
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/signal_engine/setups/extended_families.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_setups.py
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_eval_20260304.json
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp2_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp3_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp4_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp5_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_h18_recall_families_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h23_orb_sell_prob_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h25_vwap_only_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26b_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26c_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h18_h26_iteration_summary_20260304.json
+      - artifacts/research/wf_goal_v6_precision_hypothesis_compare_20260304.json
+      - artifacts/research/wf_goal_v6_methodology_probe_20260304.json
       - docs/session_handoff.md
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
       - memory/agent_memory.yaml
     dependencies:
-      - P1-CONTEXT-BUDGET-012
-      - P1-SKILL-DECISION-018
+      - P2-NEWS-CAUSAL-GATE-038
     started_at: 2026-03-04
-    completed_at: 2026-03-04
-
-  - id: P1-SELF-LEARN-LOOP-040
-    title: Enforce repeated-issue self-learning and search-space reset as machine-checked governance
-    lane: governance
-    status: completed
-    execution_mode: autonomous
-    owner: engineering-platform
-    acceptance:
-      - new incidents require explicit behavior-change and loop-breaker evidence
-      - handoff task contract requires repetition-control section with stop/reset/new-search fields
-      - repeated-issue skill requires prevention artifact and enforcement-check output
-      - governance docs and remediation flow are aligned with the new policy
-    checks:
-      - python scripts/validate_agent_memory.py
-      - python scripts/validate_task_request_contract.py
-      - python scripts/validate_skills.py
-      - python scripts/run_lean_gate.py
-    docs:
-      - configs/agent_incident_policy.yaml
-      - scripts/validate_agent_memory.py
-      - scripts/validate_task_request_contract.py
-      - docs/checklists/task-request-contract.md
-      - docs/checklists/first-time-right-gate.md
-      - docs/DEV_WORKFLOW.md
-      - AGENTS.md
-      - docs/session_handoff.md
-      - .cursor/skills/repeated-issue-review/SKILL.md
-      - memory/agent_memory.yaml
-    dependencies:
-      - P1-REQUEST-CONTRACT-039
-    started_at: 2026-03-04
-    completed_at: 2026-03-04
-
-  - id: P1-EXTERNAL-ADVICE-MAP-041
-    title: Build advice-by-advice mapping for external AI-agent practices and implement high-fit controls
-    lane: governance
-    status: completed
-    execution_mode: autonomous
-    owner: engineering-platform
-    acceptance:
-      - every concrete advice from the three external sources is mapped to repository status and decision
-      - mapping includes critical usefulness assessment against current architecture and completed governance work
-      - high-fit missing controls are implemented in validators and process docs
-      - governance loop remains green after integration
-    checks:
-      - python scripts/validate_task_request_contract.py
-      - python scripts/validate_agent_memory.py
-      - python scripts/validate_skills.py
-      - python scripts/run_lean_gate.py
-    docs:
-      - docs/workflows/external-advice-mapping-2026-03-04.md
-      - docs/workflows/agent-practices-alignment.md
-      - docs/README.md
-      - configs/agent_incident_policy.yaml
-      - scripts/validate_agent_memory.py
-      - scripts/validate_task_request_contract.py
-      - docs/DEV_WORKFLOW.md
-      - AGENTS.md
-      - docs/session_handoff.md
-      - memory/agent_memory.yaml
-    dependencies:
-      - P1-SELF-LEARN-LOOP-040
-    started_at: 2026-03-04
-    completed_at: 2026-03-04
-
-  - id: P1-HARNESS-SCORECARD-SELFLEARN-042
-    title: Make task-contract visibility explicit in scorecards and align governance skills/docs with advisory debt routing
-    lane: governance
-    status: completed
-    execution_mode: autonomous
-    owner: engineering-platform
-    acceptance:
-      - quality scorecards include an explicit task request contract check
-      - development workflow includes deterministic local preflight before gates
-      - governance remediation runbook includes advisory debt queue handling
-      - active governance skills include request-contract and loop-breaker alignment
-    checks:
-      - python scripts/validate_task_request_contract.py
-      - python scripts/validate_session_handoff.py
-      - python scripts/validate_skills.py
-      - python scripts/validate_quality_scorecards.py
-      - python scripts/run_lean_gate.py
-    docs:
-      - configs/quality_scorecards.yaml
-      - docs/DEV_WORKFLOW.md
-      - docs/runbooks/governance-remediation.md
-      - .cursor/skills/parallel-worktree-flow/SKILL.md
-      - .cursor/skills/ai-agent-architect/SKILL.md
-      - .cursor/skills/docs-sync/SKILL.md
-      - docs/session_handoff.md
-      - plans/PLANS.yaml
-      - memory/agent_memory.yaml
-    dependencies:
-      - P1-EXTERNAL-ADVICE-MAP-041
-    started_at: 2026-03-05
-    completed_at: 2026-03-05
-
-  - id: P1-REPLAY-TZ-PARITY-043
-    title: Fix incremental replay timezone mismatch and parity checker format fallback to unblock deterministic pre-push
-    lane: governance
-    status: completed
-    execution_mode: autonomous
-    owner: engineering-platform
-    acceptance:
-      - unified signal refresh no longer fails on tz-aware vs tz-naive exec_ts comparisons
-      - replay merge path normalizes timestamp columns before sort/dedup
-      - data integrity checker reads replay files with parquet-first and pickle fallback
-      - python scripts/check_data_integrity.py --data-dir data --max-day-gap 2 passes after refresh
-    checks:
-      - python -m moex_carry.cli signals --no-csv
-      - python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
-      - python scripts/run_lean_gate.py
-    docs:
-      - src/moex_carry/signal_replay/incremental.py
-      - scripts/check_data_integrity.py
-      - docs/session_handoff.md
-      - plans/PLANS.yaml
-      - memory/agent_memory.yaml
-    dependencies:
-      - P1-HARNESS-SCORECARD-SELFLEARN-042
-    started_at: 2026-03-05
-    completed_at: 2026-03-05
-
-  - id: P1-NEWS-GATE-ASOF-TEST-044
-    title: Make news gate bridge tests deterministic with explicit as-of timestamp
-    lane: governance
-    status: completed
-    execution_mode: autonomous
-    owner: engineering-platform
-    acceptance:
-      - news gate loader supports explicit as-of timestamp without changing default runtime behavior
-      - time-sensitive bridge test uses fixed as-of value and no longer depends on wall-clock date
-      - focused regression test for bridge confidence threshold passes
-    checks:
-      - python -m pytest tests/test_news_live_runtime.py::test_load_news_gate_items_reads_scored_rows -q
-      - python -m ruff check src/moex_carry/news_live_bridge.py tests/test_news_live_runtime.py
-      - python scripts/run_lean_gate.py
-    docs:
-      - src/moex_carry/news_live_bridge.py
-      - tests/test_news_live_runtime.py
-      - docs/session_handoff.md
-      - plans/PLANS.yaml
-      - memory/agent_memory.yaml
-    dependencies:
-      - P1-REPLAY-TZ-PARITY-043
-    started_at: 2026-03-05
-    completed_at: 2026-03-05
-
-  - id: P1-ARCH-AUDIT-045
-    title: Run end-to-end architecture audit and remove research-route reverse dependency on UI app module
-    lane: architecture
-    status: completed
-    execution_mode: autonomous
-    owner: architecture-owner
-    acceptance:
-      - whole-app architecture audit covers bounded contexts, dependency direction, anti-corruption seams, event/api contracts, and shared-storage shortcuts
-      - findings are prioritized by P0/P1/P2 with file+line evidence
-      - safe P1 fix removes route-layer import back-edge from `ui.routes_research` to `ui.app`
-    checks:
-      - manual static dependency scan (`rg` import graph)
-      - governance gates attempted as supporting checks and reported when blocked
-    docs:
-      - src/moex_carry/ui/routes_research.py
-      - src/moex_carry/ui/app.py
-      - docs/session_handoff.md
-      - memory/agent_memory.yaml
-    dependencies:
-      - P1-API-DECOMPOSE-024
-    started_at: 2026-03-06
-    completed_at: 2026-03-06

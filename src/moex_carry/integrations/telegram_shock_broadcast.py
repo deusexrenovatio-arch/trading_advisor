@@ -47,6 +47,7 @@ def broadcast_shock_alerts(
     policy = ShockAlertPolicy(
         primary_min_z=float(cfg.shock_primary_min_z),
         aftershock_min_z=float(cfg.shock_aftershock_min_z),
+        aftershock_min_tier=str(cfg.shock_aftershock_min_tier or "minor"),
         topic_reopen_after_hours=max(int(cfg.shock_topic_reopen_after_hours), 1),
         aftershock_cooldown_minutes=max(int(cfg.shock_aftershock_cooldown_minutes), 0),
         max_alerts_per_cycle=max(int(cfg.shock_max_alerts_per_cycle), 1),

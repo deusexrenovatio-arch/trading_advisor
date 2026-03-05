@@ -137,6 +137,7 @@ def test_run_shock_label_cycle_exports_telegram_feed(tmp_path: Path) -> None:
         "shock_direction",
         "z_score",
         "abs_move_pct",
+        "impact_tier",
         "topic_key",
         "root_topic_id",
         "selected_source",
@@ -145,7 +146,10 @@ def test_run_shock_label_cycle_exports_telegram_feed(tmp_path: Path) -> None:
         "url",
     ]
     assert feed["selected_event_id"].fillna("").tolist() == ["evt-v2-a", "evt-broad-b", ""]
-    assert feed["topic_key"].tolist() == ["evt-v2-a", "evt-broad-b", "topic:gold-up"]
+    assert feed["impact_tier"].tolist() == ["major", "strong", "medium"]
+    assert feed["topic_key"].tolist()[0] == "root:NG_US:weather_demand"
+    assert feed["topic_key"].tolist()[1].startswith("root:BRN:topic:shipping-disruption-risk-rises")
+    assert feed["topic_key"].tolist()[2] == "root:GOLD:generic"
     assert feed["root_topic_id"].tolist() == feed["topic_key"].tolist()
 
     snapshot_path = Path(str(telegram_feed_meta["snapshot_path"]))
