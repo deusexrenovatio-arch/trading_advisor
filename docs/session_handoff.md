@@ -1,5 +1,5 @@
 # Session Handoff
-Updated: 2026-03-05 17:08 UTC
+Updated: 2026-03-05 17:22 UTC
 
 ## Goal
 - Apply harness-oriented governance/self-learning hardening from latest review and merge to `main` via PR-only flow.
@@ -17,7 +17,8 @@ Updated: 2026-03-05 17:08 UTC
 - Implemented targeted harness updates: scorecard visibility, preflight clarity, advisory debt routing, and governance skill alignment.
 - Updated machine-readable governance artifacts: `plans/PLANS.yaml` and `memory/agent_memory.yaml`.
 - While clearing pre-push parity blocker, fixed incremental replay timezone mismatch and added replay format fallback in integrity checker.
-- Required validators, integrity check, and lean gate rerun: all pass.
+- Fixed one pre-push flaky wall-clock test by adding explicit as-of support to bridge loader and test.
+- Required validators, integrity check, and focused regression checks pass.
 
 ## First-Time-Right Report
 1. Confirmed coverage: governance loop, quality scorecards, remediation runbook, and active skills are all included in patch scope.
@@ -45,4 +46,6 @@ Updated: 2026-03-05 17:08 UTC
 - `python scripts/validate_quality_scorecards.py`
 - `python -m moex_carry.cli signals --no-csv`
 - `python scripts/check_data_integrity.py --data-dir data --max-day-gap 2`
+- `python -m pytest tests/test_news_live_runtime.py::test_load_news_gate_items_reads_scored_rows -q`
+- `python -m ruff check src/moex_carry/news_live_bridge.py tests/test_news_live_runtime.py`
 - `python scripts/run_lean_gate.py`

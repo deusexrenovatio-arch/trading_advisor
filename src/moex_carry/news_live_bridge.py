@@ -8,13 +8,17 @@ from moex_carry.domain.decision import NewsItem
 from moex_carry.news_live_runtime import _parse_any_utc, _sqlite_path_from_url
 
 
-def load_news_gate_items(settings: AppSettings) -> list[NewsItem]:
+def load_news_gate_items(
+    settings: AppSettings,
+    *,
+    as_of_utc: datetime | None = None,
+) -> list[NewsItem]:
     if not settings.news_filter.live_ingest_enabled:
         return []
     db_path = _sqlite_path_from_url(settings.news_filter.live_db_url)
     if not db_path.exists():
         return []
-    now_utc = datetime.now(timezone.utc)
+    now_utc = as_of_utc or datetime.now(timezone.utc)
     cutoff = now_utc - timedelta(minutes=max(settings.news_filter.lookback_minutes, 1))
     cutoff_iso = cutoff.isoformat().replace("+00:00", "Z")
 

@@ -239,10 +239,11 @@ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
     settings.news_filter.lookback_minutes = 24 * 60
     settings.news_filter.sources = ["trusted-feed"]
 
-    items = load_news_gate_items(settings)
+    as_of_utc = datetime(2026, 3, 3, 9, 30, tzinfo=timezone.utc)
+    items = load_news_gate_items(settings, as_of_utc=as_of_utc)
     assert not items
 
     settings.news_filter.live_min_confidence = 0.4
-    items = load_news_gate_items(settings)
+    items = load_news_gate_items(settings, as_of_utc=as_of_utc)
     assert items
     assert items[0].source == "trusted-feed"

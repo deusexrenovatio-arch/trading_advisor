@@ -2,6 +2,16 @@ version: 1
 updated_at: 2026-03-05
 
 decisions:
+  - id: ADM-2026-03-05-077
+    date: 2026-03-05
+    title: Stabilize news gate bridge behavior for tests via explicit as-of timestamp
+    context: Full pre-push pytest exposed a wall-clock sensitive bridge test where fixed fixture timestamps aged out of lookback window over time.
+    decision: Extend load_news_gate_items with optional as_of_utc override and use fixed as-of in time-sensitive test.
+    impact: Bridge tests are deterministic across calendar dates while production behavior keeps current-time default.
+    links:
+      - src/moex_carry/news_live_bridge.py
+      - tests/test_news_live_runtime.py
+      - plans/PLANS.yaml
   - id: ADM-2026-03-05-076
     date: 2026-03-05
     title: Surface task-request contract in scorecards and bind advisory findings to explicit remediation queue
@@ -858,4 +868,13 @@ patterns:
       - docs/runbooks/governance-remediation.md
       - plans/PLANS.yaml
       - memory/agent_memory.yaml
+  - id: AMP-2026-03-05-032
+    date: 2026-03-05
+    title: Make time-window tests explicit about evaluation clock
+    pattern: Any logic with lookback/time-cutoff gates should accept optional as-of timestamp and tests should pass fixed as-of values instead of relying on datetime.now().
+    when_to_use: Filtering, gating, or ranking code where fixture timestamps can drift outside windows as real time advances.
+    links:
+      - src/moex_carry/news_live_bridge.py
+      - tests/test_news_live_runtime.py
+      - docs/checklists/first-time-right-gate.md
 
