@@ -177,6 +177,35 @@ Note: run this command from an elevated PowerShell (Run as Administrator).
 powershell -ExecutionPolicy Bypass -File scripts/remove_autostart_tasks.ps1
 ```
 
+### Live Paper Forward Launch (signals + Telegram + forward run)
+
+To start paper forward-test from today on the live MOEX contour using existing
+Telegram signal formats:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1
+```
+
+By default, the launcher loads `scripts/moex-carry.local.ps1` (if present) for
+Telegram env vars. If `/api/forward/start` returns `Missing raw data`, the
+launcher runs `moex_carry.cli fetch` automatically and retries forward start.
+
+Useful flags:
+
+```
+# dry-run checks only
+powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -CheckOnly
+
+# force full signal refresh before forward start
+powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -ForceFullRefresh
+
+# start backend + forward only (skip Telegram worker)
+powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -SkipTelegramWorker
+
+# skip loading scripts/moex-carry.local.ps1
+powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -NoLocalEnv
+```
+
 ## HPO
 
 See `docs/hpo-howto.md` for running HPO locally with Backtest v2 as a black box.
