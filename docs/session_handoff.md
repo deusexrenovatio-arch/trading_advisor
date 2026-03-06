@@ -1,36 +1,36 @@
 # Session Handoff
-Updated: 2026-03-06 10:52 UTC
+Updated: 2026-03-06 15:08 UTC
 
 ## Goal
-- Keep `O1` as the default execution baseline after completing the full O1-relative ladder, and use the finished results to define the next concentration-aware search space.
+- Promote the execution baseline from `O1` to `H4A_CAP_OFF` after no-mini historical validation, and keep negative-month plus thin-sample diagnostics explicit for future universe decisions.
 
 ## Task Request Contract
-- Objective: reproduce `O1` on the active code path and complete the sequential `H0`-`H5` execution research program with explicit verdicts relative to `O1`.
-- In Scope: deterministic execution-hypothesis runner/reporting, frozen-window walk-forward reruns for `H0`-`H5`, and governance/research artifacts that record family verdicts and any promotion decision.
-- Out of Scope: changing non-execution signal generation logic, changing live Telegram/API contracts, or promoting any non-`O1` baseline without full evidence.
-- Constraints: same universe/window/decision times/seed/causal structure as `O1`, one execution family at a time, `same_bar_policy` and `cost_mult` remain sensitivity-only axes, governance gates green.
-- Done Evidence: `H0` reproduction artifact, per-hypothesis verdict artifacts for every tested run, family verdict summary, and plans/memory/handoff updated with final conclusions.
-- Priority Rule: preserve O1 comparability first; if any drift appears in `H0`, stop new hypothesis work, write the drift note, and only then decide whether to continue.
+- Objective: validate `H4A_CAP_OFF` after excluding duplicated mini contracts, explain the negative months, analyze thin-sample roots, and push the resulting baseline/reporting changes.
+- In Scope: no-mini historical recalc from existing full reports, negative-month decomposition, thin-sample root analysis, baseline default update, ticker-label convention, and push-ready governance sync.
+- Out of Scope: changing non-execution signal generation logic or silently pruning thin-sample non-mini roots from the live universe.
+- Constraints: full and mini contracts for the same underlying must not both count in whole-universe evaluation, human-facing reports use `TICKER (Name)`, governance gates green before push.
+- Done Evidence: no-mini historical review artifact, negative-month and thin-sample write-up, config/test baseline update to `H4A_CAP_OFF`, and pushed branch.
+- Priority Rule: universe hygiene first; if no-mini recalc weakens `H4`, stop promotion and record the contradiction before changing defaults.
 
 ## Current Delta
-- Added deterministic O1-relative runner and ladder summary artifact for the completed `H0`-`H5` program.
-- `H0` reproduced the frozen `O1` reference exactly; no active-code-path drift was detected.
-- `H1` fill-quality family is noisy: removing fallback destroys net, while `entry_improve` and `fallback_slip` only move result by tens of ticks.
-- `H2` trade-management family is noisy: break-even is inert on this window, trailing is a major positive contributor, and longer holding adds only marginal net.
-- `H3` bracket geometry is economically relevant but not promotable: `sl_rr=3.0` adds `+680.0` net ticks, but concentration worsens to `0.5813`.
-- `H4` clipping controls are the strongest revenue lever: removing `max_profit_rr` adds `+5307.5` net ticks, while hard caps fix concentration but destroy net.
-- `H5` remains sensitivity-only/disallowed: same-bar ordering and harsher cost stress cannot justify promotion even when they move metrics.
-- No tested candidate beat `O1` on the same constraints; `O1` stays baseline and the next loop should target concentration-aware controls around the `H3/H4` trade-off.
+- Added post-run analyzer and removed duplicated mini roots: `BM (Brent mini)`, `GN (Gold mini)`, `NR (Natural Gas mini)`, `RM (RTS mini)`, `S1 (Silver mini)`.
+- No-mini historical review still favors `H4A_CAP_OFF`: full `2020-2026` net is `134710.5` vs `87396.0` for `O1`; old-regime `2020-2024` remains `119588.5` vs `77426.5`.
+- Default runtime baseline is now promoted to `H4A_CAP_OFF` by setting `max_profit_rr=0.0`; the config-loading regression test now asserts the H4 default.
+- Negative months remain concentrated: `2021-02 -> PT (Platinum)`, `2021-08 -> PD (Palladium)`, `2022-02 -> MM (MXI)+MX (MIX)`, `2025-02 -> MM (MXI)+RI (RTS Index)`.
+- `2022-02` is the stress month: `MM (MXI)` `PULLBACK_LIMIT SELL` on `2022-02-25` loses `-5320.0`; `H4` softens the month by preserving gains on positive roots.
+- Thin positive roots after mini exclusion are `FF (TTF Gas)`, `DJ (Dow Jones)`, `SU (Sugar)`, `N2 (Nikkei 225)`, `SF (S&P 500)`, `CE (Copper)`, `DX (DAX)`, `SX (Euro Stoxx 50)`.
+- Thin negative watchlist roots after mini exclusion are `NC (Nickel)`, `AN (Aluminum)`, and `KC (Coffee)`; they stay too sparse for a hard universe cut.
+- Human-facing research output now uses `TICKER (Name)` labels by default, and whole-universe evaluation excludes mini contracts when a full contract exists.
 
 ## Accepted Profile
-- Profile id: `O1`
+- Profile id: `H4A_CAP_OFF`
 - Parameters:
   - `break_even_rr=0.1`
   - `break_even_buffer_ticks=2`
   - `tp_rr=0.6`
   - `sl_rr=2.5`
   - `max_holding_minutes=180`
-  - `max_profit_rr=0.3`
+  - `max_profit_rr=0.0`
   - `max_profit_ticks=0`
   - `trail_activation_rr=0.1`
   - `trail_offset_ticks=2`
@@ -49,18 +49,26 @@ Updated: 2026-03-06 10:52 UTC
 - Completed ladder artifacts:
   - `artifacts/research/wf_goal_v6_h24_o1_execution_hypothesis_ladder_20260306.json`
   - `docs/research/o1-execution-hypothesis-results-2026-03-06.md`
+- Historical review artifacts:
+  - `artifacts/research/wf_goal_v6_historical_front_contract_prefetch_2020_2022_20260306.json`
+  - `artifacts/research/wf_goal_v6_historical_front_contract_prefetch_2023_2024_20260306.json`
+  - `artifacts/research/wf_goal_v6_execution_profiles_historical_review_2020_2026_20260306.json`
+  - `docs/research/execution-profiles-historical-review-2026-03-06.md`
+- No-mini follow-up artifacts:
+  - `artifacts/research/wf_goal_v6_execution_profiles_historical_review_no_minis_2020_2026_20260306.json`
+  - `docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md`
 - Drift analysis example:
   - same generated setup `BRH6:ORB_BREAKOUT:BUY:7171` stayed stable after rebase, so the drift source was execution semantics, not signal generation.
   - future drift decisions are accepted or rejected against `O1`, not against incidental merged defaults.
 - Guardrail evidence:
-  - `tests/test_config_loading.py` now asserts `O1` default execution values directly.
+  - `tests/test_config_loading.py` now asserts `H4A_CAP_OFF` default execution values directly.
   - `memory/agent_memory.yaml` and `plans/PLANS.yaml` now require explicit baseline-drift write-up and branch-goal decision.
 
 ## First-Time-Right Report
-1. Confirmed coverage: completed `H0`-`H5`, wrote per-hypothesis and per-family JSON artifacts, and summarized the finished ladder in a dedicated research note.
-2. Missing or risky scenarios: results are still frozen-window evidence only; the unresolved blocker is concentration, not raw revenue, so any next loop must attack that explicitly.
-3. Resource/time risks and chosen controls: one offline deterministic runner prevented manual reporting drift; stop-on-drift guard at `H0` ensured later families were not run on a moving baseline.
-4. Highest-priority fixes or follow-ups: keep `O1`, then test concentration-aware structural controls around `H4A`/`H3B` instead of retuning `H1`, `H2`, or `H5`.
+1. Confirmed coverage: mini contracts were removed from the review, the no-mini comparison still favors `H4`, negative months were decomposed to root/trade level, and thin-sample roots were isolated explicitly.
+2. Missing or risky scenarios: some non-mini roots are still sparse or late-launch, so they should stay visible in diagnostics even if they are not yet candidates for hard pruning.
+3. Resource/time risks and chosen controls: mini exclusion and month analysis were derived from existing full reports instead of rerunning the full walk-forward loop; this kept the final pass reproducible and fast.
+4. Highest-priority fixes or follow-ups: push `H4` promotion, then decide whether any thin non-mini roots deserve a separate universe-pruning policy once they have more evidence or repeated negative behavior.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
@@ -70,12 +78,13 @@ Updated: 2026-03-06 10:52 UTC
 - Next Probe: rerun `python scripts/validate_task_request_contract.py` before the next push.
 
 ## Blockers
-- None for code path.
+- None.
 
 ## Next Step
-- If the next loop starts, make it concentration-aware from the first hypothesis and anchor it on the `H4A_CAP_OFF` vs `H4B_ABS_CAP_*` trade-off.
-- Do not reopen `H1`, `H2`, or `H5` as primary tuning axes unless the data window or strategy regime changes.
+- Keep `H4A_CAP_OFF` as the working baseline unless a later whole-universe no-mini review disproves it; prune thin non-mini roots only via a separate evidence loop.
 
 ## Validation
 - `python scripts/run_lean_gate.py`
-- `pytest tests/test_config_loading.py tests/test_morning_plan_walk_forward.py -q`
+- `python scripts/analyze_execution_profiles_historical_review.py --exclude-mini --out-json artifacts/research/wf_goal_v6_execution_profiles_historical_review_no_minis_2020_2026_20260306.json`
+- `python scripts/validate_task_request_contract.py`
+- `python scripts/validate_session_handoff.py`
