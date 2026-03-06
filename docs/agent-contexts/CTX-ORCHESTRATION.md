@@ -6,9 +6,13 @@ Entrypoints, runtime wiring, configuration, and cross-context orchestration.
 ## Owned Paths
 - `src/moex_carry/__main__.py`
 - `src/moex_carry/cli.py`
+- `src/moex_carry/cli_news_handlers.py`
+- `src/moex_carry/cli_news_parsers.py`
+- `src/moex_carry/cli_news_runtime_handlers.py`
 - `src/moex_carry/config.py`
 - `src/moex_carry/config_resolver.py`
 - `src/moex_carry/pipeline.py`
+- `src/moex_carry/pipeline_helpers.py`
 - `src/moex_carry/parameter_specs.py`
 - `src/moex_carry/unified_runtime.py`
 
