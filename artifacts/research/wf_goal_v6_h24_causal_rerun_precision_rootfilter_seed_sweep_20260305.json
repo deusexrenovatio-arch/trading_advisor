@@ -1,0 +1,47 @@
+{
+  "generated_at_utc": "2026-03-05T15:01:32.720110+00:00",
+  "rows": [
+    {
+      "seed": 72,
+      "filled_trades": 92,
+      "win_rate_net": 0.6956521739130435,
+      "net_ticks_sum": 2258.0,
+      "overall_trades_per_week": 1.7547683923705721,
+      "overall_concentration_top_share": 0.2124221183800623,
+      "acceptance_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_min_trades_per_week"
+      ],
+      "path": "artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_seed72_20260305.json"
+    },
+    {
+      "seed": 111,
+      "filled_trades": 64,
+      "win_rate_net": 0.609375,
+      "net_ticks_sum": 1849.0,
+      "overall_trades_per_week": 1.220708446866485,
+      "overall_concentration_top_share": 0.3170854271356784,
+      "acceptance_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_min_trades_per_week"
+      ],
+      "path": "artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_seed111_20260305.json"
+    },
+    {
+      "seed": 222,
+      "filled_trades": 50,
+      "win_rate_net": 0.6,
+      "net_ticks_sum": 696.0,
+      "overall_trades_per_week": 0.9536784741144414,
+      "overall_concentration_top_share": 0.29855842185128983,
+      "acceptance_passed": false,
+      "failed_reasons": [
+        "hard_min_win_rate_net",
+        "hard_min_trades_per_week"
+      ],
+      "path": "artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_seed222_20260305.json"
+    }
+  ]
+}
