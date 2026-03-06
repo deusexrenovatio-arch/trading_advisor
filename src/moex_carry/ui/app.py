@@ -46,6 +46,7 @@ from moex_carry.storage.db import create_engine_from_settings, create_session_fa
 from moex_carry.storage.repositories import (
     load_signal_execution_by_idempotency,
     load_decision_view_projection,
+    upsert_decision_view_projection,
     load_active_signals,
     load_latest_signal_run,
     load_open_executions,
@@ -2578,6 +2579,12 @@ def create_app(settings: AppSettings) -> Dash:
 
         projection_source = "jsonl"
         if settings.ui.ff_db_projection_source:
+            view_path = paths.data_dir / "decisions" / "decision_view.jsonl"
+            jsonl_rows = load_jsonl(view_path) if view_path.exists() else []
+            jsonl_rows = [row for row in jsonl_rows if isinstance(row, dict)]
+            if jsonl_rows:
+                with session_factory() as session:
+                    upsert_decision_view_projection(session, jsonl_rows)
             with session_factory() as session:
                 response_rows = load_decision_view_projection(
                     session,
@@ -2589,11 +2596,7 @@ def create_app(settings: AppSettings) -> Dash:
                     created_from=request.args.get("created_from"),
                     created_to=request.args.get("created_to"),
                 )
-            if response_rows:
-                projection_source = "db"
-            else:
-                response_rows = _load_decision_view_jsonl_rows()
-                projection_source = "jsonl_fallback"
+            projection_source = "db"
         else:
             response_rows = _load_decision_view_jsonl_rows()
 
@@ -4599,6 +4602,10 @@ def create_app(settings: AppSettings) -> Dash:
         logger=logger,
         bad_request=_bad_request,
         parse_bool=_parse_bool,
+        run_backtest_v2_cached_fn=lambda *args, **kwargs: run_backtest_v2_cached(*args, **kwargs),
+        serialize_backtest_report_fn=lambda report: serialize_backtest_report(report),
+        start_hpo_run_fn=lambda *args, **kwargs: start_hpo_run(*args, **kwargs),
+        load_hpo_status_fn=lambda *args, **kwargs: load_hpo_status(*args, **kwargs),
     )
 
     app = Dash(__name__, server=server, url_base_pathname="/dash/")

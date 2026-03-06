@@ -12,12 +12,6 @@ from pydantic import ValidationError
 from moex_carry.contracts.strategy_test import BacktestRequest, HpoRequest
 
 
-def _ui_app_module():
-    from moex_carry.ui import app as ui_app
-
-    return ui_app
-
-
 def register_research_routes(
     *,
     server: Flask,
@@ -25,6 +19,10 @@ def register_research_routes(
     logger: logging.Logger,
     bad_request: Callable[..., object],
     parse_bool: Callable[[object], bool | None],
+    run_backtest_v2_cached_fn: Callable[..., object],
+    serialize_backtest_report_fn: Callable[[object], object],
+    start_hpo_run_fn: Callable[..., dict[str, object]],
+    load_hpo_status_fn: Callable[..., dict[str, object]],
 ) -> None:
     @server.route("/api/v2/research/backtests/run", methods=["POST"])
     def backtest_run_v2_api():
@@ -51,7 +49,7 @@ def register_research_routes(
         except ValidationError as exc:
             return bad_request("validation_error", details=exc.errors())
         try:
-            report = _ui_app_module().run_backtest_v2_cached(
+            report = run_backtest_v2_cached_fn(
                 backtest_request,
                 paths.data_dir,
                 precompute=precompute,
@@ -72,7 +70,7 @@ def register_research_routes(
                 "run_id": f"bt-{uuid.uuid4().hex[:12]}",
                 "request_hash": request_hash,
                 "status": "completed",
-                "report": _ui_app_module().serialize_backtest_report(report),
+                "report": serialize_backtest_report_fn(report),
             }
         )
 
@@ -98,7 +96,7 @@ def register_research_routes(
         except ValidationError as exc:
             return bad_request("validation_error", details=exc.errors())
         try:
-            run_info = _ui_app_module().start_hpo_run(
+            run_info = start_hpo_run_fn(
                 hpo_request,
                 paths.data_dir,
                 precompute=precompute,
@@ -125,7 +123,7 @@ def register_research_routes(
     def hpo_status_v2_api():
         run_id = request.args.get("run_id")
         try:
-            status = _ui_app_module().load_hpo_status(paths.data_dir, run_id=run_id)
+            status = load_hpo_status_fn(paths.data_dir, run_id=run_id)
         except ValueError as exc:
             return bad_request(str(exc))
         except Exception as exc:
