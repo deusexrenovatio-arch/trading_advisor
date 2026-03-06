@@ -85,6 +85,21 @@ def _str_or_none(value: object) -> str | None:
     return text if text else None
 
 
+def _normalize_strategy_type(value: object, *, default: str = "arbitrage") -> str:
+    raw = str(value or "").strip().lower()
+    if raw in {"commodity_futures", "commodity", "futures"}:
+        return "speculative"
+    if raw in {"arbitrage", "speculative", "fundamental"}:
+        return raw
+    return default
+
+
+def _strategy_stream_from_type(strategy_type: str) -> str:
+    if strategy_type == "speculative":
+        return "commodity_futures"
+    return strategy_type
+
+
 def _bool_from_value(value: object, *, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
@@ -473,6 +488,9 @@ def apply_runtime_adapter_to_frame(
         confidence = _float_or_none(getattr(strategy_signal, "confidence", None)) or 0.0
         evaluation_cost = _float_or_none(getattr(evaluation, "cost_ticks", None))
         evaluation_expectancy = _float_or_none(getattr(evaluation, "expected_return_ticks", None))
+        strategy_id = _str_or_none(getattr(strategy_signal, "strategy_id", None))
+        strategy_type = _normalize_strategy_type(getattr(strategy_signal, "strategy_type", None))
+        strategy_stream = _strategy_stream_from_type(strategy_type)
 
         two_layer_metrics: dict[str, object] = {
             "confidence": float(confidence),
@@ -480,6 +498,10 @@ def apply_runtime_adapter_to_frame(
             "risk_ticks": risk_estimate,
             "cost_ticks": evaluation_cost,
             "expectancy_ticks_engine": evaluation_expectancy,
+            "strategy_id": strategy_id,
+            "strategy_type": strategy_type,
+            "strategy_stream": strategy_stream,
+            "override_applied": bool(override_signal_fields),
             "metadata": engine_metadata,
         }
 
@@ -504,6 +526,9 @@ def apply_runtime_adapter_to_frame(
         current_metrics = row_mapping.get("signal_metrics")
         merged_metrics = dict(current_metrics) if isinstance(current_metrics, dict) else {}
         merged_metrics["two_layer"] = two_layer_metrics
+        merged_metrics["strategy_id"] = strategy_id
+        merged_metrics["strategy_type"] = strategy_type
+        merged_metrics["strategy_stream"] = strategy_stream
         adapted.at[idx, "signal_metrics"] = merged_metrics
         if "decision" in adapted.columns:
             adapted.at[idx, "decision"] = "ENTER_OK" if two_layer_action == "enter" else "HOLD"

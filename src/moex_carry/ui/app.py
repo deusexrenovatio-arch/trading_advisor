@@ -515,6 +515,9 @@ SIGNAL_METRIC_CONTRACT_KEYS: tuple[str, ...] = (
     "unfilled_entry_rate",
     "unfilled_exit_rate",
     "forced_exit_rate",
+    "strategy_id",
+    "strategy_type",
+    "strategy_stream",
 )
 
 
@@ -537,6 +540,98 @@ def _merge_signal_metrics(record: dict[str, object]) -> dict[str, object]:
         if key not in merged:
             merged[key] = _sanitize_value(value)
     return merged
+
+
+_ALLOWED_STRATEGY_TYPES: set[str] = {"arbitrage", "speculative", "fundamental"}
+_ALLOWED_STRATEGY_STREAMS: set[str] = {"arbitrage", "commodity_futures", "fundamental"}
+
+
+def _normalize_strategy_type_value(value: object) -> str | None:
+    raw = str(value or "").strip().lower()
+    aliases = {
+        "commodity": "speculative",
+        "commodity_futures": "speculative",
+        "futures": "speculative",
+    }
+    normalized = aliases.get(raw, raw)
+    if normalized in _ALLOWED_STRATEGY_TYPES:
+        return normalized
+    return None
+
+
+def _normalize_strategy_stream_value(value: object) -> str | None:
+    raw = str(value or "").strip().lower()
+    if raw == "speculative":
+        return "commodity_futures"
+    if raw in _ALLOWED_STRATEGY_STREAMS:
+        return raw
+    return None
+
+
+def _strategy_stream_from_type(strategy_type: str | None) -> str:
+    if strategy_type == "speculative":
+        return "commodity_futures"
+    if strategy_type in _ALLOWED_STRATEGY_TYPES:
+        return str(strategy_type)
+    return "arbitrage"
+
+
+def _string_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    return raw or None
+
+
+def _extract_strategy_metadata(row: dict[str, object]) -> dict[str, str | None]:
+    metrics = row.get("signal_metrics")
+    metrics_map = metrics if isinstance(metrics, dict) else {}
+    nested_two_layer = metrics_map.get("two_layer")
+    nested_map = nested_two_layer if isinstance(nested_two_layer, dict) else {}
+
+    strategy_type = _normalize_strategy_type_value(row.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = _normalize_strategy_type_value(metrics_map.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = _normalize_strategy_type_value(nested_map.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = "arbitrage"
+
+    strategy_stream = _normalize_strategy_stream_value(row.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _normalize_strategy_stream_value(metrics_map.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _normalize_strategy_stream_value(nested_map.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _strategy_stream_from_type(strategy_type)
+
+    strategy_id = _string_or_none(row.get("strategy_id"))
+    if strategy_id is None:
+        strategy_id = _string_or_none(metrics_map.get("strategy_id"))
+    if strategy_id is None:
+        strategy_id = _string_or_none(nested_map.get("strategy_id"))
+
+    return {
+        "strategy_type": strategy_type,
+        "strategy_stream": strategy_stream,
+        "strategy_id": strategy_id,
+    }
+
+
+def _matches_strategy_filters(
+    row: dict[str, object],
+    *,
+    strategy_type_filter: str | None,
+    strategy_stream_filter: str | None,
+) -> bool:
+    metadata = _extract_strategy_metadata(row)
+    row_strategy_type = _normalize_strategy_type_value(metadata.get("strategy_type"))
+    row_strategy_stream = _normalize_strategy_stream_value(metadata.get("strategy_stream"))
+    if strategy_type_filter and row_strategy_type != strategy_type_filter:
+        return False
+    if strategy_stream_filter and row_strategy_stream != strategy_stream_filter:
+        return False
+    return True
 
 
 def _build_execution_quality(record: dict[str, object]) -> dict[str, object]:
@@ -1399,6 +1494,7 @@ def _build_signal_actionability_projection(
         consumed_action = "enter"
 
     signal_metrics = row.get("signal_metrics") if isinstance(row.get("signal_metrics"), dict) else {}
+    strategy_meta = _extract_strategy_metadata(row)
     entry_plan = {
         "plan_revision": int(signal_metrics.get("plan_revision") or (1 if has_origin else 0)),
         "generated_at": row.get("timestamp"),
@@ -1473,6 +1569,9 @@ def _build_signal_actionability_projection(
         "signal_origin_run_id": row.get("signal_origin_run_id"),
         "signal_origin_timestamp": row.get("signal_origin_timestamp"),
         "metrics": signal_metrics,
+        "strategy_id": strategy_meta.get("strategy_id"),
+        "strategy_type": strategy_meta.get("strategy_type"),
+        "strategy_stream": strategy_meta.get("strategy_stream"),
         "run_id": row.get("run_id"),
         "timestamp": row.get("timestamp"),
         "stock": row.get("stock"),
@@ -3291,6 +3390,7 @@ def create_app(settings: AppSettings) -> Dash:
                 future: str,
                 signal_action: str,
                 signal_fingerprint: str | None = None,
+                strategy_stream: str | None = None,
             ) -> dict[str, object]:
                 fingerprint = str(signal_fingerprint or "").strip()
                 if not fingerprint:
@@ -3300,6 +3400,7 @@ def create_app(settings: AppSettings) -> Dash:
                         stock=stock,
                         future=future,
                         signal_action=signal_action,
+                        strategy_stream=strategy_stream,
                     )
                 usage_entry = usage_by_fingerprint.get(fingerprint)
                 if not isinstance(usage_entry, dict):
@@ -3412,6 +3513,8 @@ def create_app(settings: AppSettings) -> Dash:
                 signal_score = row.score
                 signal_reasons = list(row.reasons) if isinstance(row.reasons, list) else []
                 current_metrics = row.metrics if isinstance(row.metrics, dict) else {}
+                current_strategy_meta = _extract_strategy_metadata({"signal_metrics": current_metrics})
+                current_strategy_stream = str(current_strategy_meta.get("strategy_stream") or "arbitrage")
                 fallback_metrics: dict[str, object] | None = None
                 pending_intent_promoted = False
                 repriced_from_hold_flat = False
@@ -3422,6 +3525,7 @@ def create_app(settings: AppSettings) -> Dash:
                     stock=row.stock_secid,
                     future=row.future_secid,
                     signal_action=action,
+                    strategy_stream=current_strategy_stream,
                 )
                 usage_fields = _signal_usage_fields(
                     run_id=signal_run_id,
@@ -3430,6 +3534,7 @@ def create_app(settings: AppSettings) -> Dash:
                     future=row.future_secid,
                     signal_action=action,
                     signal_fingerprint=signal_fingerprint,
+                    strategy_stream=current_strategy_stream,
                 )
                 entry_intent_row = latest_entry_intent_by_pair.get(key)
                 if (
@@ -3439,12 +3544,18 @@ def create_app(settings: AppSettings) -> Dash:
                 ):
                     intent_run_id = str(entry_intent_row.run_id)
                     intent_timestamp = entry_intent_row.timestamp.isoformat()
+                    intent_metrics_map = (
+                        entry_intent_row.metrics if isinstance(entry_intent_row.metrics, dict) else {}
+                    )
+                    intent_strategy_meta = _extract_strategy_metadata({"signal_metrics": intent_metrics_map})
+                    intent_strategy_stream = str(intent_strategy_meta.get("strategy_stream") or "arbitrage")
                     intent_fingerprint = build_signal_fingerprint(
                         run_id=intent_run_id,
                         timestamp=intent_timestamp,
                         stock=row.stock_secid,
                         future=row.future_secid,
                         signal_action="enter",
+                        strategy_stream=intent_strategy_stream,
                     )
                     intent_usage = _signal_usage_fields(
                         run_id=intent_run_id,
@@ -3453,11 +3564,14 @@ def create_app(settings: AppSettings) -> Dash:
                         future=row.future_secid,
                         signal_action="enter",
                         signal_fingerprint=intent_fingerprint,
+                        strategy_stream=intent_strategy_stream,
                     )
                     if bool(intent_usage.get("signal_used")):
                         entry_intent_consumed = True
                     else:
                         pending_intent_promoted = True
+                        current_strategy_meta = intent_strategy_meta
+                        current_strategy_stream = intent_strategy_stream
                         action = "enter"
                         signal_fingerprint = intent_fingerprint
                         usage_fields = intent_usage
@@ -3480,6 +3594,7 @@ def create_app(settings: AppSettings) -> Dash:
                         stock=row.stock_secid,
                         future=row.future_secid,
                         signal_action=action,
+                        strategy_stream=current_strategy_stream,
                     )
                     usage_fields = _signal_usage_fields(
                         run_id=signal_run_id,
@@ -3488,6 +3603,7 @@ def create_app(settings: AppSettings) -> Dash:
                         future=row.future_secid,
                         signal_action=action,
                         signal_fingerprint=signal_fingerprint,
+                        strategy_stream=current_strategy_stream,
                     )
                     if "repriced_from_hold_flat" not in signal_reasons:
                         signal_reasons.append("repriced_from_hold_flat")
@@ -3512,6 +3628,17 @@ def create_app(settings: AppSettings) -> Dash:
                     and entry_intent_row.metrics.get("score_gate_pass") is not None
                 ):
                     signal_metrics["score_gate_pass"] = bool(entry_intent_row.metrics.get("score_gate_pass"))
+                signal_strategy_meta = _extract_strategy_metadata(
+                    {
+                        "signal_metrics": signal_metrics,
+                        "strategy_id": current_strategy_meta.get("strategy_id"),
+                        "strategy_type": current_strategy_meta.get("strategy_type"),
+                        "strategy_stream": current_strategy_meta.get("strategy_stream"),
+                    }
+                )
+                signal_metrics.setdefault("strategy_id", signal_strategy_meta.get("strategy_id"))
+                signal_metrics.setdefault("strategy_type", signal_strategy_meta.get("strategy_type"))
+                signal_metrics.setdefault("strategy_stream", signal_strategy_meta.get("strategy_stream"))
                 payload = {
                     "run_id": signal_run_id,
                     "timestamp": signal_timestamp,
@@ -3523,6 +3650,9 @@ def create_app(settings: AppSettings) -> Dash:
                     "signal_score": signal_score,
                     "signal_reasons": signal_reasons,
                     "signal_metrics": signal_metrics,
+                    "strategy_id": signal_strategy_meta.get("strategy_id"),
+                    "strategy_type": signal_strategy_meta.get("strategy_type"),
+                    "strategy_stream": signal_strategy_meta.get("strategy_stream"),
                     "position_open": is_open,
                     "position_state": "open" if is_open else "flat",
                     "position_enter_count": int(state.get("enter_count") or 0),
@@ -3569,12 +3699,15 @@ def create_app(settings: AppSettings) -> Dash:
                 signal_score = 0.0
                 signal_reasons: list[str] = ["position_open_no_active_signal"]
                 signal_metrics: dict[str, object] = {}
+                signal_strategy_meta = _extract_strategy_metadata({"signal_metrics": signal_metrics})
+                signal_strategy_stream = str(signal_strategy_meta.get("strategy_stream") or "arbitrage")
                 signal_fingerprint = build_signal_fingerprint(
                     run_id=latest.run_id,
                     timestamp=timestamp_value,
                     stock=stock,
                     future=future,
                     signal_action=action,
+                    strategy_stream=signal_strategy_stream,
                 )
                 usage_fields = _signal_usage_fields(
                     run_id=latest.run_id,
@@ -3583,6 +3716,7 @@ def create_app(settings: AppSettings) -> Dash:
                     future=future,
                     signal_action=action,
                     signal_fingerprint=signal_fingerprint,
+                    strategy_stream=signal_strategy_stream,
                 )
                 entry_intent_row = latest_entry_intent_by_pair.get((stock, future))
                 pending_intent_promoted = False
@@ -3592,12 +3726,18 @@ def create_app(settings: AppSettings) -> Dash:
                 ):
                     intent_run_id = str(entry_intent_row.run_id)
                     intent_timestamp = entry_intent_row.timestamp.isoformat()
+                    intent_metrics_map = (
+                        entry_intent_row.metrics if isinstance(entry_intent_row.metrics, dict) else {}
+                    )
+                    intent_strategy_meta = _extract_strategy_metadata({"signal_metrics": intent_metrics_map})
+                    intent_strategy_stream = str(intent_strategy_meta.get("strategy_stream") or "arbitrage")
                     intent_fingerprint = build_signal_fingerprint(
                         run_id=intent_run_id,
                         timestamp=intent_timestamp,
                         stock=stock,
                         future=future,
                         signal_action="enter",
+                        strategy_stream=intent_strategy_stream,
                     )
                     intent_usage = _signal_usage_fields(
                         run_id=intent_run_id,
@@ -3606,9 +3746,12 @@ def create_app(settings: AppSettings) -> Dash:
                         future=future,
                         signal_action="enter",
                         signal_fingerprint=intent_fingerprint,
+                        strategy_stream=intent_strategy_stream,
                     )
                     if not bool(intent_usage.get("signal_used")):
                         pending_intent_promoted = True
+                        signal_strategy_meta = intent_strategy_meta
+                        signal_strategy_stream = intent_strategy_stream
                         action = "enter"
                         signal_fingerprint = intent_fingerprint
                         usage_fields = intent_usage
@@ -3631,6 +3774,17 @@ def create_app(settings: AppSettings) -> Dash:
                             ),
                             force_rebuild=False,
                         )
+                signal_strategy_meta = _extract_strategy_metadata(
+                    {
+                        "signal_metrics": signal_metrics,
+                        "strategy_id": signal_strategy_meta.get("strategy_id"),
+                        "strategy_type": signal_strategy_meta.get("strategy_type"),
+                        "strategy_stream": signal_strategy_meta.get("strategy_stream"),
+                    }
+                )
+                signal_metrics.setdefault("strategy_id", signal_strategy_meta.get("strategy_id"))
+                signal_metrics.setdefault("strategy_type", signal_strategy_meta.get("strategy_type"))
+                signal_metrics.setdefault("strategy_stream", signal_strategy_meta.get("strategy_stream"))
                 payload = {
                     "run_id": latest.run_id,
                     "timestamp": timestamp_value,
@@ -3642,6 +3796,9 @@ def create_app(settings: AppSettings) -> Dash:
                     "signal_score": signal_score,
                     "signal_reasons": signal_reasons,
                     "signal_metrics": signal_metrics,
+                    "strategy_id": signal_strategy_meta.get("strategy_id"),
+                    "strategy_type": signal_strategy_meta.get("strategy_type"),
+                    "strategy_stream": signal_strategy_meta.get("strategy_stream"),
                     "position_open": True,
                     "position_state": "open",
                     "position_enter_count": int(state.get("enter_count") or 0),
@@ -3774,6 +3931,22 @@ def create_app(settings: AppSettings) -> Dash:
         instrument_type_filter = str(request.args.get("instrument_type") or "").strip().lower()
         if instrument_type_filter not in {"", "stock", "future"}:
             return _bad_request("instrument_type must be one of: stock, future")
+        strategy_type_raw = str(request.args.get("strategy_type") or "").strip().lower()
+        strategy_type_filter: str | None = None
+        if strategy_type_raw:
+            strategy_type_filter = _normalize_strategy_type_value(strategy_type_raw)
+            if strategy_type_filter is None:
+                return _bad_request(
+                    "strategy_type must be one of: arbitrage, speculative, fundamental, commodity_futures"
+                )
+        strategy_stream_raw = str(request.args.get("strategy_stream") or "").strip().lower()
+        strategy_stream_filter: str | None = None
+        if strategy_stream_raw:
+            strategy_stream_filter = _normalize_strategy_stream_value(strategy_stream_raw)
+            if strategy_stream_filter is None:
+                return _bad_request(
+                    "strategy_stream must be one of: arbitrage, commodity_futures, fundamental"
+                )
         include_non_actionable = _coerce_bool(
             request.args.get("include_non_actionable"),
             default=False,
@@ -3792,6 +3965,16 @@ def create_app(settings: AppSettings) -> Dash:
                 row
                 for row in projected
                 if str(row.get("instrument_type") or "").strip().lower() == instrument_type_filter
+            ]
+        if strategy_type_filter or strategy_stream_filter:
+            projected = [
+                row
+                for row in projected
+                if _matches_strategy_filters(
+                    row,
+                    strategy_type_filter=strategy_type_filter,
+                    strategy_stream_filter=strategy_stream_filter,
+                )
             ]
 
         if not include_non_actionable:
@@ -3817,6 +4000,22 @@ def create_app(settings: AppSettings) -> Dash:
             request.args.get("include_open_holds"),
             default=True,
         )
+        strategy_type_raw = str(request.args.get("strategy_type") or "").strip().lower()
+        strategy_type_filter: str | None = None
+        if strategy_type_raw:
+            strategy_type_filter = _normalize_strategy_type_value(strategy_type_raw)
+            if strategy_type_filter is None:
+                return _bad_request(
+                    "strategy_type must be one of: arbitrage, speculative, fundamental, commodity_futures"
+                )
+        strategy_stream_raw = str(request.args.get("strategy_stream") or "").strip().lower()
+        strategy_stream_filter: str | None = None
+        if strategy_stream_raw:
+            strategy_stream_filter = _normalize_strategy_stream_value(strategy_stream_raw)
+            if strategy_stream_filter is None:
+                return _bad_request(
+                    "strategy_stream must be one of: arbitrage, commodity_futures, fundamental"
+                )
         limit = max(_parse_int(request.args.get("limit"), 500), 0)
 
         rows, status_code = _collect_signal_actionability_rows()
@@ -3825,6 +4024,13 @@ def create_app(settings: AppSettings) -> Dash:
 
         projected: list[dict[str, object]] = []
         for row in rows:
+            if strategy_type_filter or strategy_stream_filter:
+                if not _matches_strategy_filters(
+                    row,
+                    strategy_type_filter=strategy_type_filter,
+                    strategy_stream_filter=strategy_stream_filter,
+                ):
+                    continue
             state = str(row.get("actionability_state") or "").strip().lower()
             if not include_non_actionable and state not in {
                 "actionable_enter",
@@ -3894,6 +4100,9 @@ def create_app(settings: AppSettings) -> Dash:
                 "signal_origin_run_id": row.get("signal_origin_run_id"),
                 "signal_origin_timestamp": row.get("signal_origin_timestamp"),
                 "metrics": row.get("metrics") or {},
+                "strategy_id": row.get("strategy_id"),
+                "strategy_type": row.get("strategy_type"),
+                "strategy_stream": row.get("strategy_stream"),
                 "signal_id": row.get("signal_id"),
             }
             projected.append(pair_row)
@@ -4257,6 +4466,10 @@ def create_app(settings: AppSettings) -> Dash:
         signal_action_for_fingerprint = str((signal_row or {}).get("signal_action") or "").strip().lower()
         if not signal_action_for_fingerprint:
             signal_action_for_fingerprint = requested_action
+        strategy_meta_for_fingerprint = (
+            _extract_strategy_metadata(signal_row) if isinstance(signal_row, dict) else {}
+        )
+        signal_strategy_stream = str(strategy_meta_for_fingerprint.get("strategy_stream") or "arbitrage")
         signal_fingerprint = str((signal_row or {}).get("signal_fingerprint") or "").strip() or None
         if signal_run_id and signal_timestamp and signal_action_for_fingerprint:
             if signal_fingerprint is None:
@@ -4266,6 +4479,7 @@ def create_app(settings: AppSettings) -> Dash:
                     stock=stock,
                     future=future,
                     signal_action=signal_action_for_fingerprint,
+                    strategy_stream=signal_strategy_stream,
                 )
 
         pretrade_payload = payload.get("pretrade")

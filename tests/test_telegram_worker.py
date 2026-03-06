@@ -303,7 +303,7 @@ def test_worker_deduplicates_messages_and_limits_hold_open_per_day(tmp_path):
     assert len(sent) == 2
     hold_open_last = worker._state["hold_open_last_sent_date_by_pair"]
     assert isinstance(hold_open_last, dict)
-    assert "BBB|BBH6" in hold_open_last
+    assert any(str(key).startswith("BBB|BBH6|") for key in hold_open_last)
 
 
 def test_worker_skips_enter_signal_when_already_used(tmp_path):
@@ -601,6 +601,61 @@ def test_worker_throttles_new_enter_fingerprints_per_pair(tmp_path):
     worker._broadcast_signals()
 
     assert len(telegram_session.sent_messages) == 1
+
+
+def test_worker_separates_enter_cooldown_by_strategy_stream(tmp_path):
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        enter_resend_cooldown_minutes=120,
+    )
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    rows = [
+        {
+            "run_id": "run-strategy-split",
+            "timestamp": now,
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.2,
+            "strategy_type": "arbitrage",
+            "strategy_stream": "arbitrage",
+            "spot_mid": 100.0,
+            "entry_stock_min": 99.0,
+            "entry_stock_max": 101.0,
+        },
+        {
+            "run_id": "run-strategy-split",
+            "timestamp": now,
+            "stock": "AAA",
+            "future": "AAH6",
+            "signal_action": "enter",
+            "signal_direction": "cash_and_carry",
+            "signal_score": 0.31,
+            "strategy_type": "speculative",
+            "strategy_stream": "commodity_futures",
+            "spot_mid": 100.2,
+            "entry_stock_min": 99.0,
+            "entry_stock_max": 101.5,
+        },
+    ]
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[rows])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker._broadcast_signals()
+
+    assert len(telegram_session.sent_messages) == 2
+    enter_last_sent = worker._state["enter_last_sent_at_by_pair"]
+    assert isinstance(enter_last_sent, dict)
+    assert "AAA|AAH6|arbitrage" in enter_last_sent
+    assert "AAA|AAH6|commodity_futures" in enter_last_sent
 
 
 def test_worker_message_shows_staged_entry_exit_protocol(tmp_path):
