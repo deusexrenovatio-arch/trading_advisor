@@ -635,6 +635,7 @@ def test_signals_active_marks_signal_used_from_nested_ack_note(tmp_path):
         stock="AAA",
         future="AAH6",
         signal_action="enter",
+        strategy_stream="arbitrage",
     )
     with session_factory() as session:
         _seed_signal_run(
@@ -781,6 +782,7 @@ def test_signals_active_promotes_hold_open_to_pending_enter(tmp_path):
         stock="AAA",
         future="AAH6",
         signal_action="enter",
+        strategy_stream="arbitrage",
     )
     assert row["signal_action"] == "enter"
     assert row["signal_fingerprint"] == expected_fingerprint
@@ -804,6 +806,7 @@ def test_signals_active_pending_enter_stops_after_explicit_use(tmp_path):
         stock="AAA",
         future="AAH6",
         signal_action="enter",
+        strategy_stream="arbitrage",
     )
     with session_factory() as session:
         _seed_signal_run(
@@ -965,6 +968,7 @@ def test_signals_active_promotes_flat_hold_to_pending_enter(tmp_path):
         stock="AAA",
         future="AAH6",
         signal_action="enter",
+        strategy_stream="arbitrage",
     )
     assert row["signal_action"] == "enter"
     assert row["signal_fingerprint"] == expected_fingerprint
@@ -987,6 +991,7 @@ def test_signals_active_flat_pending_enter_stops_after_explicit_use(tmp_path):
         stock="AAA",
         future="AAH6",
         signal_action="enter",
+        strategy_stream="arbitrage",
     )
     with session_factory() as session:
         _seed_signal_run(
