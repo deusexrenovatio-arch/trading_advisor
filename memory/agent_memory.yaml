@@ -1,7 +1,196 @@
 version: 1
-updated_at: 2026-03-04
+updated_at: 2026-03-06
 
 decisions:
+  - id: ADM-2026-03-06-088
+    date: 2026-03-06
+    title: Split live signals by strategy stream end-to-end for API actionability and Telegram delivery
+    context: User asked to separate arbitrage and commodity-futures signals in the existing live paper-forward contour while preserving current Telegram format and ACK flow.
+    decision: Added normalized strategy metadata propagation (`strategy_id`, `strategy_type`, `strategy_stream`) from runtime adapter into API actionability payloads, strategy-aware signal fingerprinting, and Telegram worker stream-aware cooldown/daily keys plus strategy label in messages.
+    impact: Live contour can now filter and track signals per strategy stream without cross-stream dedupe collisions; operator can query actionability by stream and receive Telegram messages tagged by strategy.
+    links:
+      - src/moex_carry/strategy/two_layer_adapter.py
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/signals_ack.py
+      - src/moex_carry/integrations/telegram_strategy.py
+      - src/moex_carry/integrations/telegram_worker.py
+      - tests/test_api_v2.py
+      - tests/test_telegram_worker.py
+      - tests/test_signal_cycle.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-06-087
+    date: 2026-03-06
+    title: Harden live paper-forward launcher with automatic raw-data bootstrap on forward-start failure
+    context: Operator launch of `/api/forward/start` failed with `400 Missing raw data` even though signal refresh path was reachable on live MOEX contour.
+    decision: Updated `scripts/start_forward_paper_live.ps1` to load local env (`scripts/moex-carry.local.ps1`) by default, resolve Python executable, and on `Missing raw data` run `moex_carry.cli fetch` then retry `/api/forward/start` once automatically.
+    impact: One-command launch now reaches `forward status=ready` from a cold raw-data state without manual fetch steps, while preserving existing Telegram signal formatting and API contracts.
+    links:
+      - scripts/start_forward_paper_live.ps1
+      - README.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-06-086
+    date: 2026-03-06
+    title: Revert execution default from O4 cap to O1 and add live paper-forward launch orchestration
+    context: User confirmed O1 dominates O4 on the same trade set and requested signals-only operation with existing Telegram format plus forward-test launch from today on live MOEX contour.
+    decision: Switched `SignalEngineMorningExecutionConfig.max_profit_ticks` default from `120` to `0` (O1 behavior), added `scripts/start_forward_paper_live.ps1` to orchestrate backend startup, manual live signal refresh, optional Telegram worker start, and forward run initialization for current date, and documented the operator flow in `README.md`.
+    impact: Default runtime no longer clips profitable tails by hard absolute TP cap; operator can launch a reproducible live paper-forward contour from one command while preserving current Telegram message contract.
+    links:
+      - src/moex_carry/config.py
+      - scripts/start_forward_paper_live.ps1
+      - README.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-06-085
+    date: 2026-03-06
+    title: Fix O4 execution winner as default morning-plan policy and verify against M3
+    context: User requested to lock the execution winner after O4 had already shown hard-go robustness on full/split/multi-seed causal checks.
+    decision: Promoted O4 parameter set into `SignalEngineMorningExecutionConfig` defaults in `src/moex_carry/config.py` (break-even, TP/SL RR, max holding, TP caps, trailing, same-bar, limit fallback, and outcome-cost multipliers), then reran direct O4 vs M3 comparison on the same front-nearest baseline universe.
+    impact: New default causal execution behavior now aligns with the validated winner profile without CLI override drift; fresh comparison confirms O4 dominates M3 and is acceptance-safe (`O4 pass=true` vs `M3 pass=false` from concentration fail).
+    links:
+      - src/moex_carry/config.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_M3_frontnearest_seed124_20260306.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_frontnearest_seed124_20260306.json
+      - artifacts/research/wf_goal_v6_h24_execution_profile_compare_O4_vs_M3_seed124_20260306.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-084
+    date: 2026-03-05
+    title: Close causal hard-go robustness with LIMIT fallback and absolute TP cap execution semantics
+    context: After correcting to the baseline context, fixed execution profile `M3` passed on full window but failed robustness splits (`P1` trades-per-week/concentration and `P2` winrate), with probability gate intentionally removed.
+    decision: Extend `run_morning_plan_walk_forward.py` execution model with LIMIT fallback-to-market controls (`limit_fallback_to_market_minutes`, `limit_fallback_slip_ticks`) and absolute TP cap (`max_profit_ticks`), keep defaults backward compatible, and iterate execution-only causal reruns; accept profile `O4` (`fallback=10m/1t`, `max_profit_ticks=120`) as current robust profile.
+    impact: Hard-go constraints now pass simultaneously on full period, both split periods, and additional seeds (72/111) under causal walk-forward without probability gate, while preserving deterministic fixed-profile replay speed.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_P1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_P2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed72_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed111_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-083
+    date: 2026-03-05
+    title: Reach causal hard-go on seed124 via execution-only semantics (no probability, no routing/filter additions)
+    context: Filter-only and routing-focused reruns remained below hard winrate target, so the loop pivoted to pure execution semantics (TP/SL/exit/fill/cost behavior) per user request.
+    decision: Extended `run_morning_plan_walk_forward.py` with execution controls for bracket reshaping (`tp_rr/sl_rr`), time/exit controls (`max_holding_minutes`, trailing, same-bar policy), fill quality (`limit_entry_improve_ticks`), and outcome-aware costs (`tp/sl/exit_cost_mult`) plus `max_profit_rr`; added deterministic `execution_fixed_v1` profile and iterated causal reruns until hard-go passed on seed124.
+    impact: Causal execution profile `M3` reached `acceptance.passed=true` on target window (`win_rate_net=0.7574`, `trades_per_week=3.8529`, `concentration_top_share=0.4622`), proving the objective can be achieved through execution semantics without probability gate; next risk is robustness across additional seeds/windows.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_executionsem_v3_entryimprove_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_L_kplus_improve1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_M3_cap03_seed124_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-082
+    date: 2026-03-05
+    title: Add expert trade/skip layer and regime-expert search profile; confirm hard winrate remains limiting factor
+    context: After proving filter-space exhaustion with fast multi-seed verifier, the next hypothesis was to move from pure post-filtering to structural routing in causal runs.
+    decision: Extended `run_morning_plan_walk_forward.py` with JSON-driven `ExpertGateConfig` (rule matching by setup/side/slot/root/cluster/instrument plus risk/target thresholds), added `intraday_goal_regime_experts_v1` cluster-specific HPO profile, and executed new causal reruns on seed124 (expert-gate run and regime-expert runs with/without probability gate).
+    impact: Structural routing is now integrated in the causal runner and reproducible, but current strategy still fails `hard_min_win_rate_net` (best structural run around `0.524` winrate), and even fast post-run filter search on the new artifact found `0` `final_go` candidates; next search space must shift to execution-model changes (TP/SL/exit semantics), not more filter/routing tuning.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_h24_expert_policy_v1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_causalfirst_expert_v1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_expert_v1_seed124_filter_search_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_noprob_seed124_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-081
+    date: 2026-03-05
+    title: Complete fast multi-seed causal filter search and confirm filter-space exhaustion for current strategy
+    context: After speeding up hypothesis verification, remaining requirement was to execute full multi-seed validation loop (not single-artifact checks) and determine whether final-go targets are reachable via filter-only search.
+    decision: Added `search_wf_hypothesis_multi_seed.py` with early pruning and causal-first ranking; ran large sweeps over causal baselines (`seed72/111/124`) for `final_go`/`stage_go`, including targeted neighborhood search around known ORB root-set hypotheses.
+    impact: Search throughput is now high enough for six-figure candidate sweeps, and evidence shows no filter candidate reaches `final_go` even at `pass>=1` across current causal baselines; next iterations must shift to structural strategy changes rather than more filter-axis sweeps.
+    links:
+      - scripts/search_wf_hypothesis_multi_seed.py
+      - tests/test_search_wf_hypothesis_multi_seed.py
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass3_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_stagego_pass2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_targeted_search_finalgo_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-080
+    date: 2026-03-05
+    title: Move WF hypothesis verification to signal-tape engine and validate 44x throughput uplift
+    context: Strategy loops required thousands of deterministic hypothesis checks on `planned_signals`, and legacy verifier rescanned raw rows for each candidate, creating a bottleneck for iterative causal validation.
+    decision: Added signal-tape/bitset path to `verify_wf_hypothesis.py` with engine switch (`tape|legacy`), lite-summary and rejection-count pruning knobs, plus dedicated batch evaluator and benchmark scripts; validated parity against legacy path and measured throughput on 8,192 candidates.
+    impact: Hypothesis verification loop is no longer a blocking runtime stage; benchmark shows `44.14x` speedup (`19.99s -> 0.45s`) with `0` parity mismatches, enabling much denser candidate sweeps before expensive causal reruns.
+    links:
+      - scripts/verify_wf_hypothesis.py
+      - scripts/evaluate_wf_hypothesis_batch.py
+      - scripts/benchmark_wf_hypothesis_engines.py
+      - tests/test_verify_wf_hypothesis.py
+      - artifacts/research/wf_goal_v6_verify_engine_benchmark_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-079
+    date: 2026-03-05
+    title: Add root/instrument precision filters and validate causal rerun reproducibility limits
+    context: Post-hoc verifier found one `final_go`-passing filtered hypothesis on `h24`, but direct causal reruns with existing precision controls could not reproduce target thresholds.
+    decision: Extended precision filter in `run_morning_plan_walk_forward.py` with `--precision-allow-root` and `--precision-allow-instrument`, added tests for root/instrument gating, and ran multiple causal reruns (integrated filter, seed sweeps, baseline reruns with post-filter checks).
+    impact: Tooling now supports causal root/instrument gating, but current filter-only strategy still misses target in causal mode (`winrate` and `tpw` shortfall); evidence indicates next iteration must move constraints into train-objective/selection logic, not only precision gate.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_orb_energy_other_roots17_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_seed_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_filtered_finalgo_check_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_posthoc_autosearch_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_local_neighborhood_search_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_111_posthoc_compare_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-078
+    date: 2026-03-05
+    title: Reach final-go hypothesis on H24 via iterative root-level search and record stability gap
+    context: Slot/side precision sweeps were insufficient to hit `final_go`; user requested continued testing/iteration until goal thresholds were reached.
+    decision: Performed focused iterative auto-search across constrained artifacts with root-level hill-climb and verified best candidate using deterministic verifier; accepted passing hypothesis on `h24` (`ORB_BREAKOUT`, clusters `energy+other`, slots `12:00/14:15`, 17-root whitelist), then ran cross-artifact check with identical filter.
+    impact: Goal thresholds are now reached on `h24` (`win_rate_net=0.7523`, `trades_per_week=2.0790`, positive net, low concentration), but portability remains limited because the same filter fails neighboring artifacts and multi-report same-config sweep yields `max_passes=0`; next loop must validate causal rerun and OOS stability before promoting as strategy baseline.
+    links:
+      - artifacts/research/wf_goal_v6_iterative_autosearch_focus_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_orb_energy_other_roots17_finalgo_pass_20260305.json
+      - artifacts/research/wf_goal_v6_h24_candidate_crosscheck_20260305.json
+      - artifacts/research/wf_goal_v6_multireport_config_sweep_20260305.json
+      - scripts/verify_wf_hypothesis.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-077
+    date: 2026-03-05
+    title: Add deterministic WF hypothesis verifier with explicit pass/fail gates and baseline-candidate verdict
+    context: Strategy iteration required strict, reproducible hypothesis checks on `planned_signals` instead of ad-hoc notebook snippets and manual metric inspection.
+    decision: Added `scripts/verify_wf_hypothesis.py` with deterministic filters (setup/side/slot/cluster/root/instrument plus side-slot exclusions), walk-forward-aligned metrics (`win_rate_net`, `trades_per_week`, concentration), and explicit gate profiles (`stage_go`, `final_go`) with machine-readable verdicts; added focused tests and produced two artifact checks for the current ORB candidate.
+    impact: Each hypothesis can now be evaluated with the same command contract and auditable JSON outputs; current candidate (`ORB_BREAKOUT`, cluster `other`, slots `12:00/14:15`, exclude `BUY@12:00`) passes `stage_go` and fails `final_go`; compact neighbor sweep (`77` variants) found `0` `final_go` passes, narrowing next optimization scope to structural uplift beyond slot/side filtering.
+    links:
+      - scripts/verify_wf_hypothesis.py
+      - tests/test_verify_wf_hypothesis.py
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_stagego_20260305.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_slot_sweep_finalgo_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-05-076
+    date: 2026-03-05
+    title: Optimize futures signal-validation walk-forward runtime via indexed minute windows and context-scoped probability cache
+    context: Futures signal-check runs in `run_morning_plan_walk_forward.py` remained slow due to repeated full `m5` scans per setup and repeated probability forecast passes over growing history.
+    decision: Refactor hot path to use `bisect`-based minute-bar slicing in `_simulate_setup`, keep cached `m5` timestamps in `WindowEvalCache`, index history by probability context inside `_evaluate_window`, and reuse forecast result for allow-path planned signals instead of recomputing; align default `--retune-every-folds` with baseline (`3`).
+    impact: Setup simulation avoids full-list scans, probability gate avoids global-history scans and duplicate forecasts, and default fold retuning cadence now follows the baseline speed profile without changing signal semantics.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
   - id: ADM-2026-03-04-075
     date: 2026-03-04
     title: Expand morning-plan recall families and enforce hard-goal acceptance, then map feasible frontier

@@ -1,6 +1,51 @@
 version: 1
-updated_at: 2026-03-04
+updated_at: 2026-03-06
 items:
+  - id: P2-SIGNALS-STRATEGY-STREAM-041
+    title: Separate live signal flow by strategy stream in actionability APIs and Telegram worker
+    lane: operations
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - actionability APIs expose and filter `strategy_type` and `strategy_stream` for pair signals
+      - signal fingerprint/cooldown logic does not collide between arbitrage and commodity-futures streams
+      - Telegram signal message contains strategy label while preserving existing command/ACK UX
+      - regression tests cover API filtering, runtime metrics propagation, and worker stream cooldown split
+    checks:
+      - pytest tests/test_api_v2.py tests/test_telegram_worker.py tests/test_signal_cycle.py -q
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-FWD-LIVE-040
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-FWD-LIVE-040
+    title: Align O1 execution baseline and launch live paper-forward operator contour
+    lane: operations
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - default morning execution policy matches O1 profile (no hard absolute TP cap)
+      - operator launch script starts backend, refreshes live signals, and initializes forward run for today
+      - Telegram worker format remains unchanged and is reused by launch flow
+    checks:
+      - python scripts/run_lean_gate.py
+      - powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -CheckOnly
+      - powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -ForceFullRefresh
+    docs:
+      - README.md
+      - docs/session_handoff.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
     lane: governance
@@ -948,7 +993,7 @@ items:
   - id: P2-WF-PRECISION-HYP-039
     title: Integrate precision-filter hypothesis loop with deterministic impact artifacts for morning-plan WF
     lane: strategy
-    status: active
+    status: completed
     execution_mode: autonomous
     owner: product-engineering
     acceptance:
@@ -956,16 +1001,31 @@ items:
       - precision filter supports setup-id dedup and rule-based gating by side/setup kind/stop model/decision time/risk and target return
       - impact of each integrated hypothesis is written to a versioned artifact under artifacts/research
       - docs and operational memory capture accepted/rejected hypotheses to avoid repeated loops
+      - hypothesis verifier supports precompiled signal-tape batch checks with measured >=10x speedup and parity against legacy path
+      - multi-seed causal search loop is executable with early-pruning and proves whether filter-space still contains final-go candidates
+      - execution-only causal tuning path can satisfy hard-go acceptance on seed124 without probability gate
     checks:
       - python -m pytest tests/test_morning_plan_walk_forward.py -q
       - python -m ruff check scripts/run_morning_plan_walk_forward.py tests/test_morning_plan_walk_forward.py
+      - python -m pytest tests/test_verify_wf_hypothesis.py -q
+      - python -m pytest tests/test_search_wf_hypothesis_multi_seed.py -q
+      - python -m ruff check scripts/verify_wf_hypothesis.py tests/test_verify_wf_hypothesis.py
+      - python -m ruff check scripts/search_wf_hypothesis_multi_seed.py tests/test_search_wf_hypothesis_multi_seed.py
+      - python scripts/benchmark_wf_hypothesis_engines.py --in-json artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json --candidates 8192 --seed 42 --out-json artifacts/research/wf_goal_v6_verify_engine_benchmark_20260305.json
+      - python scripts/search_wf_hypothesis_multi_seed.py --in-json artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json --in-json artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json --in-json artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json --gate-profile final_go --candidates 200000 --seed 43 --require-passes 2 --out-json artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass2_20260305.json
       - python scripts/run_lean_gate.py
     docs:
       - scripts/run_morning_plan_walk_forward.py
+      - scripts/verify_wf_hypothesis.py
+      - scripts/evaluate_wf_hypothesis_batch.py
+      - scripts/benchmark_wf_hypothesis_engines.py
+      - scripts/search_wf_hypothesis_multi_seed.py
       - src/moex_carry/signal_engine/setups/generator.py
       - src/moex_carry/signal_engine/setups/extended_families.py
       - src/moex_carry/config.py
       - tests/test_morning_plan_walk_forward.py
+      - tests/test_verify_wf_hypothesis.py
+      - tests/test_search_wf_hypothesis_multi_seed.py
       - tests/test_signal_engine_setups.py
       - artifacts/research/wf_goal_v6_hyp1_precision_filter_eval_20260304.json
       - artifacts/research/wf_goal_v6_hyp1_precision_filter_rerun_20260304.json
@@ -987,6 +1047,38 @@ items:
       - artifacts/research/wf_goal_v6_h18_h26_iteration_summary_20260304.json
       - artifacts/research/wf_goal_v6_precision_hypothesis_compare_20260304.json
       - artifacts/research/wf_goal_v6_methodology_probe_20260304.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_stagego_20260305.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_slot_sweep_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_iterative_autosearch_focus_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_orb_energy_other_roots17_finalgo_pass_20260305.json
+      - artifacts/research/wf_goal_v6_h24_candidate_crosscheck_20260305.json
+      - artifacts/research/wf_goal_v6_multireport_config_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_orb_energy_other_roots17_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_seed_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_filtered_finalgo_check_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_posthoc_autosearch_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_local_neighborhood_search_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_111_posthoc_compare_20260305.json
+      - artifacts/research/wf_goal_v6_verify_engine_benchmark_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass3_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_stagego_pass2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_targeted_search_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_expert_policy_v1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_causalfirst_expert_v1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_expert_v1_seed124_filter_search_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_noprob_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_executionsem_v3_entryimprove_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_L_kplus_improve1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_M3_cap03_seed124_20260305.json
       - docs/session_handoff.md
       - docs/research/wf-baseline-v6-decisions-2026-03-04.md
       - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
@@ -994,3 +1086,4 @@ items:
     dependencies:
       - P2-NEWS-CAUSAL-GATE-038
     started_at: 2026-03-04
+    completed_at: 2026-03-05
