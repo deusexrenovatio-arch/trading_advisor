@@ -50,6 +50,35 @@ def init_news_live_db(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS news_article_commodity_links (
+            article_id TEXT NOT NULL,
+            commodity TEXT NOT NULL,
+            link_score REAL NOT NULL DEFAULT 0.0,
+            link_reason TEXT,
+            link_evidence_json TEXT,
+            link_mode TEXT NOT NULL DEFAULT 'deterministic',
+            is_primary_link INTEGER NOT NULL DEFAULT 0,
+            first_seen_at_utc TEXT NOT NULL,
+            last_seen_at_utc TEXT NOT NULL,
+            PRIMARY KEY (article_id, commodity),
+            FOREIGN KEY (article_id) REFERENCES news_articles(article_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_news_article_links_commodity
+        ON news_article_commodity_links (commodity, link_score DESC, article_id)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_news_article_links_article
+        ON news_article_commodity_links (article_id, commodity)
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS news_scores (
             article_id TEXT PRIMARY KEY,
             model_name TEXT NOT NULL,

@@ -58,7 +58,7 @@ def _coerce_reason_terms(value: object) -> str:
         try:
             parsed = json.loads(raw)
         except (TypeError, ValueError):
-            return _normalize_text(raw)
+            parsed = None
         if isinstance(parsed, list):
             parts = [_normalize_text(item) for item in parsed]
             return ", ".join(part for part in parts if part)
@@ -76,13 +76,11 @@ def _truncate_with_ellipsis(value: str, *, limit: int) -> str:
 def derive_news_fingerprint(row: dict[str, Any]) -> str:
     payload = "|".join(
         [
+            _normalize_text(row.get("story_id") or row.get("story_key")),
+            _normalize_text(row.get("commodity_scope")),
             _normalize_text(row.get("published_at_utc")),
-            _normalize_text(row.get("commodity")).upper(),
-            _normalize_text(row.get("direction")).lower(),
-            f"{_to_float(row.get('impact_score')):.4f}",
-            f"{_to_float(row.get('confidence')):.4f}",
-            _normalize_text(row.get("title") or row.get("headline")),
             _normalize_text(row.get("url")),
+            _normalize_text(row.get("title") or row.get("headline")),
         ]
     )
     digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
@@ -136,6 +134,63 @@ def load_news_rows(
     return rows
 
 
+def group_story_alerts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        key = (
+            _normalize_text(row.get("story_id") or row.get("story_key"))
+            or _normalize_text(row.get("article_id"))
+            or _normalize_text(row.get("url"))
+            or derive_news_fingerprint(row)
+        )
+        grouped.setdefault(key, []).append(dict(row))
+
+    alerts: list[dict[str, Any]] = []
+    for key, items in grouped.items():
+        ordered = sorted(
+            items,
+            key=lambda item: (
+                _to_float(item.get("commodity_link_score"), default=_to_float(item.get("confidence"))),
+                _to_float(item.get("impact_score")),
+                _to_float(item.get("confidence")),
+                _normalize_text(item.get("published_at_utc")),
+            ),
+            reverse=True,
+        )
+        lead = dict(ordered[0])
+        story_scope_rows: list[dict[str, Any]] = []
+        seen_commodities: set[str] = set()
+        for item in ordered:
+            commodity = _normalize_text(item.get("commodity")).upper()
+            if not commodity or commodity in seen_commodities:
+                continue
+            story_scope_rows.append(
+                {
+                    "commodity": commodity,
+                    "commodity_link_score": _to_float(
+                        item.get("commodity_link_score"),
+                        default=_to_float(item.get("confidence")),
+                    ),
+                    "link_reason": _normalize_text(item.get("link_reason")),
+                    "link_evidence_json": _normalize_text(item.get("link_evidence_json")),
+                }
+            )
+            seen_commodities.add(commodity)
+        lead["story_id"] = _normalize_text(lead.get("story_id") or lead.get("story_key") or key)
+        lead["story_scope_rows"] = story_scope_rows
+        lead["commodity_scope"] = ",".join(item["commodity"] for item in story_scope_rows)
+        lead["is_multi_commodity"] = len(story_scope_rows) > 1
+        if story_scope_rows:
+            lead["lead_commodity"] = story_scope_rows[0]["commodity"]
+            lead["lead_link_score"] = story_scope_rows[0]["commodity_link_score"]
+            lead["commodity"] = story_scope_rows[0]["commodity"]
+            lead["commodity_link_score"] = story_scope_rows[0]["commodity_link_score"]
+        alerts.append(lead)
+
+    alerts.sort(key=lambda item: _normalize_text(item.get("published_at_utc")), reverse=True)
+    return alerts
+
+
 def _format_msk(ts: datetime) -> str:
     msk = ts.astimezone(timezone(timedelta(hours=3)))
     return msk.strftime("%d.%m.%Y %H:%M MSK")
@@ -144,14 +199,14 @@ def _format_msk(ts: datetime) -> str:
 def format_news_message(alert: dict[str, Any]) -> str:
     published_dt = _parse_iso_utc(alert.get("published_at_utc"))
     published_label = _format_msk(published_dt) if published_dt is not None else "n/a"
-    commodity = _normalize_text(alert.get("commodity")).upper() or "N/A"
+    lead_commodity = _normalize_text(alert.get("lead_commodity") or alert.get("commodity")).upper() or "N/A"
     direction = _normalize_text(alert.get("direction")).lower()
     if direction in {"up", "long", "bullish", "increase"}:
-        direction_label = "⬆️ Рост"
+        direction_label = "UP"
     elif direction in {"down", "short", "bearish", "decrease"}:
-        direction_label = "⬇️ Снижение"
+        direction_label = "DOWN"
     else:
-        direction_label = "➡️ Нейтрально"
+        direction_label = "NEUTRAL"
     severity = _normalize_text(alert.get("severity")).lower() or "n/a"
     impact = _to_float(alert.get("impact_score"))
     confidence = _to_float(alert.get("confidence"))
@@ -162,61 +217,65 @@ def format_news_message(alert: dict[str, Any]) -> str:
         _normalize_text(alert.get("title") or alert.get("headline")),
         limit=200,
     )
-    story_key = _normalize_text(alert.get("story_key"))
+    story_id = _normalize_text(alert.get("story_id") or alert.get("story_key"))
     reason_terms_up = _coerce_reason_terms(alert.get("reason_terms_up"))
     reason_terms_down = _coerce_reason_terms(alert.get("reason_terms_down"))
     cause_classification = _normalize_text(alert.get("cause_classification")).lower() or "unknown"
-    cause_bucket = _normalize_text(alert.get("cause_bucket")).lower()
     cause_event = _normalize_text(alert.get("cause_event")).lower()
-    transmission_channel = _normalize_text(alert.get("transmission_channel")).lower()
     cause_route_key = _normalize_text(alert.get("cause_route_key"))
     cause_claim_status = _normalize_text(alert.get("cause_claim_status")).lower() or "unknown"
     cause_entities = _coerce_reason_terms(alert.get("cause_entities_json"))
     fundamental_score = _to_float(alert.get("fundamental_score"))
     cause_confidence = _to_float(alert.get("cause_confidence"))
     is_primary_cause = _to_bool(alert.get("is_primary_cause"))
-    verified_1h = _to_bool(alert.get("verified_move_1h"))
-    verified_1d = _to_bool(alert.get("verified_move_1d"))
-    max_move_1h = _to_float(alert.get("max_abs_move_pct_1h"))
-    max_move_1d = _to_float(alert.get("max_abs_move_pct_1d"))
-    max_z_1h = _to_float(alert.get("max_abs_z_1h"))
-    max_z_1d = _to_float(alert.get("max_abs_z_1d"))
+    lead_link_score = _to_float(
+        alert.get("lead_link_score"),
+        default=_to_float(alert.get("commodity_link_score"), default=confidence),
+    )
+    story_scope_rows = alert.get("story_scope_rows")
+    if not isinstance(story_scope_rows, list):
+        story_scope_rows = []
+    commodities_label = ", ".join(
+        f"{_normalize_text(item.get('commodity')).upper()} ({_to_float(item.get('commodity_link_score')):.2f})"
+        for item in story_scope_rows
+        if _normalize_text(item.get("commodity"))
+    ) or lead_commodity
+    evidence_parts: list[str] = []
+    for value in (reason_terms_up, reason_terms_down, cause_entities):
+        if value:
+            evidence_parts.append(value)
+    for item in story_scope_rows:
+        reason = _normalize_text(item.get("link_reason"))
+        if reason:
+            evidence_parts.append(reason)
+        evidence_terms = _coerce_reason_terms(item.get("link_evidence_json"))
+        if evidence_terms:
+            evidence_parts.append(evidence_terms)
+    evidence = ", ".join(part for part in evidence_parts if part)
     url = _normalize_text(alert.get("url"))
 
     lines = [
-        "📰 Новостной импакт-сигнал (NEWS IMPACT ALERT)",
-        f"🧷 Товар: {commodity} | 🧭 Направление: {direction_label}",
-        f"Commodity: {commodity} | Direction: {direction.upper() or 'N/A'}",
-        f"📊 Импакт: {impact:.3f} | Доверие: {confidence:.3f} | Серьёзность: {severity}",
-        f"🕒 Публикация: {published_label}",
-        f"🏷️ Источник: {source_label}",
+        "NEWS DISCOVERY ALERT",
+        f"Published: {published_label}",
+        f"Commodities: {commodities_label}",
+        f"Lead link: {lead_commodity} ({lead_link_score:.2f})",
+        f"Direction: {direction_label} | Impact: {impact:.3f} | Confidence: {confidence:.3f} | Severity: {severity}",
+        f"Source: {source_label}",
     ]
-    if story_key:
-        lines.append(f"🧬 История: {story_key}")
+    if story_id:
+        lines.append(f"Story: {story_id}")
     if headline:
-        lines.append(f"🗞️ Заголовок: {headline}")
-    if reason_terms_up:
-        lines.append(f"✅ Драйверы роста: {reason_terms_up}")
-    if reason_terms_down:
-        lines.append(f"⚠️ Драйверы снижения: {reason_terms_down}")
+        lines.append(f"Headline: {headline}")
+    lines.append(
+        "Cause: "
+        f"{cause_classification.upper()} | event={cause_event or 'n/a'} | route={cause_route_key or 'n/a'} "
+        f"| fundamental={fundamental_score:.2f} | cause_conf={cause_confidence:.2f} "
+        f"| primary={'yes' if is_primary_cause else 'no'} | claim={cause_claim_status}"
+    )
+    if evidence:
+        lines.append(f"Evidence: {evidence}")
     if url:
-        lines.append(f"🔗 Ссылка: {url}")
-    lines.append(
-        "Cause profile: "
-        f"{cause_classification.upper()} | bucket={cause_bucket or 'n/a'} | event={cause_event or 'n/a'} "
-        f"| channel={transmission_channel or 'n/a'} | fundamental={fundamental_score:.2f} "
-        f"| cause_conf={cause_confidence:.2f} | primary={'yes' if is_primary_cause else 'no'} "
-        f"| claim={cause_claim_status}"
-    )
-    if cause_entities:
-        lines.append(f"Cause entities: {cause_entities}")
-    if cause_route_key:
-        lines.append(f"Cause route: {cause_route_key}")
-    lines.append(
-        "Move verification: "
-        f"1H={'yes' if verified_1h else 'no'} ({max_move_1h:.2f}%, |z|={max_z_1h:.2f}) | "
-        f"1D={'yes' if verified_1d else 'no'} ({max_move_1d:.2f}%, |z|={max_z_1d:.2f})"
-    )
+        lines.append(f"URL: {url}")
     return "\n".join(lines)
 
 
@@ -296,9 +355,13 @@ def broadcast_news_alerts(
     if not rows:
         return
 
+    grouped_rows = group_story_alerts(rows)
+    if not grouped_rows:
+        return
+
     now_utc = datetime.now(timezone.utc)
     alerts, changed = apply_news_alert_policy(
-        rows,
+        grouped_rows,
         now_utc=now_utc,
         state=state,
         max_alerts_per_cycle=max(int(cfg.news_max_alerts_per_cycle), 1),

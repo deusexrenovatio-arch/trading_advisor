@@ -16,7 +16,8 @@ def _sqlite_path(path: Path) -> str:
 
 def test_run_news_ingest_cycle_persists_and_scores(monkeypatch, tmp_path):
     db_path = tmp_path / "news_live.db"
-    feed_path = tmp_path / "feed.csv"
+    discovery_feed_path = tmp_path / "data" / "output" / "news_live" / "live_news_discovery.csv"
+    verified_feed_path = tmp_path / "data" / "output" / "news_live" / "live_news_verified.csv"
 
     def _fake_gdelt(*args, **kwargs):
         return [
@@ -47,14 +48,19 @@ def test_run_news_ingest_cycle_persists_and_scores(monkeypatch, tmp_path):
             ),
         ),
         newsapi_enabled=False,
-        feed_path=str(feed_path),
+        discovery_feed_path=str(discovery_feed_path),
+        verified_feed_path=str(verified_feed_path),
         model_mode="keyword",
     )
     result = run_news_ingest_cycle(config=cfg, mode="live", now_utc=datetime(2026, 3, 3, tzinfo=timezone.utc))
 
     assert result["inserted_total"] == 1
     assert result["scored_total"] == 1
-    assert feed_path.exists()
+    assert result["feed_path"] == str(discovery_feed_path)
+    assert result["discovery_feed_path"] == str(discovery_feed_path)
+    assert result["verified_feed_path"] == str(verified_feed_path)
+    assert discovery_feed_path.exists()
+    assert verified_feed_path.exists()
 
     conn = sqlite3.connect(db_path)
     try:
@@ -345,7 +351,7 @@ def test_gdelt_retry_recovers_transient_failure(monkeypatch, tmp_path):
 
 def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
     db_path = tmp_path / "news_live_bridge.db"
-    feed_path = tmp_path / "data" / "output" / "news_live" / "live_news_signals.csv"
+    feed_path = tmp_path / "data" / "output" / "news_live" / "live_news_discovery.csv"
     feed_path.parent.mkdir(parents=True, exist_ok=True)
     now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     published_at = (now_utc - timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
@@ -391,6 +397,7 @@ def test_load_news_gate_items_reads_scored_rows(monkeypatch, tmp_path):
     settings.data.data_dir = str(tmp_path / "data")
     settings.news_filter.live_ingest_enabled = True
     settings.news_filter.live_db_url = _sqlite_path(db_path)
+    settings.news_filter.live_feed_path = str(feed_path)
     settings.news_filter.live_min_impact_score = 0.0
     settings.news_filter.live_min_confidence = 0.9
     settings.news_filter.live_max_items = 20
@@ -463,8 +470,8 @@ def test_scoring_deduplicates_cross_commodity_story(monkeypatch, tmp_path):
         model_mode="keyword",
     )
     result = run_news_ingest_cycle(config=cfg, mode="live", now_utc=datetime(2026, 3, 3, tzinfo=timezone.utc))
-    assert result["inserted_total"] == 2
-    assert result["scored_total"] == 2
+    assert result["inserted_total"] == 1
+    assert result["scored_total"] == 1
     assert calls["score"] == 1
 
     conn = sqlite3.connect(db_path)
@@ -476,8 +483,17 @@ def test_scoring_deduplicates_cross_commodity_story(monkeypatch, tmp_path):
             """
         ).fetchone()
         assert story_stats is not None
-        assert int(story_stats[0]) == 2
+        assert int(story_stats[0]) == 1
         assert int(story_stats[1]) == 1
+        link_stats = conn.execute(
+            """
+            SELECT COUNT(*), COUNT(DISTINCT commodity)
+            FROM news_article_commodity_links
+            """
+        ).fetchone()
+        assert link_stats is not None
+        assert int(link_stats[0]) == 2
+        assert int(link_stats[1]) == 2
     finally:
         conn.close()
 

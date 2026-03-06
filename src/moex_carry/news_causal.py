@@ -1,9 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from typing import Iterable
 
+from moex_carry.news_causal_rules import COMMODITY_RULES, GLOBAL_RULES
 from moex_carry.news_commodity_graph import infer_event_first_cause
 
 
@@ -21,20 +23,16 @@ def _match_terms(text: str, terms: Iterable[str]) -> list[str]:
     hits: list[str] = []
     for term in terms:
         needle = _normalize_text(term).lower()
-        if needle and needle in lowered:
+        if not needle:
+            continue
+        if " " in needle or any(ch in needle for ch in "+-/"):
+            matched = needle in lowered
+        else:
+            pattern = rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])"
+            matched = re.search(pattern, lowered) is not None
+        if matched:
             hits.append(needle)
     return sorted(dict.fromkeys(hits))
-
-
-@dataclass(frozen=True)
-class CausalRule:
-    bucket: str
-    event: str
-    transmission_channel: str
-    direction_bias: str
-    weight: float
-    terms: tuple[str, ...]
-
 
 @dataclass(frozen=True)
 class CausalCandidate:
@@ -50,285 +48,19 @@ class CausalCandidate:
     claim_status: str = "confirmed"
     entities: tuple[str, ...] = ()
 
-
-_GLOBAL_RULES: tuple[CausalRule, ...] = (
-    CausalRule(
-        bucket="trade_policy",
-        event="export_restriction",
-        transmission_channel="physical_supply",
-        direction_bias="up",
-        weight=0.95,
-        terms=(
-            "export ban",
-            "export curb",
-            "export quota",
-            "export duty",
-            "sanctions",
-            "embargo",
-        ),
-    ),
-    CausalRule(
-        bucket="demand",
-        event="import_demand_surge",
-        transmission_channel="physical_demand",
-        direction_bias="up",
-        weight=0.85,
-        terms=(
-            "import surge",
-            "import demand rises",
-            "china imports",
-            "india imports",
-            "refinery runs rise",
-        ),
-    ),
-    CausalRule(
-        bucket="demand",
-        event="import_demand_drop",
-        transmission_channel="physical_demand",
-        direction_bias="down",
-        weight=0.85,
-        terms=(
-            "import demand slowdown",
-            "demand destruction",
-            "import cuts",
-            "manufacturing contraction",
-            "recession risk",
-        ),
-    ),
-    CausalRule(
-        bucket="logistics",
-        event="transport_disruption",
-        transmission_channel="transport_costs",
-        direction_bias="up",
-        weight=0.9,
-        terms=(
-            "port closure",
-            "shipping disruption",
-            "red sea",
-            "suez",
-            "hormuz",
-            "pipeline outage",
-            "rail disruption",
-            "canal congestion",
-        ),
-    ),
-    CausalRule(
-        bucket="weather",
-        event="extreme_weather_supply_shock",
-        transmission_channel="weather_supply",
-        direction_bias="up",
-        weight=0.75,
-        terms=(
-            "hurricane",
-            "storm",
-            "flood",
-            "freeze",
-            "heatwave",
-            "drought",
-            "wildfire",
-        ),
-    ),
-    CausalRule(
-        bucket="monetary_policy",
-        event="central_bank_dovish_shift",
-        transmission_channel="rates_fx",
-        direction_bias="up",
-        weight=0.92,
-        terms=(
-            "rate cut",
-            "dovish",
-            "qe",
-            "liquidity easing",
-            "real yields fall",
-        ),
-    ),
-    CausalRule(
-        bucket="monetary_policy",
-        event="central_bank_hawkish_shift",
-        transmission_channel="rates_fx",
-        direction_bias="down",
-        weight=0.92,
-        terms=(
-            "rate hike",
-            "hawkish",
-            "tightening",
-            "real yields rise",
-            "balance sheet runoff",
-        ),
-    ),
-)
-
-
-_COMMODITY_RULES: dict[str, tuple[CausalRule, ...]] = {
-    "BRN": (
-        CausalRule(
-            bucket="supply",
-            event="opec_supply_cut",
-            transmission_channel="physical_supply",
-            direction_bias="up",
-            weight=1.0,
-            terms=("opec cut", "output cut", "production cut", "voluntary cut"),
-        ),
-        CausalRule(
-            bucket="supply",
-            event="opec_supply_increase",
-            transmission_channel="physical_supply",
-            direction_bias="down",
-            weight=0.95,
-            terms=("opec increase", "output increase", "production hike", "supply increase"),
-        ),
-        CausalRule(
-            bucket="inventory",
-            event="inventory_draw",
-            transmission_channel="inventory_balance",
-            direction_bias="up",
-            weight=0.9,
-            terms=("inventory draw", "stocks draw", "crude draw", "eia draw"),
-        ),
-        CausalRule(
-            bucket="inventory",
-            event="inventory_build",
-            transmission_channel="inventory_balance",
-            direction_bias="down",
-            weight=0.9,
-            terms=("inventory build", "stocks build", "crude build", "eia build"),
-        ),
-        CausalRule(
-            bucket="geopolitics",
-            event="middle_east_supply_risk",
-            transmission_channel="geopolitical_risk",
-            direction_bias="up",
-            weight=1.0,
-            terms=("iran", "missile", "drone attack", "shipping lane risk", "strait of hormuz"),
-        ),
-    ),
-    "NG_US": (
-        CausalRule(
-            bucket="weather",
-            event="cold_weather_demand",
-            transmission_channel="weather_demand",
-            direction_bias="up",
-            weight=1.0,
-            terms=("colder", "cold blast", "hdd", "freeze-off", "polar vortex"),
-        ),
-        CausalRule(
-            bucket="weather",
-            event="warm_weather_demand_drop",
-            transmission_channel="weather_demand",
-            direction_bias="down",
-            weight=1.0,
-            terms=("warmer", "mild weather", "cooling demand drop", "hdd miss"),
-        ),
-        CausalRule(
-            bucket="inventory",
-            event="storage_withdrawal",
-            transmission_channel="inventory_balance",
-            direction_bias="up",
-            weight=0.95,
-            terms=("storage withdrawal", "draw larger than expected", "eia withdrawal"),
-        ),
-        CausalRule(
-            bucket="inventory",
-            event="storage_injection",
-            transmission_channel="inventory_balance",
-            direction_bias="down",
-            weight=0.95,
-            terms=("storage injection", "build larger than expected", "eia injection"),
-        ),
-        CausalRule(
-            bucket="lng",
-            event="lng_export_outage",
-            transmission_channel="export_flow",
-            direction_bias="down",
-            weight=0.85,
-            terms=("lng outage", "export terminal outage", "freeport outage"),
-        ),
-        CausalRule(
-            bucket="lng",
-            event="lng_export_restart",
-            transmission_channel="export_flow",
-            direction_bias="up",
-            weight=0.85,
-            terms=("lng restart", "export terminal restart", "lng flows rise"),
-        ),
-    ),
-    "GOLD": (
-        CausalRule(
-            bucket="monetary_policy",
-            event="real_yield_decline",
-            transmission_channel="rates_fx",
-            direction_bias="up",
-            weight=1.0,
-            terms=("real yields fall", "treasury yields fall", "rate cuts priced"),
-        ),
-        CausalRule(
-            bucket="monetary_policy",
-            event="real_yield_rise",
-            transmission_channel="rates_fx",
-            direction_bias="down",
-            weight=1.0,
-            terms=("real yields rise", "treasury yields rise", "hawkish fed"),
-        ),
-        CausalRule(
-            bucket="fx",
-            event="usd_weakness",
-            transmission_channel="fx_pass_through",
-            direction_bias="up",
-            weight=0.9,
-            terms=("dollar weak", "usd weaker", "dxy falls"),
-        ),
-        CausalRule(
-            bucket="fx",
-            event="usd_strength",
-            transmission_channel="fx_pass_through",
-            direction_bias="down",
-            weight=0.9,
-            terms=("dollar stronger", "usd stronger", "dxy rises"),
-        ),
-        CausalRule(
-            bucket="safe_haven",
-            event="risk_off_geopolitics",
-            transmission_channel="risk_appetite",
-            direction_bias="up",
-            weight=0.95,
-            terms=("safe haven demand", "risk-off", "geopolitical escalation", "war risk"),
-        ),
-    ),
-    "SILVER": (
-        CausalRule(
-            bucket="industrial_demand",
-            event="manufacturing_upturn",
-            transmission_channel="industrial_cycle",
-            direction_bias="up",
-            weight=0.9,
-            terms=("manufacturing rebound", "pmi rises", "solar demand", "electronics demand"),
-        ),
-        CausalRule(
-            bucket="industrial_demand",
-            event="manufacturing_slowdown",
-            transmission_channel="industrial_cycle",
-            direction_bias="down",
-            weight=0.9,
-            terms=("manufacturing slowdown", "pmi contraction", "industrial demand weak"),
-        ),
-        CausalRule(
-            bucket="supply",
-            event="mine_supply_disruption",
-            transmission_channel="physical_supply",
-            direction_bias="up",
-            weight=0.85,
-            terms=("mine disruption", "strike", "smelter outage", "supply disruption"),
-        ),
-    ),
-}
-
-
 _EFFECT_ONLY_TERMS: tuple[str, ...] = (
     "prices rose",
     "prices jumped",
     "prices fell",
     "futures gained",
     "futures dropped",
+    "gold climbs",
+    "gold rises",
+    "gold falls",
+    "gold retreats",
+    "gold wavers",
+    "gold tumbles",
+    "silver falls",
     "extended gains",
     "profit taking",
     "technical rebound",
@@ -347,11 +79,120 @@ _HIGH_SIGNAL_EVENTS: set[str] = {
     "central_bank_dovish_shift",
     "central_bank_hawkish_shift",
     "middle_east_supply_risk",
+    "exporter_military_strike_risk",
     "chokepoint_closure",
     "export_restriction",
     "producer_outage",
     "producer_output_cut",
+    "pgm_mine_disruption",
+    "russian_palladium_supply_risk",
+    "copper_mine_disruption",
+    "smelter_power_disruption",
+    "nickel_ore_export_restriction",
+    "zinc_smelter_disruption",
+    "grain_export_restriction",
+    "sugar_export_restriction",
+    "coffee_crop_weather_shock",
+    "cocoa_crop_shock",
+    "citrus_crop_shock",
 }
+
+_DISCOVERY_EVENT_BY_COMMODITY: dict[str, str] = {
+    "BRN": "middle_east_supply_risk",
+    "NG_US": "extreme_weather_supply_shock",
+    "GOLD": "risk_off_geopolitics",
+    "SILVER": "manufacturing_upturn",
+    "PLATINUM": "pgm_mine_disruption",
+    "PALLADIUM": "russian_palladium_supply_risk",
+    "COPPER": "copper_mine_disruption",
+    "ALUMINUM": "smelter_power_disruption",
+    "NICKEL": "nickel_ore_export_restriction",
+    "ZINC": "zinc_smelter_disruption",
+    "WHEAT": "grain_export_restriction",
+    "SUGAR": "sugar_export_restriction",
+    "COFFEE": "coffee_supply_recovery",
+    "COCOA": "cocoa_crop_shock",
+    "ORANGE": "citrus_crop_shock",
+}
+
+_DISCOVERY_CAUSE_TERMS: tuple[str, ...] = (
+    "output",
+    "production",
+    "harvest",
+    "quota",
+    "permit",
+    "export",
+    "import",
+    "tariff",
+    "duty",
+    "inventory",
+    "stocks",
+    "crop",
+    "mine",
+    "smelter",
+    "outage",
+    "shutdown",
+    "force majeure",
+    "drought",
+    "frost",
+    "storm",
+    "farmgate",
+    "arrivals",
+    "supply",
+    "demand",
+    "policy",
+    "sanction",
+    "investment",
+    "budget",
+)
+
+_DISCOVERY_ANCHORS: dict[str, tuple[str, ...]] = {
+    "BRN": ("oil", "brent", "opec", "hormuz", "crude"),
+    "NG_US": ("natural gas", "lng", "henry hub", "eia"),
+    "GOLD": ("gold", "bullion", "real yields", "central bank"),
+    "SILVER": ("silver", "xag", "solar demand", "industrial demand"),
+    "PLATINUM": ("platinum", "pgm", "south africa"),
+    "PALLADIUM": ("palladium", "russian palladium", "autocatalyst"),
+    "COPPER": ("copper", "codelco", "escondida", "el teniente"),
+    "ALUMINUM": ("aluminum", "aluminium", "alumina", "bauxite", "qatalum"),
+    "NICKEL": ("nickel", "indonesia", "morowali", "ore"),
+    "ZINC": ("zinc", "smelter", "treatment charges"),
+    "WHEAT": ("wheat", "grain", "usda", "black sea"),
+    "SUGAR": ("sugar", "ethanol", "cane", "mills"),
+    "COFFEE": ("coffee", "arabica", "robusta", "conab"),
+    "COCOA": ("cocoa", "ivory coast", "ghana", "cocobod"),
+    "ORANGE": ("orange", "citrus", "fcoj", "greening"),
+}
+
+_DISCOVERY_NOISE_TERMS: tuple[str, ...] = (
+    "investment at this price",
+    "what should investors do",
+    "market outlook explained",
+    "technical analysis",
+    "price prediction",
+)
+
+_DISCOVERY_WEAK_TERMS: tuple[str, ...] = (
+    "rebound",
+    "record",
+    "tariff",
+    "duties",
+    "cut",
+    "boost",
+    "higher",
+    "lower",
+    "decline",
+    "rise",
+    "fall",
+    "slashed",
+    "extension",
+    "permit",
+    "investment",
+    "financing",
+    "model",
+    "regulator",
+    "producers",
+)
 
 
 def _direction_alignment_score(direction: str, expected: str) -> float:
@@ -364,6 +205,28 @@ def _direction_alignment_score(direction: str, expected: str) -> float:
     return 1.0 if normalized_direction == normalized_expected else 0.0
 
 
+def _infer_discovery_fallback(commodity: str, text: str) -> tuple[str, list[str]] | None:
+    event = _DISCOVERY_EVENT_BY_COMMODITY.get(commodity)
+    if not event:
+        return None
+    anchor_hits = _match_terms(text, _DISCOVERY_ANCHORS.get(commodity, ()))
+    cause_hits = _match_terms(text, _DISCOVERY_CAUSE_TERMS)
+    weak_hits = _match_terms(text, _DISCOVERY_WEAK_TERMS)
+    noise_hits = _match_terms(text, _DISCOVERY_NOISE_TERMS)
+    if not anchor_hits:
+        return None
+    if not cause_hits and not weak_hits:
+        if noise_hits:
+            return None
+        evidence_base = anchor_hits
+    else:
+        evidence_base = cause_hits if cause_hits else weak_hits
+    if noise_hits and len(evidence_base) < 2:
+        return None
+    evidence_terms = [*anchor_hits[:2], *evidence_base[:3]]
+    return event, list(dict.fromkeys(evidence_terms))
+
+
 def analyze_causal_news(
     *,
     commodity: str,
@@ -371,6 +234,7 @@ def analyze_causal_news(
     description: str,
     content: str,
     direction: str,
+    profile: str = "publish",
     reason_terms_up: Iterable[object] | None = None,
     reason_terms_down: Iterable[object] | None = None,
 ) -> dict[str, object]:
@@ -380,12 +244,12 @@ def analyze_causal_news(
     full_text = _to_text_blob(text, reason_blob)
 
     matched: list[CausalCandidate] = []
-    for rule in (*_GLOBAL_RULES, *_COMMODITY_RULES.get(commodity_key, ())):
+    for rule in (*GLOBAL_RULES, *COMMODITY_RULES.get(commodity_key, ())):
         terms = _match_terms(full_text, rule.terms)
         if not terms:
             continue
         evidence = float(len(terms)) * float(rule.weight)
-        if commodity_key in _COMMODITY_RULES:
+        if commodity_key in COMMODITY_RULES:
             evidence += 0.08
         matched.append(
             CausalCandidate(
@@ -419,6 +283,7 @@ def analyze_causal_news(
         )
 
     effect_hits = _match_terms(full_text, _EFFECT_ONLY_TERMS)
+    profile_key = _normalize_text(profile).lower() or "publish"
 
     if matched:
         candidate = sorted(
@@ -470,6 +335,28 @@ def analyze_causal_news(
             "cause_claim_status": candidate.claim_status,
             "cause_entities": list(candidate.entities),
         }
+
+    if profile_key == "discovery":
+        fallback = _infer_discovery_fallback(commodity_key, full_text)
+        if fallback is not None:
+            event, cause_terms = fallback
+            cause_cluster_key = f"cause:{commodity_key or 'UNK'}:{event}:discovery"
+            return {
+                "cause_classification": "mixed",
+                "cause_bucket": "discovery",
+                "cause_event": event,
+                "transmission_channel": "broad_fundamental",
+                "cause_cluster_key": cause_cluster_key,
+                "cause_confidence": 0.52,
+                "fundamental_score": 0.54,
+                "direction_alignment": 0.5,
+                "is_primary_cause": False,
+                "cause_terms": cause_terms,
+                "effect_terms": effect_hits,
+                "cause_route_key": "",
+                "cause_claim_status": "confirmed",
+                "cause_entities": [],
+            }
 
     classification = "effect" if effect_hits else "unknown"
     is_primary_cause = False

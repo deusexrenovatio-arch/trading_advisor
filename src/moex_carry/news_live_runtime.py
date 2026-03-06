@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import sqlite3
 import time
@@ -12,10 +10,8 @@ from typing import Any
 
 import requests
 import yaml
-from moex_carry.news_causal import analyze_causal_news
 from moex_carry.news_live_causal_ops import (
     augment_query_with_event_terms,
-    backfill_missing_causal_scores,
 )
 from moex_carry.news_live_feed import export_live_news_feed
 from moex_carry.news_live_clients import (
@@ -23,12 +19,23 @@ from moex_carry.news_live_clients import (
     fetch_newsapi_articles as _fetch_newsapi_articles,
 )
 from moex_carry.news_live_scoring import (
-    MODEL_NAME_KEYWORD,
-    SEVERITY_ORDER,
     ModelScorer,
     ScoringModelConfig,
 )
-from moex_carry.news_live_schema import init_news_live_db
+from moex_carry.news_live_runtime_ops import (
+    article_id as _article_id_impl,
+    backfill_missing_causal as _backfill_missing_causal_impl,
+    backfill_story_ids as _backfill_story_ids_impl,
+    init_db as _init_db_impl,
+    insert_articles as _insert_articles_impl,
+    normalize_text as _normalize_text_impl,
+    normalize_url as _normalize_url_impl,
+    retry_fetch as _retry_fetch_impl,
+    safe_json as _safe_json_impl,
+    score_new_articles as _score_new_articles_impl,
+    story_id as _story_id_impl,
+    upsert_article_links as _upsert_article_links_impl,
+)
 from moex_carry.news_storage import (
     open_sqlite_connection,
     parse_any_utc,
@@ -44,7 +51,6 @@ from moex_carry.news_runtime_state import (
     should_poll_newsapi_live,
     utc_now,
 )
-from moex_carry.news_topic import build_story_fingerprint
 
 
 @dataclass(frozen=True)
@@ -70,7 +76,7 @@ class NewsIngestConfig:
     live_lookback_minutes: int = 120
     backfill_chunk_days: int = 30
     backfill_max_windows_per_commodity: int = 20
-    feed_path: str = "data/output/news_live/live_news_signals.csv"
+    feed_path: str | None = None
     feed_min_impact_score: float = 0.35
     feed_min_confidence: float = 0.9
     feed_min_fundamental_score: float = 0.45
@@ -78,6 +84,23 @@ class NewsIngestConfig:
     feed_require_primary_cause: bool = True
     feed_require_verified_move: bool = False
     feed_require_verified_both_horizons: bool = True
+    discovery_feed_path: str = "data/output/news_live/live_news_discovery.csv"
+    discovery_feed_min_impact_score: float = 0.35
+    discovery_feed_min_confidence: float = 0.55
+    discovery_feed_min_fundamental_score: float = 0.35
+    discovery_feed_max_rows: int = 5000
+    discovery_feed_require_primary_cause: bool = False
+    discovery_min_link_score: float = 0.6
+    verified_feed_path: str = "data/output/news_live/live_news_verified.csv"
+    verified_feed_min_impact_score: float = 0.35
+    verified_feed_min_confidence: float = 0.9
+    verified_feed_min_fundamental_score: float = 0.45
+    verified_feed_max_rows: int = 5000
+    verified_feed_require_primary_cause: bool = True
+    verified_feed_require_verified_move: bool = True
+    verified_feed_require_verified_both_horizons: bool = True
+    verified_min_link_score: float = 0.7
+    causal_profile: str = "discovery"
     newsapi_enabled: bool = True
     newsapi_api_key: str | None = None
     newsapi_timeout_sec: float = 30.0
@@ -152,7 +175,7 @@ class NewsIngestConfig:
             live_lookback_minutes=int(ingest.get("live_lookback_minutes", 120)),
             backfill_chunk_days=int(ingest.get("backfill_chunk_days", 30)),
             backfill_max_windows_per_commodity=int(ingest.get("backfill_max_windows_per_commodity", 20)),
-            feed_path=str(ingest.get("feed_path") or "data/output/news_live/live_news_signals.csv"),
+            feed_path=str(ingest.get("feed_path") or "").strip() or None,
             feed_min_impact_score=float(ingest.get("feed_min_impact_score", 0.35)),
             feed_min_confidence=float(ingest.get("feed_min_confidence", 0.9)),
             feed_min_fundamental_score=float(ingest.get("feed_min_fundamental_score", 0.45)),
@@ -160,6 +183,45 @@ class NewsIngestConfig:
             feed_require_primary_cause=bool(ingest.get("feed_require_primary_cause", True)),
             feed_require_verified_move=bool(ingest.get("feed_require_verified_move", False)),
             feed_require_verified_both_horizons=bool(ingest.get("feed_require_verified_both_horizons", True)),
+            discovery_feed_path=str(
+                ingest.get("discovery_feed_path")
+                or ingest.get("feed_path")
+                or "data/output/news_live/live_news_discovery.csv"
+            ),
+            discovery_feed_min_impact_score=float(ingest.get("discovery_feed_min_impact_score", 0.35)),
+            discovery_feed_min_confidence=float(ingest.get("discovery_feed_min_confidence", 0.55)),
+            discovery_feed_min_fundamental_score=float(ingest.get("discovery_feed_min_fundamental_score", 0.35)),
+            discovery_feed_max_rows=int(ingest.get("discovery_feed_max_rows", 5000)),
+            discovery_feed_require_primary_cause=bool(ingest.get("discovery_feed_require_primary_cause", False)),
+            discovery_min_link_score=float(ingest.get("discovery_min_link_score", 0.6)),
+            verified_feed_path=str(
+                ingest.get("verified_feed_path")
+                or "data/output/news_live/live_news_verified.csv"
+            ),
+            verified_feed_min_impact_score=float(
+                ingest.get("verified_feed_min_impact_score", ingest.get("feed_min_impact_score", 0.35))
+            ),
+            verified_feed_min_confidence=float(
+                ingest.get("verified_feed_min_confidence", ingest.get("feed_min_confidence", 0.9))
+            ),
+            verified_feed_min_fundamental_score=float(
+                ingest.get("verified_feed_min_fundamental_score", ingest.get("feed_min_fundamental_score", 0.45))
+            ),
+            verified_feed_max_rows=int(ingest.get("verified_feed_max_rows", ingest.get("feed_max_rows", 5000))),
+            verified_feed_require_primary_cause=bool(
+                ingest.get("verified_feed_require_primary_cause", ingest.get("feed_require_primary_cause", True))
+            ),
+            verified_feed_require_verified_move=bool(
+                ingest.get("verified_feed_require_verified_move", ingest.get("feed_require_verified_move", True))
+            ),
+            verified_feed_require_verified_both_horizons=bool(
+                ingest.get(
+                    "verified_feed_require_verified_both_horizons",
+                    ingest.get("feed_require_verified_both_horizons", True),
+                )
+            ),
+            verified_min_link_score=float(ingest.get("verified_min_link_score", 0.7)),
+            causal_profile=str(ingest.get("causal_profile") or "discovery").strip().lower() or "discovery",
             newsapi_enabled=bool(newsapi.get("enabled", True)),
             newsapi_api_key=api_key,
             newsapi_timeout_sec=float(newsapi.get("timeout_sec", 30.0)),
@@ -187,77 +249,31 @@ class NewsIngestConfig:
         )
 
 def _normalize_text(value: object) -> str:
-    return " ".join(str(value or "").strip().split())
+    return _normalize_text_impl(value)
 
 
 def _normalize_url(value: object) -> str:
-    url = _normalize_text(value)
-    if not url:
-        return ""
-    lowered = url.lower()
-    for marker in ("?utm_", "&utm_", "?fbclid=", "&fbclid="):
-        idx = lowered.find(marker)
-        if idx >= 0:
-            return url[:idx]
-    return url
+    return _normalize_url_impl(value)
 
 
-def _article_id(*, provider: str, commodity: str, title: str, url: str, published_at: str) -> str:
-    payload = "|".join(
-        [
-            provider.strip().lower(),
-            commodity.strip().upper(),
-            _normalize_url(url).lower(),
-            _normalize_text(title).lower(),
-            _normalize_text(published_at),
-        ]
-    )
-    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:20]
-    return f"{provider.lower()}-{commodity.upper()}-{digest}"
+def _article_id(*, provider: str, title: str, url: str, published_at: str) -> str:
+    return _article_id_impl(provider=provider, title=title, url=url, published_at=published_at)
 
 
 def _story_id(*, provider: str, title: str, url: str, published_at: str) -> str:
-    return build_story_fingerprint(
-        title=title,
-        url=url,
-        published_at_utc=published_at,
-        provider=provider,
-    )
+    return _story_id_impl(provider=provider, title=title, url=url, published_at=published_at)
 
 
 def _safe_json(value: object) -> str:
-    try:
-        return json.dumps(value, ensure_ascii=False, default=str)
-    except Exception:
-        return "{}"
+    return _safe_json_impl(value)
 
 
 def _init_db(conn: sqlite3.Connection) -> None:
-    init_news_live_db(conn)
+    _init_db_impl(conn)
 
 
 def _backfill_story_ids(conn: sqlite3.Connection) -> None:
-    rows = conn.execute(
-        """
-        SELECT article_id, provider, title, url, published_at_utc
-        FROM news_articles
-        WHERE COALESCE(story_id, '') = ''
-        """
-    ).fetchall()
-    if not rows:
-        return
-    for article_id, provider, title, url, published_at_utc in rows:
-        story_id = _story_id(
-            provider=_normalize_text(provider),
-            title=_normalize_text(title),
-            url=_normalize_url(url),
-            published_at=_normalize_text(published_at_utc),
-        )
-        conn.execute(
-            "UPDATE news_articles SET story_id = ? WHERE article_id = ?",
-            (story_id, str(article_id)),
-        )
-    conn.commit()
+    _backfill_story_ids_impl(conn)
 
 
 def _retry_fetch(
@@ -266,18 +282,7 @@ def _retry_fetch(
     attempts: int,
     backoff_sec: float,
 ) -> list[dict[str, Any]]:
-    last_exc: Exception | None = None
-    total = max(int(attempts), 1)
-    for idx in range(total):
-        try:
-            return fetch_fn()
-        except Exception as exc:  # pragma: no cover - retry behavior is covered via call counting tests
-            last_exc = exc
-            if idx < total - 1 and backoff_sec > 0:
-                time.sleep(backoff_sec * float(idx + 1))
-    if last_exc is not None:
-        raise last_exc
-    return []
+    return _retry_fetch_impl(fetch_fn, attempts=attempts, backoff_sec=backoff_sec)
 
 
 def _insert_articles(
@@ -287,179 +292,48 @@ def _insert_articles(
     query_text: str,
     fetched_at_utc: str,
     items: list[dict[str, Any]],
+    allowed_commodities: tuple[str, ...],
 ) -> tuple[int, int]:
-    fetched = 0
-    inserted = 0
-    for item in items:
-        title = _normalize_text(item.get("title"))
-        url = _normalize_url(item.get("url"))
-        published_at_utc = _normalize_text(item.get("published_at_utc"))
-        if not title and not url:
-            continue
-        article_id = _article_id(
-            provider=str(item.get("provider") or "unknown"),
-            commodity=commodity,
-            title=title,
-            url=url,
-            published_at=published_at_utc,
-        )
-        story_id = _story_id(
-            provider=str(item.get("provider") or "unknown"),
-            title=title,
-            url=url,
-            published_at=published_at_utc,
-        )
-        fetched += 1
-        exists = conn.execute(
-            "SELECT 1 FROM news_articles WHERE article_id = ?",
-            (article_id,),
-        ).fetchone()
-        if exists is not None:
-            conn.execute(
-                "UPDATE news_articles SET fetched_at_utc = ?, raw_json = ?, story_id = ? WHERE article_id = ?",
-                (fetched_at_utc, _safe_json(item.get("raw")), story_id, article_id),
-            )
-            continue
-        conn.execute(
-            """
-            INSERT INTO news_articles (
-                article_id,
-                provider,
-                commodity,
-                source_name,
-                published_at_utc,
-                fetched_at_utc,
-                title,
-                description,
-                content,
-                url,
-                language,
-                query_text,
-                story_id,
-                raw_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                article_id,
-                str(item.get("provider") or ""),
-                commodity,
-                _normalize_text(item.get("source_name")),
-                published_at_utc or fetched_at_utc,
-                fetched_at_utc,
-                title or "(untitled)",
-                _normalize_text(item.get("description")),
-                _normalize_text(item.get("content")),
-                url,
-                _normalize_text(item.get("language")),
-                query_text,
-                story_id,
-                _safe_json(item.get("raw")),
-            ),
-        )
-        inserted += 1
-    conn.commit()
-    return fetched, inserted
+    return _insert_articles_impl(
+        conn,
+        commodity=commodity,
+        query_text=query_text,
+        fetched_at_utc=fetched_at_utc,
+        items=items,
+        allowed_commodities=allowed_commodities,
+    )
 
 
-def _score_new_articles(conn: sqlite3.Connection, scorer: ModelScorer) -> int:
-    rows = conn.execute(
-        """
-        SELECT
-            a.article_id,
-            a.story_id,
-            a.commodity,
-            a.title,
-            a.description,
-            a.content
-        FROM news_articles a
-        LEFT JOIN news_scores s ON a.article_id = s.article_id
-        WHERE s.article_id IS NULL
-        ORDER BY a.published_at_utc DESC
-        """
-    ).fetchall()
-    if not rows:
-        return 0
-    scored_at_utc = iso_utc(utc_now())
-    story_cache: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        article_id, story_id, commodity, title, description, content = row
-        story_key = str(story_id or "").strip() or f"article:{article_id}"
-        if story_key not in story_cache:
-            story_cache[story_key] = scorer.score(
-                commodity=str(commodity),
-                title=str(title or ""),
-                description=str(description or ""),
-                content=str(content or ""),
-            )
-        score = story_cache[story_key]
-        causal = analyze_causal_news(
-            commodity=str(commodity),
-            title=str(title or ""),
-            description=str(description or ""),
-            content=str(content or ""),
-            direction=str(score.get("direction") or "hold"),
-            reason_terms_up=score.get("reason_terms_up") or [],
-            reason_terms_down=score.get("reason_terms_down") or [],
-        )
-        severity = str(score["severity"]).lower()
-        if severity not in SEVERITY_ORDER:
-            severity = "medium"
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO news_scores (
-                article_id,
-                model_name,
-                scored_at_utc,
-                direction,
-                impact_score,
-                confidence,
-                severity,
-                reason_terms_up,
-                reason_terms_down,
-                cause_classification,
-                cause_bucket,
-                cause_event,
-                transmission_channel,
-                cause_cluster_key,
-                cause_confidence,
-                fundamental_score,
-                direction_alignment,
-                is_primary_cause,
-                cause_route_key,
-                cause_claim_status,
-                cause_entities_json,
-                cause_terms_json,
-                effect_terms_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(article_id),
-                str(score.get("model_name") or MODEL_NAME_KEYWORD),
-                scored_at_utc,
-                str(score["direction"]),
-                float(score["impact_score"]),
-                float(score["confidence"]),
-                severity,
-                _safe_json(score.get("reason_terms_up") or []),
-                _safe_json(score.get("reason_terms_down") or []),
-                str(causal.get("cause_classification") or "unknown"),
-                str(causal.get("cause_bucket") or ""),
-                str(causal.get("cause_event") or ""),
-                str(causal.get("transmission_channel") or ""),
-                str(causal.get("cause_cluster_key") or ""),
-                float(causal.get("cause_confidence") or 0.0),
-                float(causal.get("fundamental_score") or 0.0),
-                float(causal.get("direction_alignment") or 0.5),
-                1 if bool(causal.get("is_primary_cause")) else 0,
-                str(causal.get("cause_route_key") or ""),
-                str(causal.get("cause_claim_status") or "unknown"),
-                _safe_json(causal.get("cause_entities") or []),
-                _safe_json(causal.get("cause_terms") or []),
-                _safe_json(causal.get("effect_terms") or []),
-            ),
-        )
-    conn.commit()
-    return len(rows)
+def _score_new_articles(
+    conn: sqlite3.Connection,
+    scorer: ModelScorer,
+    *,
+    causal_profile: str,
+) -> int:
+    return _score_new_articles_impl(conn, scorer, causal_profile=causal_profile)
+
+
+def _upsert_article_links(
+    conn: sqlite3.Connection,
+    *,
+    article_id: str,
+    seed_commodity: str,
+    title: str,
+    description: str,
+    content: str,
+    fetched_at_utc: str,
+    allowed_commodities: tuple[str, ...],
+) -> None:
+    _upsert_article_links_impl(
+        conn,
+        article_id=article_id,
+        seed_commodity=seed_commodity,
+        title=title,
+        description=description,
+        content=content,
+        fetched_at_utc=fetched_at_utc,
+        allowed_commodities=allowed_commodities,
+    )
 
 
 def run_news_ingest_cycle(
@@ -475,7 +349,14 @@ def run_news_ingest_cycle(
     started_at = iso_utc(ts_now)
 
     db_path = sqlite_path_from_url(config.database_url, data_dir=config.data_dir)
-    feed_path = resolve_data_path(config.feed_path, data_dir=config.data_dir)
+    discovery_feed_path = resolve_data_path(
+        config.feed_path or config.discovery_feed_path or "data/output/news_live/live_news_discovery.csv",
+        data_dir=config.data_dir,
+    )
+    verified_feed_path = resolve_data_path(
+        config.verified_feed_path or "data/output/news_live/live_news_verified.csv",
+        data_dir=config.data_dir,
+    )
     conn = open_sqlite_connection(db_path, timeout_sec=15.0, write=True)
     try:
         _init_db(conn)
@@ -493,6 +374,7 @@ def run_news_ingest_cycle(
         inserted_total = 0
         provider_counts: dict[str, int] = {}
         commodity_counts: dict[str, int] = {}
+        allowed_commodities = tuple(profile.ticker for profile in config.commodity_profiles)
 
         for profile in config.commodity_profiles:
             commodity_inserted = 0
@@ -552,6 +434,7 @@ def run_news_ingest_cycle(
                             query_text=gdelt_query,
                             fetched_at_utc=started_at,
                             items=fetched,
+                            allowed_commodities=allowed_commodities,
                         )
                         fetched_total += got
                         inserted_total += inserted
@@ -630,6 +513,7 @@ def run_news_ingest_cycle(
                             query_text=newsapi_query,
                             fetched_at_utc=started_at,
                             items=fetched,
+                            allowed_commodities=allowed_commodities,
                         )
                         fetched_total += got
                         inserted_total += inserted
@@ -642,18 +526,37 @@ def run_news_ingest_cycle(
 
             commodity_counts[profile.ticker] = commodity_inserted
 
-        scored_total = _score_new_articles(conn, scorer)
-        causal_backfilled_total = backfill_missing_causal_scores(conn)
-        feed_rows = export_live_news_feed(
+        scored_total = _score_new_articles(
             conn,
-            feed_path=feed_path,
-            min_impact_score=config.feed_min_impact_score,
-            min_confidence=config.feed_min_confidence,
-            min_fundamental_score=config.feed_min_fundamental_score,
-            max_rows=max(config.feed_max_rows, 1),
-            require_primary_cause=bool(config.feed_require_primary_cause),
-            require_verified_move=bool(config.feed_require_verified_move),
-            require_verified_both_horizons=bool(config.feed_require_verified_both_horizons),
+            scorer,
+            causal_profile=config.causal_profile,
+        )
+        causal_backfilled_total = _backfill_missing_causal_impl(conn)
+        discovery_feed_rows = export_live_news_feed(
+            conn,
+            feed_path=discovery_feed_path,
+            feed_role="discovery",
+            min_impact_score=config.discovery_feed_min_impact_score,
+            min_confidence=config.discovery_feed_min_confidence,
+            min_fundamental_score=config.discovery_feed_min_fundamental_score,
+            min_link_score=config.discovery_min_link_score,
+            max_rows=max(config.discovery_feed_max_rows, 1),
+            require_primary_cause=bool(config.discovery_feed_require_primary_cause),
+            require_verified_move=False,
+            require_verified_both_horizons=False,
+        )
+        verified_feed_rows = export_live_news_feed(
+            conn,
+            feed_path=verified_feed_path,
+            feed_role="verified",
+            min_impact_score=config.verified_feed_min_impact_score,
+            min_confidence=config.verified_feed_min_confidence,
+            min_fundamental_score=config.verified_feed_min_fundamental_score,
+            min_link_score=config.verified_min_link_score,
+            max_rows=max(config.verified_feed_max_rows, 1),
+            require_primary_cause=bool(config.verified_feed_require_primary_cause),
+            require_verified_move=bool(config.verified_feed_require_verified_move),
+            require_verified_both_horizons=bool(config.verified_feed_require_verified_both_horizons),
         )
         run_id = f"news-ingest-{ts_now.strftime('%Y%m%d%H%M%S')}-{int(time.time() * 1000)}-{normalized_mode}"
         finished_at = iso_utc(utc_now())
@@ -691,12 +594,16 @@ def run_news_ingest_cycle(
             "run_id": run_id,
             "mode": normalized_mode,
             "database_path": str(db_path),
-            "feed_path": str(feed_path),
+            "feed_path": str(discovery_feed_path),
+            "discovery_feed_path": str(discovery_feed_path),
+            "verified_feed_path": str(verified_feed_path),
             "fetched_total": int(fetched_total),
             "inserted_total": int(inserted_total),
             "scored_total": int(scored_total),
             "causal_backfilled_total": int(causal_backfilled_total),
-            "feed_rows": int(feed_rows),
+            "feed_rows": int(discovery_feed_rows),
+            "discovery_feed_rows": int(discovery_feed_rows),
+            "verified_feed_rows": int(verified_feed_rows),
             "provider_counts": provider_counts,
             "commodity_counts": commodity_counts,
             "newsapi_usage": {

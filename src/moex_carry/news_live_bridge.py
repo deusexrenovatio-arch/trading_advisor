@@ -44,6 +44,16 @@ def _apply_cause_filter(df: pd.DataFrame) -> pd.DataFrame:
     required = {"cause_classification", "fundamental_score", "is_primary_cause"}
     if not required.issubset(set(df.columns)):
         return df
+    if "feed_role" in df.columns:
+        feed_role = df["feed_role"].fillna("").astype(str).str.strip().str.lower()
+        discovery = df.loc[feed_role.eq("discovery")].copy()
+        other = df.loc[~feed_role.eq("discovery")].copy()
+        if other.empty:
+            return discovery
+        filtered_other = _apply_cause_filter(other.drop(columns=["feed_role"]))
+        if "feed_role" not in filtered_other.columns:
+            filtered_other["feed_role"] = other.loc[filtered_other.index, "feed_role"]
+        return pd.concat([discovery, filtered_other], ignore_index=False).sort_index()
     classification = (
         df["cause_classification"]
         .fillna("")
@@ -65,7 +75,13 @@ def _build_news_item(row: dict[str, object], *, default_title: str) -> NewsItem 
     severity = str(row.get("severity") or "low").strip().lower()
     title = str(row.get("title") or row.get("headline") or default_title).strip() or default_title
     item_id = (
-        str(row.get("article_id") or "").strip()
+        (
+            f"{str(row.get('story_id') or row.get('story_key') or '').strip()}:{str(row.get('commodity') or '').strip().upper()}"
+            if str(row.get("story_id") or row.get("story_key") or "").strip()
+            and str(row.get("commodity") or "").strip()
+            else ""
+        )
+        or str(row.get("article_id") or "").strip()
         or str(row.get("news_id") or "").strip()
         or str(row.get("story_key") or "").strip()
         or str(row.get("id") or "").strip()
@@ -90,7 +106,7 @@ def load_news_gate_items(settings: AppSettings, *, as_of_utc: datetime | None = 
     allowed_sources = {item.strip().lower() for item in settings.news_filter.sources if item.strip()}
 
     feed_path = resolve_data_path(
-        getattr(settings.news_filter, "live_feed_path", "data/output/news_live/live_news_signals.csv"),
+        getattr(settings.news_filter, "live_feed_path", "data/output/news_live/live_news_discovery.csv"),
         data_dir=settings.data.data_dir,
     )
     feed_df = _read_feed(feed_path)

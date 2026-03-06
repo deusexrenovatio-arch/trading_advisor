@@ -948,13 +948,13 @@ def test_worker_broadcasts_shock_primary_and_aftershock(tmp_path):
 
 
 def test_worker_broadcasts_live_news_alert_once(tmp_path):
-    news_feed = tmp_path / "live_news_signals.csv"
+    news_feed = tmp_path / "live_news_discovery.csv"
     news_feed.write_text(
         "\n".join(
             [
-                "published_at_utc,commodity,direction,severity,impact_score,confidence,source_name,provider,title,url",
-                "2026-03-04T07:00:00Z,BRN,up,critical,0.95,0.95,reuters.com,newsapi,Oil jumps after Iran escalation,https://example.com/news-1",
-                "2026-03-04T07:05:00Z,GOLD,up,high,0.70,0.85,bloomberg.com,gdelt,Gold edges higher,https://example.com/news-2",
+                "feed_role,story_id,published_at_utc,commodity,commodity_link_score,direction,severity,impact_score,confidence,source_name,provider,title,url",
+                "discovery,story-iran-attack,2026-03-04T07:00:00Z,BRN,0.93,up,critical,0.95,0.95,reuters.com,newsapi,Oil jumps after Iran escalation,https://example.com/news-1",
+                "discovery,story-iran-attack,2026-03-04T07:00:00Z,GOLD,0.71,up,critical,0.95,0.95,reuters.com,newsapi,Oil jumps after Iran escalation,https://example.com/news-1",
             ]
         ),
         encoding="utf-8",
@@ -983,6 +983,6 @@ def test_worker_broadcasts_live_news_alert_once(tmp_path):
 
     assert len(telegram_session.sent_messages) == 1
     text = str(telegram_session.sent_messages[0]["text"])
-    assert "NEWS IMPACT ALERT" in text
-    assert "Commodity: BRN" in text
+    assert "NEWS DISCOVERY ALERT" in text
+    assert "Commodities: BRN (0.93), GOLD (0.71)" in text
     assert "Oil jumps after Iran escalation" in text

@@ -95,6 +95,18 @@ def _ticker_asset_codes(ticker: str) -> tuple[str, ...]:
         "BRN": ("BR",),
         "GOLD": ("GOLD", "GD", "GL"),
         "NG_US": ("NG",),
+        "SILVER": ("SILV", "SV"),
+        "PLATINUM": ("PLT",),
+        "PALLADIUM": ("PLD",),
+        "COPPER": ("COPPER",),
+        "ALUMINUM": ("ALUM",),
+        "NICKEL": ("NICKEL",),
+        "ZINC": ("ZINC",),
+        "WHEAT": ("WHEAT", "WUSH"),
+        "SUGAR": ("SUGAR", "SUGR"),
+        "COFFEE": ("COFFEE",),
+        "COCOA": ("COCOA",),
+        "ORANGE": ("ORANGE",),
     }
     return mapping.get(str(ticker or "").strip().upper(), ())
 

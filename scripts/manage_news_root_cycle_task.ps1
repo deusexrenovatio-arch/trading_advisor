@@ -2,12 +2,23 @@
 param(
     [ValidateSet("Install", "Status", "RunLive", "RunBackfill", "Remove")]
     [string]$Action = "Status",
-    [string]$LiveTaskName = "MoexCarry-NewsIngestLive",
-    [string]$BackfillTaskName = "MoexCarry-NewsIngestBackfill",
+    [string]$LiveTaskName = "MoexCarry-NewsRootLive",
+    [string]$BackfillTaskName = "MoexCarry-NewsRootBackfill",
     [string]$LiveStartTime = "06:00",
     [int]$LiveEveryMinutes = 5,
     [string]$BackfillStartTime = "03:15",
     [string]$NewsConfig = "configs/news-livecheck-ng.yaml",
+    [int]$LiveLookbackHours = 6,
+    [int]$BackfillLookbackHours = 24,
+    [int]$BarMinutes = 5,
+    [double]$MinAbsZ = 2.0,
+    [double]$RootMinFundamentalScore = 0.45,
+    [double]$RootMinCauseConfidence = 0.45,
+    [double]$AftershockMaxGapMin = 2880.0,
+    [switch]$EnableCandidateNewsApiEnrichment,
+    [int]$EnrichmentWindowMin = 90,
+    [int]$EnrichmentMaxRequestsPerSymbol = 4,
+    [switch]$NoRootMaintenance,
     [string]$RunAs = "",
     [switch]$DryRun
 )
@@ -15,7 +26,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$startScript = Join-Path $PSScriptRoot "start_news_ingest_cycle.ps1"
+$startScript = Join-Path $PSScriptRoot "start_news_root_cycle.ps1"
 if (-not (Test-Path $startScript)) {
     throw "Missing script: $startScript"
 }
@@ -34,33 +45,39 @@ function Get-TaskOrNull {
     }
 }
 
-function Invoke-TaskScript {
-    param(
-        [string]$ScriptAction,
-        [string]$TaskName
-    )
-    & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "manage_shock_label_cycle_task.ps1") `
-        -Action $ScriptAction `
-        -TaskName $TaskName
-}
-
-function Install-NewsTask {
+function Install-RootTask {
     param(
         [string]$TaskName,
         [string]$Mode,
         [string]$StartTime,
         [string]$ScheduleMode,
-        [int]$RepeatMinutes
+        [int]$RepeatMinutes,
+        [int]$LookbackHours
     )
+
     $arguments = @(
         "-NoProfile",
         "-WindowStyle", "Hidden",
         "-ExecutionPolicy", "Bypass",
         "-File", "`"$startScript`"",
         "-Mode", $Mode,
-        "-NewsConfig", "`"$NewsConfig`""
-    ) -join " "
-    $taskAction = New-ScheduledTaskAction -Execute $powerShellExe -Argument $arguments
+        "-NewsConfig", "`"$NewsConfig`"",
+        "-LookbackHours", [string]$LookbackHours,
+        "-BarMinutes", [string]$BarMinutes,
+        "-MinAbsZ", [string]$MinAbsZ,
+        "-RootMinFundamentalScore", [string]$RootMinFundamentalScore,
+        "-RootMinCauseConfidence", [string]$RootMinCauseConfidence,
+        "-AftershockMaxGapMin", [string]$AftershockMaxGapMin,
+        "-EnrichmentWindowMin", [string]$EnrichmentWindowMin,
+        "-EnrichmentMaxRequestsPerSymbol", [string]$EnrichmentMaxRequestsPerSymbol
+    )
+    if ($EnableCandidateNewsApiEnrichment) {
+        $arguments += "-EnableCandidateNewsApiEnrichment"
+    }
+    if ($NoRootMaintenance) {
+        $arguments += "-NoRootMaintenance"
+    }
+    $taskAction = New-ScheduledTaskAction -Execute $powerShellExe -Argument ($arguments -join " ")
     if ($ScheduleMode -eq "Repeat") {
         $parts = $StartTime.Split(":")
         if ($parts.Count -ne 2) {
@@ -76,7 +93,7 @@ function Install-NewsTask {
         $trigger = New-ScheduledTaskTrigger `
             -Once `
             -At $startAt `
-            -RepetitionInterval (New-TimeSpan -Minutes ([Math]::Max($RepeatMinutes,1))) `
+            -RepetitionInterval (New-TimeSpan -Minutes ([Math]::Max($RepeatMinutes, 1))) `
             -RepetitionDuration (New-TimeSpan -Hours 24)
     }
     else {
@@ -93,8 +110,8 @@ function Install-NewsTask {
         -AllowStartIfOnBatteries `
         -DontStopIfGoingOnBatteries `
         -MultipleInstances IgnoreNew
-    Write-Host "[moex] Install task '$TaskName' mode=$Mode schedule=$ScheduleMode start=$StartTime repeat=$RepeatMinutes"
-    Write-Host "[moex] Command: $powerShellExe $arguments"
+    Write-Host "[moex] Install task '$TaskName' mode=$Mode schedule=$ScheduleMode start=$StartTime"
+    Write-Host "[moex] Command: $powerShellExe $($arguments -join ' ')"
     if ($DryRun) {
         return
     }
@@ -109,19 +126,14 @@ function Install-NewsTask {
 
 switch ($Action) {
     "Status" {
-        $liveTask = Get-TaskOrNull -Name $LiveTaskName
-        if ($null -eq $liveTask) {
-            Write-Host "[moex] Task not found: $LiveTaskName"
-        }
-        else {
-            Get-ScheduledTask -TaskName $LiveTaskName | Format-List TaskName, State, Actions, Triggers, Principal
-        }
-        $backfillTask = Get-TaskOrNull -Name $BackfillTaskName
-        if ($null -eq $backfillTask) {
-            Write-Host "[moex] Task not found: $BackfillTaskName"
-        }
-        else {
-            Get-ScheduledTask -TaskName $BackfillTaskName | Format-List TaskName, State, Actions, Triggers, Principal
+        foreach ($taskName in @($LiveTaskName, $BackfillTaskName)) {
+            $task = Get-TaskOrNull -Name $taskName
+            if ($null -eq $task) {
+                Write-Host "[moex] Task not found: $taskName"
+            }
+            else {
+                Get-ScheduledTask -TaskName $taskName | Format-List TaskName, State, Actions, Triggers, Principal
+            }
         }
     }
     "RunLive" {
@@ -154,17 +166,19 @@ switch ($Action) {
         }
     }
     "Install" {
-        Install-NewsTask `
+        Install-RootTask `
             -TaskName $LiveTaskName `
             -Mode "live" `
             -StartTime $LiveStartTime `
             -ScheduleMode "Repeat" `
-            -RepeatMinutes $LiveEveryMinutes
-        Install-NewsTask `
+            -RepeatMinutes $LiveEveryMinutes `
+            -LookbackHours $LiveLookbackHours
+        Install-RootTask `
             -TaskName $BackfillTaskName `
             -Mode "backfill" `
             -StartTime $BackfillStartTime `
             -ScheduleMode "Daily" `
-            -RepeatMinutes 0
+            -RepeatMinutes 0 `
+            -LookbackHours $BackfillLookbackHours
     }
 }

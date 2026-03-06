@@ -9,6 +9,7 @@ import pandas as pd
 
 from moex_carry.config import AppSettings
 from moex_carry.news_live_runtime import NewsIngestConfig
+from moex_carry.news_root_maintenance import RootMaintenanceConfig, refresh_root_maintenance
 from moex_carry.news_shock_live_input import LiveShockInputConfig, build_live_shock_input
 from moex_carry.news_shock_store import upsert_live_shock_rows
 from moex_carry.news_storage import open_sqlite_connection, sqlite_path_from_url
@@ -88,6 +89,13 @@ class ShockRowsBackfillConfig:
     front_contract_candidates: int = 4
     history_padding_days: int = 10
     root_reuse_lookback_minutes: float = 2880.0
+    root_min_fundamental_score: float = 0.45
+    root_min_cause_confidence: float = 0.45
+    aftershock_max_gap_minutes: float = 2880.0
+    enable_candidate_newsapi_enrichment: bool = False
+    enrichment_window_minutes: int = 90
+    enrichment_max_requests_per_symbol: int = 4
+    run_root_maintenance: bool = True
     write_csv_snapshot: bool = False
     snapshot_dir: str = "data/output/shock_backfill_snapshots"
 
@@ -128,6 +136,9 @@ def run_shock_rows_backfill(
     windows_processed = 0
     rows_upserted_total = 0
     rows_detected_total = 0
+    root_links_total = 0
+    root_registry_total = 0
+    root_edges_total = 0
     snapshots: list[str] = []
     cursor_before = cursor
     window_hours = max(int(cfg.window_hours), 1)
@@ -154,6 +165,12 @@ def run_shock_rows_backfill(
             front_contract_candidates=cfg.front_contract_candidates,
             history_padding_days=cfg.history_padding_days,
             root_reuse_lookback_minutes=cfg.root_reuse_lookback_minutes,
+            root_min_fundamental_score=cfg.root_min_fundamental_score,
+            root_min_cause_confidence=cfg.root_min_cause_confidence,
+            aftershock_max_gap_minutes=cfg.aftershock_max_gap_minutes,
+            enable_candidate_newsapi_enrichment=cfg.enable_candidate_newsapi_enrichment,
+            enrichment_window_minutes=cfg.enrichment_window_minutes,
+            enrichment_max_requests_per_symbol=cfg.enrichment_max_requests_per_symbol,
         )
         frame = build_live_shock_input(
             settings=settings,
@@ -174,6 +191,20 @@ def run_shock_rows_backfill(
             )
         )
         rows_upserted_total += rows_upserted
+        if cfg.run_root_maintenance and rows_upserted > 0:
+            root_report = refresh_root_maintenance(
+                database_url=news_config.database_url,
+                data_dir=news_config.data_dir,
+                cfg=RootMaintenanceConfig(
+                    bar_minutes=cfg.bar_minutes,
+                    start_ts=_iso_utc(window_start),
+                    end_ts=_iso_utc(window_end),
+                    max_rows=0,
+                ),
+            )
+            root_links_total += int(root_report.get("links_upserted") or 0)
+            root_registry_total += int(root_report.get("registry_upserted") or 0)
+            root_edges_total += int(root_report.get("edges_upserted") or 0)
 
         if cfg.write_csv_snapshot:
             snap_dir = Path(cfg.snapshot_dir)
@@ -206,6 +237,9 @@ def run_shock_rows_backfill(
         "windows_processed": int(windows_processed),
         "rows_detected_total": int(rows_detected_total),
         "rows_upserted_total": int(rows_upserted_total),
+        "root_links_upserted_total": int(root_links_total),
+        "root_registry_upserted_total": int(root_registry_total),
+        "root_edges_upserted_total": int(root_edges_total),
         "done": bool(cursor <= start_utc),
         "snapshots": snapshots,
     }

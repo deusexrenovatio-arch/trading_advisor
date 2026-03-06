@@ -8,7 +8,23 @@ from typing import Any
 import pandas as pd
 
 
-SUPPORTED_SYMBOLS = ("BRN", "GOLD", "NG_US")
+SUPPORTED_SYMBOLS = (
+    "BRN",
+    "NG_US",
+    "GOLD",
+    "SILVER",
+    "PLATINUM",
+    "PALLADIUM",
+    "COPPER",
+    "ALUMINUM",
+    "NICKEL",
+    "ZINC",
+    "WHEAT",
+    "SUGAR",
+    "COFFEE",
+    "COCOA",
+    "ORANGE",
+)
 
 
 @dataclass(frozen=True)
@@ -21,13 +37,37 @@ class ShockCurationConfig:
         return ShockCurationConfig(
             max_abs_move_pct_by_symbol={
                 "BRN": 15.0,
-                "GOLD": 8.0,
                 "NG_US": 40.0,
+                "GOLD": 8.0,
+                "SILVER": 14.0,
+                "PLATINUM": 18.0,
+                "PALLADIUM": 22.0,
+                "COPPER": 14.0,
+                "ALUMINUM": 14.0,
+                "NICKEL": 22.0,
+                "ZINC": 16.0,
+                "WHEAT": 20.0,
+                "SUGAR": 20.0,
+                "COFFEE": 25.0,
+                "COCOA": 28.0,
+                "ORANGE": 30.0,
             },
             max_abs_z_by_symbol={
                 "BRN": 15.0,
-                "GOLD": 15.0,
                 "NG_US": 25.0,
+                "GOLD": 15.0,
+                "SILVER": 20.0,
+                "PLATINUM": 22.0,
+                "PALLADIUM": 24.0,
+                "COPPER": 20.0,
+                "ALUMINUM": 20.0,
+                "NICKEL": 24.0,
+                "ZINC": 20.0,
+                "WHEAT": 24.0,
+                "SUGAR": 24.0,
+                "COFFEE": 26.0,
+                "COCOA": 28.0,
+                "ORANGE": 28.0,
             },
         )
 
@@ -59,7 +99,7 @@ _DIRECTION_MAP = {
     "flat": "hold",
     "none": "hold",
 }
-_VALID_CANDIDATE_SOURCES = ("v2_clean", "broad", "none")
+_VALID_CANDIDATE_SOURCES = ("root", "v2_clean", "broad", "none")
 
 
 def _norm_text(value: object) -> str:
@@ -101,6 +141,17 @@ def _to_float(value: object) -> float | None:
 
 
 def _candidate(row: pd.Series, source: str) -> dict[str, Any] | None:
+    if source == "root":
+        event_id = _norm_text(row.get("selected_event_id"))
+        delay = _to_float(row.get("selected_delay_min"))
+        return {
+            "source": "root",
+            "event_id": event_id,
+            "event_ts_utc": _norm_text(row.get("selected_event_ts")),
+            "delay_min": delay,
+            "title": _norm_text(row.get("selected_title")),
+            "url": _norm_text(row.get("selected_url")),
+        } if event_id else None
     prefix = "v2" if source == "v2_clean" else "broad"
     event_id = _norm_text(row.get(f"{prefix}_event_id"))
     if not event_id:
@@ -123,7 +174,7 @@ def _choose_primary_candidate(
 ) -> dict[str, Any]:
     allowed = set(candidate_sources or [])
     ranked_candidates: list[dict[str, Any]] = []
-    for source in ("v2_clean", "broad"):
+    for source in ("root", "v2_clean", "broad"):
         item = _candidate(row, source)
         if item is None:
             continue
@@ -204,7 +255,9 @@ def curate_shock_dataset(
 
         selected_source = _norm_text(row.get("selected_event_source")).lower()
         if not selected_source:
-            if _norm_text(row.get("v2_event_id")):
+            if _norm_text(row.get("selected_event_id")):
+                selected_source = "root"
+            elif _norm_text(row.get("v2_event_id")):
                 selected_source = "v2_clean"
             elif _norm_text(row.get("broad_event_id")):
                 selected_source = "broad"
@@ -227,12 +280,29 @@ def curate_shock_dataset(
     issues_df = pd.DataFrame(issue_rows)
     curated_df = df.loc[keep_mask].copy()
     curated_df["selected_source"] = curated_df.apply(
-        lambda r: (_norm_text(r.get("selected_event_source")).lower() or ("v2_clean" if _norm_text(r.get("v2_event_id")) else ("broad" if _norm_text(r.get("broad_event_id")) else "none"))),
+        lambda r: (
+            _norm_text(r.get("selected_event_source")).lower()
+            or ("root" if _norm_text(r.get("selected_event_id")) else ("v2_clean" if _norm_text(r.get("v2_event_id")) else ("broad" if _norm_text(r.get("broad_event_id")) else "none")))
+        ),
         axis=1,
     )
+    v2_delay_series = pd.to_numeric(
+        curated_df.get("v2_delay_min", pd.Series(float("nan"), index=curated_df.index)),
+        errors="coerce",
+    )
+    root_delay_series = pd.to_numeric(
+        curated_df.get("selected_delay_min", pd.Series(float("nan"), index=curated_df.index)),
+        errors="coerce",
+    )
     curated_df["direction_layer_eligible"] = (
-        (curated_df["selected_source"] == "v2_clean")
-        & pd.to_numeric(curated_df.get("v2_delay_min"), errors="coerce").between(0.0, 60.0, inclusive="both")
+        (
+            (curated_df["selected_source"] == "v2_clean")
+            & v2_delay_series.between(0.0, 60.0, inclusive="both")
+        )
+        | (
+            (curated_df["selected_source"] == "root")
+            & root_delay_series.between(0.0, 60.0, inclusive="both")
+        )
     ).astype(int)
     curated_df["shock_ts"] = curated_df["shock_ts_dt"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     curated_df = curated_df.drop(columns=["shock_ts_dt"])
@@ -287,7 +357,7 @@ def build_shock_label_pack(
 
         available_sources = {
             source
-            for source in ("v2_clean", "broad")
+            for source in ("root", "v2_clean", "broad")
             if _candidate(row, source) is not None
         }
         if candidate_sources is not None:

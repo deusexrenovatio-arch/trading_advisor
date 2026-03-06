@@ -376,8 +376,11 @@ def register_news_subcommands(
     news_live_eval_parser.add_argument(
         "--tickers",
         type=str,
-        default="BRN,GOLD,NG_US",
-        help="Comma-separated tickers (default: BRN,GOLD,NG_US).",
+        default="BRN,NG_US,GOLD,SILVER,PLATINUM,PALLADIUM,COPPER,ALUMINUM,NICKEL,ZINC,WHEAT,SUGAR,COFFEE,COCOA,ORANGE",
+        help=(
+            "Comma-separated tickers "
+            "(default: BRN,NG_US,GOLD,SILVER,PLATINUM,PALLADIUM,COPPER,ALUMINUM,NICKEL,ZINC,WHEAT,SUGAR,COFFEE,COCOA,ORANGE)."
+        ),
     )
     news_live_eval_parser.add_argument(
         "--horizon",

@@ -7,6 +7,7 @@ import pandas as pd
 import yaml
 
 from moex_carry.cli_news_handlers import handle_news_command
+from moex_carry.cli_news_runtime_handlers import handle_news_runtime_command
 from moex_carry.config import load_settings, resolve_paths
 from moex_carry.logging import configure_logging
 
@@ -205,7 +206,7 @@ def main() -> None:
     shock_pack_parser.add_argument(
         "--candidate-source",
         action="append",
-        choices=["v2_clean", "broad", "none"],
+        choices=["root", "v2_clean", "broad", "none"],
         default=None,
         help="Primary candidate source filter; repeat for multiple values.",
     )
@@ -253,39 +254,6 @@ def main() -> None:
     shock_ready_parser.add_argument("--episode-window-min", type=int, default=10080)
     shock_ready_parser.add_argument("--max-gap-min", type=int, default=2880)
 
-    shock_cycle_parser = subparsers.add_parser(
-        "shock_label_cycle",
-        help="Run automated shock labeling cycle (direction pack + causal pack + optional ingest/readiness).",
-    )
-    _add_common_args(shock_cycle_parser)
-    shock_cycle_parser.add_argument("--input-csv", type=str, required=True)
-    shock_cycle_parser.add_argument("--output-dir", type=str, default=None)
-    shock_cycle_parser.add_argument("--start-ts", type=str, default=None)
-    shock_cycle_parser.add_argument("--end-ts", type=str, default=None)
-    shock_cycle_parser.add_argument("--min-abs-z", type=float, default=2.5)
-    shock_cycle_parser.add_argument("--max-delay-min", type=float, default=60.0)
-    shock_cycle_parser.add_argument("--max-tasks-per-day-symbol", type=int, default=20)
-    shock_cycle_parser.add_argument("--direction-max-tasks", type=int, default=300)
-    shock_cycle_parser.add_argument("--causal-max-tasks", type=int, default=900)
-    shock_cycle_parser.add_argument("--direction-candidate-sources", type=str, default="v2_clean")
-    shock_cycle_parser.add_argument("--causal-candidate-sources", type=str, default="broad,none")
-    shock_cycle_parser.add_argument("--direction-labels-jsonl", type=str, default=None)
-    shock_cycle_parser.add_argument("--causal-labels-jsonl", type=str, default=None)
-    shock_cycle_parser.add_argument("--ingest-min-confidence", type=float, default=0.60)
-    shock_cycle_parser.add_argument("--no-telegram-feed", action="store_true")
-    shock_cycle_parser.add_argument(
-        "--telegram-feed-path",
-        type=str,
-        default="data/output/shock_alerts/live_shocks.csv",
-    )
-    shock_cycle_parser.add_argument("--telegram-feed-min-abs-z", type=float, default=2.0)
-    shock_cycle_parser.add_argument("--telegram-feed-max-rows", type=int, default=5000)
-    shock_cycle_parser.add_argument("--run-readiness", action="store_true")
-    shock_cycle_parser.add_argument("--primary-z", type=float, default=2.5)
-    shock_cycle_parser.add_argument("--aftershock-z", type=float, default=2.0)
-    shock_cycle_parser.add_argument("--episode-window-min", type=int, default=10080)
-    shock_cycle_parser.add_argument("--max-gap-min", type=int, default=2880)
-
     shock_rows_backfill_parser = subparsers.add_parser(
         "news_shock_backfill",
         help="Backfill news_shock_rows table by historical windows with cursor progression",
@@ -313,8 +281,33 @@ def main() -> None:
     shock_rows_backfill_parser.add_argument("--front-contract-candidates", type=int, default=4)
     shock_rows_backfill_parser.add_argument("--history-padding-days", type=int, default=10)
     shock_rows_backfill_parser.add_argument("--root-reuse-lookback-min", type=float, default=2880.0)
+    shock_rows_backfill_parser.add_argument("--root-min-fundamental-score", type=float, default=0.45)
+    shock_rows_backfill_parser.add_argument("--root-min-cause-confidence", type=float, default=0.45)
+    shock_rows_backfill_parser.add_argument("--aftershock-max-gap-min", type=float, default=2880.0)
+    shock_rows_backfill_parser.add_argument("--enable-candidate-newsapi-enrichment", action="store_true")
+    shock_rows_backfill_parser.add_argument("--enrichment-window-min", type=int, default=90)
+    shock_rows_backfill_parser.add_argument("--enrichment-max-requests-per-symbol", type=int, default=4)
+    shock_rows_backfill_parser.add_argument("--no-root-maintenance", action="store_true")
     shock_rows_backfill_parser.add_argument("--write-snapshot-csv", action="store_true")
     shock_rows_backfill_parser.add_argument("--snapshot-dir", type=str, default="data/output/shock_backfill_snapshots")
+
+    root_cycle_parser = subparsers.add_parser(
+        "news_root_cycle",
+        help="Run unified root pipeline: ingest -> shock input -> root maintenance.",
+    )
+    _add_common_args(root_cycle_parser)
+    root_cycle_parser.add_argument("--news-config", type=str, default="configs/news-livecheck-ng.yaml")
+    root_cycle_parser.add_argument("--ingest-mode", type=str, choices=["live", "backfill"], default="live")
+    root_cycle_parser.add_argument("--lookback-hours", type=int, default=6)
+    root_cycle_parser.add_argument("--bar-minutes", type=int, default=5)
+    root_cycle_parser.add_argument("--min-abs-z", type=float, default=2.0)
+    root_cycle_parser.add_argument("--root-min-fundamental-score", type=float, default=0.45)
+    root_cycle_parser.add_argument("--root-min-cause-confidence", type=float, default=0.45)
+    root_cycle_parser.add_argument("--aftershock-max-gap-min", type=float, default=2880.0)
+    root_cycle_parser.add_argument("--enable-candidate-newsapi-enrichment", action="store_true")
+    root_cycle_parser.add_argument("--enrichment-window-min", type=int, default=90)
+    root_cycle_parser.add_argument("--enrichment-max-requests-per-symbol", type=int, default=4)
+    root_cycle_parser.add_argument("--no-root-maintenance", action="store_true")
 
     args = parser.parse_args()
     configure_logging(args.log_level)
@@ -349,6 +342,8 @@ def main() -> None:
         else:
             run_signal_cycle(settings, max_pairs=args.max_pairs, save_csv=not args.no_csv)
     elif handle_news_command(args, settings):
+        return
+    elif handle_news_runtime_command(args, settings):
         return
     elif args.command == "ui":
         from moex_carry.ui.app import run_ui
@@ -648,97 +643,5 @@ def main() -> None:
         )
         payload = {key: str(value) for key, value in result.items()}
         print(json.dumps(payload, ensure_ascii=False))
-    elif args.command == "shock_label_cycle":
-        from moex_carry.news_shock_automation import ShockLabelCycleConfig, run_shock_label_cycle
-        from moex_carry.news_shock_readiness import ReadinessConfig
-
-        def _parse_sources(raw: str) -> tuple[str, ...] | None:
-            text = (raw or "").strip().lower()
-            if not text or text == "any":
-                return None
-            values = tuple(part.strip() for part in text.split(",") if part.strip())
-            return values or None
-
-        input_csv = Path(args.input_csv)
-        if not input_csv.exists():
-            raise FileNotFoundError(f"Input file not found: {input_csv}")
-        if args.output_dir:
-            output_dir = Path(args.output_dir)
-        else:
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("data/output") / f"shock_label_cycle_{stamp}"
-
-        result = run_shock_label_cycle(
-            input_csv=input_csv,
-            output_dir=output_dir,
-            config=ShockLabelCycleConfig(
-                min_abs_z=args.min_abs_z,
-                max_tasks_per_day_symbol=args.max_tasks_per_day_symbol,
-                max_delay_minutes=args.max_delay_min,
-                direction_max_tasks_total=args.direction_max_tasks,
-                causal_max_tasks_total=args.causal_max_tasks,
-                direction_candidate_sources=_parse_sources(args.direction_candidate_sources),
-                causal_candidate_sources=_parse_sources(args.causal_candidate_sources),
-                ingest_min_confidence=args.ingest_min_confidence,
-                export_telegram_feed=not bool(args.no_telegram_feed),
-                telegram_feed_path=Path(args.telegram_feed_path),
-                telegram_feed_min_abs_z=args.telegram_feed_min_abs_z,
-                telegram_feed_max_rows=args.telegram_feed_max_rows,
-                run_readiness=args.run_readiness,
-                readiness_config=ReadinessConfig(
-                    max_delay_minutes=args.max_delay_min,
-                    primary_z_threshold=args.primary_z,
-                    aftershock_z_threshold=args.aftershock_z,
-                    episode_window_minutes=args.episode_window_min,
-                    max_gap_minutes=args.max_gap_min,
-                ),
-            ),
-            start_ts=args.start_ts,
-            end_ts=args.end_ts,
-            direction_labels_jsonl=Path(args.direction_labels_jsonl) if args.direction_labels_jsonl else None,
-            causal_labels_jsonl=Path(args.causal_labels_jsonl) if args.causal_labels_jsonl else None,
-        )
-        print(json.dumps(result, ensure_ascii=False))
-    elif args.command == "news_shock_backfill":
-        from moex_carry.news_live_runtime import NewsIngestConfig
-        from moex_carry.news_shock_backfill import ShockRowsBackfillConfig, run_shock_rows_backfill
-
-        news_cfg = NewsIngestConfig.from_yaml(Path(args.news_config))
-        start_utc = _parse_utc_datetime(args.start_ts)
-        if start_utc is None:
-            raise ValueError(f"Invalid --start-ts: {args.start_ts}")
-        end_utc = _parse_utc_datetime(args.end_ts) if str(args.end_ts).strip() else None
-        payload = run_shock_rows_backfill(
-            settings=settings,
-            news_config=news_cfg,
-            cfg=ShockRowsBackfillConfig(
-                cursor_key=str(args.cursor_key),
-                start_utc=start_utc,
-                end_utc=end_utc,
-                window_hours=int(args.window_hours),
-                windows_per_run=int(args.windows_per_run),
-                bar_minutes=int(args.bar_minutes),
-                min_abs_z=float(args.min_abs_z),
-                rolling_window_bars=int(args.rolling_window_bars),
-                rolling_min_bars=int(args.rolling_min_bars),
-                max_delay_minutes=float(args.max_delay_min),
-                strict_pre_shock_minutes=float(args.strict_pre_shock_min),
-                broad_context_lookback_minutes=float(args.broad_context_lookback_min),
-                v2_min_relevance=float(args.v2_min_relevance),
-                broad_min_relevance=float(args.broad_min_relevance),
-                cross_commodity_min_relevance=float(args.cross_commodity_min_relevance),
-                news_min_impact_score=float(args.news_min_impact_score),
-                news_min_confidence=float(args.news_min_confidence),
-                news_max_items_per_symbol=int(args.news_max_items_per_symbol),
-                front_contract_candidates=int(args.front_contract_candidates),
-                history_padding_days=int(args.history_padding_days),
-                root_reuse_lookback_minutes=float(args.root_reuse_lookback_min),
-                write_csv_snapshot=bool(args.write_snapshot_csv),
-                snapshot_dir=str(args.snapshot_dir),
-            ),
-        )
-        print(json.dumps(payload, ensure_ascii=False))
-
-
 if __name__ == "__main__":
     main()

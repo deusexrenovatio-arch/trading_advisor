@@ -39,6 +39,24 @@ _SYMBOL_HINT_MAP = {
     "GOLD": "GOLD",
     "XAU": "GOLD",
     "BULLION": "GOLD",
+    "SILVER": "SILVER",
+    "XAG": "SILVER",
+    "PLATINUM": "PLATINUM",
+    "XPT": "PLATINUM",
+    "PALLADIUM": "PALLADIUM",
+    "XPD": "PALLADIUM",
+    "COPPER": "COPPER",
+    "ALUMINUM": "ALUMINUM",
+    "ALUMINIUM": "ALUMINUM",
+    "NICKEL": "NICKEL",
+    "ZINC": "ZINC",
+    "WHEAT": "WHEAT",
+    "SUGAR": "SUGAR",
+    "COFFEE": "COFFEE",
+    "COCOA": "COCOA",
+    "ORANGE": "ORANGE",
+    "OJ": "ORANGE",
+    "FCOJ": "ORANGE",
 }
 
 _SILVER_TABLE_NAME = "news_silver_labels"
@@ -68,7 +86,35 @@ def _extract_symbol_hints_from_text(value: object) -> str:
     text = _normalize_text(value).replace("-", "_").replace(" ", "_").upper()
     if not text:
         return ""
-    for token in ("NG_US", "NATURAL_GAS", "GAS", "NG", "BRN", "BRENT", "OIL", "CRUDE", "GOLD", "XAU"):
+    for token in (
+        "NG_US",
+        "NATURAL_GAS",
+        "GAS",
+        "NG",
+        "BRN",
+        "BRENT",
+        "OIL",
+        "CRUDE",
+        "GOLD",
+        "XAU",
+        "SILVER",
+        "XAG",
+        "PLATINUM",
+        "XPT",
+        "PALLADIUM",
+        "XPD",
+        "COPPER",
+        "ALUMINUM",
+        "ALUMINIUM",
+        "NICKEL",
+        "ZINC",
+        "WHEAT",
+        "SUGAR",
+        "COFFEE",
+        "COCOA",
+        "ORANGE",
+        "FCOJ",
+    ):
         if token in text:
             normalized = _normalize_symbol(token)
             if normalized:

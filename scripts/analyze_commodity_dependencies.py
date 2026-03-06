@@ -15,7 +15,23 @@ from typing import Iterable
 from moex_carry.config import load_settings, resolve_paths
 
 
-DEFAULT_SYMBOLS = ("BRN", "GOLD", "NG_US")
+DEFAULT_SYMBOLS = (
+    "BRN",
+    "NG_US",
+    "GOLD",
+    "SILVER",
+    "PLATINUM",
+    "PALLADIUM",
+    "COPPER",
+    "ALUMINUM",
+    "NICKEL",
+    "ZINC",
+    "WHEAT",
+    "SUGAR",
+    "COFFEE",
+    "COCOA",
+    "ORANGE",
+)
 GEO_TERMS = (
     "iran",
     "israel",
@@ -515,7 +531,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--config", type=str, default=None, help="Optional config path.")
     parser.add_argument("--db-path", type=str, default=None, help="Optional explicit sqlite db path.")
-    parser.add_argument("--symbols", type=str, default="BRN,GOLD,NG_US")
+    parser.add_argument(
+        "--symbols",
+        type=str,
+        default="BRN,NG_US,GOLD,SILVER,PLATINUM,PALLADIUM,COPPER,ALUMINUM,NICKEL,ZINC,WHEAT,SUGAR,COFFEE,COCOA,ORANGE",
+    )
     parser.add_argument("--period-days", type=int, default=365)
     parser.add_argument("--max-gap-hours", type=float, default=3.0)
     parser.add_argument("--max-lag-hours", type=int, default=6)
