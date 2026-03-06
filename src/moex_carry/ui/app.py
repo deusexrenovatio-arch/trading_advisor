@@ -4599,6 +4599,10 @@ def create_app(settings: AppSettings) -> Dash:
         logger=logger,
         bad_request=_bad_request,
         parse_bool=_parse_bool,
+        run_backtest_v2_cached_fn=run_backtest_v2_cached,
+        serialize_backtest_report_fn=serialize_backtest_report,
+        start_hpo_run_fn=start_hpo_run,
+        load_hpo_status_fn=load_hpo_status,
     )
 
     app = Dash(__name__, server=server, url_base_pathname="/dash/")
