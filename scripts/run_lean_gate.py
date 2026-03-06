@@ -14,6 +14,13 @@ def _run(cmd: list[str]) -> int:
     return int(completed.returncode)
 
 
+def _run_optional(cmd: list[str]) -> int:
+    printable = " ".join(cmd)
+    print(f">>> {printable} (non-blocking)", flush=True)
+    completed = subprocess.run(cmd, check=False)
+    return int(completed.returncode)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run lightweight governance gates for short coding loops."
@@ -31,7 +38,12 @@ def main() -> int:
     args = parser.parse_args()
 
     py = sys.executable
+    _run_optional([py, "scripts/agent_process_telemetry.py", "first-patch"])
+
     commands: list[list[str]] = [
+        [py, "scripts/sync_task_outcomes.py"],
+        [py, "scripts/validate_task_outcomes.py"],
+        [py, "scripts/validate_process_regressions.py"],
         [py, "scripts/sync_architecture_map.py", "--check"],
         [py, "scripts/validate_plans.py"],
         [py, "scripts/validate_agent_memory.py"],
@@ -40,6 +52,7 @@ def main() -> int:
         [py, "scripts/validate_harness_guideline.py"],
         [py, "scripts/validate_pr_only_policy.py"],
         [py, "scripts/validate_architecture_policy.py"],
+        [py, "scripts/validate_agent_contexts.py"],
         [py, "scripts/validate_test_cases.py"],
         [py, "scripts/validate_user_needs_catalog.py"],
         [py, "scripts/validate_skills.py"],

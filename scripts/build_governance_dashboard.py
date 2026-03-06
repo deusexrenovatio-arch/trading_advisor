@@ -108,6 +108,7 @@ def run(
 
     quality_report = artifacts_dir / "quality-scorecard.md"
     autonomy_report = artifacts_dir / "autonomy-kpi-report.md"
+    process_report = artifacts_dir / "process-improvement-report.md"
     entropy_report = artifacts_dir / "docs-gardening-report.md"
     findings_report = artifacts_dir / "agent-review-findings.md"
 
@@ -133,6 +134,20 @@ def run(
             ],
         ),
         (
+            "process-improvement",
+            process_report,
+            [
+                sys.executable,
+                "scripts/process_improvement_report.py",
+                "--output",
+                str(process_report),
+                "--base-sha",
+                base_sha or "",
+                "--head-sha",
+                head_sha or "",
+            ],
+        ),
+        (
             "docs-gardening-entropy",
             entropy_report,
             [
@@ -153,6 +168,16 @@ def run(
     if base_sha and head_sha:
         agent_review_cmd.extend(["--base-sha", base_sha, "--head-sha", head_sha])
     commands.append(("agent-review-findings", findings_report, agent_review_cmd))
+
+    if summary_file is not None:
+        for idx, (name, artifact, command) in enumerate(commands):
+            if name == "process-improvement":
+                commands[idx] = (
+                    name,
+                    artifact,
+                    [*command, "--summary-file", str(summary_file)],
+                )
+                break
 
     results: list[ComponentResult] = []
     for name, artifact, command in commands:

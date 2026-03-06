@@ -37,6 +37,34 @@ dimensions:
         command: ["{python}", "scripts/validate_session_handoff.py"]
       - id: task-request-contract
         command: ["{python}", "scripts/validate_task_request_contract.py"]
+      - id: task-outcomes-contract
+        command: ["{python}", "scripts/validate_task_outcomes.py"]
+
+  - id: decision-quality
+    threshold: 1.0
+    checks:
+      - id: task-outcomes-decision
+        command: ["{python}", "scripts/validate_task_outcomes.py", "--focus", "decision-quality"]
+      - id: process-regressions-decision
+        command: ["{python}", "scripts/validate_process_regressions.py", "--focus", "decision-quality"]
+
+  - id: context-efficiency
+    threshold: 1.0
+    checks:
+      - id: agent-context-coverage
+        command: ["{python}", "scripts/validate_agent_contexts.py"]
+      - id: task-outcomes-context
+        command: ["{python}", "scripts/validate_task_outcomes.py", "--focus", "context-efficiency"]
+      - id: process-regressions-context
+        command: ["{python}", "scripts/validate_process_regressions.py", "--focus", "context-efficiency"]
+
+  - id: self-learning
+    threshold: 1.0
+    checks:
+      - id: task-outcomes-learning
+        command: ["{python}", "scripts/validate_task_outcomes.py", "--focus", "self-learning"]
+      - id: process-regressions-learning
+        command: ["{python}", "scripts/validate_process_regressions.py", "--focus", "self-learning"]
 
   - id: security
     threshold: 1.0

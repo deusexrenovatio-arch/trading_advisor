@@ -10,6 +10,8 @@ REQUIRED_SNIPPETS = [
     "`python scripts/validate_plans.py`",
     "`python scripts/validate_session_handoff.py`",
     "`python scripts/validate_task_request_contract.py`",
+    "`python scripts/validate_task_outcomes.py`",
+    "`python scripts/validate_process_regressions.py`",
     "`python scripts/validate_pr_only_policy.py`",
     "`python scripts/validate_architecture_policy.py`",
     "`python scripts/run_lean_gate.py`",
@@ -19,6 +21,7 @@ REQUIRED_SNIPPETS = [
     "`python scripts/self_heal.py`",
     "`python scripts/validate_agent_memory.py`",
     "`python scripts/autonomy_kpi_report.py`",
+    "`python scripts/process_improvement_report.py`",
     "`python scripts/validate_dependency_decisions.py`",
     "`python scripts/validate_codeowners.py`",
     "`python scripts/validate_taste_invariants.py`",
@@ -33,6 +36,8 @@ REQUIRED_SNIPPETS = [
     "`manual_scenarios_count`",
     "`unlinked_test_cases_count`",
     "`autonomous_completion_rate`",
+    "`process_correct_first_time_pct`",
+    "`process_repeat_error_rate`",
 ]
 REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 

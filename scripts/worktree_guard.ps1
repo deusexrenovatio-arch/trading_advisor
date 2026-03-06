@@ -74,7 +74,27 @@ function Invoke-ContextRouterHint {
     }
 
     try {
-        $routerOutput = & $pythonExe $routerPath --from-git --format text 2>$null
+        $routerArgs = @(
+            $routerPath,
+            "--from-git",
+            "--format",
+            "text",
+            "--session-handoff-path",
+            (Join-Path $RepoRootPath "docs/session_handoff.md")
+        )
+        if (-not [string]::IsNullOrWhiteSpace($env:MOEX_CARRY_CONTEXT_ROUTER_REQUEST)) {
+            $routerArgs += @("--request", $env:MOEX_CARRY_CONTEXT_ROUTER_REQUEST.Trim())
+        }
+        if (-not [string]::IsNullOrWhiteSpace($env:MOEX_CARRY_CONTEXT_ROUTER_TARGET_MODULES)) {
+            foreach ($targetModule in $env:MOEX_CARRY_CONTEXT_ROUTER_TARGET_MODULES.Split(",")) {
+                $trimmed = $targetModule.Trim()
+                if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                    $routerArgs += @("--target-module", $trimmed)
+                }
+            }
+        }
+
+        $routerOutput = & $pythonExe @routerArgs 2>$null
         $routerExitCode = $LASTEXITCODE
         if ($routerExitCode -ne 0) {
             Write-Host "context_router: skipped (exit_code=$routerExitCode)"
@@ -101,6 +121,29 @@ function Invoke-ContextRouterHint {
         }
     } catch {
         Write-Host "context_router: skipped (python/context_router unavailable)"
+    }
+}
+
+function Invoke-AgentProcessTelemetryStart {
+    param(
+        [string]$RepoRootPath,
+        [switch]$QuietMode
+    )
+    if ($QuietMode) {
+        return
+    }
+    $telemetryPath = Join-Path $RepoRootPath "scripts/agent_process_telemetry.py"
+    if (-not (Test-Path -LiteralPath $telemetryPath)) {
+        return
+    }
+    $pythonExe = "python"
+    if (-not [string]::IsNullOrWhiteSpace($env:PYTHON)) {
+        $pythonExe = $env:PYTHON.Trim()
+    }
+    try {
+        & $pythonExe $telemetryPath "start" "--session-handoff-path" (Join-Path $RepoRootPath "docs/session_handoff.md") 2>$null | Out-Null
+    } catch {
+        Write-Host "agent_process_telemetry: skipped (python/telemetry unavailable)"
     }
 }
 
@@ -231,6 +274,7 @@ switch ($Action) {
                 Write-Host "  branch: $currentBranch"
             }
             Invoke-ContextRouterHint -RepoRootPath $repoRoot -QuietMode:$Quiet
+            Invoke-AgentProcessTelemetryStart -RepoRootPath $repoRoot -QuietMode:$Quiet
             exit 0
         }
 

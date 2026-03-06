@@ -1,9 +1,11 @@
 # CTX-API-UI
 
 ## Scope
-API handlers, UI behavior, and operator-facing delivery surfaces.
+API handlers, UI behavior, operator actions, and delivery surfaces.
 
 ## Owned Paths
+- `src/moex_carry/signals_ack.py`
+- `src/moex_carry/signals_delivery.py`
 - `src/moex_carry/ui/`
 - `ui-web/`
 - `src/moex_carry/integrations/`

@@ -4,8 +4,17 @@
 Governance automation, observability, and operational workflow tooling.
 
 ## Owned Paths
+- `docs/agent-contexts/`
+- `docs/DEV_WORKFLOW.md`
+- `docs/README.md`
+- `docs/session_handoff.md`
+- `memory/`
+- `plans/`
 - `src/moex_carry/observability/`
+- `src/moex_carry/logging.py`
 - `scripts/`
+- `tests/architecture/`
+- `tests/test_context_router.py`
 - `docs/workflows/`
 - `docs/runbooks/`
 - `.githooks/`

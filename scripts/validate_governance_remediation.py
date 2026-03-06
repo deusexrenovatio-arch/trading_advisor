@@ -11,6 +11,8 @@ REQUIRED_SECTIONS = [
     "## `python scripts/validate_agent_memory.py`",
     "## `python scripts/validate_session_handoff.py`",
     "## `python scripts/validate_task_request_contract.py`",
+    "## `python scripts/validate_task_outcomes.py`",
+    "## `python scripts/validate_process_regressions.py`",
     "## `python scripts/validate_pr_only_policy.py`",
     "## `python scripts/validate_dependency_decisions.py`",
     "## `python scripts/validate_taste_invariants.py`",
@@ -20,6 +22,7 @@ REQUIRED_SECTIONS = [
     "## `python scripts/validate_flaky_policy.py`",
     "## `python scripts/validate_observability_stack.py`",
     "## `python scripts/validate_quality_scorecards.py`",
+    "## `python scripts/process_improvement_report.py`",
     "## `python scripts/build_governance_dashboard.py`",
 ]
 

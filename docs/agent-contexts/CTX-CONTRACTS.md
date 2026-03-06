@@ -1,11 +1,12 @@
 # CTX-CONTRACTS
 
 ## Scope
-Schema/version boundaries for storage and public API contracts.
+Schema/version boundaries for storage, decision projection, and public API contracts.
 
 ## Owned Paths
 - `contracts/`
 - `docs/contracts/api-v2.yaml`
+- `src/moex_carry/decision_log.py`
 - `src/moex_carry/storage/`
 - `src/moex_carry/contracts/`
 
