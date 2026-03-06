@@ -48,6 +48,8 @@ def _seed_base_tables(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE news_shock_rows (
             selected_event_id TEXT,
+            v2_event_id TEXT,
+            broad_event_id TEXT,
             shock_ts TEXT,
             shock_direction TEXT,
             abs_move_pct REAL,
@@ -161,5 +163,121 @@ def test_feed_verification_gate_respects_both_vs_any_horizon() -> None:
 
         assert strict.empty
         assert list(relaxed["article_id"]) == ["b1"]
+    finally:
+        conn.close()
+
+
+def test_feed_verification_matches_broad_event_id_when_selected_missing() -> None:
+    conn = sqlite3.connect(":memory:")
+    try:
+        _seed_base_tables(conn)
+        conn.execute(
+            """
+            INSERT INTO news_articles (article_id, story_id, published_at_utc, commodity, source_name, provider, title, url)
+            VALUES ('c1', 'story-c1', '2026-03-05T09:00:00Z', 'BRN', 'wire', 'gdelt', 'Iran strike hits export terminal', 'https://ex/c1')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO news_scores (
+                article_id, direction, severity, impact_score, confidence, reason_terms_up, reason_terms_down,
+                cause_classification, cause_bucket, cause_event, transmission_channel, cause_cluster_key,
+                cause_confidence, fundamental_score, direction_alignment, is_primary_cause, cause_terms_json, effect_terms_json
+            )
+            VALUES ('c1', 'up', 'high', 0.86, 0.93, '["strike"]', '[]', 'cause', 'supply', 'producer_outage', 'physical_supply', 'cause:BRN:outage:c1', 0.81, 0.9, 1.0, 1, '["strike"]', '[]')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO news_shock_rows (selected_event_id, v2_event_id, broad_event_id, shock_ts, shock_direction, abs_move_pct, z_score)
+            VALUES (NULL, NULL, 'c1', '2026-03-05T09:20:00Z', 'up', 1.4, 3.1)
+            """
+        )
+        conn.commit()
+
+        frame = build_live_news_feed_frame(
+            conn,
+            min_impact_score=0.1,
+            min_confidence=0.1,
+            min_fundamental_score=0.45,
+            max_rows=20,
+            require_primary_cause=True,
+            require_verified_move=True,
+            require_verified_both_horizons=False,
+        )
+
+        assert list(frame["article_id"]) == ["c1"]
+        row = frame.iloc[0]
+        assert bool(row["verified_move_1h"]) is True
+        assert float(row["verification_score"]) > 0.0
+    finally:
+        conn.close()
+
+
+def test_feed_emits_per_commodity_rows_with_story_scope_json() -> None:
+    conn = sqlite3.connect(":memory:")
+    try:
+        _seed_base_tables(conn)
+        conn.execute(
+            """
+            CREATE TABLE news_article_commodity_links (
+                article_id TEXT NOT NULL,
+                commodity TEXT NOT NULL,
+                link_score REAL NOT NULL,
+                link_reason TEXT,
+                link_evidence_json TEXT,
+                link_mode TEXT,
+                is_primary_link INTEGER,
+                first_seen_at_utc TEXT,
+                last_seen_at_utc TEXT,
+                PRIMARY KEY (article_id, commodity)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO news_articles (article_id, story_id, published_at_utc, commodity, source_name, provider, title, url)
+            VALUES ('m1', 'story-m1', '2026-03-05T09:00:00Z', 'BRN', 'wire', 'newsapi', 'Oil and gold rise on Middle East escalation', 'https://ex/m1')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO news_scores (
+                article_id, direction, severity, impact_score, confidence, reason_terms_up, reason_terms_down,
+                cause_classification, cause_bucket, cause_event, transmission_channel, cause_cluster_key,
+                cause_confidence, fundamental_score, direction_alignment, is_primary_cause, cause_terms_json, effect_terms_json
+            )
+            VALUES ('m1', 'up', 'high', 0.88, 0.94, '["escalation","safe haven"]', '[]', 'cause', 'geopolitics', 'route_risk', 'physical_supply', 'cause:macro:m1', 0.82, 0.9, 1.0, 1, '["escalation"]', '[]')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO news_article_commodity_links (
+                article_id, commodity, link_score, link_reason, link_evidence_json, link_mode, is_primary_link, first_seen_at_utc, last_seen_at_utc
+            )
+            VALUES
+                ('m1', 'BRN', 0.93, 'anchor+seed', '["oil","middle east"]', 'deterministic', 1, '2026-03-05T09:00:00Z', '2026-03-05T09:00:00Z'),
+                ('m1', 'GOLD', 0.71, 'anchor', '["gold","safe haven"]', 'deterministic', 0, '2026-03-05T09:00:00Z', '2026-03-05T09:00:00Z')
+            """
+        )
+        conn.commit()
+
+        frame = build_live_news_feed_frame(
+            conn,
+            feed_role="discovery",
+            min_impact_score=0.1,
+            min_confidence=0.1,
+            min_link_score=0.6,
+            max_rows=20,
+            require_primary_cause=False,
+            require_verified_move=False,
+            require_verified_both_horizons=False,
+        )
+
+        assert list(frame["commodity"]) == ["BRN", "GOLD"]
+        assert set(frame["feed_role"]) == {"discovery"}
+        assert set(frame["story_id"]) == {"story-m1"}
+        assert all(str(value).startswith("{") for value in frame["story_scope_json"].tolist())
+        assert set(frame["commodity_scope"]) == {"BRN,GOLD"}
     finally:
         conn.close()

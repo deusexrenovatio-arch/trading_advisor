@@ -61,6 +61,17 @@ def _init_table(conn: Any) -> None:
             selected_match_mode TEXT,
             selected_title TEXT,
             selected_url TEXT,
+            selected_cause_event TEXT,
+            selected_cause_route_key TEXT,
+            selected_cause_claim_status TEXT,
+            selected_cause_classification TEXT,
+            selected_cause_confidence REAL,
+            selected_fundamental_score REAL,
+            selected_direction_alignment REAL,
+            selected_is_primary_cause INTEGER,
+            root_link_type TEXT,
+            root_primary_shock_ts TEXT,
+            root_episode_event_index INTEGER,
             root_topic_id TEXT,
             label_has_any INTEGER,
             label_has_gold INTEGER,
@@ -75,6 +86,26 @@ def _init_table(conn: Any) -> None:
         )
         """
     )
+    columns = {
+        str(row[1]).strip().lower()
+        for row in conn.execute(f"PRAGMA table_info({_TABLE_NAME})").fetchall()
+    }
+    migrations: tuple[tuple[str, str], ...] = (
+        ("selected_cause_event", "TEXT"),
+        ("selected_cause_route_key", "TEXT"),
+        ("selected_cause_claim_status", "TEXT"),
+        ("selected_cause_classification", "TEXT"),
+        ("selected_cause_confidence", "REAL"),
+        ("selected_fundamental_score", "REAL"),
+        ("selected_direction_alignment", "REAL"),
+        ("selected_is_primary_cause", "INTEGER"),
+        ("root_link_type", "TEXT"),
+        ("root_primary_shock_ts", "TEXT"),
+        ("root_episode_event_index", "INTEGER"),
+    )
+    for column, dtype in migrations:
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {_TABLE_NAME} ADD COLUMN {column} {dtype}")
     conn.execute(
         f"""
         CREATE INDEX IF NOT EXISTS idx_{_TABLE_NAME}_shock_ts
@@ -85,6 +116,12 @@ def _init_table(conn: Any) -> None:
         f"""
         CREATE INDEX IF NOT EXISTS idx_{_TABLE_NAME}_selected_event
         ON {_TABLE_NAME} (selected_event_id, symbol, shock_ts DESC)
+        """
+    )
+    conn.execute(
+        f"""
+        CREATE INDEX IF NOT EXISTS idx_{_TABLE_NAME}_root_topic
+        ON {_TABLE_NAME} (root_topic_id, symbol, shock_ts DESC)
         """
     )
     conn.commit()
@@ -135,6 +172,17 @@ def upsert_live_shock_rows(
                     _normalize_text(row.get("selected_match_mode")),
                     _normalize_text(row.get("selected_title")),
                     _normalize_text(row.get("selected_url")),
+                    _normalize_text(row.get("selected_cause_event")),
+                    _normalize_text(row.get("selected_cause_route_key")),
+                    _normalize_text(row.get("selected_cause_claim_status")),
+                    _normalize_text(row.get("selected_cause_classification")),
+                    _safe_float(row.get("selected_cause_confidence")),
+                    _safe_float(row.get("selected_fundamental_score")),
+                    _safe_float(row.get("selected_direction_alignment")),
+                    _safe_int(row.get("selected_is_primary_cause")),
+                    _normalize_text(row.get("root_link_type")),
+                    _normalize_text(row.get("root_primary_shock_ts")),
+                    _safe_int(row.get("root_episode_event_index")),
                     _normalize_text(row.get("root_topic_id")),
                     _safe_int(row.get("label_has_any")),
                     _safe_int(row.get("label_has_gold")),
@@ -178,6 +226,17 @@ def upsert_live_shock_rows(
                 selected_match_mode,
                 selected_title,
                 selected_url,
+                selected_cause_event,
+                selected_cause_route_key,
+                selected_cause_claim_status,
+                selected_cause_classification,
+                selected_cause_confidence,
+                selected_fundamental_score,
+                selected_direction_alignment,
+                selected_is_primary_cause,
+                root_link_type,
+                root_primary_shock_ts,
+                root_episode_event_index,
                 root_topic_id,
                 label_has_any,
                 label_has_gold,
@@ -188,7 +247,7 @@ def upsert_live_shock_rows(
                 silver_direction_match,
                 updated_at_utc,
                 row_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(symbol, shock_ts, bar_minutes) DO UPDATE SET
                 prev_ts = excluded.prev_ts,
                 prev_price = excluded.prev_price,
@@ -215,6 +274,17 @@ def upsert_live_shock_rows(
                 selected_match_mode = excluded.selected_match_mode,
                 selected_title = excluded.selected_title,
                 selected_url = excluded.selected_url,
+                selected_cause_event = excluded.selected_cause_event,
+                selected_cause_route_key = excluded.selected_cause_route_key,
+                selected_cause_claim_status = excluded.selected_cause_claim_status,
+                selected_cause_classification = excluded.selected_cause_classification,
+                selected_cause_confidence = excluded.selected_cause_confidence,
+                selected_fundamental_score = excluded.selected_fundamental_score,
+                selected_direction_alignment = excluded.selected_direction_alignment,
+                selected_is_primary_cause = excluded.selected_is_primary_cause,
+                root_link_type = excluded.root_link_type,
+                root_primary_shock_ts = excluded.root_primary_shock_ts,
+                root_episode_event_index = excluded.root_episode_event_index,
                 root_topic_id = excluded.root_topic_id,
                 label_has_any = excluded.label_has_any,
                 label_has_gold = excluded.label_has_gold,

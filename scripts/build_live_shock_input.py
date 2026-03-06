@@ -7,6 +7,7 @@ from pathlib import Path
 
 from moex_carry.config import load_settings
 from moex_carry.news_live_runtime import NewsIngestConfig
+from moex_carry.news_root_maintenance import RootMaintenanceConfig, refresh_root_maintenance
 from moex_carry.news_shock_live_input import LiveShockInputConfig, build_live_shock_input
 from moex_carry.news_shock_store import upsert_live_shock_rows
 
@@ -33,7 +34,14 @@ def main() -> None:
     parser.add_argument("--front-contract-candidates", type=int, default=4)
     parser.add_argument("--history-padding-days", type=int, default=10)
     parser.add_argument("--root-reuse-lookback-min", type=float, default=2880.0)
+    parser.add_argument("--root-min-fundamental-score", type=float, default=0.45)
+    parser.add_argument("--root-min-cause-confidence", type=float, default=0.45)
+    parser.add_argument("--aftershock-max-gap-min", type=float, default=2880.0)
+    parser.add_argument("--enable-candidate-newsapi-enrichment", action="store_true")
+    parser.add_argument("--enrichment-window-min", type=int, default=90)
+    parser.add_argument("--enrichment-max-requests-per-symbol", type=int, default=4)
     parser.add_argument("--no-write-db", action="store_true")
+    parser.add_argument("--no-root-maintenance", action="store_true")
     parser.add_argument("--write-db-url", type=str, default="")
     parser.add_argument("--write-db-data-dir", type=str, default="")
     parser.add_argument("--end-ts", type=str, default=None)
@@ -69,12 +77,19 @@ def main() -> None:
             front_contract_candidates=args.front_contract_candidates,
             history_padding_days=args.history_padding_days,
             root_reuse_lookback_minutes=args.root_reuse_lookback_min,
+            root_min_fundamental_score=args.root_min_fundamental_score,
+            root_min_cause_confidence=args.root_min_cause_confidence,
+            aftershock_max_gap_minutes=args.aftershock_max_gap_min,
+            enable_candidate_newsapi_enrichment=bool(args.enable_candidate_newsapi_enrichment),
+            enrichment_window_minutes=args.enrichment_window_min,
+            enrichment_max_requests_per_symbol=args.enrichment_max_requests_per_symbol,
         ),
         end_utc=end_ts,
     )
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(args.output_csv, index=False)
     db_rows_upserted = 0
+    root_maintenance = {"links_upserted": 0, "registry_upserted": 0, "edges_upserted": 0}
     if not bool(args.no_write_db):
         database_url = str(args.write_db_url or news_cfg.database_url)
         data_dir = str(args.write_db_data_dir or news_cfg.data_dir)
@@ -85,11 +100,21 @@ def main() -> None:
                 data_dir=data_dir,
             )
         )
+        if not bool(args.no_root_maintenance):
+            root_maintenance = refresh_root_maintenance(
+                database_url=database_url,
+                data_dir=data_dir,
+                cfg=RootMaintenanceConfig(
+                    bar_minutes=args.bar_minutes,
+                    max_rows=0,
+                ),
+            )
     payload = {
         "output_csv": str(args.output_csv),
         "rows": int(len(frame)),
         "symbols": sorted(frame["symbol"].dropna().astype(str).unique().tolist()) if not frame.empty else [],
         "db_rows_upserted": db_rows_upserted,
+        "root_maintenance": root_maintenance,
     }
     print(json.dumps(payload, ensure_ascii=False))
 

@@ -236,7 +236,7 @@ class TelegramConfig(BaseModel):
     shock_max_alerts_per_cycle: int = 20
     shock_sent_fingerprint_ttl_hours: int = 24 * 21
     news_alerts_enabled: bool = False
-    news_feed_path: str | None = "./data/output/news_live/live_news_signals.csv"
+    news_feed_path: str | None = "./data/output/news_live/live_news_discovery.csv"
     news_min_impact_score: float = 0.35
     news_min_confidence: float = 0.9
     news_max_alerts_per_cycle: int = 20
@@ -274,6 +274,7 @@ class RiskProfileConfig(BaseModel):
 class NewsFilterConfig(BaseModel):
     live_ingest_enabled: bool = False
     live_db_url: str = "sqlite:///./data/news_livecheck_ng.db"
+    live_feed_path: str = "./data/output/news_live/live_news_discovery.csv"
     live_min_impact_score: float = 0.35
     live_min_confidence: float = 0.9
     live_max_items: int = 200
@@ -335,6 +336,16 @@ class NewsIngestConfig(BaseModel):
                 price_interval="1d",
             ),
             NewsIngestConfig.CommodityProfile(
+                ticker="NG_US",
+                name="US Natural Gas",
+                gdelt_query='("natural gas" OR "henry hub" OR "us lng")',
+                newsapi_query='("natural gas" OR "henry hub" OR lng)',
+                rss_urls=["https://news.google.com/rss/search?q=henry+hub+natural+gas+futures"],
+                price_source="yfinance",
+                price_symbol="NG=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
                 ticker="GOLD",
                 name="Gold",
                 gdelt_query='("gold futures" OR "gold price" OR bullion)',
@@ -345,13 +356,123 @@ class NewsIngestConfig(BaseModel):
                 price_interval="1d",
             ),
             NewsIngestConfig.CommodityProfile(
-                ticker="NG_US",
-                name="US Natural Gas",
-                gdelt_query='("natural gas" OR "henry hub" OR "us lng")',
-                newsapi_query='("natural gas" OR "henry hub" OR lng)',
-                rss_urls=["https://news.google.com/rss/search?q=henry+hub+natural+gas+futures"],
+                ticker="SILVER",
+                name="Silver",
+                gdelt_query='("silver futures" OR "silver price" OR "industrial silver" OR "solar demand silver")',
+                newsapi_query='("silver" OR xag OR "solar demand" OR "silver mine")',
+                rss_urls=["https://news.google.com/rss/search?q=silver+futures"],
                 price_source="yfinance",
-                price_symbol="NG=F",
+                price_symbol="SI=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="PLATINUM",
+                name="Platinum",
+                gdelt_query='("platinum futures" OR "platinum price" OR "south africa platinum" OR "pgm supply")',
+                newsapi_query='("platinum" OR xpt OR pgm OR autocatalyst)',
+                rss_urls=["https://news.google.com/rss/search?q=platinum+futures"],
+                price_source="yfinance",
+                price_symbol="PL=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="PALLADIUM",
+                name="Palladium",
+                gdelt_query='("palladium futures" OR "palladium price" OR "russian palladium" OR "autocatalyst demand")',
+                newsapi_query='("palladium" OR xpd OR "russian supply" OR autocatalyst)',
+                rss_urls=["https://news.google.com/rss/search?q=palladium+futures"],
+                price_source="yfinance",
+                price_symbol="PA=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="COPPER",
+                name="Copper",
+                gdelt_query='("copper futures" OR "copper price" OR codelco OR "mine strike" OR smelter)',
+                newsapi_query='("copper" OR codelco OR escondida OR "mine strike" OR smelter)',
+                rss_urls=["https://news.google.com/rss/search?q=copper+futures"],
+                price_source="yfinance",
+                price_symbol="HG=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="ALUMINUM",
+                name="Aluminum",
+                gdelt_query='("aluminum futures" OR "aluminium price" OR bauxite OR alumina OR "smelter outage")',
+                newsapi_query='("aluminum" OR "aluminium" OR bauxite OR alumina OR smelter)',
+                rss_urls=["https://news.google.com/rss/search?q=aluminum+futures"],
+                price_source="yfinance",
+                price_symbol="",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="NICKEL",
+                name="Nickel",
+                gdelt_query='("nickel futures" OR "nickel price" OR "indonesia nickel" OR "ore export" OR "stainless steel demand")',
+                newsapi_query='("nickel" OR "indonesia nickel" OR "ore ban" OR "stainless steel demand")',
+                rss_urls=["https://news.google.com/rss/search?q=nickel+futures"],
+                price_source="yfinance",
+                price_symbol="",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="ZINC",
+                name="Zinc",
+                gdelt_query='("zinc futures" OR "zinc price" OR "zinc smelter" OR "mine disruption")',
+                newsapi_query='("zinc" OR "zinc smelter" OR "mine disruption" OR "treatment charges")',
+                rss_urls=["https://news.google.com/rss/search?q=zinc+futures"],
+                price_source="yfinance",
+                price_symbol="",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="WHEAT",
+                name="Wheat",
+                gdelt_query='("wheat futures" OR "black sea wheat" OR "grain corridor" OR "wheat drought" OR "crop condition")',
+                newsapi_query='("wheat" OR "black sea wheat" OR "grain corridor" OR "wheat crop")',
+                rss_urls=["https://news.google.com/rss/search?q=wheat+futures"],
+                price_source="yfinance",
+                price_symbol="ZW=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="SUGAR",
+                name="Sugar",
+                gdelt_query='("sugar futures" OR "raw sugar" OR "brazil sugar cane" OR "india sugar export" OR "ethanol parity")',
+                newsapi_query='("sugar" OR "raw sugar" OR "brazil sugar" OR "ethanol parity")',
+                rss_urls=["https://news.google.com/rss/search?q=sugar+futures"],
+                price_source="yfinance",
+                price_symbol="SB=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="COFFEE",
+                name="Coffee",
+                gdelt_query='("coffee futures" OR arabica OR robusta OR "brazil coffee crop" OR "coffee frost")',
+                newsapi_query='("coffee" OR arabica OR robusta OR "coffee crop" OR frost)',
+                rss_urls=["https://news.google.com/rss/search?q=coffee+futures"],
+                price_source="yfinance",
+                price_symbol="KC=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="COCOA",
+                name="Cocoa",
+                gdelt_query='("cocoa futures" OR "ivory coast cocoa" OR "ghana cocoa" OR harmattan OR "crop disease")',
+                newsapi_query='("cocoa" OR "ivory coast" OR ghana OR harmattan OR "crop disease")',
+                rss_urls=["https://news.google.com/rss/search?q=cocoa+futures"],
+                price_source="yfinance",
+                price_symbol="CC=F",
+                price_interval="1d",
+            ),
+            NewsIngestConfig.CommodityProfile(
+                ticker="ORANGE",
+                name="Orange Juice",
+                gdelt_query='("orange juice futures" OR fcoj OR "citrus greening" OR "florida orange crop")',
+                newsapi_query='("orange juice" OR fcoj OR "citrus greening" OR "orange crop")',
+                rss_urls=["https://news.google.com/rss/search?q=orange+juice+futures"],
+                price_source="yfinance",
+                price_symbol="OJ=F",
                 price_interval="1d",
             ),
         ]

@@ -1358,6 +1358,8 @@ class TelegramWorker:
                 send_text=self._send_text,
                 save_state=self._save_state,
                 logger=logger,
+                shock_database_url=self.settings.news_filter.live_db_url,
+                data_dir=self.settings.data.data_dir,
             )
             broadcast_news_alerts(
                 cfg=self.cfg,
