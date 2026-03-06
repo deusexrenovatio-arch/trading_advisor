@@ -1,13 +1,20 @@
 # CTX-RESEARCH
 
 ## Scope
-Backtest v2, minute replay, and HPO runtime/performance.
+Backtest, replay, analytics, and HPO runtime/performance.
 
 ## Owned Paths
+- `src/moex_carry/analytics/`
+- `src/moex_carry/backtest/`
 - `src/moex_carry/backtest_v2/`
+- `src/moex_carry/broker/`
+- `src/moex_carry/costs/`
+- `src/moex_carry/execution/`
+- `src/moex_carry/forward/`
 - `src/moex_carry/hpo/`
+- `src/moex_carry/perf.py`
 - `src/moex_carry/signal_replay/`
-- `src/moex_carry/analytics/alpha.py`
+- `src/moex_carry/snapshot/`
 
 ## Guarded Paths (do not change in this context)
 - `src/moex_carry/ui/`

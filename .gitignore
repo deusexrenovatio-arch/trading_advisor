@@ -11,3 +11,5 @@ __pycache__/
 *.log
 scripts/*.local.ps1
 .worktree-context.local.json
+.runlogs/
+.tmp/

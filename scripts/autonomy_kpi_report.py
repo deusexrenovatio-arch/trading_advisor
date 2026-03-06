@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from agent_process_telemetry import compute_process_rollup, load_task_outcomes
+
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -87,6 +89,20 @@ def _compute_self_heal_metrics(path: Path) -> dict[str, int]:
     return {"self_heal_workflow_enabled": 1 if path.exists() else 0}
 
 
+def _compute_process_metrics(path: Path) -> dict[str, float | int]:
+    payload = load_task_outcomes(path)
+    rollup = compute_process_rollup(payload)
+    metrics = rollup["current_metrics"]
+    return {
+        "process_tasks_completed": rollup["completed_tasks_count"],
+        "process_burn_in_complete": 1 if rollup["burn_in_complete"] else 0,
+        "process_correct_first_time_pct": float(metrics.get("correct_first_time_pct", 0.0)),
+        "process_start_match_pct": float(metrics.get("start_match_pct", 0.0)),
+        "process_repeat_error_rate": float(metrics.get("repeat_error_rate", 0.0)),
+        "process_environment_blocker_rate": float(metrics.get("environment_blocker_rate", 0.0)),
+    }
+
+
 def _render_report(metrics: dict[str, float | int]) -> str:
     lines = [
         "# Autonomy KPI Report",
@@ -108,6 +124,12 @@ def _render_report(metrics: dict[str, float | int]) -> str:
         "quality_dimensions_total",
         "quality_blocking_dimensions",
         "self_heal_workflow_enabled",
+        "process_tasks_completed",
+        "process_burn_in_complete",
+        "process_correct_first_time_pct",
+        "process_start_match_pct",
+        "process_repeat_error_rate",
+        "process_environment_blocker_rate",
     ]
     for key in ordered:
         value = metrics.get(key, 0)
@@ -124,6 +146,7 @@ def run(
     plans_path: Path,
     memory_path: Path,
     quality_path: Path,
+    task_outcomes_path: Path,
     self_heal_workflow_path: Path,
     output: Path,
     summary_file: Path | None,
@@ -132,6 +155,7 @@ def run(
     metrics.update(_compute_plan_metrics(plans_path))
     metrics.update(_compute_memory_metrics(memory_path))
     metrics.update(_compute_quality_metrics(quality_path))
+    metrics.update(_compute_process_metrics(task_outcomes_path))
     metrics.update(_compute_self_heal_metrics(self_heal_workflow_path))
 
     report = _render_report(metrics)
@@ -151,6 +175,7 @@ def main() -> None:
     parser.add_argument("--plans", default="plans/PLANS.yaml")
     parser.add_argument("--memory", default="memory/agent_memory.yaml")
     parser.add_argument("--quality-scorecards", default="configs/quality_scorecards.yaml")
+    parser.add_argument("--task-outcomes", default="memory/task_outcomes.yaml")
     parser.add_argument("--self-heal-workflow", default=".github/workflows/self-heal.yml")
     parser.add_argument("--output", default="autonomy-kpi-report.md")
     parser.add_argument("--summary-file", default=None)
@@ -161,6 +186,7 @@ def main() -> None:
             plans_path=Path(args.plans),
             memory_path=Path(args.memory),
             quality_path=Path(args.quality_scorecards),
+            task_outcomes_path=Path(args.task_outcomes),
             self_heal_workflow_path=Path(args.self_heal_workflow),
             output=Path(args.output),
             summary_file=summary,

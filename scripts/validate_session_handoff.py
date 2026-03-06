@@ -10,6 +10,7 @@ REQUIRED_HEADINGS = [
     "# Session Handoff",
     "## Goal",
     "## Current Delta",
+    "## Task Outcome",
     "## Blockers",
     "## Next Step",
     "## Validation",

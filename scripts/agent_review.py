@@ -6,6 +6,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_process_telemetry import load_task_outcomes
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -33,6 +35,10 @@ def _changed_files(base_sha: str | None, head_sha: str | None) -> list[str]:
 def _build_findings(changed: list[str]) -> list[Finding]:
     findings: list[Finding] = []
     changed_set = set(changed)
+    non_trivial = any(
+        path not in {"docs/session_handoff.md", "memory/task_outcomes.yaml"} and not path.startswith(".runlogs/")
+        for path in changed
+    )
 
     src_changed = any(path.startswith("src/") for path in changed)
     tests_changed = any(path.startswith("tests/") or path.startswith("ui-web/tests/") for path in changed)
@@ -85,6 +91,58 @@ def _build_findings(changed: list[str]) -> list[Finding]:
                 rule_id="agents-without-workflow-doc-sync",
                 message="AGENTS.md changed without DEV_WORKFLOW sync in same diff.",
                 recommendation="Verify process docs remain aligned to agent instructions.",
+            )
+        )
+
+    if non_trivial:
+        if "docs/session_handoff.md" not in changed_set:
+            findings.append(
+                Finding(
+                    severity="P1",
+                    rule_id="non-trivial-diff-without-task-outcome-handoff",
+                    message="Non-trivial diff changed code/governance files without session handoff closeout update.",
+                    recommendation="Update docs/session_handoff.md Task Outcome fields for the task.",
+                )
+            )
+        if "memory/task_outcomes.yaml" not in changed_set:
+            findings.append(
+                Finding(
+                    severity="P1",
+                    rule_id="non-trivial-diff-without-task-outcome-ledger",
+                    message="Non-trivial diff changed code/governance files without task outcomes ledger update.",
+                    recommendation="Run scripts/sync_task_outcomes.py and commit memory/task_outcomes.yaml.",
+                )
+            )
+
+    ledger = load_task_outcomes(Path("memory/task_outcomes.yaml"))
+    repeated_without_followup = []
+    seen_signatures: set[str] = set()
+    for row in ledger.get("items", []):
+        if not isinstance(row, dict):
+            continue
+        signature = str(row.get("incident_signature", "")).strip()
+        if not signature or signature == "none":
+            continue
+        repeated = signature in seen_signatures
+        seen_signatures.add(signature)
+        if not repeated:
+            continue
+        action = str(row.get("improvement_action", "")).strip()
+        artifact = str(row.get("improvement_artifact", "")).strip()
+        linked_plan = str(row.get("linked_plan_id", "")).strip()
+        linked_memory = str(row.get("linked_memory_id", "")).strip()
+        if action in {"", "none", "pending"} or artifact in {"", "none", "pending"} or (not linked_plan and not linked_memory):
+            repeated_without_followup.append(signature)
+    if repeated_without_followup:
+        findings.append(
+            Finding(
+                severity="P2",
+                rule_id="repeated-signature-without-followup",
+                message=(
+                    "Repeated incident signatures exist without a distinct improvement artifact or linked follow-up: "
+                    + ", ".join(sorted(set(repeated_without_followup)))
+                ),
+                recommendation="Add a new improvement artifact and linked plan/memory item for repeated signatures.",
             )
         )
 
