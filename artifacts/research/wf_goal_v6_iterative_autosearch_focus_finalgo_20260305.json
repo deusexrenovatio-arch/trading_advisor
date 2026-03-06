@@ -1,0 +1,2127 @@
+{
+  "generated_at_utc": "2026-03-05T13:35:24.312713+00:00",
+  "reports_scanned": [
+    "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+    "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+    "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+    "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+    "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+    "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json"
+  ],
+  "candidates_evaluated": 60,
+  "final_go_passed_count": 3,
+  "top_candidates": [
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "NC",
+        "NG",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 109,
+      "win": 0.7522935779816514,
+      "tpw": 2.0790190735694822,
+      "net": 3622.5,
+      "top": 0.2581090407177364,
+      "pass": true,
+      "distance": 0.0
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "NC",
+        "NG",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 109,
+      "win": 0.7522935779816514,
+      "tpw": 2.0790190735694822,
+      "net": 3622.5,
+      "top": 0.2581090407177364,
+      "pass": true,
+      "distance": 0.0
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "NC",
+        "NG",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 109,
+      "win": 0.7522935779816514,
+      "tpw": 2.0790190735694822,
+      "net": 3622.5,
+      "top": 0.2581090407177364,
+      "pass": true,
+      "distance": 0.0
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "include_roots": [
+        "AN",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NC",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 105,
+      "win": 0.7428571428571429,
+      "tpw": 2.002724795640327,
+      "net": 3473.0,
+      "top": 0.25785990071704357,
+      "pass": false,
+      "distance": 0.0071428571428571175
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NC",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 105,
+      "win": 0.7428571428571429,
+      "tpw": 2.002724795640327,
+      "net": 3473.0,
+      "top": 0.25785990071704357,
+      "pass": false,
+      "distance": 0.0071428571428571175
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NC",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 105,
+      "win": 0.7428571428571429,
+      "tpw": 2.002724795640327,
+      "net": 3473.0,
+      "top": 0.25785990071704357,
+      "pass": false,
+      "distance": 0.0071428571428571175
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NC",
+        "NR",
+        "PT",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "ZC"
+      ],
+      "filled": 106,
+      "win": 0.7264150943396226,
+      "tpw": 2.0217983651226157,
+      "net": 3974.0,
+      "top": 0.240154711673699,
+      "pass": false,
+      "distance": 0.02358490566037741
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NC",
+        "NG",
+        "NR",
+        "PD",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 105,
+      "win": 0.7238095238095238,
+      "tpw": 2.002724795640327,
+      "net": 4131.0,
+      "top": 0.24033985102420857,
+      "pass": false,
+      "distance": 0.02619047619047621
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NC",
+        "NR",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "ZC"
+      ],
+      "filled": 106,
+      "win": 0.7169811320754716,
+      "tpw": 2.0217983651226157,
+      "net": 2442.0,
+      "top": 0.2611809923130678,
+      "pass": false,
+      "distance": 0.03301886792452835
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NC",
+        "NG",
+        "NR",
+        "PD",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 106,
+      "win": 0.7169811320754716,
+      "tpw": 2.0217983651226157,
+      "net": 2386.5,
+      "top": 0.20789961500071297,
+      "pass": false,
+      "distance": 0.03301886792452835
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NG",
+        "NR",
+        "OJ",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 106,
+      "win": 0.660377358490566,
+      "tpw": 2.0217983651226157,
+      "net": 4146.0,
+      "top": 0.3222300140252454,
+      "pass": false,
+      "distance": 0.089622641509434
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NR",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "SX",
+        "W4"
+      ],
+      "filled": 105,
+      "win": 0.638095238095238,
+      "tpw": 2.002724795640327,
+      "net": 6678.0,
+      "top": 0.2976947535771065,
+      "pass": false,
+      "distance": 0.11190476190476195
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "NG",
+        "NR",
+        "OJ",
+        "PT",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 106,
+      "win": 0.6320754716981132,
+      "tpw": 2.0217983651226157,
+      "net": 4931.0,
+      "top": 0.23991076860677346,
+      "pass": false,
+      "distance": 0.11792452830188682
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "NG",
+        "NR",
+        "OJ",
+        "PT",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 106,
+      "win": 0.6320754716981132,
+      "tpw": 2.0217983651226157,
+      "net": 4931.0,
+      "top": 0.23991076860677346,
+      "pass": false,
+      "distance": 0.11792452830188682
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NG",
+        "NR",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.6285714285714286,
+      "tpw": 2.002724795640327,
+      "net": 5845.0,
+      "top": 0.34627831715210355,
+      "pass": false,
+      "distance": 0.12142857142857144
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NR",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "SX",
+        "W4"
+      ],
+      "filled": 106,
+      "win": 0.6415094339622641,
+      "tpw": 2.0217983651226157,
+      "net": 7362.0,
+      "top": 0.37006578947368424,
+      "pass": false,
+      "distance": 0.12855635551142014
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "NC",
+        "NR",
+        "OJ",
+        "PT",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.6190476190476191,
+      "tpw": 2.002724795640327,
+      "net": 4838.0,
+      "top": 0.2387005649717514,
+      "pass": false,
+      "distance": 0.13095238095238093
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "NC",
+        "NR",
+        "OJ",
+        "PT",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.6190476190476191,
+      "tpw": 2.002724795640327,
+      "net": 4838.0,
+      "top": 0.2387005649717514,
+      "pass": false,
+      "distance": 0.13095238095238093
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "BR",
+        "CC",
+        "DJ",
+        "FF",
+        "MX",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU",
+        "W4"
+      ],
+      "filled": 131,
+      "win": 0.6106870229007634,
+      "tpw": 2.4986376021798367,
+      "net": 2083.5,
+      "top": 0.35013347570742126,
+      "pass": false,
+      "distance": 0.1394464528066579
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "BR",
+        "CC",
+        "DJ",
+        "FF",
+        "MX",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU",
+        "W4"
+      ],
+      "filled": 131,
+      "win": 0.6106870229007634,
+      "tpw": 2.4986376021798367,
+      "net": 2083.5,
+      "top": 0.35013347570742126,
+      "pass": false,
+      "distance": 0.1394464528066579
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@11:00"
+      ],
+      "include_roots": [
+        "CC",
+        "FF",
+        "MX",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU"
+      ],
+      "filled": 127,
+      "win": 0.6062992125984252,
+      "tpw": 2.422343324250681,
+      "net": 2094.5,
+      "top": 0.3452622583057366,
+      "pass": false,
+      "distance": 0.14370078740157477
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@11:00"
+      ],
+      "include_roots": [
+        "CC",
+        "FF",
+        "MX",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU"
+      ],
+      "filled": 127,
+      "win": 0.6062992125984252,
+      "tpw": 2.422343324250681,
+      "net": 2094.5,
+      "top": 0.3452622583057366,
+      "pass": false,
+      "distance": 0.14370078740157477
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "CC",
+        "DJ",
+        "FF",
+        "MX",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU",
+        "W4"
+      ],
+      "filled": 130,
+      "win": 0.6076923076923076,
+      "tpw": 2.4795640326975477,
+      "net": 2043.0,
+      "top": 0.3531882809133994,
+      "pass": false,
+      "distance": 0.14549597322109176
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "CC",
+        "DJ",
+        "FF",
+        "MX",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU",
+        "W4"
+      ],
+      "filled": 130,
+      "win": 0.6076923076923076,
+      "tpw": 2.4795640326975477,
+      "net": 2043.0,
+      "top": 0.3531882809133994,
+      "pass": false,
+      "distance": 0.14549597322109176
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "BR",
+        "CC",
+        "DJ",
+        "FF",
+        "MX",
+        "NA",
+        "NG",
+        "OJ",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU",
+        "W4"
+      ],
+      "filled": 128,
+      "win": 0.609375,
+      "tpw": 2.44141689373297,
+      "net": 1126.0,
+      "top": 0.35756924546322827,
+      "pass": false,
+      "distance": 0.1481942454632283
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "BR",
+        "CC",
+        "DJ",
+        "FF",
+        "MX",
+        "NA",
+        "NG",
+        "OJ",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU",
+        "W4"
+      ],
+      "filled": 128,
+      "win": 0.609375,
+      "tpw": 2.44141689373297,
+      "net": 1126.0,
+      "top": 0.35756924546322827,
+      "pass": false,
+      "distance": 0.1481942454632283
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "CC",
+        "DJ",
+        "FF",
+        "MM",
+        "MX",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU",
+        "W4"
+      ],
+      "filled": 149,
+      "win": 0.610738255033557,
+      "tpw": 2.8419618528610355,
+      "net": 4805.5,
+      "top": 0.36038895266392057,
+      "pass": false,
+      "distance": 0.14965069763036354
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "11:00",
+        "11:30",
+        "12:00",
+        "12:30",
+        "13:00",
+        "13:30",
+        "14:15",
+        "15:00"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "CC",
+        "DJ",
+        "FF",
+        "MM",
+        "MX",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "SA",
+        "SF",
+        "SU",
+        "W4"
+      ],
+      "filled": 149,
+      "win": 0.610738255033557,
+      "tpw": 2.8419618528610355,
+      "net": 4805.5,
+      "top": 0.36038895266392057,
+      "pass": false,
+      "distance": 0.14965069763036354
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "BR",
+        "CC",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NG",
+        "NR",
+        "OJ",
+        "PD",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5904761904761905,
+      "tpw": 2.002724795640327,
+      "net": 5061.0,
+      "top": 0.35570682285895205,
+      "pass": false,
+      "distance": 0.1652306323827616
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CE",
+        "DX",
+        "GD",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NG",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 4610.0,
+      "top": 0.28932282336080256,
+      "pass": false,
+      "distance": 0.1785714285714286
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CE",
+        "DX",
+        "GD",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NG",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 4610.0,
+      "top": 0.28932282336080256,
+      "pass": false,
+      "distance": 0.1785714285714286
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CE",
+        "DX",
+        "GD",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NG",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 4610.0,
+      "top": 0.28932282336080256,
+      "pass": false,
+      "distance": 0.1785714285714286
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CE",
+        "DX",
+        "GD",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NG",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 4610.0,
+      "top": 0.28932282336080256,
+      "pass": false,
+      "distance": 0.1785714285714286
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CE",
+        "DX",
+        "GD",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NG",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 4610.0,
+      "top": 0.28932282336080256,
+      "pass": false,
+      "distance": 0.1785714285714286
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CE",
+        "DX",
+        "GD",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NG",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 4610.0,
+      "top": 0.28932282336080256,
+      "pass": false,
+      "distance": 0.1785714285714286
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CE",
+        "DX",
+        "GD",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NG",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 4610.0,
+      "top": 0.28932282336080256,
+      "pass": false,
+      "distance": 0.1785714285714286
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CE",
+        "DX",
+        "GD",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NA",
+        "NG",
+        "PD",
+        "PT",
+        "RI",
+        "S1",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 4610.0,
+      "top": 0.28932282336080256,
+      "pass": false,
+      "distance": 0.1785714285714286
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "CC",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NR",
+        "OJ",
+        "PD",
+        "PT",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 5171.0,
+      "top": 0.3539140022050717,
+      "pass": false,
+      "distance": 0.1824854307765003
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "CC",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NR",
+        "OJ",
+        "PD",
+        "PT",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 5171.0,
+      "top": 0.3539140022050717,
+      "pass": false,
+      "distance": 0.1824854307765003
+    },
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "metals",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "include_roots": [
+        "AN",
+        "CC",
+        "CE",
+        "DJ",
+        "DX",
+        "FF",
+        "GD",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NR",
+        "OJ",
+        "PD",
+        "PT",
+        "R2",
+        "RI",
+        "S1",
+        "SA",
+        "SF",
+        "SU",
+        "SV",
+        "SX"
+      ],
+      "filled": 105,
+      "win": 0.5714285714285714,
+      "tpw": 2.002724795640327,
+      "net": 5171.0,
+      "top": 0.3539140022050717,
+      "pass": false,
+      "distance": 0.1824854307765003
+    }
+  ],
+  "final_go_passes": [
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "NC",
+        "NG",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 109,
+      "win": 0.7522935779816514,
+      "tpw": 2.0790190735694822,
+      "net": 3622.5,
+      "top": 0.2581090407177364,
+      "pass": true,
+      "distance": 0.0
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "NC",
+        "NG",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 109,
+      "win": 0.7522935779816514,
+      "tpw": 2.0790190735694822,
+      "net": 3622.5,
+      "top": 0.2581090407177364,
+      "pass": true,
+      "distance": 0.0
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "NC",
+        "NG",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "filled": 109,
+      "win": 0.7522935779816514,
+      "tpw": 2.0790190735694822,
+      "net": 3622.5,
+      "top": 0.2581090407177364,
+      "pass": true,
+      "distance": 0.0
+    }
+  ]
+}

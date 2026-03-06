@@ -1,0 +1,1396 @@
+{
+  "generated_at_utc": "2026-03-05T13:39:14.541447+00:00",
+  "reports": [
+    "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+    "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+    "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+    "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+    "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+    "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json"
+  ],
+  "configs_evaluated": 1152,
+  "max_passes_any_single_config": 0,
+  "top_configs": [
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7090909090909091,
+          "tpw": 1.0490463215258856,
+          "top": 0.8214021845484135,
+          "net": 24404.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.660377358490566,
+          "tpw": 1.0108991825613078,
+          "top": 0.8824657310704961,
+          "net": 11912.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7164179104477612,
+          "tpw": 1.2779291553133516,
+          "top": 0.8125183269799803,
+          "net": 18457.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.708029197080292,
+          "tpw": 2.6130790190735693,
+          "top": 0.21693735498839908,
+          "net": 3225.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7380952380952381,
+          "tpw": 0.8010899182561307,
+          "top": 0.8315130182721673,
+          "net": 19147.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6666666666666666,
+          "tpw": 0.8583106267029973,
+          "top": 0.8306182657773217,
+          "net": 7641.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7391304347826086,
+          "tpw": 0.8773841961852861,
+          "top": 0.7698336057049473,
+          "net": 13402.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.719626168224299,
+          "tpw": 2.0408719346049047,
+          "top": 0.23207462351090133,
+          "net": 4284.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7380952380952381,
+          "tpw": 0.8010899182561307,
+          "top": 0.8451471071663379,
+          "net": 23701.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.725,
+          "tpw": 0.7629427792915532,
+          "top": 0.8938799123930741,
+          "net": 11883.5
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7543859649122807,
+          "tpw": 1.0871934604904632,
+          "top": 0.832281864841745,
+          "net": 18405.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7064220183486238,
+          "tpw": 2.0790190735694822,
+          "top": 0.2064278635140875,
+          "net": 2361.5
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.65625,
+          "tpw": 0.6103542234332425,
+          "top": 0.6645270768776745,
+          "net": 6213.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.5757575757575758,
+          "tpw": 0.6294277929155313,
+          "top": 0.78268156424581,
+          "net": 5030.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6444444444444445,
+          "tpw": 0.8583106267029973,
+          "top": 0.689161554192229,
+          "net": 6298.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7311827956989247,
+          "tpw": 1.7738419618528611,
+          "top": 0.3338543992853953,
+          "net": 1196.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6938775510204082,
+          "tpw": 0.9346049046321526,
+          "top": 0.8297528996469995,
+          "net": 24152.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6585365853658537,
+          "tpw": 0.782016348773842,
+          "top": 0.9311370882040383,
+          "net": 11181.5
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7169811320754716,
+          "tpw": 1.0108991825613078,
+          "top": 0.8666477111174297,
+          "net": 17267.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6764705882352942,
+          "tpw": 1.9455040871934606,
+          "top": 0.257006874669487,
+          "net": 1833.5
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6842105263157895,
+          "tpw": 0.36239782016348776,
+          "top": 0.5143903715332286,
+          "net": 955.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.56,
+          "tpw": 0.4768392370572207,
+          "top": 0.3285472972972973,
+          "net": 759.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.625,
+          "tpw": 0.45776566757493187,
+          "top": 0.5767000527148128,
+          "net": 1243.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7619047619047619,
+          "tpw": 1.2016348773841963,
+          "top": 0.370003957261575,
+          "net": 2255.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7222222222222222,
+          "tpw": 0.6866485013623979,
+          "top": 0.8539902009632951,
+          "net": 23449.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.75,
+          "tpw": 0.5340599455040872,
+          "top": 0.9653181738057465,
+          "net": 11153.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7674418604651163,
+          "tpw": 0.8201634877384196,
+          "top": 0.8888571673280612,
+          "net": 17214.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6621621621621622,
+          "tpw": 1.4114441416893733,
+          "top": 0.3584070796460177,
+          "net": 970.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.782608695652174,
+          "tpw": 0.43869209809264303,
+          "top": 0.8747787731097013,
+          "net": 18191.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.8,
+          "tpw": 0.3814713896457766,
+          "top": 0.9602817310485042,
+          "net": 6882.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.8636363636363636,
+          "tpw": 0.4196185286103542,
+          "top": 0.8749079302725264,
+          "net": 12159.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6590909090909091,
+          "tpw": 0.8392370572207084,
+          "top": 0.48910468972051163,
+          "net": 2029.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7222222222222222,
+          "tpw": 0.6866485013623979,
+          "top": 0.8539902009632951,
+          "net": 23449.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.75,
+          "tpw": 0.5340599455040872,
+          "top": 0.9653181738057465,
+          "net": 11153.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7674418604651163,
+          "tpw": 0.8201634877384196,
+          "top": 0.8888571673280612,
+          "net": 17214.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6621621621621622,
+          "tpw": 1.4114441416893733,
+          "top": 0.3584070796460177,
+          "net": 970.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6153846153846154,
+          "tpw": 0.24795640326975477,
+          "top": 0.7735978699647857,
+          "net": 5257.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.625,
+          "tpw": 0.15258855585831063,
+          "top": 0.9730941704035875,
+          "net": 4271.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6666666666666666,
+          "tpw": 0.40054495912806537,
+          "top": 0.910049454138285,
+          "net": 5055.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6666666666666666,
+          "tpw": 0.5722070844686649,
+          "top": 0.7317670093000489,
+          "net": -1059.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7222222222222222,
+          "tpw": 0.6866485013623979,
+          "top": 0.8539902009632951,
+          "net": 23449.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.75,
+          "tpw": 0.5340599455040872,
+          "top": 0.9653181738057465,
+          "net": 11153.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7674418604651163,
+          "tpw": 0.8201634877384196,
+          "top": 0.8888571673280612,
+          "net": 17214.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6621621621621622,
+          "tpw": 1.4114441416893733,
+          "top": 0.3584070796460177,
+          "net": 970.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "BUY"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6842105263157895,
+          "tpw": 0.36239782016348776,
+          "top": 0.5143903715332286,
+          "net": 955.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.56,
+          "tpw": 0.4768392370572207,
+          "top": 0.3285472972972973,
+          "net": 759.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.625,
+          "tpw": 0.45776566757493187,
+          "top": 0.5767000527148128,
+          "net": 1243.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7619047619047619,
+          "tpw": 1.2016348773841963,
+          "top": 0.370003957261575,
+          "net": 2255.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6842105263157895,
+          "tpw": 0.36239782016348776,
+          "top": 0.5143903715332286,
+          "net": 955.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.56,
+          "tpw": 0.4768392370572207,
+          "top": 0.3285472972972973,
+          "net": 759.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.625,
+          "tpw": 0.45776566757493187,
+          "top": 0.5767000527148128,
+          "net": 1243.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7619047619047619,
+          "tpw": 1.2016348773841963,
+          "top": 0.370003957261575,
+          "net": 2255.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.8333333333333334,
+          "tpw": 0.11444141689373297,
+          "top": 0.5257936507936508,
+          "net": 252.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6666666666666666,
+          "tpw": 0.22888283378746593,
+          "top": 0.4024330900243309,
+          "net": 730.5
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7142857142857143,
+          "tpw": 0.2670299727520436,
+          "top": 0.7207055858882823,
+          "net": 1190.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.8,
+          "tpw": 0.667574931880109,
+          "top": 0.3718887262079063,
+          "net": 1391.5
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6842105263157895,
+          "tpw": 0.36239782016348776,
+          "top": 0.5143903715332286,
+          "net": 955.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.56,
+          "tpw": 0.4768392370572207,
+          "top": 0.3285472972972973,
+          "net": 759.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.625,
+          "tpw": 0.45776566757493187,
+          "top": 0.5767000527148128,
+          "net": 1243.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7619047619047619,
+          "tpw": 1.2016348773841963,
+          "top": 0.370003957261575,
+          "net": 2255.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6153846153846154,
+          "tpw": 0.24795640326975477,
+          "top": 0.6986496090973703,
+          "net": 703.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.46153846153846156,
+          "tpw": 0.24795640326975477,
+          "top": 0.2809123649459784,
+          "net": 28.5
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.5,
+          "tpw": 0.1907356948228883,
+          "top": 0.450723638869745,
+          "net": 52.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7142857142857143,
+          "tpw": 0.5340599455040872,
+          "top": 0.33994334277620397,
+          "net": 863.5
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [
+        "SELL"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6842105263157895,
+          "tpw": 0.36239782016348776,
+          "top": 0.5143903715332286,
+          "net": 955.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.56,
+          "tpw": 0.4768392370572207,
+          "top": 0.3285472972972973,
+          "net": 759.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.625,
+          "tpw": 0.45776566757493187,
+          "top": 0.5767000527148128,
+          "net": 1243.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.7619047619047619,
+          "tpw": 1.2016348773841963,
+          "top": 0.370003957261575,
+          "net": 2255.0
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6527777777777778,
+          "tpw": 1.3732970027247957,
+          "top": 0.8200029760797589,
+          "net": 26246.0
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.5797101449275363,
+          "tpw": 1.3160762942779292,
+          "top": 0.8975413014814241,
+          "net": 12593.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6260162601626016,
+          "tpw": 2.346049046321526,
+          "top": 0.783405752120836,
+          "net": 23533.0
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6122448979591837,
+          "tpw": 3.7384196185286105,
+          "top": 0.19695162359178264,
+          "net": 2432.5
+        }
+      ]
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "passes": 0,
+      "details": [
+        {
+          "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+          "pass": false,
+          "win": 0.0,
+          "tpw": 0.0,
+          "top": 0.0,
+          "net": 0.0
+        },
+        {
+          "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6610169491525424,
+          "tpw": 1.125340599455041,
+          "top": 0.8288556508589117,
+          "net": 20988.5
+        },
+        {
+          "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+          "pass": false,
+          "win": 0.5737704918032787,
+          "tpw": 1.1634877384196185,
+          "top": 0.8456501403180543,
+          "net": 8322.0
+        },
+        {
+          "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6176470588235294,
+          "tpw": 1.9455040871934606,
+          "top": 0.7398468138867687,
+          "net": 18477.5
+        },
+        {
+          "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+          "pass": false,
+          "win": 0.6024096385542169,
+          "tpw": 3.1662125340599454,
+          "top": 0.2634264574563082,
+          "net": 3491.5
+        }
+      ]
+    }
+  ]
+}

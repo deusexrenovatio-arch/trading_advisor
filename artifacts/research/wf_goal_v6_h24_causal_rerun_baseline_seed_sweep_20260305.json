@@ -1,0 +1,20 @@
+{
+  "rows": [
+    {
+      "seed": 72,
+      "filled": 463,
+      "win": 0.5421166306695464,
+      "tpw": 8.831062670299728,
+      "net": 7744.0,
+      "path": "artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json"
+    },
+    {
+      "seed": 111,
+      "filled": 542,
+      "win": 0.47232472324723246,
+      "tpw": 10.337874659400544,
+      "net": 8361.5,
+      "path": "artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json"
+    }
+  ]
+}

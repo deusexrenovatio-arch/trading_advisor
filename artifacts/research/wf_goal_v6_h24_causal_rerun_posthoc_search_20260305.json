@@ -1,0 +1,777 @@
+{
+  "generated_at_utc": "2026-03-05T14:15:22.523165+00:00",
+  "source_report": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_orb_energy_other_roots17_20260305.json",
+  "candidates_evaluated": 972,
+  "final_go_passed_count": 0,
+  "top_candidates": [
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "selected_rows": 77,
+      "filled": 57,
+      "win": 0.6666666666666666,
+      "tpw": 1.0871934604904632,
+      "net": 1611.0,
+      "top": 0.2616279069767442,
+      "pass": false,
+      "distance": 0.9961398728428702
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "selected_rows": 164,
+      "filled": 57,
+      "win": 0.6666666666666666,
+      "tpw": 1.0871934604904632,
+      "net": 1611.0,
+      "top": 0.2616279069767442,
+      "pass": false,
+      "distance": 0.9961398728428702
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "selected_rows": 68,
+      "filled": 51,
+      "win": 0.6862745098039216,
+      "tpw": 0.9727520435967303,
+      "net": 1497.0,
+      "top": 0.290834312573443,
+      "pass": false,
+      "distance": 1.0909734465993481
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "selected_rows": 143,
+      "filled": 51,
+      "win": 0.6862745098039216,
+      "tpw": 0.9727520435967303,
+      "net": 1497.0,
+      "top": 0.290834312573443,
+      "pass": false,
+      "distance": 1.0909734465993481
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "selected_rows": 56,
+      "filled": 45,
+      "win": 0.7333333333333333,
+      "tpw": 0.8583106267029973,
+      "net": 1717.0,
+      "top": 0.2749739854318418,
+      "pass": false,
+      "distance": 1.1583560399636692
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "selected_rows": 114,
+      "filled": 45,
+      "win": 0.7333333333333333,
+      "tpw": 0.8583106267029973,
+      "net": 1717.0,
+      "top": 0.2749739854318418,
+      "pass": false,
+      "distance": 1.1583560399636692
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "selected_rows": 60,
+      "filled": 45,
+      "win": 0.6888888888888889,
+      "tpw": 0.8583106267029973,
+      "net": 1498.5,
+      "top": 0.3143855192124484,
+      "pass": false,
+      "distance": 1.2028004844081137
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "selected_rows": 132,
+      "filled": 45,
+      "win": 0.6888888888888889,
+      "tpw": 0.8583106267029973,
+      "net": 1498.5,
+      "top": 0.3143855192124484,
+      "pass": false,
+      "distance": 1.2028004844081137
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "selected_rows": 53,
+      "filled": 42,
+      "win": 0.7142857142857143,
+      "tpw": 0.8010899182561307,
+      "net": 1552.5,
+      "top": 0.30071123755334284,
+      "pass": false,
+      "distance": 1.2346243674581547
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "selected_rows": 106,
+      "filled": 42,
+      "win": 0.7142857142857143,
+      "tpw": 0.8010899182561307,
+      "net": 1552.5,
+      "top": 0.30071123755334284,
+      "pass": false,
+      "distance": 1.2346243674581547
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "selected_rows": 52,
+      "filled": 40,
+      "win": 0.725,
+      "tpw": 0.7629427792915532,
+      "net": 1460.0,
+      "top": 0.339041095890411,
+      "pass": false,
+      "distance": 1.2620572207084466
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "selected_rows": 112,
+      "filled": 40,
+      "win": 0.725,
+      "tpw": 0.7629427792915532,
+      "net": 1460.0,
+      "top": 0.339041095890411,
+      "pass": false,
+      "distance": 1.2620572207084466
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "selected_rows": 58,
+      "filled": 39,
+      "win": 0.6666666666666666,
+      "tpw": 0.7438692098092643,
+      "net": 1100.0,
+      "top": 0.34567039106145253,
+      "pass": false,
+      "distance": 1.3394641235240692
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "selected_rows": 126,
+      "filled": 39,
+      "win": 0.6666666666666666,
+      "tpw": 0.7438692098092643,
+      "net": 1100.0,
+      "top": 0.34567039106145253,
+      "pass": false,
+      "distance": 1.3394641235240692
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "selected_rows": 39,
+      "filled": 33,
+      "win": 0.7878787878787878,
+      "tpw": 0.6294277929155313,
+      "net": 1604.5,
+      "top": 0.32938610158928017,
+      "pass": false,
+      "distance": 1.3705722070844688
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "selected_rows": 39,
+      "filled": 33,
+      "win": 0.7878787878787878,
+      "tpw": 0.6294277929155313,
+      "net": 1604.5,
+      "top": 0.32938610158928017,
+      "pass": false,
+      "distance": 1.3705722070844688
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "selected_rows": 39,
+      "filled": 33,
+      "win": 0.7878787878787878,
+      "tpw": 0.6294277929155313,
+      "net": 1604.5,
+      "top": 0.32938610158928017,
+      "pass": false,
+      "distance": 1.3705722070844688
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "selected_rows": 82,
+      "filled": 33,
+      "win": 0.7878787878787878,
+      "tpw": 0.6294277929155313,
+      "net": 1604.5,
+      "top": 0.32938610158928017,
+      "pass": false,
+      "distance": 1.3705722070844688
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "selected_rows": 82,
+      "filled": 33,
+      "win": 0.7878787878787878,
+      "tpw": 0.6294277929155313,
+      "net": 1604.5,
+      "top": 0.32938610158928017,
+      "pass": false,
+      "distance": 1.3705722070844688
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "selected_rows": 82,
+      "filled": 33,
+      "win": 0.7878787878787878,
+      "tpw": 0.6294277929155313,
+      "net": 1604.5,
+      "top": 0.32938610158928017,
+      "pass": false,
+      "distance": 1.3705722070844688
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "selected_rows": 57,
+      "filled": 42,
+      "win": 0.5714285714285714,
+      "tpw": 0.8010899182561307,
+      "net": 517.5,
+      "top": 0.3172295852928602,
+      "pass": false,
+      "distance": 1.3774815103152978
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "selected_rows": 120,
+      "filled": 42,
+      "win": 0.5714285714285714,
+      "tpw": 0.8010899182561307,
+      "net": 517.5,
+      "top": 0.3172295852928602,
+      "pass": false,
+      "distance": 1.3774815103152978
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "selected_rows": 37,
+      "filled": 31,
+      "win": 0.7741935483870968,
+      "tpw": 0.5912806539509536,
+      "net": 1515.5,
+      "top": 0.34872979214780603,
+      "pass": false,
+      "distance": 1.4087193460490464
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "selected_rows": 37,
+      "filled": 31,
+      "win": 0.7741935483870968,
+      "tpw": 0.5912806539509536,
+      "net": 1515.5,
+      "top": 0.34872979214780603,
+      "pass": false,
+      "distance": 1.4087193460490464
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "selected_rows": 37,
+      "filled": 31,
+      "win": 0.7741935483870968,
+      "tpw": 0.5912806539509536,
+      "net": 1515.5,
+      "top": 0.34872979214780603,
+      "pass": false,
+      "distance": 1.4087193460490464
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "selected_rows": 75,
+      "filled": 31,
+      "win": 0.7741935483870968,
+      "tpw": 0.5912806539509536,
+      "net": 1515.5,
+      "top": 0.34872979214780603,
+      "pass": false,
+      "distance": 1.4087193460490464
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "selected_rows": 75,
+      "filled": 31,
+      "win": 0.7741935483870968,
+      "tpw": 0.5912806539509536,
+      "net": 1515.5,
+      "top": 0.34872979214780603,
+      "pass": false,
+      "distance": 1.4087193460490464
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "selected_rows": 75,
+      "filled": 31,
+      "win": 0.7741935483870968,
+      "tpw": 0.5912806539509536,
+      "net": 1515.5,
+      "top": 0.34872979214780603,
+      "pass": false,
+      "distance": 1.4087193460490464
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "selected_rows": 50,
+      "filled": 34,
+      "win": 0.7058823529411765,
+      "tpw": 0.6485013623978202,
+      "net": 1062.5,
+      "top": 0.37542662116040953,
+      "pass": false,
+      "distance": 1.4210429058214127
+    },
+    {
+      "setup_kinds": [
+        "BOX_BREAKOUT",
+        "EMA_PULLBACK_LIMIT",
+        "ORB_BREAKOUT",
+        "PULLBACK_LIMIT",
+        "VOLATILITY_COMPRESSION_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "selected_rows": 107,
+      "filled": 34,
+      "win": 0.7058823529411765,
+      "tpw": 0.6485013623978202,
+      "net": 1062.5,
+      "top": 0.37542662116040953,
+      "pass": false,
+      "distance": 1.4210429058214127
+    }
+  ],
+  "final_go_passes": []
+}

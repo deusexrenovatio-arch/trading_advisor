@@ -1,0 +1,18 @@
+{
+  "generated_at_utc": "2026-03-05T15:49:14.695079+00:00",
+  "source_report_path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+  "gate_profile": "final_go",
+  "tpw_period_scope": "report",
+  "candidates_total": 8192,
+  "seed": 42,
+  "runtime_seconds": {
+    "legacy": 19.99454099999275,
+    "tape": 0.4529376999998931
+  },
+  "speedup": 44.144130638711395,
+  "parity": {
+    "checked": 8192,
+    "mismatch_count": 0,
+    "sample_mismatches": []
+  }
+}

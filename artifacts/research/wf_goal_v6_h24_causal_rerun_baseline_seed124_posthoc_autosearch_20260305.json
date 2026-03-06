@@ -1,0 +1,534 @@
+{
+  "generated_at_utc": "2026-03-05T15:10:40.919141+00:00",
+  "source_report": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+  "base_candidates": 8064,
+  "final_candidates": 12,
+  "final_go_passed_count": 0,
+  "top_final": [
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "include_roots": [
+        "AN",
+        "CC",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 150,
+      "filled": 110,
+      "win": 0.7363636363636363,
+      "tpw": 2.0980926430517712,
+      "net": 7786.0,
+      "top": 0.3496959716240182,
+      "pass": false,
+      "distance": 0.013636363636363669
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "CC",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 150,
+      "filled": 110,
+      "win": 0.7363636363636363,
+      "tpw": 2.0980926430517712,
+      "net": 7786.0,
+      "top": 0.3496959716240182,
+      "pass": false,
+      "distance": 0.013636363636363669
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "CC",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 150,
+      "filled": 110,
+      "win": 0.7363636363636363,
+      "tpw": 2.0980926430517712,
+      "net": 7786.0,
+      "top": 0.3496959716240182,
+      "pass": false,
+      "distance": 0.013636363636363669
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [],
+      "include_roots": [
+        "AN",
+        "BM",
+        "CC",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 162,
+      "filled": 106,
+      "win": 0.7358490566037735,
+      "tpw": 2.0217983651226157,
+      "net": 8076.0,
+      "top": 0.3418152550767707,
+      "pass": false,
+      "distance": 0.014150943396226467
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "CC",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 162,
+      "filled": 106,
+      "win": 0.7358490566037735,
+      "tpw": 2.0217983651226157,
+      "net": 8076.0,
+      "top": 0.3418152550767707,
+      "pass": false,
+      "distance": 0.014150943396226467
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "CC",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 162,
+      "filled": 106,
+      "win": 0.7358490566037735,
+      "tpw": 2.0217983651226157,
+      "net": 8076.0,
+      "top": 0.3418152550767707,
+      "pass": false,
+      "distance": 0.014150943396226467
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "BR",
+        "CC",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NR",
+        "OJ",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 163,
+      "filled": 105,
+      "win": 0.7142857142857143,
+      "tpw": 2.002724795640327,
+      "net": 7749.0,
+      "top": 0.3492535425101215,
+      "pass": false,
+      "distance": 0.0357142857142857
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NG",
+        "NR",
+        "OJ",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 154,
+      "filled": 105,
+      "win": 0.7142857142857143,
+      "tpw": 2.002724795640327,
+      "net": 6741.0,
+      "top": 0.33150470219435735,
+      "pass": false,
+      "distance": 0.0357142857142857
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NG",
+        "NR",
+        "OJ",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 136,
+      "filled": 106,
+      "win": 0.7075471698113207,
+      "tpw": 2.0217983651226157,
+      "net": 6741.5,
+      "top": 0.3314810857020731,
+      "pass": false,
+      "distance": 0.04245283018867929
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "CC",
+        "CE",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 161,
+      "filled": 107,
+      "win": 0.7009345794392523,
+      "tpw": 2.0408719346049047,
+      "net": 7498.0,
+      "top": 0.3532309660908509,
+      "pass": false,
+      "distance": 0.052296386651598636
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "clusters": [
+        "energy",
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "BR",
+        "CC",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NG",
+        "NR",
+        "OJ",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 145,
+      "filled": 104,
+      "win": 0.7115384615384616,
+      "tpw": 1.9836512261580381,
+      "net": 7500.5,
+      "top": 0.35764721124570836,
+      "pass": false,
+      "distance": 0.06245752354920869
+    },
+    {
+      "setup_kinds": [
+        "ORB_BREAKOUT",
+        "EMA_PULLBACK_LIMIT"
+      ],
+      "clusters": [
+        "other"
+      ],
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "sides": [],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "include_roots": [
+        "AN",
+        "BM",
+        "CC",
+        "CE",
+        "DX",
+        "HS",
+        "KC",
+        "MM",
+        "MX",
+        "N2",
+        "NC",
+        "NR",
+        "OJ",
+        "PD",
+        "RI",
+        "S1",
+        "SF",
+        "SX",
+        "ZC"
+      ],
+      "selected_rows": 148,
+      "filled": 103,
+      "win": 0.7184466019417476,
+      "tpw": 1.9645776566757494,
+      "net": 6737.0,
+      "top": 0.33761427949499345,
+      "pass": false,
+      "distance": 0.06697574138250306
+    }
+  ],
+  "final_go_passes": []
+}
