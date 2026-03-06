@@ -210,6 +210,23 @@ needs:
       - TC-DEV-WF-001
       - TC-DEV-WF-003
 
+  - id: need-process-self-improvement-loop
+    title: Delivery process learns from task outcomes instead of repeating the same errors
+    problem_statement: Task-level routing, rework, and repeated failure patterns stay implicit unless they are captured in a tracked closeout loop.
+    value_if_solved: Faster convergence, fewer wrong-path retries, and explicit prevention artifacts for repeated failures.
+    user_cases:
+      - uc-task-telemetry-and-closeout-loop
+    acceptance_scenarios:
+      - process-telemetry-start-first-patch
+      - process-task-outcome-closeout
+      - process-repeated-signature-prevention
+      - process-regression-burn-in-thresholds
+    test_cases:
+      - TC-PROC-TELE-001
+      - TC-PROC-TELE-002
+      - TC-PROC-TELE-003
+      - TC-PROC-TELE-004
+
 user_cases:
   - id: uc-actionable-signal-to-execution
     title: Single-flow handling from signal review to execution
@@ -420,3 +437,19 @@ user_cases:
     test_cases:
       - TC-DEV-WF-001
       - TC-DEV-WF-003
+
+  - id: uc-task-telemetry-and-closeout-loop
+    title: Engineer captures task telemetry, closeout, and prevention follow-up in one loop
+    persona: Engineer
+    trigger: User works on a non-trivial task that may require replan or repeated-error prevention.
+    expected_outcome: Start/first-patch/end telemetry, task outcome ledger, and repeated-signature remediation are captured without relying on chat memory.
+    acceptance_scenarios:
+      - process-telemetry-start-first-patch
+      - process-task-outcome-closeout
+      - process-repeated-signature-prevention
+      - process-regression-burn-in-thresholds
+    test_cases:
+      - TC-PROC-TELE-001
+      - TC-PROC-TELE-002
+      - TC-PROC-TELE-003
+      - TC-PROC-TELE-004

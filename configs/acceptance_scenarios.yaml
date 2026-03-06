@@ -90,6 +90,46 @@ scenarios:
       - "Repeated issue triggers findings+hypotheses report."
       - "Regression checklist is executed before closing."
 
+  - id: process-telemetry-start-first-patch
+    type: manual
+    scope: process
+    test_cases: [TC-PROC-TELE-001]
+    title: Process telemetry lifecycle gate
+    user_story: Engineer gets task start and first-patch telemetry without manual bookkeeping.
+    expectations:
+      - "worktree_guard emits task-start telemetry for the active task."
+      - "run_lean_gate records first-patch telemetry once the diff changes."
+
+  - id: process-task-outcome-closeout
+    type: manual
+    scope: process
+    test_cases: [TC-PROC-TELE-002]
+    title: Task outcome closeout and ledger sync gate
+    user_story: Non-trivial diffs require an up-to-date task outcome section and repo-tracked ledger record.
+    expectations:
+      - "Task outcome validation fails before ledger sync on a non-trivial diff."
+      - "memory/task_outcomes.yaml is updated after sync and validation passes."
+
+  - id: process-repeated-signature-prevention
+    type: manual
+    scope: process
+    test_cases: [TC-PROC-TELE-003]
+    title: Repeated signature prevention gate
+    user_story: Repeated incident signatures must route into a new prevention artifact and linked follow-up.
+    expectations:
+      - "Repeated signature is rejected when improvement artifact is reused."
+      - "Validation requires a linked plan or memory follow-up for repeated signatures."
+
+  - id: process-regression-burn-in-thresholds
+    type: manual
+    scope: process
+    test_cases: [TC-PROC-TELE-004]
+    title: Process regression burn-in threshold gate
+    user_story: Rolling process metrics stay advisory until burn-in is complete, then become blocking.
+    expectations:
+      - "Burn-in status stays non-blocking before 20 completed tasks."
+      - "Threshold failures become blocking after the 20-task rolling window exists."
+
   - id: decision-view
     type: api_list
     scope: backend
