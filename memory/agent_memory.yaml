@@ -2,6 +2,18 @@ version: 1
 updated_at: 2026-03-06
 
 decisions:
+  - id: ADM-2026-03-06-089
+    date: 2026-03-06
+    title: Fix O1 as the primary execution baseline and require O1-relative drift sign-off
+    context: User decided to anchor the branch on the working O1 execution profile and measure every later execution change against O1 rather than against incidental merged defaults or temporary legacy fallback.
+    decision: Set `SignalEngineMorningExecutionConfig` defaults to the O1 profile, keep O1 as the reference baseline for runtime and research comparisons, and require any future rebase or execution-profile change to include a written drift analysis and accept/reject decision relative to O1.
+    impact: The repository has one explicit execution baseline again; default runtime, walk-forward runs, and future drift reviews now share the same O1 reference point.
+    links:
+      - src/moex_carry/config.py
+      - tests/test_config_loading.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O1_limitfallback10m1t_frontnearest_seed124_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
   - id: ADM-2026-03-06-088
     date: 2026-03-06
     title: Split live signals by strategy stream end-to-end for API actionability and Telegram delivery
@@ -744,6 +756,15 @@ incidents:
       - docs/runbooks/self-heal-escalation.md
 
 patterns:
+  - id: AMP-2026-03-06-012
+    date: 2026-03-06
+    title: Rebase drift needs explicit baseline sign-off
+    pattern: If a rebase changes runtime, research, or execution baseline behavior, write the drift down immediately, compare it against O1, and choose accept/revert based on the active branch goal instead of silently inheriting merged defaults.
+    when_to_use: Any rebase, merge, or cherry-pick that changes signal selection, execution semantics, artifact metrics, or operator-visible behavior.
+    links:
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
   - id: AMP-2026-02-20-001
     date: 2026-02-20
     title: Progressive disclosure first

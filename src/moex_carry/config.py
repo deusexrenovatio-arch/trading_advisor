@@ -521,13 +521,14 @@ class SignalEngineMorningExecutionConfig(BaseModel):
     buffer_atr_mult: float = 0.10
     buffer_min_ticks: int = 1
     limit_slip_ticks: int = 2
+    # O1 is the working execution baseline. Any alternative execution profile must be
+    # evaluated and explained relative to O1 before it can replace the default.
     break_even_rr: float = 0.1
     break_even_buffer_ticks: int = 2
     tp_rr: float = 0.6
     sl_rr: float = 2.5
     max_holding_minutes: int = 180
     max_profit_rr: float = 0.3
-    # O1 baseline: disable hard absolute TP cap to avoid clipping profitable tails.
     max_profit_ticks: int = 0
     trail_activation_rr: float = 0.1
     trail_offset_ticks: int = 2
