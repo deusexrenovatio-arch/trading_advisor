@@ -2,6 +2,16 @@ version: 1
 updated_at: 2026-03-06
 
 decisions:
+  - id: ADM-2026-03-06-090
+    date: 2026-03-06
+    title: Restrict execution optimization to O1-relative economic levers and sequential family tests
+    context: User clarified that the goal of execution research is larger net revenue versus baseline, and requested that conclusions about useful versus misleading levers be fixed in durable project memory before the next hypothesis loop.
+    decision: Treat `O1` as the only comparison anchor, optimize first on fill-quality and trade-management levers, delay bracket-clipping levers until later, and forbid cost multipliers or same-bar policy from being used as primary optimization axes; run hypotheses one family at a time and record a verdict for each family before moving on.
+    impact: "Future execution research now has a deterministic ladder: economically credible levers first, simulator-assumption levers only as sensitivity checks, and every claimed improvement must explain how it beats O1."
+    links:
+      - docs/research/o1-execution-hypothesis-program-2026-03-06.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
   - id: ADM-2026-03-06-089
     date: 2026-03-06
     title: Fix O1 as the primary execution baseline and require O1-relative drift sign-off
@@ -756,6 +766,15 @@ incidents:
       - docs/runbooks/self-heal-escalation.md
 
 patterns:
+  - id: AMP-2026-03-06-013
+    date: 2026-03-06
+    title: One execution family at a time against O1
+    pattern: Keep O1 frozen, test one execution family at a time, and write a verdict before mixing families. Start with fill-quality levers, then trade management, then bracket geometry, and treat simulator-assumption levers only as sensitivity checks.
+    when_to_use: Any walk-forward or paper-forward execution research that claims uplift versus O1.
+    links:
+      - docs/research/o1-execution-hypothesis-program-2026-03-06.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
   - id: AMP-2026-03-06-012
     date: 2026-03-06
     title: Rebase drift needs explicit baseline sign-off

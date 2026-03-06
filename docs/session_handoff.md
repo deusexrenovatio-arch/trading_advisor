@@ -19,6 +19,8 @@ Updated: 2026-03-06 10:03 UTC
 - Added regression coverage for `O1` defaults in `tests/test_config_loading.py`.
 - Recorded a durable rebase-drift rule in `memory/agent_memory.yaml` and `plans/PLANS.yaml`.
 - Any baseline-changing rebase now requires a write-up, `O1` comparison, and a branch-goal decision.
+- Added an O1-relative hypothesis ladder in `docs/research/o1-execution-hypothesis-program-2026-03-06.md`.
+- Research order is fixed: fill quality -> trade management -> bracket geometry -> clipping -> sensitivity only.
 
 ## Accepted Profile
 - Profile id: `O1`
@@ -54,8 +56,8 @@ Updated: 2026-03-06 10:03 UTC
 ## First-Time-Right Report
 1. Confirmed coverage: restored `O1` defaults, added regression test for them, and recorded mandatory `O1`-relative drift analysis rule in governance memory.
 2. Missing or risky scenarios: non-`O1` overrides can still reintroduce drift if they are used without explicit artifact comparison.
-3. Resource/time risks and chosen controls: minimal patch changes only default baseline definition and governance records, reducing collateral regression risk.
-4. Highest-priority fixes or follow-ups: keep naming every new execution profile explicitly and compare it against `O1` before promotion.
+3. Resource/time risks and chosen controls: the hypothesis ladder now freezes `cost_mult` and `same_bar_policy` as non-primary axes to avoid pseudo-improvement loops.
+4. Highest-priority fixes or follow-ups: start with H0 O1 reproduction, then run H1 fill-quality family before touching trade-management or bracket-geometry levers.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
@@ -68,7 +70,8 @@ Updated: 2026-03-06 10:03 UTC
 - None for code path.
 
 ## Next Step
-- If execution-profile experiments continue, run them only via explicit overrides and compare against `O1` before promoting any new default.
+- Run H0 O1 reproduction on the active code path.
+- Start H1 fill-quality family and write a verdict before any H2 trade-management tests.
 
 ## Validation
 - `python scripts/run_lean_gate.py`
