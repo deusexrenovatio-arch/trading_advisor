@@ -13,6 +13,8 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | Machine-readable execution plan | `python scripts/validate_plans.py` | Engineering owner | `governance` |
 | Session handoff context budget contract | `python scripts/validate_session_handoff.py` | Engineering owner | `governance` |
 | Operator request contract and first-time-right report completeness | `python scripts/validate_task_request_contract.py` | Engineering owner | `governance` |
+| Task outcome closeout and ledger completeness | `python scripts/validate_task_outcomes.py` | Engineering owner | `governance`, `quality-scorecards` |
+| Rolling process-regression thresholds after burn-in | `python scripts/validate_process_regressions.py` | Engineering enablement | `quality-scorecards` |
 | Recurring-error prevention with behavior-change evidence and loop-breaker control | `python scripts/validate_agent_memory.py` + `python scripts/validate_task_request_contract.py` | Engineering owner | `governance` |
 | Contract-first API surface | `python scripts/validate_api_v2_contract_parity.py` | Backend platform | `governance` |
 | Directional module boundaries (no core -> UI imports) | `python scripts/validate_import_boundaries.py` | Architecture owner | `governance` |
@@ -39,6 +41,7 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | Self-heal escalation to human judgment | `docs/runbooks/self-heal-escalation.md` + workflow escalation step | Engineering platform | `self-heal` |
 | Agent operational memory integrity | `python scripts/validate_agent_memory.py` | Engineering owner | `governance` |
 | Autonomy KPI observability | `python scripts/autonomy_kpi_report.py` | Engineering enablement | `docs-gardening` |
+| Process-improvement telemetry and weekly rollups | `python scripts/process_improvement_report.py` | Engineering enablement | `docs-gardening`, `governance-dashboard` |
 | Runtime regression and behavior stability | `pytest` | Backend + Quant owners | `backend`, `perf-minute-runtime` |
 | Frontend integration safety | `npm --prefix ui-web run lint` + `npm --prefix ui-web run build` | Frontend owner | `frontend` |
 | UI journey verification with artifacts | `npm --prefix ui-web run test:e2e` | Frontend owner | `frontend-e2e` |
@@ -59,6 +62,8 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | `mean_cycle_time_days` | Mean cycle time for completed plan items with start/end dates | `scripts/autonomy_kpi_report.py` |
 | `memory_decisions_count` | Number of decision records in agent memory | `scripts/autonomy_kpi_report.py` |
 | `self_heal_workflow_enabled` | Binary indicator that self-heal CI loop is configured | `scripts/autonomy_kpi_report.py` |
+| `process_correct_first_time_pct` | Share of recent completed tasks closed as `correct_first_time` | `scripts/autonomy_kpi_report.py` |
+| `process_repeat_error_rate` | Share of recent completed tasks that repeated an existing incident signature | `scripts/autonomy_kpi_report.py` |
 
 ## Sprint 0 Exit Gate
 - Document exists and contains `Principle -> Check -> Owner -> CI Job` mapping.

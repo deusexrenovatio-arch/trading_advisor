@@ -51,6 +51,31 @@ Use this guide when a governance gate fails.
   - Next Probe
 - Use `docs/checklists/task-request-contract.md` as the canonical template.
 
+## `python scripts/validate_task_outcomes.py`
+- Keep `## Task Outcome` in `docs/session_handoff.md` with:
+  - `Outcome Status`
+  - `Decision Quality`
+  - `Final Contexts`
+  - `Route Match`
+  - `Primary Rework Cause`
+  - `Incident Signature`
+  - `Improvement Action`
+  - `Improvement Artifact`
+- For active tasks, ensure `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check` has created `.runlogs/agent-process/state.json`.
+- Sync ledger with `python scripts/sync_task_outcomes.py` so `memory/task_outcomes.yaml` contains the current task record.
+- If `decision_quality` is not `correct_first_time` or `correct_after_replan`, set a non-`none` improvement action.
+- If an incident signature repeats, use a new improvement artifact and link a plan or memory item.
+
+## `python scripts/validate_process_regressions.py`
+- During burn-in (<20 completed tasks), keep the ledger structurally valid and continue recording every task outcome.
+- After burn-in, review rolling metrics in `memory/task_outcomes.yaml`:
+  - `correct_first_time_pct >= 0.70`
+  - `start_match_pct >= 0.75`
+  - `context_expansion_rate <= 0.25`
+  - `repeat_error_rate <= 0.15`
+  - `environment_blocker_rate <= 0.20`
+- Use `python scripts/process_improvement_report.py` to inspect deltas, repeated signatures, blocker leaders, and missing follow-up links.
+
 ## `python scripts/validate_pr_only_policy.py`
 - Keep `.githooks/pre-push` in PR-only mode for `main`.
 - Keep `AGENTS.md`, `docs/DEV_WORKFLOW.md`, and `README.md` aligned with the same policy text.
@@ -97,6 +122,17 @@ Use this guide when a governance gate fails.
 - Find failing dimension/check in the report.
 - Run the failing command directly.
 - Fix and rerun until all dimensions meet thresholds.
+
+## `python scripts/process_improvement_report.py`
+- Generate the report locally:
+  - `python scripts/process_improvement_report.py --output process-improvement-report.md`
+- Inspect:
+  - rolling metrics and deltas,
+  - top repeated error signatures,
+  - top environment blockers,
+  - wrong-path or partial tasks,
+  - improvement actions without linked follow-up.
+- If the report shows recurring signatures without prevention artifacts, route remediation into `plans/PLANS.yaml` or `memory/agent_memory.yaml`.
 
 ## Advisory debt queue (non-blocking findings)
 - If output says `advisory` or `non-blocking`, do not ignore it across runs.

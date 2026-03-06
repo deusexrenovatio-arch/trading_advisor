@@ -10,6 +10,11 @@
 - Verify local runtime before any gate command:
   - `python --version`
   - `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
+- `worktree_guard -Action Check` prints CTX routing from current diff plus `docs/session_handoff.md`.
+- Successful `worktree_guard -Action Check` also emits/refreshes local task-start telemetry under `.runlogs/agent-process/`.
+- Optional intent sharpeners for start-of-task routing:
+  - `MOEX_CARRY_CONTEXT_ROUTER_REQUEST="<user request>"`
+  - `MOEX_CARRY_CONTEXT_ROUTER_TARGET_MODULES="pipeline,ui,news_live_runtime"`
 - Before any code change, lock expected worktree + branch for the current session:
   - `./scripts/worktree_guard.ps1 -Action Init -WorktreePath "D:\\wt-<name>" -Branch "<branch>" -ContextTtlHours 12`
 - Before every development task, verify context:
@@ -104,10 +109,12 @@ Required report block for implementation and reviews:
   - `## Task Request Contract` with objective, scope, constraints, done-evidence, and priority rule.
   - `## First-Time-Right Report` using the required 4-part report block.
   - `## Repetition Control` with max same-path attempts, stop trigger, reset action, new search space, and next probe.
+  - `## Task Outcome` with outcome status, decision quality, final contexts, route match, rework cause, incident signature, and improvement artifact/action.
 - Use checklist:
   - `docs/checklists/task-request-contract.md`
 - Validation command:
   - `python scripts/validate_task_request_contract.py`
+  - `python scripts/validate_task_outcomes.py`
 
 Blockers:
 - Missing measurable objective or contradictory scope.
@@ -137,11 +144,18 @@ Blockers:
 - Use progressive disclosure: load only the files/slices required for the active step.
 - Run fast governance loop after each meaningful patch:
   - `python scripts/run_lean_gate.py`
+- Lean gate automatically:
+  - records first-patch telemetry when the diff meaningfully changes,
+  - syncs `memory/task_outcomes.yaml` from `docs/session_handoff.md` + active local task state,
+  - validates task-outcome closeout and rolling process regressions.
 - On gate failure, use deterministic remediation map:
   - `docs/runbooks/governance-remediation.md`
 - Keep machine-readable plan state fresh:
   - update `plans/PLANS.yaml` for active/completed/deferred status changes.
   - schema/invariants: `docs/planning/plans-registry.md`
+- Keep agent context coverage fresh:
+  - new significant `src/moex_carry/*.py` files must map to a `CTX-*` route.
+  - validation command: `python scripts/validate_agent_contexts.py`
 - Keep operational memory fresh:
   - record durable decisions/incidents/patterns in `memory/agent_memory.yaml`.
   - incident `remediation_type` must follow `configs/agent_incident_policy.yaml`.
@@ -152,6 +166,9 @@ Blockers:
 - Keep handoff delta fresh:
   - update `docs/session_handoff.md` with current goal, delta, blockers, and next step.
   - keep task request contract and first-time-right report sections current.
+- Keep task outcome ledger fresh:
+  - run `python scripts/sync_task_outcomes.py` after updating `## Task Outcome` or let `python scripts/run_lean_gate.py` sync it automatically.
+  - `memory/task_outcomes.yaml` is the canonical tracked ledger for PR/weekly process rollups.
 - Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
 - Before push/PR, always run the full blocker gate below.
 
@@ -168,8 +185,11 @@ Blockers:
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
 - `python scripts/run_lean_gate.py`
+- `python scripts/validate_agent_contexts.py`
 - `python scripts/validate_session_handoff.py`
 - `python scripts/validate_task_request_contract.py`
+- `python scripts/validate_task_outcomes.py`
+- `python scripts/validate_process_regressions.py`
 - `python scripts/validate_quality_scorecards.py`
 - `python scripts/validate_python_style.py`
 - `python scripts/validate_structured_logging.py`
@@ -246,6 +266,7 @@ Blockers:
   - `python scripts/run_lean_gate.py`
   - `python scripts/doc_gardening_report.py`
   - `python scripts/autonomy_kpi_report.py`
+  - `python scripts/process_improvement_report.py`
 - `agent-review` CI job publishes deterministic findings artifact for each PR/push:
   - `python scripts/agent_review.py`
 - `governance-dashboard` CI job publishes one combined artifact:
