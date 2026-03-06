@@ -19,6 +19,10 @@
 - first-time-right-load-readiness-gate -> TC-FTR-PROC-004
 - first-time-right-context-integrity-gate -> TC-FTR-PROC-005
 - first-time-right-repeated-issue-gate -> TC-FTR-PROC-006
+- process-telemetry-start-first-patch -> TC-PROC-TELE-001
+- process-task-outcome-closeout -> TC-PROC-TELE-002
+- process-repeated-signature-prevention -> TC-PROC-TELE-003
+- process-regression-burn-in-thresholds -> TC-PROC-TELE-004
 - decision-view -> TC-DEC-API-001, TC-DEC-UI-001
 - decision-view-filters -> TC-DEC-API-005
 - decision-view-aggregation -> TC-DEC-API-002
@@ -1023,6 +1027,48 @@ Steps:
 Expected:
 - Team switches from patching to structured root-cause workflow.
 - Issue is not closed without explicit regression validation.
+
+### TC-PROC-TELE-001 Worktree start and lean gate first patch emit telemetry lifecycle
+Acceptance: process-telemetry-start-first-patch
+Automation: tests/test_task_outcomes.py::test_run_lean_gate_records_first_patch_in_minimal_repo
+Steps:
+1. Start task with `worktree_guard -Action Check`.
+2. Make one first diff on the task path.
+3. Run `python scripts/run_lean_gate.py`.
+Expected:
+- `.runlogs/agent-process/task-events.jsonl` contains `task_start` and `first_patch`.
+- `.runlogs/agent-process/state.json` stores active task id and time-to-first-patch.
+
+### TC-PROC-TELE-002 Non-trivial diff requires task outcome sync and ledger record
+Acceptance: process-task-outcome-closeout
+Automation: tests/test_task_outcomes.py::test_validate_task_outcomes_requires_sync_for_non_trivial_diff
+Steps:
+1. Create a non-trivial working-tree diff.
+2. Run `python scripts/validate_task_outcomes.py` before syncing.
+3. Run `python scripts/sync_task_outcomes.py` and validate again.
+Expected:
+- Validator fails before sync because current task has no ledger record.
+- Validator passes after sync and `memory/task_outcomes.yaml` contains the active task id.
+
+### TC-PROC-TELE-003 Repeated incident signature needs new prevention artifact
+Acceptance: process-repeated-signature-prevention
+Automation: tests/test_task_outcomes.py::test_validate_task_outcomes_blocks_repeated_signature_without_new_artifact
+Steps:
+1. Seed ledger with an older outcome for one `incident_signature`.
+2. Close a new task with the same signature and the same prevention artifact.
+3. Run `python scripts/validate_task_outcomes.py`.
+Expected:
+- Validation fails until the new task uses a distinct improvement artifact and linked follow-up.
+
+### TC-PROC-TELE-004 Burn-in keeps rolling regressions advisory until 20 completed tasks
+Acceptance: process-regression-burn-in-thresholds
+Automation: tests/test_agent_process_telemetry.py::test_rollup_respects_burn_in_and_thresholds
+Steps:
+1. Compute rollup with fewer than 20 completed tasks.
+2. Compute rollup again with 20 tasks and poor metrics.
+Expected:
+- Burn-in window does not block before 20 completed tasks.
+- Threshold status flips to blocking once the 20-task window exists and metrics regress.
 
 ## Regression Checklist (minimum)
 - /api/v2/signals/history returns JSON (no HTML).
