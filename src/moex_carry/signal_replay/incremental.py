@@ -14,11 +14,11 @@ import pandas as pd
 from moex_carry.config import AppSettings
 from moex_carry.domain.models import ContractSpec, DividendEvent, KeyRate
 from moex_carry.domain.portfolio import PairSpec
-from moex_carry.pipeline import (
-    _apply_spread_carry_signals,
-    _avg_recent_trade_return_annual,
-    _avg_recent_trade_return_annual_operational,
-    _execution_quality_stats,
+from moex_carry.signal_replay.pipeline_acl import (
+    apply_spread_carry_signals,
+    avg_recent_trade_return_annual,
+    avg_recent_trade_return_annual_operational,
+    execution_quality_stats,
 )
 from moex_carry.signal_replay.core import (
     ReplayMetrics,
@@ -310,7 +310,7 @@ def run_true_incremental_replay(
         )
 
     initial_payload = initial_state.to_payload()
-    replay_tail_result = _apply_spread_carry_signals(
+    replay_tail_result = apply_spread_carry_signals(
         tail,
         merged=None,
         dividends=dividends,
@@ -404,9 +404,9 @@ def _collect_metrics(replay: pd.DataFrame) -> ReplayMetrics:
     )
     closed_mask = exit_mask & replay["trade_return_annual_operational"].notna()
     trades_closed = int(closed_mask.sum())
-    stats = _execution_quality_stats(replay)
-    avg_fill = _avg_recent_trade_return_annual(replay)
-    avg_oper = _avg_recent_trade_return_annual_operational(replay)
+    stats = execution_quality_stats(replay)
+    avg_fill = avg_recent_trade_return_annual(replay)
+    avg_oper = avg_recent_trade_return_annual_operational(replay)
     entry_wait = (
         replay.loc[closed_mask, "entry_wait_minutes"].dropna()
         if "entry_wait_minutes" in replay.columns
