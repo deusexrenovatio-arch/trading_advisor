@@ -521,6 +521,23 @@ class SignalEngineMorningExecutionConfig(BaseModel):
     buffer_atr_mult: float = 0.10
     buffer_min_ticks: int = 1
     limit_slip_ticks: int = 2
+    break_even_rr: float = 0.1
+    break_even_buffer_ticks: int = 2
+    tp_rr: float = 0.6
+    sl_rr: float = 2.5
+    max_holding_minutes: int = 180
+    max_profit_rr: float = 0.3
+    # O1 baseline: disable hard absolute TP cap to avoid clipping profitable tails.
+    max_profit_ticks: int = 0
+    trail_activation_rr: float = 0.1
+    trail_offset_ticks: int = 2
+    same_bar_policy: str = "open_direction"
+    limit_entry_improve_ticks: int = 1
+    limit_fallback_to_market_minutes: int = 10
+    limit_fallback_slip_ticks: int = 1
+    tp_cost_mult: float = 0.2
+    sl_cost_mult: float = 0.7
+    exit_cost_mult: float = 0.4
     noise_warn_high: float = 2.5
     noise_warn_low: float = 0.4
     swing_k: int = 2
