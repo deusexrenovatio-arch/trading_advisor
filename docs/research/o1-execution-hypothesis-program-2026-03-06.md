@@ -126,3 +126,15 @@
 2. Run H1 fill-quality family.
 3. Write a verdict before moving to H2.
 4. Continue family-by-family until each lever is classified.
+
+## Completed Run (2026-03-06)
+- Final ladder summary: `artifacts/research/wf_goal_v6_h24_o1_execution_hypothesis_ladder_20260306.json`
+- Full write-up: `docs/research/o1-execution-hypothesis-results-2026-03-06.md`
+- Outcome:
+  - `H0`: reproduced `O1` exactly.
+  - `H1`: noisy.
+  - `H2`: noisy.
+  - `H3`: noisy but identified `sl_rr` as a real revenue lever with concentration cost.
+  - `H4`: noisy but identified `max_profit_rr` clipping as the dominant revenue/concentration trade-off.
+  - `H5`: disallowed for promotion; sensitivity only.
+- Baseline decision after completed ladder: keep `O1`.

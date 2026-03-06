@@ -2,6 +2,18 @@ version: 1
 updated_at: 2026-03-06
 
 decisions:
+  - id: ADM-2026-03-06-091
+    date: 2026-03-06
+    title: Complete O1-relative execution ladder and keep O1 as baseline
+    context: User requested the full `H0`-`H5` execution research program to be run end-to-end against frozen `O1`, with conclusions fixed in repo memory before the next optimization cycle.
+    decision: Added a deterministic runner for the O1-relative ladder, completed `H0`-`H5` on the frozen front-nearest window, and kept `O1` as baseline because no tested candidate improved net revenue while also satisfying the same hard concentration constraint. `H1` and `H2` were noisy/inert, `H3` stop widening and `H4` RR-cap removal improved revenue but worsened concentration, `H4` absolute caps repaired concentration but destroyed too much net, and `H5` remained sensitivity-only/disallowed.
+    impact: "Execution research is now narrowed to one unresolved problem: concentration-aware control of the revenue levers exposed by `sl_rr` and `max_profit_rr`. Future loops should not reopen fill-quality, break-even, trailing, or same-bar assumptions as primary axes on this frozen window."
+    links:
+      - scripts/run_o1_execution_hypothesis_program.py
+      - artifacts/research/wf_goal_v6_h24_o1_execution_hypothesis_ladder_20260306.json
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
   - id: ADM-2026-03-06-090
     date: 2026-03-06
     title: Restrict execution optimization to O1-relative economic levers and sequential family tests
@@ -766,6 +778,15 @@ incidents:
       - docs/runbooks/self-heal-escalation.md
 
 patterns:
+  - id: AMP-2026-03-06-014
+    date: 2026-03-06
+    title: Separate revenue levers from promotion-safe levers
+    pattern: If an execution lever raises `net_ticks_sum` but still worsens concentration or fails the same hard-go constraints, record it as mechanism evidence and carry it forward only into a concentration-aware next search space; do not promote it as the new baseline.
+    when_to_use: Any O1-relative execution comparison where revenue and hard-go constraints move in opposite directions.
+    links:
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - artifacts/research/wf_goal_v6_h24_o1_execution_hypothesis_ladder_20260306.json
+      - memory/agent_memory.yaml
   - id: AMP-2026-03-06-013
     date: 2026-03-06
     title: One execution family at a time against O1

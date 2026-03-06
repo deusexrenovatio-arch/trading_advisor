@@ -1,26 +1,26 @@
 # Session Handoff
-Updated: 2026-03-06 10:03 UTC
+Updated: 2026-03-06 10:52 UTC
 
 ## Goal
-- Keep `O1` as the default futures execution baseline and require explicit sign-off for any future drift relative to `O1`.
+- Keep `O1` as the default execution baseline after completing the full O1-relative ladder, and use the finished results to define the next concentration-aware search space.
 
 ## Task Request Contract
-- Objective: fix `O1` as the default execution baseline and codify mandatory drift analysis for future rebases or profile changes that move away from `O1`.
-- In Scope: `src/moex_carry/config.py`, config-default regression coverage, and governance memory/handoff/plan records for rebase-drift decisions.
-- Out of Scope: removing advanced execution features, changing non-execution strategy logic, or changing Telegram/API live-signal contracts.
-- Constraints: deterministic behavior, `O1` stays default until a replacement beats it and is explicitly accepted, governance gates green.
-- Done Evidence: `O1` defaults restored, regression test added for `O1`, rebase-drift rule recorded in plans/memory/handoff.
-- Priority Rule: branch goal follows `O1` first; merged changes that drift from `O1` require written analysis and explicit accept/revert decision.
+- Objective: reproduce `O1` on the active code path and complete the sequential `H0`-`H5` execution research program with explicit verdicts relative to `O1`.
+- In Scope: deterministic execution-hypothesis runner/reporting, frozen-window walk-forward reruns for `H0`-`H5`, and governance/research artifacts that record family verdicts and any promotion decision.
+- Out of Scope: changing non-execution signal generation logic, changing live Telegram/API contracts, or promoting any non-`O1` baseline without full evidence.
+- Constraints: same universe/window/decision times/seed/causal structure as `O1`, one execution family at a time, `same_bar_policy` and `cost_mult` remain sensitivity-only axes, governance gates green.
+- Done Evidence: `H0` reproduction artifact, per-hypothesis verdict artifacts for every tested run, family verdict summary, and plans/memory/handoff updated with final conclusions.
+- Priority Rule: preserve O1 comparability first; if any drift appears in `H0`, stop new hypothesis work, write the drift note, and only then decide whether to continue.
 
 ## Current Delta
-- Default morning execution policy again matches `O1`.
-- `O1` is now the comparison anchor for runtime and research metrics.
-- Alternative execution behavior remains available through explicit config or CLI overrides.
-- Added regression coverage for `O1` defaults in `tests/test_config_loading.py`.
-- Recorded a durable rebase-drift rule in `memory/agent_memory.yaml` and `plans/PLANS.yaml`.
-- Any baseline-changing rebase now requires a write-up, `O1` comparison, and a branch-goal decision.
-- Added an O1-relative hypothesis ladder in `docs/research/o1-execution-hypothesis-program-2026-03-06.md`.
-- Research order is fixed: fill quality -> trade management -> bracket geometry -> clipping -> sensitivity only.
+- Added deterministic O1-relative runner and ladder summary artifact for the completed `H0`-`H5` program.
+- `H0` reproduced the frozen `O1` reference exactly; no active-code-path drift was detected.
+- `H1` fill-quality family is noisy: removing fallback destroys net, while `entry_improve` and `fallback_slip` only move result by tens of ticks.
+- `H2` trade-management family is noisy: break-even is inert on this window, trailing is a major positive contributor, and longer holding adds only marginal net.
+- `H3` bracket geometry is economically relevant but not promotable: `sl_rr=3.0` adds `+680.0` net ticks, but concentration worsens to `0.5813`.
+- `H4` clipping controls are the strongest revenue lever: removing `max_profit_rr` adds `+5307.5` net ticks, while hard caps fix concentration but destroy net.
+- `H5` remains sensitivity-only/disallowed: same-bar ordering and harsher cost stress cannot justify promotion even when they move metrics.
+- No tested candidate beat `O1` on the same constraints; `O1` stays baseline and the next loop should target concentration-aware controls around the `H3/H4` trade-off.
 
 ## Accepted Profile
 - Profile id: `O1`
@@ -46,6 +46,9 @@ Updated: 2026-03-06 10:03 UTC
 - O1 reference artifacts:
   - `artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O1_limitfallback10m1t_frontnearest_seed124_20260305.json`
   - `artifacts/research/wf_goal_v6_h24_execution_profile_compare_O4_vs_M3_seed124_20260306.json`
+- Completed ladder artifacts:
+  - `artifacts/research/wf_goal_v6_h24_o1_execution_hypothesis_ladder_20260306.json`
+  - `docs/research/o1-execution-hypothesis-results-2026-03-06.md`
 - Drift analysis example:
   - same generated setup `BRH6:ORB_BREAKOUT:BUY:7171` stayed stable after rebase, so the drift source was execution semantics, not signal generation.
   - future drift decisions are accepted or rejected against `O1`, not against incidental merged defaults.
@@ -54,10 +57,10 @@ Updated: 2026-03-06 10:03 UTC
   - `memory/agent_memory.yaml` and `plans/PLANS.yaml` now require explicit baseline-drift write-up and branch-goal decision.
 
 ## First-Time-Right Report
-1. Confirmed coverage: restored `O1` defaults, added regression test for them, and recorded mandatory `O1`-relative drift analysis rule in governance memory.
-2. Missing or risky scenarios: non-`O1` overrides can still reintroduce drift if they are used without explicit artifact comparison.
-3. Resource/time risks and chosen controls: the hypothesis ladder now freezes `cost_mult` and `same_bar_policy` as non-primary axes to avoid pseudo-improvement loops.
-4. Highest-priority fixes or follow-ups: start with H0 O1 reproduction, then run H1 fill-quality family before touching trade-management or bracket-geometry levers.
+1. Confirmed coverage: completed `H0`-`H5`, wrote per-hypothesis and per-family JSON artifacts, and summarized the finished ladder in a dedicated research note.
+2. Missing or risky scenarios: results are still frozen-window evidence only; the unresolved blocker is concentration, not raw revenue, so any next loop must attack that explicitly.
+3. Resource/time risks and chosen controls: one offline deterministic runner prevented manual reporting drift; stop-on-drift guard at `H0` ensured later families were not run on a moving baseline.
+4. Highest-priority fixes or follow-ups: keep `O1`, then test concentration-aware structural controls around `H4A`/`H3B` instead of retuning `H1`, `H2`, or `H5`.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
@@ -70,8 +73,8 @@ Updated: 2026-03-06 10:03 UTC
 - None for code path.
 
 ## Next Step
-- Run H0 O1 reproduction on the active code path.
-- Start H1 fill-quality family and write a verdict before any H2 trade-management tests.
+- If the next loop starts, make it concentration-aware from the first hypothesis and anchor it on the `H4A_CAP_OFF` vs `H4B_ABS_CAP_*` trade-off.
+- Do not reopen `H1`, `H2`, or `H5` as primary tuning axes unless the data window or strategy regime changes.
 
 ## Validation
 - `python scripts/run_lean_gate.py`
