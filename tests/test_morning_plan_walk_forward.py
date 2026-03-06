@@ -259,6 +259,147 @@ def test_simulate_setup_limit_uses_entry_range_fill_price():
     assert result.entry_ticks == 101
 
 
+def test_simulate_setup_limit_entry_improve_ticks_waits_for_better_price():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2RI",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            price_range_low_ticks=99,
+            price_range_high_ticks=101,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=15),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=110,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=104.0, high=106.0, low=100.0, close=105.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=103.0, high=104.0, low=99.0, close=100.0, volume=12.0),
+        Candle(ts=as_of + timedelta(minutes=15), open=100.0, high=101.0, low=99.0, close=100.0, volume=14.0),
+    ]
+    baseline = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    improved = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        limit_entry_improve_ticks=2,
+    )
+    assert baseline.filled is True
+    assert baseline.entry_ticks == 101
+    assert improved.filled is True
+    assert improved.entry_ticks == 99
+    assert improved.entry_ts != baseline.entry_ts
+
+
+def test_simulate_setup_limit_fallback_to_market_fills_after_timeout():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2LF",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            price_range_low_ticks=99,
+            price_range_high_ticks=101,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=20),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=110,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=104.0, high=106.0, low=103.0, close=105.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=105.0, high=106.0, low=103.0, close=104.0, volume=12.0),
+        Candle(ts=as_of + timedelta(minutes=15), open=104.0, high=105.0, low=103.0, close=104.0, volume=14.0),
+    ]
+    baseline = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    fallback = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        limit_fallback_to_market_minutes=10,
+        limit_fallback_slip_ticks=1,
+    )
+    assert baseline.filled is False
+    assert baseline.outcome == "NO_FILL"
+    assert fallback.filled is True
+    assert fallback.entry_ticks == 102
+    assert fallback.entry_ts == (as_of + timedelta(minutes=15)).isoformat()
+
+
 def test_simulate_setup_respects_time_stop_minutes_from_setup_meta():
     mod = _load_module()
     tz = ZoneInfo("Europe/Moscow")
@@ -313,6 +454,504 @@ def test_simulate_setup_respects_time_stop_minutes_from_setup_meta():
     assert result.filled is True
     assert result.outcome == "EXIT"
     assert result.exit_ticks == 102
+
+
+def test_simulate_setup_break_even_arm_moves_stop_to_entry():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2BE",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=30),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=110,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=100.5, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=103.0, low=101.0, close=102.0, volume=12.0),
+        Candle(ts=as_of + timedelta(minutes=15), open=102.0, high=101.0, low=100.0, close=100.5, volume=14.0),
+        Candle(ts=as_of + timedelta(minutes=20), open=100.5, high=101.0, low=99.5, close=100.0, volume=16.0),
+    ]
+    no_be = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    with_be = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        break_even_rr=0.5,
+        break_even_buffer_ticks=0,
+    )
+    assert no_be.outcome == "EXIT"
+    assert with_be.outcome == "SL"
+    assert with_be.exit_ticks == 100
+    assert with_be.gross_ticks == 0.0
+
+
+def test_simulate_setup_same_bar_policy_tp_first_changes_collision_outcome():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2SBP",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.STOP_LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=15),
+            meta={"limit_price_ticks": 101, "setup_kind": "BOX_BREAKOUT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=105,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=6,
+    )
+    bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=99.0, high=102.0, low=100.0, close=101.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=101.0, high=106.0, low=94.0, close=105.0, volume=20.0),
+    ]
+    default_result = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    tp_first_result = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        same_bar_policy="tp_first",
+    )
+    assert default_result.outcome == "SL"
+    assert tp_first_result.outcome == "TP"
+    assert tp_first_result.exit_ticks == 105
+
+
+def test_simulate_setup_tp_rr_and_sl_rr_override_bracket_distances():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2RR",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=30),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=120,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    tp_bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=100.0, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=103.0, low=100.0, close=102.0, volume=12.0),
+        Candle(ts=as_of + timedelta(minutes=15), open=102.0, high=102.0, low=101.0, close=101.0, volume=14.0),
+    ]
+    baseline_tp = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=tp_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    tp_rr_result = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=tp_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        tp_rr=0.6,
+    )
+    assert baseline_tp.outcome == "EXIT"
+    assert tp_rr_result.outcome == "TP"
+    assert tp_rr_result.exit_ticks == 103
+
+    sl_bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=100.0, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=101.0, low=97.0, close=98.5, volume=12.0),
+        Candle(ts=as_of + timedelta(minutes=15), open=98.5, high=99.0, low=98.0, close=98.0, volume=14.0),
+    ]
+    baseline_sl = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=sl_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    sl_rr_result = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=sl_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        sl_rr=0.4,
+    )
+    assert baseline_sl.outcome == "EXIT"
+    assert sl_rr_result.outcome == "SL"
+    assert sl_rr_result.exit_ticks == 98
+
+
+def test_simulate_setup_max_profit_rr_caps_tp_distance():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2CAP",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=30),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=120,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=100.0, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=108.0, low=100.0, close=106.0, volume=12.0),
+        Candle(ts=as_of + timedelta(minutes=15), open=106.0, high=106.0, low=105.0, close=105.0, volume=14.0),
+    ]
+    baseline = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    capped = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        max_profit_rr=1.0,
+    )
+    capped_ticks = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        max_profit_ticks=2,
+    )
+    assert baseline.outcome == "EXIT"
+    assert capped.outcome == "TP"
+    assert capped.exit_ticks == 105
+    assert capped_ticks.outcome == "TP"
+    assert capped_ticks.exit_ticks == 102
+
+
+def test_simulate_setup_trailing_and_global_max_holding_minutes():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2TRAIL",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=30),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=120,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    trail_bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=100.0, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=106.0, low=100.0, close=105.0, volume=12.0),
+        Candle(ts=as_of + timedelta(minutes=15), open=105.0, high=104.0, low=103.0, close=103.5, volume=14.0),
+        Candle(ts=as_of + timedelta(minutes=20), open=103.5, high=103.5, low=102.0, close=102.0, volume=16.0),
+    ]
+    baseline_trail = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=trail_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    trailing_result = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=trail_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        trail_activation_rr=1.0,
+        trail_offset_ticks=2,
+    )
+    assert baseline_trail.outcome == "EXIT"
+    assert trailing_result.outcome == "SL"
+    assert trailing_result.exit_ticks == 104
+
+    hold_bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=100.0, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=102.0, low=99.0, close=101.0, volume=12.0),
+        Candle(ts=as_of + timedelta(minutes=15), open=101.0, high=102.0, low=100.0, close=101.5, volume=14.0),
+        Candle(ts=as_of + timedelta(minutes=20), open=101.5, high=102.0, low=100.0, close=101.0, volume=16.0),
+    ]
+    no_hold_cap = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=hold_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+    )
+    with_hold_cap = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=hold_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(commission_ticks_per_side=0.0, slippage_ticks_per_side=0.0, spread_half_ticks=0.0),
+        max_holding_minutes=10,
+    )
+    assert no_hold_cap.outcome == "EXIT"
+    assert with_hold_cap.outcome == "EXIT"
+    assert with_hold_cap.exit_ts != no_hold_cap.exit_ts
+
+
+def test_simulate_setup_outcome_cost_multipliers_adjust_net_ticks():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 20, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S2COST",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.D1, kind="PIVOT_PP", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=30),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=106,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    costs = mod.CostAssumptions(commission_ticks_per_side=1.0, slippage_ticks_per_side=1.0, spread_half_ticks=0.0)
+    tp_bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=100.0, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=106.0, low=100.0, close=105.0, volume=12.0),
+    ]
+    base_tp = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=tp_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=costs,
+    )
+    discounted_tp = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=tp_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=costs,
+        tp_cost_mult=0.25,
+    )
+    assert base_tp.outcome == "TP"
+    assert base_tp.cost_ticks == 4.0
+    assert discounted_tp.cost_ticks == 1.0
+    assert discounted_tp.net_ticks == pytest.approx(base_tp.net_ticks + 3.0)
+
+    sl_bars = [
+        Candle(ts=as_of + timedelta(minutes=5), open=100.0, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=100.0, low=94.0, close=95.0, volume=12.0),
+    ]
+    base_sl = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=sl_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=costs,
+    )
+    discounted_sl = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=sl_bars,
+        tick_size=1.0,
+        calendar=_calendar(),
+        costs=costs,
+        sl_cost_mult=0.5,
+    )
+    assert base_sl.outcome == "SL"
+    assert base_sl.cost_ticks == 4.0
+    assert discounted_sl.cost_ticks == 2.0
+    assert discounted_sl.net_ticks == pytest.approx(base_sl.net_ticks + 2.0)
 
 
 class _FakeIssClient:
@@ -1098,9 +1737,12 @@ def test_precision_filter_reason_blocks_by_side_and_risk():
         allowed_setup_kinds=(),
         allowed_stop_models=(),
         allowed_decision_times=(),
+        allowed_roots=(),
+        allowed_instruments=(),
         dedup_setup_ids=False,
     )
     side_reason = mod._precision_filter_reason(
+        instrument_id="BRH6",
         setup=setup,
         as_of_ts=as_of,
         precision_filter=side_filter,
@@ -1115,14 +1757,182 @@ def test_precision_filter_reason_blocks_by_side_and_risk():
         allowed_setup_kinds=(),
         allowed_stop_models=(),
         allowed_decision_times=(),
+        allowed_roots=(),
+        allowed_instruments=(),
         dedup_setup_ids=False,
     )
     risk_reason = mod._precision_filter_reason(
+        instrument_id="BRH6",
         setup=setup,
         as_of_ts=as_of,
         precision_filter=risk_filter,
     )
     assert risk_reason == "precision_min_risk_ticks"
+
+
+def test_binomial_wilson_lower_bound_behaves_as_lcb():
+    mod = _load_module()
+    lcb_low_conf = mod._binomial_wilson_lower_bound(wins=45, trials=60, confidence=0.8)
+    lcb_high_conf = mod._binomial_wilson_lower_bound(wins=45, trials=60, confidence=0.95)
+    raw = 45.0 / 60.0
+    assert 0.0 <= lcb_low_conf <= raw
+    assert 0.0 <= lcb_high_conf <= raw
+    assert lcb_high_conf <= lcb_low_conf
+
+
+def test_causal_first_components_add_instability_and_lcbs():
+    mod = _load_module()
+    rows = [
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-01-02",
+            setup_id="S1",
+            setup_kind="ORB_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-01-02T10:30:00+03:00",
+            entry_ts="2026-01-02T10:35:00+03:00",
+            exit_ts="2026-01-02T11:00:00+03:00",
+            filled=True,
+            outcome="TP",
+            gross_ticks=8.0,
+            net_ticks=5.0,
+            cost_ticks=3.0,
+            entry_ticks=100,
+            exit_ticks=105,
+        ),
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-01-09",
+            setup_id="S2",
+            setup_kind="ORB_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-01-09T10:30:00+03:00",
+            entry_ts="2026-01-09T10:35:00+03:00",
+            exit_ts="2026-01-09T11:00:00+03:00",
+            filled=True,
+            outcome="SL",
+            gross_ticks=-9.0,
+            net_ticks=-12.0,
+            cost_ticks=3.0,
+            entry_ticks=100,
+            exit_ticks=88,
+        ),
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-01-16",
+            setup_id="S3",
+            setup_kind="ORB_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-01-16T10:30:00+03:00",
+            entry_ts="2026-01-16T10:35:00+03:00",
+            exit_ts="2026-01-16T11:00:00+03:00",
+            filled=True,
+            outcome="TP",
+            gross_ticks=7.0,
+            net_ticks=4.0,
+            cost_ticks=3.0,
+            entry_ticks=100,
+            exit_ticks=104,
+        ),
+    ]
+    summary = mod._summarize(rows, setups_total=3)
+    period_start = date(2026, 1, 1)
+    period_end = date(2026, 1, 21)
+    metrics = mod._causal_first_components(
+        results=rows,
+        summary=summary,
+        period_start=period_start,
+        period_end=period_end,
+        subfold_days=7,
+        confidence=0.8,
+    )
+    raw_win_rate = float(summary["win_rate_net"])
+    raw_tpw = mod._trades_per_week(
+        filled_trades=int(summary["filled_trades"]),
+        period_start=period_start,
+        period_end=period_end,
+    )
+    assert metrics["causal_winrate_lcb"] <= raw_win_rate
+    assert metrics["causal_trades_per_week_lcb"] <= raw_tpw
+    assert metrics["causal_instability_expectancy_std"] > 0.0
+
+
+def test_precision_filter_reason_blocks_by_root_and_instrument():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 21, 12, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S-PRECISION-ROOT",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="DAY",
+            meta={"setup_kind": "ORB_BREAKOUT", "target_return_pct": 0.8},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={"stop_model": "structure"},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=110,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=6,
+    )
+
+    root_filter = mod.PrecisionFilterConfig(
+        enabled=True,
+        min_risk_ticks=None,
+        min_target_return_pct=None,
+        allowed_sides=(),
+        allowed_setup_kinds=(),
+        allowed_stop_models=(),
+        allowed_decision_times=(),
+        allowed_roots=("BR",),
+        allowed_instruments=(),
+        dedup_setup_ids=False,
+    )
+    root_reason = mod._precision_filter_reason(
+        instrument_id="NGH6",
+        setup=setup,
+        as_of_ts=as_of,
+        precision_filter=root_filter,
+    )
+    assert root_reason == "precision_root"
+
+    instrument_filter = mod.PrecisionFilterConfig(
+        enabled=True,
+        min_risk_ticks=None,
+        min_target_return_pct=None,
+        allowed_sides=(),
+        allowed_setup_kinds=(),
+        allowed_stop_models=(),
+        allowed_decision_times=(),
+        allowed_roots=(),
+        allowed_instruments=("BRH6",),
+        dedup_setup_ids=False,
+    )
+    instrument_reason = mod._precision_filter_reason(
+        instrument_id="BRM6",
+        setup=setup,
+        as_of_ts=as_of,
+        precision_filter=instrument_filter,
+    )
+    assert instrument_reason == "precision_instrument"
 
 
 def test_evaluate_window_precision_filter_dedup_blocks_duplicate_setup_ids():
@@ -1201,6 +2011,8 @@ def test_evaluate_window_precision_filter_dedup_blocks_duplicate_setup_ids():
                 allowed_setup_kinds=(),
                 allowed_stop_models=(),
                 allowed_decision_times=(),
+                allowed_roots=(),
+                allowed_instruments=(),
                 dedup_setup_ids=True,
             ),
         )
@@ -1269,6 +2081,8 @@ def test_evaluate_window_collects_generator_rejection_trace_summary():
                 allowed_setup_kinds=(),
                 allowed_stop_models=(),
                 allowed_decision_times=(),
+                allowed_roots=(),
+                allowed_instruments=(),
                 dedup_setup_ids=False,
             ),
             collect_generator_rejection_trace=True,
@@ -1463,3 +2277,104 @@ def test_evaluate_window_fast_cache_keeps_parity_with_plain_evaluation():
     assert summary_plain == summary_fast
     assert history_plain == history_fast
     assert planned_plain == planned_fast
+
+
+def _make_expert_test_setup(*, as_of: datetime, risk_ticks: int, target_return_pct: float) -> Setup:
+    return Setup(
+        setup_id="EXPERT-S1",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=30),
+            meta={
+                "setup_kind": "ORB_BREAKOUT",
+                "target_return_pct": float(target_return_pct),
+            },
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=90,
+            qty_lots=1,
+            tif="GTC",
+            meta={"stop_model": "structure"},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=120,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=int(risk_ticks),
+    )
+
+
+def test_expert_gate_reason_respects_rule_match_and_constraints():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 3, 5, 12, 0, tzinfo=tz)
+    config = mod._parse_expert_gate_config(
+        {
+            "enabled": True,
+            "default_action": "block",
+            "rules": [
+                {
+                    "name": "energy_orb_midday",
+                    "allow_setup_kinds": ["ORB_BREAKOUT"],
+                    "allow_roots": ["BR", "NG"],
+                    "allow_decision_times": ["12:00"],
+                    "allow_clusters": ["energy"],
+                    "min_risk_ticks": 100,
+                    "min_target_return_pct": 0.6,
+                }
+            ],
+        }
+    )
+    setup_ok = _make_expert_test_setup(as_of=as_of, risk_ticks=120, target_return_pct=0.8)
+    reason_ok = mod._expert_filter_reason(
+        instrument_id="BRH6",
+        setup=setup_ok,
+        as_of_ts=as_of,
+        expert_gate=config,
+        root_to_cluster={"BR": "energy", "NG": "energy"},
+    )
+    assert reason_ok is None
+
+    setup_low_quality = _make_expert_test_setup(as_of=as_of, risk_ticks=90, target_return_pct=0.4)
+    reason_constraints = mod._expert_filter_reason(
+        instrument_id="BRH6",
+        setup=setup_low_quality,
+        as_of_ts=as_of,
+        expert_gate=config,
+        root_to_cluster={"BR": "energy", "NG": "energy"},
+    )
+    assert reason_constraints == "expert_rule_constraints"
+
+    reason_no_match = mod._expert_filter_reason(
+        instrument_id="SVC6",
+        setup=setup_ok,
+        as_of_ts=as_of,
+        expert_gate=config,
+        root_to_cluster={"BR": "energy", "NG": "energy"},
+    )
+    assert reason_no_match == "expert_no_match"
+
+
+def test_parse_expert_gate_config_rejects_invalid_bounds():
+    mod = _load_module()
+    with pytest.raises(ValueError, match="expert_gate_rule_risk_bounds_invalid"):
+        mod._parse_expert_gate_config(
+            {
+                "enabled": True,
+                "rules": [{"name": "bad", "min_risk_ticks": 200, "max_risk_ticks": 100}],
+            }
+        )
