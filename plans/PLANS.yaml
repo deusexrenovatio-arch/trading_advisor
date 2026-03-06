@@ -1302,3 +1302,133 @@ items:
       - P1-API-DECOMPOSE-024
     started_at: 2026-03-06
     completed_at: 2026-03-06
+
+  - id: P2-NEWS-GOLDEN-SET-045
+    title: Build manual web-backed golden events set and tune causal routing for 2026-02-28 strike miss
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - manual golden set contains 10 root-cause events per commodity in active contour (`BRN`, `NG_US`, `GOLD`) with links and verification metrics
+      - route-aware strike class is introduced to capture exporter-level military strike risk without forcing outage label
+      - live feed verification can use broad and v2 event ids when selected id is absent
+      - regression tests cover strike-route inference and broad-id verification behavior
+    checks:
+      - python -m pytest tests/test_news_commodity_graph.py tests/test_news_causal.py tests/test_news_live_feed.py -q
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - docs/research/news_golden_events_v1.md
+      - docs/research/news_golden_events_v1.csv
+      - src/moex_carry/news_commodity_graph.py
+      - src/moex_carry/news_causal.py
+      - src/moex_carry/news_live_feed.py
+      - tests/test_news_commodity_graph.py
+      - tests/test_news_causal.py
+      - tests/test_news_live_feed.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-EVENT-FIRST-GRAPH-044
+    started_at: 2026-03-05
+    completed_at: 2026-03-05
+
+  - id: P2-NEWS-ROOT-PROD-046
+    title: Unify production news pipeline with root-first matching, aftershock linkage, enrichment and root graph maintenance
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - ingest to shock flow prioritizes root-cause candidates and keeps legacy fallback modes
+      - candidate-window NewsAPI enrichment can backfill around weak/no-link shocks and persist scored articles
+      - shock storage persists root fields and aftershock linkage fields for downstream evaluation
+      - root maintenance tables are auto-built (`news_root_links`, `news_root_registry`, `news_root_route_edges`)
+      - unified runtime CLI cycle exists for ingest -> shock -> root maintenance
+    checks:
+      - python -m pytest tests/test_news_causal.py tests/test_news_commodity_graph.py tests/test_news_shock_live_input.py tests/test_news_shock_store.py tests/test_news_shock_pipeline.py tests/test_news_shock_automation.py tests/test_news_shock_backfill.py tests/test_news_root_maintenance.py -q
+      - python scripts/run_lean_gate.py
+    docs:
+      - src/moex_carry/news_shock_live_input.py
+      - src/moex_carry/news_shock_enrichment.py
+      - src/moex_carry/news_shock_store.py
+      - src/moex_carry/news_root_maintenance.py
+      - src/moex_carry/cli.py
+      - docs/runbooks/news-shock-go-live.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-GOLDEN-SET-045
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-NEWS-DISCOVERY-047
+    title: Split discovery vs verified news feeds, remove legacy prod routes, and wire discovery into gate and Telegram
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - news_root_cycle exports live_news_discovery.csv and live_news_verified.csv
+      - discovery feed is the default input for `news_live_bridge` and Telegram news alerts
+      - live storage/feed contracts expose story-first many-to-many commodity attribution rows
+      - Telegram discovery output groups multi-commodity rows by story_id into one message without move-verification fields
+      - legacy operational scripts for `news_ingest` and `shock_label_cycle` are removed from production code paths and docs
+      - new task scheduler wrappers manage only `MoexCarry-NewsRootLive` and `MoexCarry-NewsRootBackfill`
+    checks:
+      - python -m pytest tests/test_news_live_runtime.py tests/test_news_live_feed.py tests/test_telegram_news_broadcast.py tests/test_telegram_worker.py tests/test_news_filter.py tests/test_news_shock_live_input.py tests/test_news_operational_contract.py -q
+      - powershell -ExecutionPolicy Bypass -File scripts/start_news_root_cycle.ps1 -CheckOnly
+      - powershell -ExecutionPolicy Bypass -File scripts/manage_news_root_cycle_task.ps1 -Action Install -DryRun
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/news_shock_live_input.py
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - src/moex_carry/integrations/telegram_worker.py
+      - scripts/start_news_root_cycle.ps1
+      - scripts/manage_news_root_cycle_task.ps1
+      - docs/runbooks/news-shock-go-live.md
+      - README.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-ROOT-PROD-046
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-NEWS-LINK-BENCH-048
+    title: Add formal multi-commodity attribution benchmark and close strict acceptance for discovery routing
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - a structured multi-commodity benchmark fixture exists with explicit expected commodity scopes
+      - deterministic linker rules reject generic weak anchors without commodity-specific evidence
+      - benchmark validator reports false multi-commodity assignment rate <= 0.10 under production-style discovery settings
+      - targeted linker and runtime validations remain green after the benchmark hardening
+    checks:
+      - python -m pytest tests/test_news_linking.py tests/test_news_live_runtime.py tests/test_news_live_feed.py tests/test_telegram_news_broadcast.py tests/test_telegram_worker.py tests/test_news_operational_contract.py -q
+      - python scripts/news_multi_commodity_benchmark.py --benchmark-csv docs/research/news_multi_commodity_benchmark.csv --output-dir data/output/news_multi_commodity_benchmark
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_quality_scorecards.py
+    docs:
+      - src/moex_carry/news/linking.py
+      - docs/research/news_multi_commodity_benchmark.csv
+      - scripts/news_multi_commodity_benchmark.py
+      - tests/test_news_linking.py
+      - docs/runbooks/news-shock-go-live.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-DISCOVERY-047
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+    started_at: 2026-03-06
+    completed_at: 2026-03-06

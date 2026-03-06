@@ -1,47 +1,48 @@
 # Session Handoff
-Updated: 2026-03-06 06:10 UTC
+Updated: 2026-03-06 13:12 UTC
 
 ## Goal
-- Shift Telegram/news flow from fact-only market commentary to commodity-specific fundamental causes that are later verified by realized price move on 1H and 1D horizons.
+- Close strict acceptance for the unified `news_root_cycle` runtime by adding formal multi-commodity attribution validation, tightening deterministic linker behavior where needed, and proving the remaining benchmark threshold in addition to the already-passing discovery walk-forward targets.
 
 ## Task Request Contract
-- Objective: implement event-first root-cause extraction with a commodity dependency graph (exporters, producers, importers, chokepoints, transmission links) so primary triggers are detected before financial recaps.
-- In Scope: wide per-commodity classification dictionaries, directed geographic/dependency graph, event-first causal inference integration in `news_causal`, and query expansion to fetch root-cause sources.
-- Out of Scope: replacing upstream providers, introducing LLM-only extraction as the primary path, and changing trading execution policy outside current signal/news bridge.
-- Constraints: preserve current runtime stability and API compatibility, keep deterministic fallbacks for low-confidence items, and require leakage-safe evaluation logic.
-- Done Evidence: passing `python scripts/validate_task_request_contract.py`, pre/post `python scripts/run_lean_gate.py`, targeted tests for new causal tagging and 1H/1D verification logic, and generated artifacts showing filtered cause-first rows plus verification metrics.
-- Priority Rule: prioritize precision of fundamental-cause alerts over coverage; when in doubt classify as uncertain/noise rather than promote to Telegram.
+- Objective: close the remaining strict-pass acceptance gap after the runtime unification rollout by proving false multi-commodity assignment rate `<= 10%` on a formal benchmark, while preserving the already-implemented discovery/verified production routing and discovery walk-forward targets.
+- In Scope: define a structured multi-commodity benchmark fixture; add a deterministic benchmark validator/report; tighten linker rules if benchmark reveals generic cross-commodity leakage; add regression tests; update runbook/session/plans/memory with the acceptance evidence and benchmark command.
+- Out of Scope: re-opening production routing design, retraining models, changing strategy decision logic, changing the known-event walk-forward methodology, or silently downgrading synthetic validation targets.
+- Constraints: benchmark must reflect production-style linking semantics (configured commodity universe and discovery min-link threshold), generic geopolitical/weather/mining tokens must not count as standalone commodity links, and the work must preserve the current single production route via `news_root_cycle`.
+- Done Evidence: (1) formal benchmark dataset and validator exist in-repo, (2) targeted linker tests cover previous false-link patterns, (3) measured false multi-commodity assignment rate is `<= 10%`, (4) discovery walk-forward and operational validation remain green after linker changes.
+- Priority Rule: acceptance-closing benchmark and linker correctness first, then regression protection and documentation of the new quality gate.
 
 ## Current Delta
-- Added `news_commodity_graph.py` with wide per-commodity role catalogs: exporters, producers, importers, chokepoints.
-- Added directed dependency edges per commodity (geo/transmission graph) and route resolver to commodity node.
-- Added event-first causal inference (`chokepoint`, `outage/restart`, `export controls`, `demand shifts`, weather).
-- `news_causal.py` now uses hybrid scoring: taxonomy rules + graph event-first candidates with source priority.
-- Causal payload now carries `cause_route_key`, `cause_claim_status`, and matched `cause_entities`.
-- `news_scores` schema/runtime persist these fields and legacy backfill updates old rows on ingest cycle.
-- Ingestion queries are now auto-augmented with event-first terms to fetch root-cause sources beyond finance recaps.
-- Feed/Telegram formatting includes claim status, route, and entities; new tests cover graph and query expansion.
+- Production unification is implemented and validated.
+- Discovery walk-forward still passes after linker hardening.
+- Metrics remain `window_pass_rate=1.0`, `avg_known_event_coverage=0.976`, `avg_exact_event_recall=0.748`, `avg_precision=0.612`.
+- A formal multi-commodity benchmark now exists at `docs/research/news_multi_commodity_benchmark.csv`.
+- The deterministic linker now rejects weak generic anchors as standalone secondary links.
+- The benchmark passes at discovery settings with `false_multi_commodity_assignment_rate=0.0`, `assignment_precision=1.0`, `assignment_recall=1.0`.
 
 ## First-Time-Right Report
-1. Confirmed coverage: taxonomy, clustering, and verification gates are included for both ingestion-time labeling and feed-time prioritization.
-2. Missing or risky scenarios: conflicting headlines, delayed reactions beyond 1D, and supply-chain events with cross-commodity spillover may reduce deterministic confidence.
-3. Resource/time risks and chosen controls: potential backfill cost managed via smoke-first windows, strict horizon metrics (1H/1D), and deterministic fallbacks before broad rollout.
-4. Highest-priority fixes or follow-ups: enforce cause/effect gate before Telegram feed export, then calibrate thresholds against realized move distributions by commodity.
+1. Confirmed coverage: the task covers runtime entrypoint unification, feed split, default wiring into gate and Telegram, legacy route cleanup, and operational documentation truth.
+2. Missing or risky scenarios: the remaining risk is validation blind spot, not runtime wiring; a weak benchmark could hide cross-commodity leakage, while over-generic anchor rules can still promote wrong secondary commodities.
+3. Resource/time risks and chosen controls: keep the change narrow (linker + benchmark + tests), measure against a manually curated fixture before and after edits, and rerun discovery/operational checks to guard against regression.
+4. Highest-priority fixes or follow-ups: remove weak-anchor false positives first, then lock a formal benchmark and validator so the acceptance target stays machine-checkable.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
-- Stop Trigger: two consecutive attempts fail to improve precision on causal validation metrics (or fail deterministic gate tests) for the same rule path.
-- Reset Action: freeze current rule branch, snapshot false-positive/false-negative slices, and restart from commodity-specific hypothesis set with tightened source and mechanism constraints.
-- New Search Space: (1) mechanism-first taxonomy rules, (2) source reliability + novelty gating, (3) event-to-price alignment window adjustments for 1H/1D verification.
-- Next Probe: run a focused historical sample for one commodity bucket (energy/metals/agri) and compare precision/coverage before and after causal gates.
+- Stop Trigger: two consecutive linker/benchmark iterations still fail the false-assignment threshold or require benchmark cases that no longer reflect production semantics.
+- Reset Action: freeze the benchmark rows and inspect the exact false-link evidence row by row before making any further heuristic changes.
+- New Search Space: (1) strong-vs-weak anchor separation, (2) graph-route evidence as a first-class link signal, (3) benchmark semantics aligned to discovery feed threshold and allowed commodity universe.
+- Next Probe: run a formal curated benchmark against the current linker, then patch only the concrete false-link patterns exposed there.
 
 ## Blockers
 - No blockers.
 
 ## Next Step
-- Backfill `news_shock_rows` farther back in time to increase verified 1H/1D sample size for non-BRN commodities.
+- Rerun final lean gate after plan/memory sync and keep the benchmark plus walk-forward artifacts as the strict-pass evidence bundle.
 
 ## Validation
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
 - `python scripts/run_lean_gate.py`
+- `python scripts/news_multi_commodity_benchmark.py --benchmark-csv docs/research/news_multi_commodity_benchmark.csv --output-dir data/output/fullpass_multi_commodity_benchmark_20260306`
+- `python scripts/news_known_events_walkforward.py --known-events-csv docs/research/news_golden_events_gold.csv --output-dir data/output/fullpass_known_events_discovery_20260306_linkbench --causal-profile discovery --warmup-days 120 --test-window-days 14 --step-days 14 --min-calibration-rows 60 --min-test-known-rows 6 --grid-min-fundamental 0.2,0.3,0.4,0.5,0.6 --grid-min-confidence 0.2,0.3,0.4,0.5,0.6 --min-calibration-precision 0.40 --gate-known-row-recall 0.90 --gate-known-event-coverage 0.90 --gate-precision 0.40`
+- `pytest tests/test_news_linking.py tests/test_news_live_runtime.py tests/test_news_live_feed.py tests/test_telegram_news_broadcast.py tests/test_telegram_worker.py tests/test_news_shock_live_input.py tests/test_news_operational_contract.py -q`

@@ -2,7 +2,112 @@ version: 1
 updated_at: 2026-03-06
 
 decisions:
+  - id: ADM-2026-03-06-086
+    date: 2026-03-06
+    title: Close discovery acceptance with a formal multi-commodity benchmark and weak-anchor linker guard
+    context: Runtime unification and discovery routing were complete, but strict acceptance remained open because the repository had no structured multi-label benchmark and the deterministic linker could still leak extra commodities from generic terms such as `mine strike` or `drought`.
+    decision: Add a curated multi-commodity benchmark fixture plus validator under discovery settings, and harden `score_commodity_links` so commodity aliases, route evidence, or specific topic terms are required while generic weak anchors only act as supporting evidence.
+    impact: False secondary links are now machine-checked against an in-repo benchmark, and discovery acceptance can be closed with auditable benchmark output instead of proxy judgments from single-label gold data.
+    links:
+      - src/moex_carry/news/linking.py
+      - src/moex_carry/news/linking_benchmark.py
+      - scripts/news_multi_commodity_benchmark.py
+      - docs/research/news_multi_commodity_benchmark.csv
+      - tests/test_news_linking.py
+      - docs/runbooks/news-shock-go-live.md
+  - id: ADM-2026-03-06-085
+    date: 2026-03-06
+    title: Make discovery feed the only forward news route and demote verified and legacy schedulers to non-production roles
+    context: After `news_root_cycle` was introduced, the runtime still exposed multiple production-looking routes (`news_ingest`, `shock_label_cycle`, single `live_news_signals.csv`), which kept forward gating tied to post-factum verification and single-row Telegram delivery semantics.
+    decision: Split runtime export into `discovery` and `verified` feeds, route bridge and Telegram defaults to discovery, refactor live-news storage/feed contracts toward story-first many-to-many commodity attribution, group Telegram discovery alerts by `story_id`, and delete legacy production scheduler/launcher paths in favor of one `news_root_cycle` manager pair.
+    impact: Production truth becomes one runtime command and one forward news contour; verified output remains for retrospective calibration, while Telegram and strategy gate consume the same discovery contract with explicit multi-commodity scope.
+    links:
+      - src/moex_carry/news_live_runtime.py
+      - src/moex_carry/news_live_runtime_ops.py
+      - src/moex_carry/news_live_feed.py
+      - src/moex_carry/news_live_bridge.py
+      - src/moex_carry/news_shock_live_input.py
+      - src/moex_carry/news_shock_live_input_helpers.py
+      - src/moex_carry/integrations/telegram_news_broadcast.py
+      - src/moex_carry/integrations/telegram_worker.py
+      - scripts/start_news_root_cycle.ps1
+      - scripts/manage_news_root_cycle_task.ps1
+      - docs/runbooks/news-shock-go-live.md
+  - id: ADM-2026-03-06-084
+    date: 2026-03-06
+    title: Promote root-first news routing to production cycle with DB-linked aftershocks and route graph maintenance
+    context: Research-mode routing still depended on legacy `v2_clean/broad` branches and had no single production cycle that continuously linked root causes to aftershocks in storage.
+    decision: Add root-first candidate selection in live shock input, candidate-window NewsAPI enrichment with DB persistence/scoring, persist root/aftershock fields in `news_shock_rows`, auto-build root maintenance tables (`news_root_links`, `news_root_registry`, `news_root_route_edges`), and expose unified `news_root_cycle` CLI command for ingest->shock->root maintenance.
+    impact: Runtime now has one operational flow from ingest to root/aftershock linkage with persistent graph context, while preserving fallback candidate modes for coverage and backward compatibility.
+    links:
+      - src/moex_carry/news_shock_live_input.py
+      - src/moex_carry/news_shock_enrichment.py
+      - src/moex_carry/news_shock_store.py
+      - src/moex_carry/news_root_maintenance.py
+      - src/moex_carry/cli.py
+      - src/moex_carry/cli_news_runtime_handlers.py
+      - docs/runbooks/news-shock-go-live.md
+  - id: ADM-2026-03-05-083
+    date: 2026-03-05
+    title: Reach >=90% known-event coverage in no-lookahead walk-forward via discovery profile and rebuilt GOLD labels
+    context: User target was to maximize coverage of known root events in rolling windows while keeping acceptable precision.
+    decision: Introduce `discovery` vs `publish` causal profiles, enrich missing `cause_event/cause_route_key` in GOLD root rows, and calibrate walk-forward in discovery mode for coverage-first validation.
+    impact: Known-event walk-forward achieved `avg_known_event_coverage=0.976` and `avg_precision=0.608` (discovery), while publish mode remains stricter for downstream Telegram filtering.
+    links:
+      - scripts/news_known_events_walkforward.py
+      - scripts/enrich_news_golden_events.py
+      - docs/research/news_golden_events_gold.csv
+      - data/output/news_known_events_walkforward_h5_discovery/known_events_walkforward_summary.json
+      - docs/runbooks/news-forward-synthetic-validation.md
+  - id: ADM-2026-03-05-082
+    date: 2026-03-05
+    title: Evaluate forward detector by known-event walk-forward coverage, not only shock-row recall
+    context: User clarified the target metric as coverage of already known root events in rolling time windows.
+    decision: Add no-lookahead walk-forward validation over golden known events where each test window checks if known root events are found by detector outputs, with threshold tuning only on past calibration slices.
+    impact: Quality decisions now match business expectation ("caught known events") and are auditable per window with found/missed ledgers.
+    links:
+      - scripts/news_known_events_walkforward.py
+      - docs/runbooks/news-forward-synthetic-validation.md
+      - docs/runbooks/news-shock-go-live.md
+      - docs/session_handoff.md
+  - id: ADM-2026-03-05-081
+    date: 2026-03-05
+    title: Raise synthetic root/aftershock launch target to 90% recall on known shocks
+    context: User target was clarified to require catching at least 90% of known shock episodes before forward rollout.
+    decision: Set no-lookahead synthetic replay defaults and launch protocol thresholds to `avg_primary_recall_episode>=0.90` and `avg_aftershock_recall_episode>=0.90`.
+    impact: Release decision now aligns with explicit high-recall requirement; current pipeline state is treated as below-goal until recall gap is closed.
+    links:
+      - scripts/news_forward_synthetic.py
+      - docs/runbooks/news-forward-synthetic-validation.md
+      - docs/runbooks/news-shock-go-live.md
+      - docs/session_handoff.md
   - id: ADM-2026-03-05-080
+    date: 2026-03-05
+    title: Split forward root hypotheses from post-factum market verification and add no-lookahead synthetic gate
+    context: Trading value degrades if root detection waits for realized 1H/1D move confirmation; however launch risk remains high without pre-launch proof on historical shocks.
+    decision: Keep live routing hypothesis-only (root/aftershock from causal text+route evidence), use 1H/1D only for offline validation/calibration, and require walk-forward synthetic validation with frozen past-only threshold tuning and explicit leakage filtering before forward enablement.
+    impact: Runtime can emit early root signals without post-knowledge latency, while release readiness remains controlled by deterministic no-lookahead metrics across rolling historical windows.
+    links:
+      - scripts/news_forward_synthetic.py
+      - docs/runbooks/news-forward-synthetic-validation.md
+      - docs/runbooks/news-shock-go-live.md
+      - docs/session_handoff.md
+  - id: ADM-2026-03-05-079
+    date: 2026-03-05
+    title: Lock manual web-backed golden event baseline and split Iran strike routing from outage semantics
+    context: Root-cause recall on 2026-02-28 Iran strike headlines remained inconsistent because generic geopolitical labels dropped route context, while naive strike terms over-promoted outage classes.
+    decision: Add a manual golden set (`BRN`, `NG_US`, `GOLD`, 10 events each) sourced from internet links with local move/post-effect metrics; add `exporter_military_strike_risk` event-first route class; tighten outage/strike term matching and word-boundary term detection; extend feed verification to match `selected_event_id`, `v2_event_id`, and `broad_event_id`.
+    impact: Causal calibration now has a stable benchmark artifact and the known 2026-02-28 strike class is captured with explicit route context without conflating all strike headlines with physical outages.
+    links:
+      - docs/research/news_golden_events_v1.md
+      - docs/research/news_golden_events_v1.csv
+      - src/moex_carry/news_commodity_graph.py
+      - src/moex_carry/news_causal.py
+      - src/moex_carry/news_live_feed.py
+      - tests/test_news_commodity_graph.py
+      - tests/test_news_causal.py
+      - tests/test_news_live_feed.py
+  - id: ADM-2026-03-05-075
     date: 2026-03-05
     title: Add event-first commodity dependency graph to extract root causes beyond financial recap headlines
     context: Cause-first ranking still surfaced many finance-recapped stories because source queries and taxonomy relied on commodity-keyword mentions, while true trigger headlines often mention chokepoints, operators, or policy actions without ticker terms.
@@ -18,7 +123,7 @@ decisions:
       - tests/test_news_commodity_graph.py
       - tests/test_news_causal.py
       - tests/test_news_live_runtime.py
-  - id: ADM-2026-03-05-079
+  - id: ADM-2026-03-05-074
     date: 2026-03-05
     title: Auto-backfill causal fields for legacy live-news scores and lock strict verified-feed defaults
     context: Prepared historical `news_livecheck_ng.db` had populated legacy `news_scores` rows without new causal columns, which made cause-first feed gating return empty or near-empty output under strict verification settings.
@@ -29,7 +134,7 @@ decisions:
       - configs/news-livecheck-ng.yaml
       - tests/test_news_live_runtime.py
       - docs/session_handoff.md
-  - id: ADM-2026-03-05-078
+  - id: ADM-2026-03-05-073
     date: 2026-03-05
     title: Enforce cause-first commodity news feed with deterministic taxonomy and post-factum 1H/1D verification
     context: Telegram/live-news flow contained many fact-only market-commentary items ("price rose/fell") that lacked primary causal triggers and reduced signal quality.
@@ -44,7 +149,7 @@ decisions:
       - tests/test_news_causal.py
       - tests/test_news_live_feed.py
       - docs/session_handoff.md
-  - id: ADM-2026-03-05-077
+  - id: ADM-2026-03-05-072
     date: 2026-03-05
     title: Stabilize news gate bridge behavior for tests via explicit as-of timestamp
     context: Full pre-push pytest exposed a wall-clock sensitive bridge test where fixed fixture timestamps aged out of lookback window over time.
@@ -54,7 +159,7 @@ decisions:
       - src/moex_carry/news_live_bridge.py
       - tests/test_news_live_runtime.py
       - plans/PLANS.yaml
-  - id: ADM-2026-03-05-076
+  - id: ADM-2026-03-05-071
     date: 2026-03-05
     title: Surface task-request contract in scorecards and bind advisory findings to explicit remediation queue
     context: Harness-oriented review showed the task-contract gate was enforced in lean loop but not visible as a scorecard check, while recurring advisory findings had no mandatory planning path.
