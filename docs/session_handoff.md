@@ -1,5 +1,5 @@
 # Session Handoff
-Updated: 2026-03-06 15:08 UTC
+Updated: 2026-03-06 19:35 UTC
 
 ## Goal
 - Promote the execution baseline from `O1` to `H4A_CAP_OFF` after no-mini historical validation, and keep negative-month plus thin-sample diagnostics explicit for future universe decisions.
@@ -13,14 +13,14 @@ Updated: 2026-03-06 15:08 UTC
 - Priority Rule: universe hygiene first; if no-mini recalc weakens `H4`, stop promotion and record the contradiction before changing defaults.
 
 ## Current Delta
-- Added post-run analyzer and removed duplicated mini roots: `BM (Brent mini)`, `GN (Gold mini)`, `NR (Natural Gas mini)`, `RM (RTS mini)`, `S1 (Silver mini)`.
-- No-mini historical review still favors `H4A_CAP_OFF`: full `2020-2026` net is `134710.5` vs `87396.0` for `O1`; old-regime `2020-2024` remains `119588.5` vs `77426.5`.
-- Default runtime baseline is now promoted to `H4A_CAP_OFF` by setting `max_profit_rr=0.0`; the config-loading regression test now asserts the H4 default.
-- Negative months remain concentrated: `2021-02 -> PT (Platinum)`, `2021-08 -> PD (Palladium)`, `2022-02 -> MM (MXI)+MX (MIX)`, `2025-02 -> MM (MXI)+RI (RTS Index)`.
-- `2022-02` is the stress month: `MM (MXI)` `PULLBACK_LIMIT SELL` on `2022-02-25` loses `-5320.0`; `H4` softens the month by preserving gains on positive roots.
-- Thin positive roots after mini exclusion are `FF (TTF Gas)`, `DJ (Dow Jones)`, `SU (Sugar)`, `N2 (Nikkei 225)`, `SF (S&P 500)`, `CE (Copper)`, `DX (DAX)`, `SX (Euro Stoxx 50)`.
-- Thin negative watchlist roots after mini exclusion are `NC (Nickel)`, `AN (Aluminum)`, and `KC (Coffee)`; they stay too sparse for a hard universe cut.
-- Human-facing research output now uses `TICKER (Name)` labels by default, and whole-universe evaluation excludes mini contracts when a full contract exists.
+- Mini roots are excluded by analyzer, and no-mini `H4A_CAP_OFF` still beats `O1`: `134710.5` vs `87396.0` on `2020-2026`, `119588.5` vs `77426.5` on `2020-2024`.
+- Runtime baseline is now `H4A_CAP_OFF` via `max_profit_rr=0.0`, and the config-loading regression test asserts that default directly.
+- Negative months stay concentrated; `2022-02` is the stress month: `2021-02 -> PT`, `2021-08 -> PD`, `2022-02 -> MM+MX`, `2025-02 -> MM+RI`; worst trade is `MM` `-5320.0`.
+- Thin-root policy is now cause-based: `late-launch but active` -> `FF (TTF Gas)`, `CE (Copper)`, `NC (Nickel)`, `AN (Aluminum)`, `KC (Coffee)`.
+- `Sparse-trigger but active` roots are `DJ (Dow Jones)` and `SU (Sugar)`.
+- `Current-regime silent` on `2025-2026`: `N2 (Nikkei 225)`, `SF (S&P 500)`, `DX (DAX)`, `SX (Euro Stoxx 50)`.
+- The silent cluster is entirely index-root driven, so follow-up should treat it as a family-fit hypothesis rather than four unrelated failures.
+- Reports use `TICKER (Name)`, exclude mini roots in whole-universe views, and publish monthly histograms in both `svg` and app-renderable `png`.
 
 ## Accepted Profile
 - Profile id: `H4A_CAP_OFF`
@@ -81,7 +81,7 @@ Updated: 2026-03-06 15:08 UTC
 - None.
 
 ## Next Step
-- Keep `H4A_CAP_OFF` as the working baseline unless a later whole-universe no-mini review disproves it; prune thin non-mini roots only via a separate evidence loop.
+- Keep `H4A_CAP_OFF` as the working baseline unless a later whole-universe no-mini review disproves it; review thin non-mini roots by cause (`late-launch`, `sparse-trigger`, `current-regime silent`) and treat the silent index cluster as a separate family-fit question before any pruning.
 
 ## Validation
 - `python scripts/run_lean_gate.py`

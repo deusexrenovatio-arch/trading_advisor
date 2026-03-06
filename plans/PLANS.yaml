@@ -1,6 +1,31 @@
 version: 1
 updated_at: 2026-03-06
 items:
+  - id: P2-SIGNALS-RESEARCH-047
+    title: Classify thin roots by cause on 2025-2026 and publish renderable monthly histogram artifacts
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - thin roots are classified by cause rather than by aggregate sparse PnL label
+      - "2025-2026 slice explicitly separates active late-launch roots from current-regime silent roots"
+      - the current-regime silent cluster is recorded as an index-family observation
+      - monthly revenue histogram is published in a renderable format for the app
+    checks:
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - docs/research/evaluation-policy.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-BASELINE-046
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
   - id: P2-SIGNALS-BASELINE-046
     title: Promote H4 baseline after no-mini historical validation and record root-level month diagnostics
     lane: research
