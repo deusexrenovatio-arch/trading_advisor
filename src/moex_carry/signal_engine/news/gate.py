@@ -7,6 +7,7 @@ import re
 import sqlite3
 from typing import Any
 
+from moex_carry.news_storage import open_sqlite_connection, sqlite_path_from_url
 from moex_carry.signal_engine.core.types import Setup
 
 SEVERITY_ORDER: dict[str, int] = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -57,12 +58,7 @@ def _instrument_group(instrument_id: str) -> str:
 
 
 def _sqlite_path_from_url(database_url: str) -> Path:
-    normalized = str(database_url or "").strip()
-    if normalized.startswith("sqlite:///"):
-        return Path(normalized[len("sqlite:///") :])
-    if normalized.startswith("sqlite://"):
-        return Path(normalized[len("sqlite://") :])
-    raise ValueError(f"unsupported_news_db_url:{database_url}")
+    return sqlite_path_from_url(database_url, data_dir="./data")
 
 
 def _parse_utc(value: Any) -> datetime | None:
@@ -242,7 +238,7 @@ class CommodityNewsGate:
         cutoff_utc = as_of_utc - timedelta(minutes=int(self.lookback_minutes))
         as_of_iso = as_of_utc.isoformat().replace("+00:00", "Z")
         cutoff_iso = cutoff_utc.isoformat().replace("+00:00", "Z")
-        conn = sqlite3.connect(db_path)
+        conn = open_sqlite_connection(db_path, timeout_sec=5.0, write=False)
         try:
             rows = conn.execute(
                 """
@@ -318,3 +314,4 @@ class CommodityNewsGate:
                 )
             )
         return items, errors
+
