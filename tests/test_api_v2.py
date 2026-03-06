@@ -1057,7 +1057,7 @@ def test_v2_decision_view_uses_db_projection_source(tmp_path):
     assert rows[0]["entity_ref"]["ticker"] == "GAZP"
 
 
-def test_v2_decision_view_db_projection_falls_back_to_jsonl(tmp_path):
+def test_v2_decision_view_db_projection_bootstraps_from_jsonl(tmp_path):
     settings = _build_settings(tmp_path, ff_db_projection_source=True)
     engine = create_engine_from_settings(settings)
     init_db(engine)
@@ -1087,7 +1087,7 @@ def test_v2_decision_view_db_projection_falls_back_to_jsonl(tmp_path):
     assert isinstance(rows, list)
     assert len(rows) == 1
     assert rows[0]["decision_id"] == "dec-jsonl-1"
-    assert rows[0]["projection_source"] == "jsonl_fallback"
+    assert rows[0]["projection_source"] == "db"
 
 
 def test_v2_research_wrappers(tmp_path, monkeypatch):
