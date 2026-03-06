@@ -1,231 +1,171 @@
 # News Shock Go-Live Runbook
 
 ## Scope
-- Instruments: `BRN`, `GOLD`, `NG_US`.
-- Objective:
-  - catch root shocks and aftershocks (including multi-day continuation);
-  - provide direction signal only when evidence quality is sufficient.
+- Production runtime for commodity-news discovery, verified attribution, shock-row maintenance, strategy gate input, and Telegram delivery.
+- Instruments: configured MOEX-linked commodities in `configs/news-livecheck-ng.yaml`.
 
-## Pipeline
-1. Build/curate shock dataset from `shock_news_1h_annual_all.csv`.
-2. Build high-impact label pack for Chat Pro.
-3. Ingest Chat Pro labels into silver dataset.
-4. Run readiness assessment and only then enable production signaling.
+## Production Truth
+- Production command: `python -m moex_carry.cli news_root_cycle`
+- Production scheduler: `scripts/manage_news_root_cycle_task.ps1`
+- Production launcher: `scripts/start_news_root_cycle.ps1`
+- Strategy gate input: `data/output/news_live/live_news_discovery.csv`
+- Telegram news input: `telegram.news_feed_path`
+- Telegram shock input: `telegram.shock_feed_path`
 
-## Automated Daily Cycle
-Use one command to build both task packs:
-- `direction` pack: default `v2_clean` only (direction + causal).
-- `causal` pack: default `broad,none` (causal-only to expand coverage).
+`news_root_cycle` is the only production route. It runs ingest, story-first commodity attribution, discovery/verified feed export, shock-row persistence, and optional root maintenance in one cycle.
+
+## Feed Contract
+`news_root_cycle` exports two news feeds:
+
+- `data/output/news_live/live_news_discovery.csv`
+- `data/output/news_live/live_news_verified.csv`
+
+Discovery feed:
+- high-recall causal profile (`causal_profile: discovery`)
+- no post-move verification requirement
+- one row per `(story_id, commodity)`
+- used by `news_live_bridge` and Telegram news alerts
+
+Verified feed:
+- requires post-move verification
+- used only for retrospective attribution, quality review, and calibration
+
+Required discovery/verified columns:
+- `feed_role`
+- `story_id`
+- `commodity`
+- `commodity_link_score`
+- `story_scope_json`
+- `link_reason`
+
+## One-Shot Production Commands
+Live cycle:
 
 ```powershell
 $env:PYTHONPATH='src'
-python scripts/run_shock_label_cycle.py `
-  --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv `
-  --output-dir data/output/shock_label_cycle_latest `
-  --start-ts 2026-01-01T00:00:00Z `
-  --min-abs-z 2.5 `
-  --max-delay-min 60 `
-  --direction-max-tasks 300 `
-  --causal-max-tasks 900 `
-  --direction-candidate-sources v2_clean `
-  --causal-candidate-sources broad,none `
-  --telegram-feed-path data/output/shock_alerts/live_shocks.csv `
-  --telegram-feed-min-abs-z 2.0
-```
-
-If Chat Pro outputs are already available, add:
-```powershell
-  --direction-labels-jsonl data/output/shock_label_cycle_latest/direction/chat_labels.jsonl `
-  --causal-labels-jsonl data/output/shock_label_cycle_latest/causal/chat_labels.jsonl `
-  --ingest-min-confidence 0.6 `
-  --run-readiness
-```
-
-Cycle output includes:
-- `shock_label_cycle_manifest.json` (single source-of-truth for artifacts and counts),
-- curated dataset and issue ledger,
-- separate direction/causal packs and summaries,
-- `telegram_live_shocks.csv` snapshot and rolling `data/output/shock_alerts/live_shocks.csv` feed for Telegram worker,
-- optional silver ingest artifacts and readiness report.
-
-## Windows Auto-Run (Task Scheduler)
-Install daily auto-run task (default: every day at `09:10` local time):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 `
-  -Action Install `
-  -StartTime 09:10
-```
-
-Check status:
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Status
-```
-
-Run immediately (manual trigger):
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Run
-```
-
-Remove task:
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1 -Action Remove
-```
-
-Recommended live mode (`fresh + backfill` split):
-- `fresh` task: repeats every 30 minutes, only recent window (`FreshLookbackHours=6`), updates Telegram feed.
-- `backfill` task: once per day, broader historical coverage, does not overwrite Telegram feed.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action Install
-```
-
-Check both tasks:
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/manage_news_shock_live_plan.ps1 -Action Status
-```
-
-Budget-aware defaults for `NewsAPI` daily limit `100`:
-- realtime verification budget: `55`
-- backfill budget: `35`
-- emergency reserve: `10`
-- live per-commodity poll interval: `90` minutes (prevents burning live budget in first hours)
-- client retries: `GDELT=3`, `NewsAPI=2` with backoff
-
-These are exposed as parameters in `manage_news_shock_live_plan.ps1`.
-
-## Shock Rows Backfill (progressive DB fill)
-Use cursor-based backfill to populate `news_shock_rows` gradually from older periods. Each run processes a bounded set of historical windows and updates a persistent cursor in `news_state`, so backfill is incremental and safe for regular scheduling.
-
-Manual run:
-```powershell
-$env:PYTHONPATH='src'
-python -m moex_carry.cli news_shock_backfill `
+python -m moex_carry.cli news_root_cycle `
   --news-config configs/news-livecheck-ng.yaml `
-  --start-ts 2025-01-01T00:00:00Z `
-  --window-hours 24 `
-  --windows-per-run 8 `
-  --cursor-key shock_rows_backfill_cursor_utc
+  --ingest-mode live `
+  --lookback-hours 6 `
+  --bar-minutes 5 `
+  --min-abs-z 2.0 `
+  --root-min-fundamental-score 0.45 `
+  --root-min-cause-confidence 0.45 `
+  --aftershock-max-gap-min 2880 `
+  --enable-candidate-newsapi-enrichment `
+  --enrichment-window-min 90 `
+  --enrichment-max-requests-per-symbol 4
 ```
 
-Scheduled mode:
-- `manage_news_shock_live_plan.ps1 -Action Install` configures daily backfill task with:
-  - `UseDbInput` for DB-first cycle input,
-  - `RunShockBackfill` for pre-cycle incremental `news_shock_rows` fill,
-  - bounded `ShockBackfillWindowHours` / `ShockBackfillWindowsPerRun` for smooth progression.
+Backfill cycle:
 
-Task uses `scripts/start_shock_label_cycle.ps1` as launcher, which:
-- sets `PYTHONPATH=src`,
-- loads `scripts/moex-carry.local.ps1` if present,
-- writes each run to `data/output/shock_label_cycle_auto/<UTC timestamp>/`,
-- updates `data/output/shock_alerts/live_shocks.csv` (unless `-NoTelegramFeed` is set).
-- supports rolling window mode via `-FreshLookbackHours` for frequent runs.
-
-## Live News Ingestion (GDELT + NewsAPI)
-Runtime ingestion and article-level scoring are available via:
-- CLI: `moex-carry news_ingest`
-- Script: `scripts/run_news_ingest_cycle.py`
-
-Live one-shot run:
 ```powershell
 $env:PYTHONPATH='src'
-python -m moex_carry.cli news_ingest `
+python -m moex_carry.cli news_root_cycle `
   --news-config configs/news-livecheck-ng.yaml `
-  --mode live
+  --ingest-mode backfill `
+  --lookback-hours 24 `
+  --bar-minutes 5 `
+  --min-abs-z 2.0 `
+  --root-min-fundamental-score 0.45 `
+  --root-min-cause-confidence 0.45 `
+  --aftershock-max-gap-min 2880
 ```
 
-Backfill one-shot run:
+`moex-carry news_ingest` remains available only as a debug one-shot and must not be scheduled in production.
+
+## Scheduler
+Validate launcher without starting a cycle:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start_news_root_cycle.ps1 -CheckOnly
+```
+
+Dry-run scheduler install:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_root_cycle_task.ps1 -Action Install -DryRun
+```
+
+Install production tasks:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_root_cycle_task.ps1 -Action Install
+```
+
+Status:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_root_cycle_task.ps1 -Action Status
+```
+
+Manual runs:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_root_cycle_task.ps1 -Action RunLive
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_root_cycle_task.ps1 -Action RunBackfill
+```
+
+Remove tasks:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/manage_news_root_cycle_task.ps1 -Action Remove
+```
+
+Task names:
+- `MoexCarry-NewsRootLive`
+- `MoexCarry-NewsRootBackfill`
+
+## Telegram
+- Ensure `telegram.enabled=true`, bot token, and `telegram.allowed_user_ids` are configured.
+- `telegram.news_feed_path` should point to `data/output/news_live/live_news_discovery.csv`.
+- `telegram.shock_feed_path` should point to `data/output/shock_alerts/live_shocks.csv`.
+
+Run worker:
+
 ```powershell
 $env:PYTHONPATH='src'
-python -m moex_carry.cli news_ingest `
-  --news-config configs/news-livecheck-ng.yaml `
-  --mode backfill
+python -m moex_carry.cli telegram_bot --config configs/default.yaml
 ```
 
-Scheduler (5-minute live + daily backfill):
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/manage_news_ingest_tasks.ps1 -Action Install
-powershell -ExecutionPolicy Bypass -File scripts/manage_news_ingest_tasks.ps1 -Action Status
-```
+Discovery Telegram contract:
+- header `NEWS DISCOVERY ALERT`
+- one message per `story_id`
+- all linked commodities listed in one message
+- no `verified_move_*` or move-verification fields
 
-Notes:
-- Scoring mode comes from `news_models.primary_model` (`nli`, `finbert`, `keyword`).
-- GPU is auto-selected via `news_models.device: auto`; fallback to CPU/keyword is automatic.
-- Live feed output is written to `news_ingest.feed_path` (default `data/output/news_live/live_news_signals.csv`).
+Shock Telegram contract stays separate:
+- `SHOCK PRIMARY`
+- `SHOCK AFTERSHOCK`
 
-## Telegram Shock Alerts
-- Ensure `telegram.enabled=true`, bot token and allowed users are configured.
-- `configs/default.yaml` now sets `telegram.shock_alerts_enabled=true` and reads feed from `telegram.shock_feed_path`.
-- Run worker:
+## Strategy Gate
+- `news_live_bridge` reads per-commodity rows from `data/output/news_live/live_news_discovery.csv`.
+- `configs/default.yaml` sets `news_filter.live_feed_path` to the discovery feed.
+- Verified feed must not be used for forward gate decisions.
 
-```powershell
-$env:PYTHONPATH='src'
-python -m moex_carry.cli telegram_bot
-```
+## Offline Validation
+Research and validation tooling remains non-production:
+- `python -m moex_carry.cli news_shock_backfill ...`
+- `python scripts/news_known_events_walkforward.py ...`
+- `python scripts/news_multi_commodity_benchmark.py ...`
+- `python scripts/news_forward_synthetic.py ...`
+- `python scripts/run_news_shock_silver_cycle.py ...`
+- `python scripts/news_shock_readiness.py ...`
 
-## Commands
-### 1) Label pack
-```powershell
-$env:PYTHONPATH='src'
-python scripts/build_shock_label_pack.py `
-  --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv `
-  --output-dir data/output/shock_label_pack_latest `
-  --start-ts 2026-01-01T00:00:00Z `
-  --min-abs-z 2.5 `
-  --max-delay-min 60 `
-  --candidate-source v2_clean
-```
+Mandatory checks before enabling or changing forward routing:
+- `python scripts/run_lean_gate.py`
+- `python scripts/validate_quality_scorecards.py`
+- `python scripts/news_multi_commodity_benchmark.py --benchmark-csv docs/research/news_multi_commodity_benchmark.csv --output-dir data/output/news_multi_commodity_benchmark`
+- `python -m pytest tests/test_news_live_runtime.py tests/test_news_live_feed.py tests/test_telegram_news_broadcast.py tests/test_telegram_worker.py tests/test_news_shock_live_input.py tests/test_news_operational_contract.py -q`
 
-### 2) Ingest labels
-```powershell
-$env:PYTHONPATH='src'
-python scripts/ingest_shock_labels.py `
-  --tasks-jsonl data/output/shock_label_pack_latest/shock_label_pack_zge2p5.jsonl `
-  --labels-jsonl data/output/shock_label_pack_latest/chat_pro_labels.jsonl `
-  --output-dir data/output/shock_silver_latest `
-  --min-confidence 0.6
-```
+Quality targets for discovery validation:
+- `window_pass_rate >= 0.9`
+- `avg_known_event_coverage >= 0.9`
+- `avg_exact_event_recall >= 0.65`
+- `avg_precision >= 0.4`
+- false multi-commodity assignment rate `<= 10%`
 
-### 3) Readiness report
-```powershell
-$env:PYTHONPATH='src'
-python scripts/news_shock_readiness.py `
-  --input-csv data/output/news_perf_365d_5m_opt/shock_news_1h_annual_all.csv `
-  --output-dir data/output/news_shock_readiness_latest `
-  --start-ts 2026-01-01T00:00:00Z `
-  --max-delay-min 60 `
-  --primary-z 2.5 `
-  --aftershock-z 2.0 `
-  --episode-window-min 10080 `
-  --max-gap-min 2880
-```
-
-## Readiness Criteria (critical)
-- `detector_primary_recall >= 0.70`
-- `detector_aftershock_recall >= 0.75`
-- `direction_v2_accuracy >= 0.58`
-- `direction_v2_labeled_count >= 120`
-- `direction_v2_coverage >= 0.07`
-- `curation_critical_drop_share <= 0.05`
-- `aftershock_1d_count >= 10`
-
-If any critical check fails, production enablement is blocked.
-
-## Production Mode Recommendation
-- Detector layer: use current high-recall matching.
-- Direction layer: use only `v2_clean` matched events.
-- If direction evidence is absent, send shock alert without direction commitment.
-
-## Artifacts
-- `readiness_report.md` and `readiness_report.json`
-- `readiness_checks.csv`, `readiness_metrics.csv`
-- `readiness_curated_shocks.csv`, `readiness_curation_issues.csv`
-- Episode capture artifacts: `shock_episode_events.csv`, `shock_mode_capture.csv`
-
-## Known Failure Modes and Controls
-- Extreme price artifacts from roll or bad ticks:
-  - controlled by curation caps per symbol (`abs_move_pct`, `|z|`).
-- Direction drift from broad noisy links:
-  - direction quality measured separately on `v2_clean`.
-- Short episode windows miss multi-day aftershocks:
-  - readiness uses long topic profile (`7d window`, `2d max gap`).
+Multi-commodity attribution benchmark contract:
+- fixture: `docs/research/news_multi_commodity_benchmark.csv`
+- evaluator: `scripts/news_multi_commodity_benchmark.py`
+- settings: configured commodity universe from `configs/news-livecheck-ng.yaml` and discovery min-link threshold

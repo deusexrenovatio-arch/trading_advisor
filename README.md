@@ -125,6 +125,26 @@ Then send `/start` to the bot and wait for signal messages. ACK is recorded as
 If `daily_healthcheck_enabled=true`, the worker also sends one daily morning
 heartbeat with backend status and active signals count.
 
+The Telegram worker is the single consumer for both news and shock feeds. In the
+unified production route, `news_root_cycle` writes:
+
+```
+data/output/news_live/live_news_discovery.csv
+data/output/news_live/live_news_verified.csv
+data/output/shock_alerts/live_shocks.csv
+```
+
+`telegram.news_feed_path` and `news_filter.live_feed_path` point to the
+discovery feed by default. Discovery alerts are grouped one message per
+`story_id` with all linked commodities; post-move shock alerts remain on the
+separate shock feed.
+
+Production runtime entrypoint:
+
+```
+python -m moex_carry.cli news_root_cycle --news-config configs/news-livecheck-ng.yaml --ingest-mode live
+```
+
 ### Windows auto-start (backend + Telegram worker)
 
 Use helper scripts in `scripts/` to avoid manual restart after reboot:
