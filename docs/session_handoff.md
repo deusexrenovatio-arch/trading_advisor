@@ -10,6 +10,7 @@ Updated: 2026-03-06 08:44 UTC
 - Out of Scope: probability-gate restoration, Telegram message schema redesign, broker auto-trading.
 - Constraints: deterministic behavior, no breaking API/worker contracts, governance gates green.
 - Done Evidence: O1 default config committed, live launch script added, strategy stream split wired through API/TG worker, docs updated.
+- Priority Rule: preserve production signal continuity first (live contour + Telegram delivery), then optimize secondary documentation details.
 
 ## Current Delta
 - Default morning execution policy switched from O4 TP hard-cap to O1 behavior (`SignalEngineMorningExecutionConfig.max_profit_ticks: 120 -> 0`).
@@ -57,8 +58,15 @@ Updated: 2026-03-06 08:44 UTC
 ## First-Time-Right Report
 1. Confirmed coverage: baseline switch + launch orchestration + strategy stream split (API + Telegram) + docs.
 2. Missing or risky scenarios: Telegram worker still requires env/token (`MOEX_CARRY_TELEGRAM__BOT_TOKEN`, `...ALLOWED_USER_IDS`); script now auto-loads local env file but still warns/skips worker if creds are absent.
-3. Resource/time risks and controls: live refresh can be heavy; `-ForceFullRefresh` is explicit opt-in.
-4. Highest-priority follow-up: add scheduled phase runner for forward `EOD -> OPEN -> AFTER_CLOSE` if operator wants full daily automation.
+3. Resource/time risks and chosen controls: live refresh can be heavy; `-ForceFullRefresh` is explicit opt-in.
+4. Highest-priority fixes or follow-ups: add scheduled phase runner for forward `EOD -> OPEN -> AFTER_CLOSE` if operator wants full daily automation.
+
+## Repetition Control
+- Max Same-Path Attempts: 2
+- Stop Trigger: two consecutive unsuccessful attempts on the same push/rebase failure path.
+- Reset Action: stop retry loop, inspect failing gate details, and patch only the minimal contract violation before retry.
+- New Search Space: (1) handoff contract sections, (2) governance validator expectations, (3) rebase conflict resolution strategy.
+- Next Probe: rerun `python scripts/validate_task_request_contract.py` before the next push.
 
 ## Blockers
 - None for code path.
