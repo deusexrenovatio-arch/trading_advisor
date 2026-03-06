@@ -1,0 +1,49 @@
+version: 1
+updated_at: '2026-03-06'
+items:
+- task_id: APT-20260306T163854Z-c3d3f52f
+  closed_at: '2026-03-06T16:53:22Z'
+  branch: feat/agent-context-routing-v2
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 31
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: validator
+  improvement_artifact: scripts/validate_task_outcomes.py
+  linked_plan_id: P1-PROCESS-TELEMETRY-047
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 2
+  intent_sources:
+  - session_handoff
+- task_id: APT-20260306T190026Z-c3d3f52f
+  closed_at: '2026-03-06T19:01:49Z'
+  branch: feat/agent-context-routing-v2
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: validator
+  improvement_artifact: scripts/validate_task_outcomes.py
+  linked_plan_id: P1-PROCESS-TELEMETRY-047
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 11
+  intent_sources:
+  - session_handoff

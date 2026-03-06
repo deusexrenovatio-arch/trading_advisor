@@ -9,6 +9,7 @@ This directory is the repository knowledge system for agent-first engineering.
 - `docs/session_handoff.md`
 - `plans/PLANS.yaml`
 - `memory/agent_memory.yaml`
+- `memory/task_outcomes.yaml`
 - `CODEOWNERS`
 
 ## Architecture
@@ -41,10 +42,14 @@ This directory is the repository knowledge system for agent-first engineering.
 
 ## Validation Commands
 - `python scripts/run_lean_gate.py`
+- `python scripts/validate_agent_contexts.py`
 - `python scripts/validate_session_handoff.py`
 - `python scripts/validate_task_request_contract.py`
+- `python scripts/validate_task_outcomes.py`
+- `python scripts/validate_process_regressions.py`
 - `python scripts/validate_pr_only_policy.py`
 - `python scripts/validate_quality_scorecards.py`
+- `python scripts/process_improvement_report.py`
 - `python scripts/validate_python_style.py`
 - `python scripts/validate_structured_logging.py`
 - `python scripts/validate_codeowners.py`
