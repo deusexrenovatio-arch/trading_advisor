@@ -8,7 +8,7 @@ Updated: 2026-03-06 13:05 UTC
 - Objective: add canonical task telemetry, tracked task outcomes, blocking outcome validation, and weekly/PR process-health reporting on top of the existing governance spine.
 - In Scope: `scripts/worktree_guard.ps1`, `scripts/run_lean_gate.py`, new telemetry/outcome validators and reporters, `configs/quality_scorecards.yaml`, CI/workflow docs, `memory/task_outcomes.yaml`, and focused tests.
 - Out of Scope: business runtime feature changes, personal/operator performance analytics, external telemetry services, or commit-time storage of detailed local event logs.
-- Constraints: keep `.runlogs/` local-only; use deterministic repo-tracked YAML for historical rollups; preserve current governance commands unless the new plan explicitly extends them.
+- Constraints: keep `.runlogs/` local-only; use deterministic repo-tracked YAML for historical rollups; preserve current governance commands unless the new plan explicitly extends them; do not disturb the existing `news_root_cycle` production contour.
 - Done Evidence: `python scripts/validate_task_outcomes.py`, `python scripts/validate_process_regressions.py`, `python scripts/validate_quality_scorecards.py`, focused pytest coverage for telemetry/outcome flow, and `python scripts/run_lean_gate.py` pass.
 - Priority Rule: block missing or repeated process failures first; trend polish and dashboard presentation are secondary.
 
