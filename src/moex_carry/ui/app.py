@@ -21,10 +21,6 @@ from moex_carry.contracts.strategy_test import BacktestRequest, ForwardTestReque
 from moex_carry.backtest_v2.runtime import run_backtest_v2_cached, serialize_backtest_report
 from moex_carry.data.moex_iss import MoexIssClient
 from moex_carry.decision_log import load_jsonl
-from moex_carry.domain.decision_engine import (
-    build_decision_action_entries,
-    parse_decision_action_request,
-)
 from moex_carry.domain.execution_policy import (
     evaluate_fail_closed_entry,
     select_auto_unwind_candidates,
@@ -142,6 +138,7 @@ from moex_carry.ui.app_helpers_feed import (
     DECISION_STYLE,
 )
 from moex_carry.ui.app_helpers_news_bridge import build_silver_explain_payload
+from moex_carry.ui.decision_actions import DecisionActionService
 from moex_carry.ui.data import (
     load_backtest_summary,
     load_backtest_summary_with_source,
