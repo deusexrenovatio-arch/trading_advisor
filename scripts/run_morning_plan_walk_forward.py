@@ -253,6 +253,46 @@ COMPARISON_POINTS: list[str] = [
 ]
 
 SAME_BAR_POLICIES: tuple[str, ...] = ("sl_first", "tp_first", "open_direction")
+COMMISSION_MODELS: tuple[str, ...] = ("legacy_ticks", "moex_real_fees")
+EXECUTION_STYLES: tuple[str, ...] = ("maker", "taker")
+MOEX_TAKER_EXCHANGE_FEE_PCT_BY_CONTRACT_TYPE: dict[str, float] = {
+    "currency": 0.00462,
+    "interest": 0.01650,
+    "stock": 0.01980,
+    "index": 0.00660,
+    "commodity": 0.01320,
+}
+MOEX_CONTRACT_TYPE_BY_ROOT: dict[str, str] = {
+    "AN": "commodity",
+    "BM": "commodity",
+    "BR": "commodity",
+    "CC": "commodity",
+    "CE": "commodity",
+    "DJ": "index",
+    "DX": "index",
+    "FF": "commodity",
+    "GD": "commodity",
+    "GN": "commodity",
+    "HS": "index",
+    "KC": "commodity",
+    "MM": "index",
+    "MX": "index",
+    "N2": "index",
+    "NA": "index",
+    "NC": "commodity",
+    "NG": "commodity",
+    "NR": "commodity",
+    "PD": "commodity",
+    "PL": "commodity",
+    "PT": "commodity",
+    "RI": "index",
+    "RM": "index",
+    "S1": "commodity",
+    "SF": "index",
+    "SU": "commodity",
+    "SV": "commodity",
+    "SX": "index",
+}
 
 
 @dataclass(frozen=True)
@@ -269,12 +309,21 @@ class CostAssumptions:
     commission_ticks_per_side: float
     slippage_ticks_per_side: float
     spread_half_ticks: float
+    commission_model: str = "legacy_ticks"
+    broker_fee_rub_per_order_per_lot: float = 0.0
 
     @property
     def round_trip_ticks(self) -> float:
         return 2.0 * (
             float(self.commission_ticks_per_side)
             + float(self.slippage_ticks_per_side)
+            + float(self.spread_half_ticks)
+        )
+
+    @property
+    def round_trip_impact_ticks(self) -> float:
+        return 2.0 * (
+            float(self.slippage_ticks_per_side)
             + float(self.spread_half_ticks)
         )
 
@@ -285,6 +334,7 @@ class PositionSizingConfig:
     account_equity: float | None
     target_risk_pct: float | None
     max_contracts_per_instrument: int
+    target_risk_money: float | None = None
 
 
 @dataclass(frozen=True)
@@ -1075,6 +1125,8 @@ def _normalize_position_sizing_mode(raw: Any) -> str:
         return "fixed_lots"
     if normalized in {"target_risk_pct", "risk", "risk_pct"}:
         return "target_risk_pct"
+    if normalized in {"target_risk_money", "risk_money", "risk_rub", "money"}:
+        return "target_risk_money"
     raise ValueError("unknown_position_sizing_mode")
 
 
@@ -1120,34 +1172,48 @@ def _position_sizing_details(
         account_equity=None,
         target_risk_pct=None,
         max_contracts_per_instrument=base_qty_lots,
+        target_risk_money=None,
     )
     mode = _normalize_position_sizing_mode(sizing.mode)
     tick_value = _resolve_instrument_tick_value(str(instrument_id), tick_values)
     stop_distance_ticks = _estimated_stop_distance_ticks(setup=setup, sl_rr=float(sl_rr))
-    risk_cost_ticks = float(costs.round_trip_ticks) * max(float(sl_cost_mult), 0.0)
-    risk_money_per_lot = (
-        float(stop_distance_ticks + risk_cost_ticks) * float(tick_value)
-        if float(tick_value) > 0.0
-        else None
-    )
+    risk_money_per_lot: float | None = None
+    if float(tick_value) > 0.0:
+        if _real_fee_model_enabled(costs):
+            risk_impact_ticks = float(costs.round_trip_impact_ticks) * max(float(sl_cost_mult), 0.0)
+            risk_impact_money = float(risk_impact_ticks) * float(tick_value)
+            risk_fee_money = _estimated_stop_path_fee_money_per_lot(
+                instrument_id=str(instrument_id),
+                setup=setup,
+                tick_value=float(tick_value),
+                costs=costs,
+            )
+            risk_money_per_lot = float(float(stop_distance_ticks) * float(tick_value) + risk_impact_money + risk_fee_money)
+        else:
+            risk_cost_ticks = float(costs.round_trip_ticks) * max(float(sl_cost_mult), 0.0)
+            risk_money_per_lot = float(stop_distance_ticks + risk_cost_ticks) * float(tick_value)
     qty_lots = int(base_qty_lots)
+    risk_budget_money: float | None = None
     if mode == "target_risk_pct":
         account_equity = _coerce_metric_float(sizing.account_equity)
         target_risk_pct = _coerce_metric_float(sizing.target_risk_pct)
-        max_contracts = max(int(sizing.max_contracts_per_instrument), 1)
         if (
             account_equity is not None
             and account_equity > 0.0
             and target_risk_pct is not None
             and target_risk_pct > 0.0
-            and risk_money_per_lot is not None
-            and risk_money_per_lot > 0.0
         ):
             risk_budget_money = float(account_equity * target_risk_pct / 100.0)
+    elif mode == "target_risk_money":
+        target_risk_money = _coerce_metric_float(sizing.target_risk_money)
+        if target_risk_money is not None and target_risk_money > 0.0:
+            risk_budget_money = float(target_risk_money)
+    if mode in {"target_risk_pct", "target_risk_money"}:
+        if risk_budget_money is not None and risk_money_per_lot is not None and risk_money_per_lot > 0.0:
             sized_qty_lots = int(math.floor(risk_budget_money / risk_money_per_lot))
-            qty_lots = min(max(sized_qty_lots, 1), max_contracts)
+            qty_lots = max(sized_qty_lots, 1)
         else:
-            qty_lots = min(max(base_qty_lots, 1), max_contracts)
+            qty_lots = max(base_qty_lots, 1)
     position_risk_money = (
         float(risk_money_per_lot) * float(qty_lots)
         if risk_money_per_lot is not None
@@ -1158,6 +1224,7 @@ def _position_sizing_details(
         "qty_lots": int(qty_lots),
         "tick_value": (float(tick_value) if float(tick_value) > 0.0 else None),
         "stop_distance_ticks": int(stop_distance_ticks),
+        "risk_budget_money": (float(risk_budget_money) if risk_budget_money is not None else None),
         "risk_money_per_lot": (float(risk_money_per_lot) if risk_money_per_lot is not None else None),
         "position_risk_money": (float(position_risk_money) if position_risk_money is not None else None),
     }
@@ -1715,6 +1782,107 @@ def _instrument_group(instrument_id: str) -> str:
     return secid.upper()
 
 
+def _normalize_commission_model(raw: Any) -> str:
+    normalized = str(raw or "legacy_ticks").strip().lower()
+    if normalized in COMMISSION_MODELS:
+        return normalized
+    return "legacy_ticks"
+
+
+def _normalize_execution_style(raw: Any) -> str:
+    normalized = str(raw or "maker").strip().lower()
+    if normalized in EXECUTION_STYLES:
+        return normalized
+    return "maker"
+
+
+def _real_fee_model_enabled(costs: CostAssumptions) -> bool:
+    return _normalize_commission_model(costs.commission_model) == "moex_real_fees"
+
+
+def _moex_contract_type_for_instrument(instrument_id: str) -> str:
+    root = _instrument_group(instrument_id)
+    contract_type = MOEX_CONTRACT_TYPE_BY_ROOT.get(root)
+    if contract_type is None:
+        raise ValueError(f"unknown_moex_contract_type:{root}")
+    return str(contract_type)
+
+
+def _order_fee_money_per_lot(
+    *,
+    instrument_id: str,
+    price_ticks: int,
+    tick_value: float,
+    execution_style: str,
+    costs: CostAssumptions,
+) -> float:
+    if not _real_fee_model_enabled(costs):
+        return 0.0
+    broker_fee = max(float(costs.broker_fee_rub_per_order_per_lot), 0.0)
+    style = _normalize_execution_style(execution_style)
+    if style != "taker":
+        return float(broker_fee)
+    notional_money = abs(float(price_ticks)) * max(float(tick_value), 0.0)
+    if notional_money <= 0.0:
+        return float(broker_fee)
+    fee_pct = float(MOEX_TAKER_EXCHANGE_FEE_PCT_BY_CONTRACT_TYPE[_moex_contract_type_for_instrument(instrument_id)])
+    exchange_fee = max(float(notional_money * fee_pct / 100.0), 0.01)
+    return float(broker_fee + exchange_fee)
+
+
+def _round_trip_fee_money_per_lot(
+    *,
+    instrument_id: str,
+    entry_ticks: int,
+    entry_execution_style: str,
+    exit_ticks: int,
+    exit_execution_style: str,
+    tick_value: float,
+    costs: CostAssumptions,
+) -> float:
+    return float(
+        _order_fee_money_per_lot(
+            instrument_id=instrument_id,
+            price_ticks=entry_ticks,
+            tick_value=tick_value,
+            execution_style=entry_execution_style,
+            costs=costs,
+        )
+        + _order_fee_money_per_lot(
+            instrument_id=instrument_id,
+            price_ticks=exit_ticks,
+            tick_value=tick_value,
+            execution_style=exit_execution_style,
+            costs=costs,
+        )
+    )
+
+
+def _estimated_entry_execution_style_for_risk(setup: Setup) -> str:
+    return "taker" if _order_type_name(setup) == "STOP" else "maker"
+
+
+def _estimated_stop_path_fee_money_per_lot(
+    *,
+    instrument_id: str,
+    setup: Setup,
+    tick_value: float,
+    costs: CostAssumptions,
+    sl_ticks: int | None = None,
+) -> float:
+    if not _real_fee_model_enabled(costs):
+        return 0.0
+    return _round_trip_fee_money_per_lot(
+        instrument_id=instrument_id,
+        entry_ticks=int(setup.entry_order.price_ticks),
+        entry_execution_style=_estimated_entry_execution_style_for_risk(setup),
+        exit_ticks=int(setup.sl_order.price_ticks if sl_ticks is None else sl_ticks),
+        exit_execution_style="taker",
+        tick_value=tick_value,
+        costs=costs,
+    )
+
+
 def _build_front_selector(
     *,
     instruments: list[str],
@@ -1977,6 +2145,8 @@ def _apply_cost_stress(costs: CostAssumptions, stress_mult: float) -> CostAssump
         commission_ticks_per_side=float(costs.commission_ticks_per_side) * mult,
         slippage_ticks_per_side=float(costs.slippage_ticks_per_side) * mult,
         spread_half_ticks=float(costs.spread_half_ticks) * mult,
+        commission_model=_normalize_commission_model(costs.commission_model),
+        broker_fee_rub_per_order_per_lot=float(costs.broker_fee_rub_per_order_per_lot),
     )
 
 
@@ -2428,7 +2598,7 @@ def _entry_fill(
     limit_entry_improve_ticks: int = 0,
     limit_fallback_to_market_minutes: int = 0,
     limit_fallback_slip_ticks: int = 0,
-) -> tuple[datetime, int] | None:
+) -> tuple[datetime, int, str] | None:
     side = setup.side
     entry_ticks = int(setup.entry_order.price_ticks)
     entry_range_low, entry_range_high = _entry_range_ticks(setup)
@@ -2444,10 +2614,10 @@ def _entry_fill(
             low_ticks = price_to_ticks(float(bar.low), tick_size)
             if side == Side.BUY and low_ticks <= int(entry_range_high - improve_ticks):
                 # Conservative fill inside range for BUY: worse (higher) price.
-                return bar.ts, int(entry_range_high - improve_ticks)
+                return bar.ts, int(entry_range_high - improve_ticks), "maker"
             if side == Side.SELL and high_ticks >= int(entry_range_low + improve_ticks):
                 # Conservative fill inside range for SELL: worse (lower) price.
-                return bar.ts, int(entry_range_low + improve_ticks)
+                return bar.ts, int(entry_range_low + improve_ticks), "maker"
             if fallback_minutes > 0 and armed_ts is not None:
                 elapsed_min = (bar.ts - armed_ts).total_seconds() / 60.0
                 if elapsed_min >= float(fallback_minutes):
@@ -2456,7 +2626,7 @@ def _entry_fill(
                         if side == Side.BUY
                         else int(entry_range_low - fallback_slip)
                     )
-                    return bar.ts, fallback_fill
+                    return bar.ts, fallback_fill, "taker"
         return None
 
     if order_type == "STOP":
@@ -2464,9 +2634,9 @@ def _entry_fill(
             high_ticks = price_to_ticks(float(bar.high), tick_size)
             low_ticks = price_to_ticks(float(bar.low), tick_size)
             if side == Side.BUY and high_ticks >= entry_ticks:
-                return bar.ts, entry_ticks
+                return bar.ts, entry_ticks, "taker"
             if side == Side.SELL and low_ticks <= entry_ticks:
-                return bar.ts, entry_ticks
+                return bar.ts, entry_ticks, "taker"
         return None
 
     if order_type == "STOP_LIMIT":
@@ -2500,9 +2670,9 @@ def _entry_fill(
             if not triggered:
                 continue
             if side == Side.BUY and low_ticks <= limit_ticks:
-                return bar.ts, int(limit_ticks)
+                return bar.ts, int(limit_ticks), "maker"
             if side == Side.SELL and high_ticks >= limit_ticks:
-                return bar.ts, int(limit_ticks)
+                return bar.ts, int(limit_ticks), "maker"
             if fallback_minutes > 0 and trigger_ts is not None:
                 elapsed_min = (bar.ts - trigger_ts).total_seconds() / 60.0
                 if elapsed_min >= float(fallback_minutes):
@@ -2511,7 +2681,7 @@ def _entry_fill(
                         if side == Side.BUY
                         else int(entry_ticks - fallback_slip_ticks)
                     )
-                    return bar.ts, int(fallback_fill)
+                    return bar.ts, int(fallback_fill), "taker"
         return None
 
     return None
@@ -2581,7 +2751,7 @@ def _exit_result(
     trail_activation_rr: float = 0.0,
     trail_offset_ticks: int = 0,
     same_bar_policy: str = "sl_first",
-) -> tuple[str, datetime, int]:
+) -> tuple[str, datetime, int, str]:
     tp_value = int(setup.tp_order.price_ticks) if tp_ticks is None else int(tp_ticks)
     sl_value = int(setup.sl_order.price_ticks) if sl_ticks is None else int(sl_ticks)
     active_sl_ticks = int(sl_value)
@@ -2624,16 +2794,16 @@ def _exit_result(
             sl_hit = high_ticks >= active_sl_ticks
         if tp_hit and sl_hit:
             if same_bar_mode == "tp_first":
-                return "TP", bar.ts, tp_exec_ticks
+                return "TP", bar.ts, tp_exec_ticks, "maker"
             if same_bar_mode == "open_direction":
                 tp_preferred = close_ticks >= open_ticks if setup.side == Side.BUY else close_ticks <= open_ticks
                 if tp_preferred:
-                    return "TP", bar.ts, tp_exec_ticks
-            return "SL", bar.ts, active_sl_ticks
+                    return "TP", bar.ts, tp_exec_ticks, "maker"
+            return "SL", bar.ts, active_sl_ticks, "taker"
         if tp_hit:
-            return "TP", bar.ts, tp_exec_ticks
+            return "TP", bar.ts, tp_exec_ticks, "maker"
         if sl_hit:
-            return "SL", bar.ts, active_sl_ticks
+            return "SL", bar.ts, active_sl_ticks, "taker"
         if (not be_armed) and be_trigger_distance > 0:
             if setup.side == Side.BUY:
                 trigger_hit = high_ticks >= int(fill_ticks + be_trigger_distance)
@@ -2656,11 +2826,11 @@ def _exit_result(
             else:
                 active_sl_ticks = min(active_sl_ticks, int(low_ticks + trail_offset))
         if time_stop_deadline is not None and bar.ts >= time_stop_deadline:
-            return "EXIT", bar.ts, price_to_ticks(float(bar.close), tick_size)
+            return "EXIT", bar.ts, price_to_ticks(float(bar.close), tick_size), "taker"
     if not bars:
-        return "EXIT", fill_ts, int(fill_ticks)
+        return "EXIT", fill_ts, int(fill_ticks), "taker"
     last = bars[-1]
-    return "EXIT", last.ts, price_to_ticks(float(last.close), tick_size)
+    return "EXIT", last.ts, price_to_ticks(float(last.close), tick_size), "taker"
 
 
 def _simulate_setup(
@@ -2671,6 +2841,7 @@ def _simulate_setup(
     m5_rows: list[Candle],
     m5_timestamps: list[datetime] | None = None,
     tick_size: float,
+    tick_value: float | None = None,
     calendar: MarketCalendar,
     costs: CostAssumptions,
     limit_entry_improve_ticks: int = 0,
@@ -2728,7 +2899,7 @@ def _simulate_setup(
             exit_ticks=None,
             qty_lots=qty_lots,
         )
-    fill_ts, fill_ticks = fill
+    fill_ts, fill_ticks, entry_execution_style = fill
     raw_time_stop_minutes = setup.entry_order.meta.get("time_stop_minutes")
     try:
         setup_time_stop_minutes = max(int(raw_time_stop_minutes), 0) if raw_time_stop_minutes is not None else 0
@@ -2757,7 +2928,7 @@ def _simulate_setup(
     fill_idx = bisect_right(m5_timestamps, fill_ts, lo=start_idx)
     exit_end_idx = bisect_right(m5_timestamps, horizon_deadline, lo=fill_idx)
     exit_bars = m5_rows[fill_idx:exit_end_idx]
-    outcome, exit_ts, exit_ticks = _exit_result(
+    outcome, exit_ts, exit_ticks, exit_execution_style = _exit_result(
         setup=setup,
         bars=exit_bars,
         tick_size=tick_size,
@@ -2782,7 +2953,22 @@ def _simulate_setup(
         outcome_cost_mult = max(float(sl_cost_mult), 0.0)
     else:
         outcome_cost_mult = max(float(exit_cost_mult), 0.0)
-    effective_cost_ticks = float(costs.round_trip_ticks) * float(outcome_cost_mult)
+    resolved_tick_value = max(float(tick_value or 0.0), 0.0)
+    if _real_fee_model_enabled(costs) and resolved_tick_value > 0.0:
+        impact_cost_ticks = float(costs.round_trip_impact_ticks) * float(outcome_cost_mult)
+        impact_cost_money = float(impact_cost_ticks) * float(resolved_tick_value)
+        fee_cost_money = _round_trip_fee_money_per_lot(
+            instrument_id=str(instrument_id),
+            entry_ticks=int(fill_ticks),
+            entry_execution_style=entry_execution_style,
+            exit_ticks=int(exit_ticks),
+            exit_execution_style=exit_execution_style,
+            tick_value=float(resolved_tick_value),
+            costs=costs,
+        )
+        effective_cost_ticks = float((impact_cost_money + fee_cost_money) / float(resolved_tick_value))
+    else:
+        effective_cost_ticks = float(costs.round_trip_ticks) * float(outcome_cost_mult)
     net_ticks = gross_ticks - effective_cost_ticks
     return SetupResult(
         instrument_id=instrument_id,
@@ -3817,6 +4003,7 @@ def _evaluate_window(
                         m5_rows=m5_rows,
                         m5_timestamps=m5_timestamps,
                         tick_size=tick_size,
+                        tick_value=_resolve_instrument_tick_value(str(report_instrument_id), tick_values),
                         calendar=calendar,
                         costs=effective_costs,
                         limit_entry_improve_ticks=limit_entry_improve_ticks,
@@ -4091,6 +4278,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
     risk_profile = getattr(settings, "risk_profile", None)
     account_equity = _coerce_metric_float(getattr(risk_profile, "account_equity", None))
     default_target_risk_pct = _coerce_metric_float(getattr(risk_profile, "max_risk_per_trade_pct", None))
+    default_target_risk_money = _coerce_metric_float(getattr(risk_profile, "max_risk_per_trade_money", None))
     try:
         default_max_contracts = max(int(getattr(risk_profile, "max_contracts_per_instrument", 1)), 1)
     except (TypeError, ValueError):
@@ -4100,6 +4288,11 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         max(float(args.position_sizing_risk_pct), 0.0)
         if args.position_sizing_risk_pct is not None
         else (float(default_target_risk_pct) if default_target_risk_pct is not None else None)
+    )
+    position_sizing_target_risk_money = (
+        max(float(args.position_sizing_risk_money), 0.0)
+        if args.position_sizing_risk_money is not None
+        else (float(default_target_risk_money) if default_target_risk_money is not None else None)
     )
     position_sizing_max_contracts = (
         max(int(args.position_sizing_max_contracts), 1)
@@ -4111,6 +4304,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         account_equity=account_equity,
         target_risk_pct=position_sizing_target_risk_pct,
         max_contracts_per_instrument=position_sizing_max_contracts,
+        target_risk_money=position_sizing_target_risk_money,
     )
 
     start_date = _parse_iso_date(args.start_date)
@@ -4257,6 +4451,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         commission_ticks_per_side=float(args.commission_ticks_per_side),
         slippage_ticks_per_side=float(args.slippage_ticks_per_side),
         spread_half_ticks=float(args.spread_half_ticks),
+        commission_model=_normalize_commission_model(args.commission_model),
+        broker_fee_rub_per_order_per_lot=float(args.broker_fee_rub_per_order_per_lot),
     )
     cost_stress_mult = max(float(args.cost_stress_mult), 1e-9)
     stressed_base_costs = _apply_cost_stress(costs, cost_stress_mult)
@@ -4965,6 +5161,11 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 if position_sizing.target_risk_pct is not None
                 else None
             ),
+            "target_risk_money": (
+                float(position_sizing.target_risk_money)
+                if position_sizing.target_risk_money is not None
+                else None
+            ),
             "max_contracts_per_instrument": int(position_sizing.max_contracts_per_instrument),
         },
         "cache": {
@@ -5000,6 +5201,11 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 "target_risk_pct": (
                     float(position_sizing.target_risk_pct)
                     if position_sizing.target_risk_pct is not None
+                    else None
+                ),
+                "target_risk_money": (
+                    float(position_sizing.target_risk_money)
+                    if position_sizing.target_risk_money is not None
                     else None
                 ),
                 "max_contracts_per_instrument": int(position_sizing.max_contracts_per_instrument),
@@ -5314,6 +5520,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--slippage-ticks-per-side", type=float, default=1.0)
     parser.add_argument("--spread-half-ticks", type=float, default=1.0)
     parser.add_argument(
+        "--commission-model",
+        type=str,
+        default="legacy_ticks",
+        choices=sorted(COMMISSION_MODELS),
+    )
+    parser.add_argument("--broker-fee-rub-per-order-per-lot", type=float, default=0.45)
+    parser.add_argument(
         "--cost-stress-mult",
         type=float,
         default=1.0,
@@ -5323,8 +5536,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--position-sizing-mode",
         type=str,
         default="fixed_lots",
-        choices=["fixed_lots", "target_risk_pct"],
-        help="Position sizing for money metrics and selection. fixed_lots keeps setup qty; target_risk_pct sizes by risk budget.",
+        choices=["fixed_lots", "target_risk_pct", "target_risk_money"],
+        help="Position sizing for money metrics and selection. fixed_lots keeps setup qty; target_risk_pct sizes by percent of equity; target_risk_money sizes by absolute money budget.",
     )
     parser.add_argument(
         "--position-sizing-risk-pct",
@@ -5333,10 +5546,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Per-trade risk budget as percent of account equity when position-sizing-mode=target_risk_pct.",
     )
     parser.add_argument(
+        "--position-sizing-risk-money",
+        type=float,
+        default=None,
+        help="Per-trade risk budget in account currency when position-sizing-mode=target_risk_money.",
+    )
+    parser.add_argument(
         "--position-sizing-max-contracts",
         type=int,
         default=None,
-        help="Per-instrument contract cap when position-sizing-mode=target_risk_pct.",
+        help="Legacy per-instrument contract cap. Accepted for backward compatibility but ignored by risk-based sizing.",
     )
     parser.add_argument(
         "--execution-break-even-rr",

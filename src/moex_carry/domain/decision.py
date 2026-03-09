@@ -10,6 +10,7 @@ class RiskProfile:
     account_equity: float
     account_currency: str
     max_risk_per_trade_pct: float
+    max_risk_per_trade_money: float
     max_daily_loss_pct: float
     max_open_risk_pct: float
     max_leverage: float

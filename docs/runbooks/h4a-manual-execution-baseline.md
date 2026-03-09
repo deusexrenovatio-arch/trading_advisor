@@ -21,6 +21,28 @@ Operator contract for the current morning-plan intraday futures execution baseli
 | Break-even arming | `break_even_rr=0.1`, `buffer=2` ticks | Once price moves `0.1R` in favor, move stop to `fill + 2 ticks` for BUY or `fill - 2 ticks` for SELL. |
 | Trailing | `trail_activation_rr=0.1`, `offset=2` ticks | After `0.1R` favorable move, trail the active stop `2` ticks behind the best favorable price. |
 | Time stop | `180` minutes from fill | Close the position no later than `180` minutes after actual fill if neither TP nor stop has closed it earlier. |
+| Position sizing | `20_000 RUB` per trade, risk-only cap | Before sending the order, estimate `risk_money_per_lot = (effective stop distance + modeled round-trip cost) * tick_value` and set `qty = max(1, floor(20_000 / risk_money_per_lot))`. If one contract alone is above `20_000 RUB`, keep `1` lot and log the granularity exception. |
+
+## Fee Model
+- Broker fee: every executed order costs `0.45 RUB` per contract.
+- Additional broker fee: none.
+- Exchange fee: applied only to market or taker execution; passive limit or maker execution pays `0`.
+- For H4A this means:
+  - LIMIT entry filled passively: broker fee only.
+  - LIMIT fallback to market: broker fee plus exchange taker fee.
+  - STOP entry or STOP loss: broker fee plus exchange taker fee.
+  - TP LIMIT: broker fee only.
+  - Time-stop or manual close by marketable order: broker fee plus exchange taker fee.
+
+| Futures type | MOEX taker fee |
+| --- | ---: |
+| Currency contracts | `0.00462%` |
+| Interest contracts | `0.01650%` |
+| Stock contracts | `0.01980%` |
+| Index contracts | `0.00660%` |
+| Commodity contracts | `0.01320%` |
+
+- The H4A research/runtime model uses the official MOEX asymmetrical tariff logic: maker exchange fee is `0`, taker exchange fee depends on the contract type table above.
 
 ## Fill-Dependent Recalculation
 - `H4A` uses the actual fill as the anchor.
@@ -56,7 +78,7 @@ Operator contract for the current morning-plan intraday futures execution baseli
 - If precise ordering cannot be reconstructed, record the event as `same_bar_ambiguous` in the operator note and treat post-trade analysis conservatively.
 
 ## Minimum Operator Checklist
-1. Confirm entry corridor and planned quantity before sending the order.
+1. Confirm entry corridor, estimated risk per lot, and planned quantity before sending the order.
 2. Start a `10`-minute timer for every `H4A` LIMIT entry.
 3. If no fill by `10` minutes, replace with a marketable order or abort and log the deviation as `entry_fallback_market` or `manual_override`.
 4. Confirm the fallback decision in Telegram follow-up when the `10`-minute timeout is reached.
@@ -74,6 +96,7 @@ Operator contract for the current morning-plan intraday futures execution baseli
 - `time_stop_180m`
 - `same_bar_ambiguous`
 - `entry_fallback_market`
+- `risk_cap_granularity_exception`
 - `manual_override`
 
 ## Non-Negotiable Constraint

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import statistics
 import subprocess
 import time
@@ -20,6 +21,7 @@ ARTIFACT_DIR = REPO_ROOT / "artifacts" / "research"
 DATE_STAMP = datetime.now(UTC).strftime("%Y%m%d")
 DEFAULT_REFERENCE = o1prog.DEFAULT_REFERENCE
 DEFAULT_OUTPUT = ARTIFACT_DIR / f"wf_goal_v6_h4a_vs_baseline_risk_{DATE_STAMP}.json"
+EXCLUDED_MINI_ROOTS = frozenset({"BM", "GN", "NR", "RM", "S1"})
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,32 @@ def _sample_quantile(values: list[float], q: float) -> float:
     return float(ordered[low] + (ordered[high] - ordered[low]) * frac)
 
 
+def instrument_root(instrument_id: str) -> str:
+    token = str(instrument_id or "").strip().upper()
+    matched = re.match(r"^([A-Z0-9]+?)[FGHJKMNQUVXZ]\d$", token)
+    if matched:
+        return str(matched.group(1)).upper()
+    return token
+
+
+def is_excluded_mini_instrument(instrument_id: str) -> bool:
+    return instrument_root(instrument_id) in EXCLUDED_MINI_ROOTS
+
+
+def filter_no_mini_report(report: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(report)
+    planned_rows = []
+    for row in report.get("planned_signals") or []:
+        if is_excluded_mini_instrument(str(row.get("instrument_id") or "")):
+            continue
+        planned_rows.append(dict(row))
+    payload["planned_signals"] = planned_rows
+    payload["universe_policy"] = {
+        "exclude_mini_roots": sorted(EXCLUDED_MINI_ROOTS),
+    }
+    return payload
+
+
 def _month_keys(start_date: date, end_date: date) -> list[str]:
     year = start_date.year
     month = start_date.month
@@ -95,8 +123,24 @@ def build_command(
     risk_pct: float | None,
     max_contracts: int | None,
 ) -> list[str]:
-    command = o1prog.build_command(reference, execution_overrides)
+    filtered_reference = dict(reference)
+    filtered_reference["instruments"] = [
+        instrument_id
+        for instrument_id in list(reference.get("instruments") or [])
+        if not is_excluded_mini_instrument(str(instrument_id))
+    ]
+    command = o1prog.build_command(filtered_reference, execution_overrides)
     command.extend(["--out-json", str(output_path), "--position-sizing-mode", "target_risk_pct"])
+    command.extend(
+        [
+            "--commission-model",
+            "moex_real_fees",
+            "--broker-fee-rub-per-order-per-lot",
+            "0.45",
+            "--commission-ticks-per-side",
+            "0.0",
+        ]
+    )
     if risk_pct is not None:
         command.extend(["--position-sizing-risk-pct", str(float(risk_pct))])
     if max_contracts is not None:
@@ -144,6 +188,8 @@ def signal_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
         trade_date = str(item.get("trade_date") or "")[:10]
         root = str(item.get("instrument_id") or "").strip().upper()
         if not trade_date or not root:
+            continue
+        if is_excluded_mini_instrument(root):
             continue
         net_money = _float_or_none(item.get("simulated_net_money"))
         gross_money = _float_or_none(item.get("simulated_gross_money"))
@@ -290,8 +336,13 @@ def gate_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def qty_distribution(rows: list[dict[str, Any]], *, max_contracts: int) -> dict[str, Any]:
+def qty_distribution(rows: list[dict[str, Any]], *, max_contracts: int | None = None) -> dict[str, Any]:
     filled_qtys = [int(row["qty_lots"]) for row in rows if bool(row["simulated_filled"])]
+    cap_hit_share = (
+        float(sum(1 for item in filled_qtys if int(item) >= int(max_contracts)) / len(filled_qtys))
+        if filled_qtys and max_contracts is not None and int(max_contracts) > 0
+        else None
+    )
     if not filled_qtys:
         return {
             "filled_trades": 0,
@@ -301,7 +352,7 @@ def qty_distribution(rows: list[dict[str, Any]], *, max_contracts: int) -> dict[
             "p75_qty_lots": 0.0,
             "max_qty_lots": 0,
             "mean_qty_lots": 0.0,
-            "cap_hit_share": 0.0,
+            "cap_hit_share": cap_hit_share,
         }
     return {
         "filled_trades": int(len(filled_qtys)),
@@ -311,7 +362,7 @@ def qty_distribution(rows: list[dict[str, Any]], *, max_contracts: int) -> dict[
         "p75_qty_lots": float(_sample_quantile([float(item) for item in filled_qtys], 0.75)),
         "max_qty_lots": int(max(filled_qtys)),
         "mean_qty_lots": float(statistics.mean(filled_qtys)),
-        "cap_hit_share": float(sum(1 for item in filled_qtys if int(item) >= int(max_contracts)) / len(filled_qtys)),
+        "cap_hit_share": cap_hit_share,
     }
 
 
@@ -457,6 +508,8 @@ def run_analysis(args: argparse.Namespace) -> dict[str, Any]:
             max_contracts=max_contracts,
         )
         report, runtime_seconds = run_report(command)
+        report = filter_no_mini_report(report)
+        write_json(artifact_path, report)
         scenario_reports[scenario.scenario_id] = report
         scenario_rows[scenario.scenario_id] = signal_rows(report)
         scenario_metrics[scenario.scenario_id] = sizing.scenario_metrics(report)

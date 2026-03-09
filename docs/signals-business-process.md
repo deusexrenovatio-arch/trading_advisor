@@ -93,6 +93,7 @@ Decision rule:
 - `O1` is kept only as the reference baseline; live execution must be read as `H4A_CAP_OFF`.
 - Operators must follow [H4A Manual Execution Baseline](runbooks/h4a-manual-execution-baseline.md) whenever the signal is executed as the active morning futures baseline.
 - Additional mandatory actions for `H4A`:
+  - calculate planned `qty_lots` only from the `20_000 RUB` H4A risk budget before sending the order,
   - start a `10`-minute timer on every LIMIT entry and replace the order if it is still not filled,
   - recalculate effective TP and stop from the realized fill,
   - manage break-even and trailing stop updates after fill,

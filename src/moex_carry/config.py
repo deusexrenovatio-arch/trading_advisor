@@ -271,6 +271,7 @@ class RiskProfileConfig(BaseModel):
     account_equity: float = 1_000_000.0
     account_currency: str = "RUB"
     max_risk_per_trade_pct: float = 0.5
+    max_risk_per_trade_money: float = 20_000.0
     max_daily_loss_pct: float = 2.0
     max_open_risk_pct: float = 1.5
     max_leverage: float = 3.0

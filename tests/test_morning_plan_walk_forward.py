@@ -1860,7 +1860,7 @@ def test_build_planned_signal_contains_entry_range_and_levels():
     assert planned.simulated_net_return_on_equity_pct == pytest.approx(10.0)
 
 
-def test_apply_position_sizing_target_risk_pct_uses_tick_value_and_caps_contracts():
+def test_apply_position_sizing_target_risk_pct_ignores_legacy_contract_cap():
     mod = _load_module()
     setup = Setup(
         setup_id="S-SIZE",
@@ -1910,11 +1910,313 @@ def test_apply_position_sizing_target_risk_pct_uses_tick_value_and_caps_contract
             max_contracts_per_instrument=4,
         ),
     )
-    assert sized_setup.entry_order.qty_lots == 4
-    assert sized_setup.sl_order.qty_lots == 4
-    assert sized_setup.tp_order.qty_lots == 4
+    assert sized_setup.entry_order.qty_lots == 5
+    assert sized_setup.sl_order.qty_lots == 5
+    assert sized_setup.tp_order.qty_lots == 5
     assert details["risk_money_per_lot"] == pytest.approx(20.0)
-    assert details["position_risk_money"] == pytest.approx(80.0)
+    assert details["position_risk_money"] == pytest.approx(100.0)
+
+
+def test_apply_position_sizing_target_risk_money_scales_qty_from_absolute_budget():
+    mod = _load_module()
+    setup = Setup(
+        setup_id="S-SIZE-MONEY",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="DAY",
+            meta={"setup_kind": "BOX_BREAKOUT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=98,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=108,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=2,
+    )
+    sized_setup, details = mod._apply_position_sizing(
+        setup=setup,
+        instrument_id="BRH6",
+        tick_values={"BRH6": 10.0},
+        costs=mod.CostAssumptions(
+            commission_ticks_per_side=0.0,
+            slippage_ticks_per_side=0.0,
+            spread_half_ticks=0.0,
+        ),
+        position_sizing=mod.PositionSizingConfig(
+            mode="target_risk_money",
+            account_equity=1_000.0,
+            target_risk_pct=None,
+            max_contracts_per_instrument=2,
+            target_risk_money=75.0,
+        ),
+    )
+    assert sized_setup.entry_order.qty_lots == 3
+    assert sized_setup.sl_order.qty_lots == 3
+    assert sized_setup.tp_order.qty_lots == 3
+    assert details["risk_budget_money"] == pytest.approx(75.0)
+    assert details["risk_money_per_lot"] == pytest.approx(20.0)
+    assert details["position_risk_money"] == pytest.approx(60.0)
+
+
+def test_apply_position_sizing_target_risk_money_keeps_one_lot_when_budget_is_below_one_contract():
+    mod = _load_module()
+    setup = Setup(
+        setup_id="S-SIZE-MONEY-FLOOR",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="DAY",
+            meta={"setup_kind": "BOX_BREAKOUT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=98,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=108,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=2,
+    )
+    sized_setup, details = mod._apply_position_sizing(
+        setup=setup,
+        instrument_id="BRH6",
+        tick_values={"BRH6": 10.0},
+        costs=mod.CostAssumptions(
+            commission_ticks_per_side=0.0,
+            slippage_ticks_per_side=0.0,
+            spread_half_ticks=0.0,
+        ),
+        position_sizing=mod.PositionSizingConfig(
+            mode="target_risk_money",
+            account_equity=1_000.0,
+            target_risk_pct=None,
+            max_contracts_per_instrument=1,
+            target_risk_money=10.0,
+        ),
+    )
+    assert sized_setup.entry_order.qty_lots == 1
+    assert details["risk_budget_money"] == pytest.approx(10.0)
+    assert details["risk_money_per_lot"] == pytest.approx(20.0)
+    assert details["position_risk_money"] == pytest.approx(20.0)
+
+
+def test_apply_position_sizing_real_fee_model_includes_broker_and_taker_exchange_fee():
+    mod = _load_module()
+    setup = Setup(
+        setup_id="S-SIZE-REAL-FEES",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="DAY",
+            meta={"setup_kind": "BOX_BREAKOUT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=98,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=108,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=2,
+    )
+    sized_setup, details = mod._apply_position_sizing(
+        setup=setup,
+        instrument_id="BRH6",
+        tick_values={"BRH6": 10.0},
+        costs=mod.CostAssumptions(
+            commission_ticks_per_side=0.0,
+            slippage_ticks_per_side=0.0,
+            spread_half_ticks=0.0,
+            commission_model="moex_real_fees",
+            broker_fee_rub_per_order_per_lot=0.45,
+        ),
+        position_sizing=mod.PositionSizingConfig(
+            mode="target_risk_money",
+            account_equity=1_000.0,
+            target_risk_pct=None,
+            max_contracts_per_instrument=1,
+            target_risk_money=63.0,
+        ),
+    )
+    assert sized_setup.entry_order.qty_lots == 2
+    assert details["risk_money_per_lot"] == pytest.approx(21.02936)
+    assert details["position_risk_money"] == pytest.approx(42.05872)
+
+
+def test_simulate_setup_real_fee_model_counts_only_broker_fee_for_maker_entry_and_tp():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 23, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S-REAL-FEE-TP",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=15),
+            meta={"setup_kind": "PULLBACK_LIMIT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=105,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    rows = [
+        Candle(ts=as_of + timedelta(minutes=5), open=101.0, high=101.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=106.0, low=100.0, close=105.0, volume=12.0),
+    ]
+    result = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=rows,
+        tick_size=1.0,
+        tick_value=10.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(
+            commission_ticks_per_side=0.0,
+            slippage_ticks_per_side=0.0,
+            spread_half_ticks=0.0,
+            commission_model="moex_real_fees",
+            broker_fee_rub_per_order_per_lot=0.45,
+        ),
+    )
+    assert result.filled is True
+    assert result.outcome == "TP"
+    assert result.gross_ticks == pytest.approx(5.0)
+    assert result.cost_ticks == pytest.approx(0.09)
+    assert result.net_ticks == pytest.approx(4.91)
+
+
+def test_simulate_setup_real_fee_model_counts_broker_and_exchange_fee_for_taker_entry_and_sl():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 23, 10, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S-REAL-FEE-SL",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="GTT",
+            expire_ts=as_of + timedelta(minutes=15),
+            meta={"setup_kind": "BOX_BREAKOUT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=110,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    rows = [
+        Candle(ts=as_of + timedelta(minutes=5), open=99.0, high=100.0, low=99.0, close=100.0, volume=10.0),
+        Candle(ts=as_of + timedelta(minutes=10), open=100.0, high=101.0, low=94.0, close=95.0, volume=12.0),
+    ]
+    result = mod._simulate_setup(
+        instrument_id="BRH6",
+        as_of_ts=as_of,
+        setup=setup,
+        m5_rows=rows,
+        tick_size=1.0,
+        tick_value=10.0,
+        calendar=_calendar(),
+        costs=mod.CostAssumptions(
+            commission_ticks_per_side=0.0,
+            slippage_ticks_per_side=0.0,
+            spread_half_ticks=0.0,
+            commission_model="moex_real_fees",
+            broker_fee_rub_per_order_per_lot=0.45,
+        ),
+    )
+    assert result.filled is True
+    assert result.outcome == "SL"
+    assert result.gross_ticks == pytest.approx(-5.0)
+    assert result.cost_ticks == pytest.approx(0.11574)
+    assert result.net_ticks == pytest.approx(-5.11574)
 
 
 def test_build_planned_signal_scales_money_by_simulated_qty_and_exposes_sizing():

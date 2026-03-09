@@ -13,6 +13,7 @@ analysis_module = importlib.import_module("run_h4a_vs_baseline_risk")
 _bucket_stats = analysis_module._bucket_stats
 classify_signal_row = analysis_module.classify_signal_row
 execution_delta = analysis_module.execution_delta
+filter_no_mini_report = analysis_module.filter_no_mini_report
 
 
 def test_execution_delta_keeps_only_changed_keys() -> None:
@@ -75,3 +76,19 @@ def test_bucket_stats_tracks_fill_and_money_breakdown() -> None:
     assert stats["net_money_sum"] == 90.0
     assert stats["expectancy_net_money"] == 45.0
     assert stats["avg_qty_lots"] == 1.5
+
+
+def test_filter_no_mini_report_removes_excluded_mini_roots_from_planned_signals() -> None:
+    report = {
+        "planned_signals": [
+            {"instrument_id": "BR", "trade_date": "2026-02-01"},
+            {"instrument_id": "NR", "trade_date": "2026-02-01"},
+            {"instrument_id": "S1", "trade_date": "2026-02-02"},
+            {"instrument_id": "RI", "trade_date": "2026-02-02"},
+        ]
+    }
+
+    filtered = filter_no_mini_report(report)
+
+    assert [row["instrument_id"] for row in filtered["planned_signals"]] == ["BR", "RI"]
+    assert filtered["universe_policy"]["exclude_mini_roots"] == ["BM", "GN", "NR", "RM", "S1"]

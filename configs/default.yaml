@@ -207,6 +207,7 @@ risk_profile:
   account_equity: 1000000
   account_currency: "RUB"
   max_risk_per_trade_pct: 0.5
+  max_risk_per_trade_money: 20000
   max_daily_loss_pct: 2.0
   max_open_risk_pct: 1.5
   max_leverage: 3
