@@ -20,6 +20,7 @@ if str(REPO_SRC) not in sys.path:
     sys.path.insert(0, str(REPO_SRC))
 
 from context_router import route_files
+from moex_carry.governance.process_reports import ROLLING_WINDOW_SIZE
 
 
 TERMINAL_OUTCOME_STATUSES = {"completed", "partial", "blocked"}
@@ -55,23 +56,8 @@ ALLOWED_IMPROVEMENT_ACTIONS = {
     "workflow",
     "test",
 }
-ROLLING_WINDOW_SIZE = 20
 TASK_OUTCOMES_REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 MARKDOWN_KEY_RE = re.compile(r"[^a-z0-9]+")
-
-ROLLING_THRESHOLDS = {
-    "decision-quality": {
-        "correct_first_time_pct": ("ge", 0.70),
-    },
-    "context-efficiency": {
-        "start_match_pct": ("ge", 0.75),
-        "context_expansion_rate": ("le", 0.25),
-    },
-    "self-learning": {
-        "repeat_error_rate": ("le", 0.15),
-        "environment_blocker_rate": ("le", 0.20),
-    },
-}
 
 
 def default_process_root() -> Path:
