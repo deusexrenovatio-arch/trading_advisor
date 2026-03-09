@@ -631,7 +631,7 @@ items:
     and keep adapters thin.
   - Some files are unmapped. Classify manually before implementation.
 - task_id: APT-20260309T154838Z-00900cb9
-  closed_at: null
+  closed_at: '2026-03-09T15:49:45Z'
   branch: codex/h4a-live-hardening
   goal_class: ops
   start_primary_context: CTX-OPS
@@ -641,17 +641,17 @@ items:
   - CTX-STRATEGY
   - CTX-API-UI
   - CTX-OPS
-  route_match: pending
+  route_match: matched
   time_to_first_patch_sec: null
   same_path_attempts: 1
-  decision_quality: pending
+  decision_quality: correct_after_replan
   primary_rework_cause: none
   incident_signature: none
   improvement_action: architecture
   improvement_artifact: src/moex_carry/ui/operator_execution_projection.py
   linked_plan_id: P1-H4A-LIVE-062
   linked_memory_id: null
-  outcome_status: in_progress
+  outcome_status: completed
   unmapped_files_count: 0
   intent_sources:
   - session_handoff
