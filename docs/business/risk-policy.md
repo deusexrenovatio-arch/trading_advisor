@@ -13,8 +13,8 @@
 - `score_gate`: quality filter for actionable candidates.
 
 ## Action policy
-- `ack`: records operator awareness; does not alter position balance.
-- `enter|exit|hold_open`: execution-relevant actions.
+- `mark_viewed` (and legacy alias `ack`): records operator awareness only; does not alter position balance.
+- `enter_submitted|enter_filled|entry_cancelled|exit_submitted|exit_filled|manual_override`: execution-relevant actions.
 - `idempotency_key`: mandatory dedup mechanism for repeated requests.
 - `reason_code`: mandatory for policy-driven actions (for example `LEG_IMBALANCE_TIMEOUT`).
 

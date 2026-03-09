@@ -72,7 +72,7 @@
 - US-09 Forward paper daily cycle -> forward-start/forward-status (TC-FWD-API-001, TC-FWD-API-002) + unit tests: tests/test_forward_engine.py.
 - US-10 HPO run + leaderboard -> hpo, hpo-status (TC-HPO-API-001, TC-HPO-API-002, TC-HPO-UNIT-001) + unit tests: tests/hpo/test_folds.py, tests/hpo/test_objective.py, tests/hpo/test_leaderboard.py.
 - US-11 Review decisions with server filters -> decision-view, decision-view-filters (TC-DEC-API-001, TC-DEC-API-005, TC-DEC-UI-001).
-- US-12 Confirm signal usage from Telegram -> signals-ack-execute + signals-active (TC-SIG-ACK-API-001, TC-SIG-ACK-UI-001, TC-SIG-ACT-API-001, TC-TG-UI-001, TC-TG-WRK-001, TC-TG-WRK-004).
+- US-12 Confirm signal review from Telegram -> signals-ack-execute + signals-active (TC-SIG-ACK-API-001, TC-SIG-ACK-UI-001, TC-SIG-ACT-API-001, TC-TG-UI-001, TC-TG-WRK-001, TC-TG-WRK-004, TC-TG-WRK-010, TC-TG-WRK-011).
 - US-13 Morning bot liveness check -> signals-active (TC-TG-UI-002, TC-TG-UI-003, TC-TG-WRK-002, TC-TG-WRK-003).
 - US-14 Complete user-facing flow without hidden gaps -> first-time-right-user-case-gate + signals-active + pretrade-check + signals-execute (TC-FTR-PROC-002, TC-SIG-UI-WORKFLOW-001, TC-PRETRADE-UI-001, TC-SIG-EXEC-UI-001).
 - US-15 Fast convergence to target metrics -> first-time-right-goal-contract-gate + hpo/hpo-status (TC-FTR-PROC-001, TC-HPO-API-001, TC-HPO-API-002).
@@ -320,18 +320,18 @@ Expected:
 - API payload contains `order_id`.
 - `order_id` is identical for both legs, enabling linked two-leg execution tracking.
 
-### TC-SIG-ACK-UI-001 Telegram ACK lifecycle
+### TC-SIG-ACK-UI-001 Telegram review lifecycle
 Acceptance: signals-ack-execute, signals-active
 Automation: manual
 Steps:
 1. Start backend and `telegram_bot` worker.
 2. Send `/start` to bot from whitelisted user.
-3. Wait for a signal message and click `Использовал сигнал`.
+3. Wait for a signal message and click `Mark viewed`.
 4. Open Signals tab in UI and reload data.
 Expected:
-- Signal row shows `signal_used=true`.
-- `signal_details_pending=true` until first `enter/exit` execution is logged for the pair.
-- ACK action does not change open-position balance fields.
+- Signal row shows `signal_viewed=true`.
+- `signal_details_pending=true` until first `enter_filled` or `entry_cancelled` execution is logged for the pair.
+- Review action does not change open-position balance fields.
 
 ### TC-TG-UI-001 Telegram onboarding and access control
 Acceptance: signals-ack-execute
@@ -567,7 +567,7 @@ Acceptance: signals-action-v2
 Automation: scripts/acceptance_check.py (signal_action)
 Request:
 - GET /api/v2/signals/active?limit=5 (resolve `signal_id`)
-- POST /api/v2/signals/{signal_id}/actions (`action=ack`)
+- POST /api/v2/signals/{signal_id}/actions (`action=mark_viewed`)
 Expected:
 - If active rows exist, action request returns HTTP 200 with status `ok` or `duplicate`.
 - Response includes `signal_id`, `entity_ref`, `action`, and `fail_closed`.
@@ -657,14 +657,15 @@ Expected:
 - Dry run returns candidates and counters without persistence.
 - Execute mode creates idempotent `exit` actions for stale leg imbalance candidates.
 
-### TC-SIG-ACK-API-001 Execute ACK endpoint
+### TC-SIG-ACK-API-001 Execute Telegram review compatibility endpoint
 Acceptance: signals-ack-execute
 Automation: scripts/acceptance_check.py (post_json)
 Request:
 - POST /api/signals/execute with `action=ack`
 Expected:
 - 200 OK with JSON response containing `status`.
-- Stored execution row has `action=ack` and default `status=acknowledged` when status is omitted.
+- Compatibility alias is accepted, but canonical stored action is `mark_viewed`.
+- Default stored status is `viewed` when status is omitted.
 
 ### TC-TG-WRK-001 Whitelist registration in worker
 Acceptance: signals-ack-execute
@@ -693,13 +694,13 @@ Expected:
 - Heartbeat message is still sent.
 - Message contains `Backend: ERROR`.
 
-### TC-TG-WRK-004 Expired ACK token is rejected
+### TC-TG-WRK-004 Expired Telegram review token is rejected
 Acceptance: signals-ack-execute
 Automation: tests/test_telegram_worker.py::test_worker_callback_rejects_expired_token
 Request:
 - Process callback with expired `ack:<token>`.
 Expected:
-- No ACK execution call is sent to backend.
+- No review execution call is sent to backend.
 - Callback token is removed from worker state and user receives rejection notice.
 
 ### TC-TG-WRK-005 Worker deduplicates stable enter fingerprint
@@ -741,10 +742,28 @@ Expected:
 Acceptance: signals-actionability
 Automation: tests/test_telegram_worker.py::test_worker_callback_marks_stale_intent_and_drops_token
 Request:
-- Process callback where backend rejects ACK with `message=intent_superseded_or_stale`.
+- Process callback where backend rejects `mark_viewed` with `message=intent_superseded_or_stale`.
 Expected:
 - Token is removed from pending callbacks.
 - User receives explicit stale-intent hint instead of generic failure.
+
+### TC-TG-WRK-010 Telegram H4A follow-up broadcasts post-fill stages
+Acceptance: signals-actionability
+Automation: tests/test_telegram_worker.py::test_worker_sends_post_fill_break_even_and_time_stop_followups
+Request:
+- Return one `enter_filled` H4A row with post-fill packet, break-even/trailing trigger, and time-stop reminder due.
+Expected:
+- Worker sends dedicated follow-up messages for post-fill packet, break-even/trailing, and time stop.
+- Each follow-up message exposes `Confirm` and `Manual override` callbacks.
+
+### TC-TG-WRK-011 Telegram H4A follow-up confirmation is persisted without lifecycle drift
+Acceptance: signals-actionability
+Automation: tests/test_telegram_worker.py::test_worker_callback_confirm_followup_posts_stage_payload
+Request:
+- Process callback `act:confirm_followup:<token>` for an H4A follow-up stage.
+Expected:
+- Backend receives `action=confirm_followup` with `h4a_stage`.
+- Operator status remains on the current execution lifecycle and does not regress to entry-consumption semantics.
 
 ### TC-SIG-ACT-API-004 v2 active row exposes delivery contract fields
 Acceptance: signals-active
@@ -1107,7 +1126,7 @@ Expected:
 Preconditions:
 - At least one row from `/api/v2/pairs/actionability`.
 Steps:
-1. POST `/api/v2/pairs/{pair_id}/actions` with `action=ack`, fixed `idempotency_key`.
+1. POST `/api/v2/pairs/{pair_id}/actions` with `action=mark_viewed`, fixed `idempotency_key`.
 2. Repeat same request with same key.
 Expected:
 - First response `status=ok`.
@@ -1184,28 +1203,28 @@ Expected:
 - Row contains open-position overlay (`hold_open` semantics via axes/flags).
 - Fresh enter intent remains visible and traceable (not silently suppressed by hold state).
 
-### TC-ENTITY-ACT-API-007 ACK consumes intent without changing position state
-Automation: tests/test_api_v2.py::test_v2_pair_actions_reject_stale_intent_id
+### TC-ENTITY-ACT-API-007 mark_viewed keeps intent actionable without changing position state
+Automation: tests/test_api_v2.py::test_v2_pair_ack_alias_marks_signal_as_viewed_without_consuming_intent
 Preconditions:
 - Active entity intent exists and position is flat.
 Steps:
-1. POST `/api/v2/entities/{entity_type}/{entity_id}/signals/actions` with `action=ack`.
+1. POST `/api/v2/entities/{entity_type}/{entity_id}/signals/actions` with `action=mark_viewed`.
 2. GET `/api/v2/signals/actionability` for same entity.
 Expected:
-- Intent state becomes `consumed`.
+- Intent state becomes `viewed`.
 - Position state remains `flat`.
-- Delivery is suppressed with consumed reason for this intent.
+- Delivery remains allowed while the intent is still executable.
 
 ### TC-ENTITY-ACT-API-008 Instrument action resolves to pair context
 Automation: tests/test_api_v2.py::test_v2_instrument_actions_resolve_pair_context_and_store_execution
 Preconditions:
 - Instrument appears in `/api/v2/signals/actionability?entity_type=instrument`.
 Steps:
-1. POST `/api/v2/entities/instrument/{entity_id}/signals/actions` with `action=ack` and matching `intent_id`.
+1. POST `/api/v2/entities/instrument/{entity_id}/signals/actions` with `action=mark_viewed` and matching `intent_id`.
 Expected:
 - Response status `ok`.
 - Response keeps `entity_ref.entity_type=instrument` and includes resolved `pair_ref`/`pair_id`.
-- Execution is stored against resolved pair ledger.
+- Execution is stored against resolved pair ledger as canonical `mark_viewed`.
 
 ### TC-ENTITY-ACT-API-009 Ambiguous instrument requires explicit pair hint
 Automation: tests/test_api_v2.py::test_v2_instrument_actions_require_pair_hint_when_ambiguous
