@@ -14,6 +14,18 @@ decisions:
       - scripts/validate_process_regressions.py
       - plans/PLANS.yaml
       - docs/runbooks/governance-remediation.md
+  - id: ADM-2026-03-09-096
+    date: 2026-03-09
+    title: "Reprice frozen H4A review artifacts with real maker-taker commissions when local full replay is blocked"
+    context: "User asked to replace abstract H4A commissions with the real broker contract (`0.45 RUB` per executed order per lot) plus MOEX maker-taker exchange fees by futures type, and to stop leaking mini roots into H4A review outputs. The walk-forward runtime was updated for a real fee mode, but a local full `run_h4a_vs_baseline_risk.py` replay still hit the existing `front_selector_empty` environment blocker."
+    decision: "Keep the real commission model in walk-forward for future exact reruns, add the official MOEX taker-fee table and no-mini policy to operator/docs, and make `run_h4a_contract_sizing_review.py` reprice the frozen H4A source artifact with real commissions plus default mini exclusion before resizing quantity. Treat filled `LIMIT` entries as maker unless the frozen artifact timing implies the documented market fallback, and treat filled `STOP_LIMIT` entries as maker at planned entry ticks when the source artifact lacks fallback detail."
+    impact: "The no-mini H4A comparison now preserves trade count while lowering net revenue under real fees: fixed-lot H4A moves from `51.7k RUB` to `48.4k RUB`, risk-only `20_000 RUB` sizing moves from `1.366m RUB` to `1.120m RUB`, fill rate stays `0.8426`, and net win rate moves from `0.9444` to `0.9293`. The review path is now explicit about both the maker-taker tariff contract and the frozen-artifact inference boundary."
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_h4a_contract_sizing_review.py
+      - scripts/run_h4a_vs_baseline_risk.py
+      - artifacts/research/wf_goal_v6_h4a_contract_sizing_20000_risk_only_20260309.json
+      - docs/runbooks/h4a-manual-execution-baseline.md
   - id: ADM-2026-03-09-094
     date: 2026-03-09
     title: Use Telegram follow-up confirmations as the H4A baseline guard instead of implicit ACK semantics
