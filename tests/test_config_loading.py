@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import moex_carry.config as config_module
-from moex_carry.config import load_settings
+from moex_carry.config import SignalEngineMorningExecutionConfig, load_settings
 
 
 def _write_yaml(path: Path, payload: str) -> None:
@@ -152,3 +152,24 @@ signal_engine:
     assert settings.signal_engine.morning_plan.news_gate.lookback_minutes == 240
     assert settings.signal_engine.morning_plan.news_gate.reduce_max_setups == 1
     assert settings.signal_engine.morning_plan.news_gate.commodity_map["BR"] == "BRN"
+
+
+def test_signal_engine_morning_execution_defaults_preserve_o1_baseline():
+    cfg = SignalEngineMorningExecutionConfig()
+
+    assert cfg.break_even_rr == 0.1
+    assert cfg.break_even_buffer_ticks == 2
+    assert cfg.tp_rr == 0.6
+    assert cfg.sl_rr == 2.5
+    assert cfg.max_holding_minutes == 180
+    assert cfg.max_profit_rr == 0.3
+    assert cfg.max_profit_ticks == 0
+    assert cfg.trail_activation_rr == 0.1
+    assert cfg.trail_offset_ticks == 2
+    assert cfg.same_bar_policy == "open_direction"
+    assert cfg.limit_entry_improve_ticks == 1
+    assert cfg.limit_fallback_to_market_minutes == 10
+    assert cfg.limit_fallback_slip_ticks == 1
+    assert cfg.tp_cost_mult == 0.2
+    assert cfg.sl_cost_mult == 0.7
+    assert cfg.exit_cost_mult == 0.4
