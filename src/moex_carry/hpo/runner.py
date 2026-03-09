@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -38,6 +39,9 @@ def run_hpo(
     random_seed: int | None = None,
     evaluation_mode: EvaluationMode = "CONTINUOUS",
     precompute: bool | None = None,
+    parallel_fold_workers: int = 1,
+    max_fold_evaluations_per_trial: int = 0,
+    refit_top_n_full_folds: int = 0,
     backtest_runner: BacktestRunner | None = None,
 ) -> HpoResult:
     rng = random.Random(random_seed)
@@ -45,11 +49,17 @@ def run_hpo(
     if backtest_runner is None:
         backtest_runner = _default_backtest_runner
     trials: list[TrialResult] = []
+    trial_cache: dict[str, TrialResult] = {}
     for _ in range(max_trials):
         if algorithm == "TPE":
             params = sample_tpe(space, trials, rng, mode=objective.mode)
         else:
             params = sample_random(space, rng)
+        params_sig = _params_signature(params)
+        cached_trial = trial_cache.get(params_sig)
+        if cached_trial is not None:
+            trials.append(cached_trial)
+            continue
         trial = _evaluate_trial(
             base_request=base_request,
             params=params,
@@ -58,12 +68,43 @@ def run_hpo(
             objective=objective,
             aggregation=aggregation,
             evaluation_mode=evaluation_mode,
+            max_fold_evaluations=max_fold_evaluations_per_trial,
+            parallel_fold_workers=parallel_fold_workers,
             precompute=precompute,
             backtest_runner=backtest_runner,
         )
+        trial_cache[params_sig] = trial
         trials.append(trial)
-    return HpoResult(trials=trials, mode=str(objective.mode).lower())
 
+    refit_top_n = max(int(refit_top_n_full_folds), 0)
+    if refit_top_n > 0 and int(max_fold_evaluations_per_trial) > 0 and trials:
+        mode = str(objective.mode).lower()
+        reverse = mode != "min"
+        ranked_sigs = sorted(
+            trial_cache.items(),
+            key=lambda item: float(item[1].objective),
+            reverse=reverse,
+        )
+        top_sigs = [sig for sig, _trial in ranked_sigs[:refit_top_n]]
+        for sig in top_sigs:
+            params = trial_cache[sig].params
+            full_trial = _evaluate_trial(
+                base_request=base_request,
+                params=params,
+                folds=folds,
+                data_dir=data_dir,
+                objective=objective,
+                aggregation=aggregation,
+                evaluation_mode=evaluation_mode,
+                max_fold_evaluations=0,
+                parallel_fold_workers=parallel_fold_workers,
+                precompute=precompute,
+                backtest_runner=backtest_runner,
+            )
+            trial_cache[sig] = full_trial
+        trials = [trial_cache.get(_params_signature(trial.params), trial) for trial in trials]
+
+    return HpoResult(trials=trials, mode=str(objective.mode).lower())
 
 def _default_backtest_runner(request: BacktestRequest, data_dir: Path, precompute: bool | None) -> Any:
     return run_backtest_v2_cached(
@@ -81,27 +122,54 @@ def _evaluate_trial(
     folds: list[WalkForwardFold],
     data_dir: Path,
     objective: ObjectiveConfig,
-    aggregation: AggregationMode,
-    evaluation_mode: EvaluationMode,
-    precompute: bool | None,
-    backtest_runner: BacktestRunner,
+    aggregation: AggregationMode = "median",
+    evaluation_mode: EvaluationMode = "CONTINUOUS",
+    max_fold_evaluations: int = 0,
+    parallel_fold_workers: int = 1,
+    precompute: bool | None = None,
+    backtest_runner: BacktestRunner = _default_backtest_runner,
 ) -> TrialResult:
     request = _apply_params(base_request, params)
     evaluation_scope = _objective_scope(objective)
+    eval_folds = _select_fold_subset(folds, max_fold_evaluations)
+    worker_count = max(int(parallel_fold_workers), 1)
+
     fold_results: list[FoldResult] = []
     fold_objectives: list[float] = []
-    for fold in folds:
-        result = _evaluate_fold(
-            request=request,
-            fold=fold,
-            data_dir=data_dir,
-            objective=objective,
-            evaluation_mode=evaluation_mode,
-            precompute=precompute,
-            backtest_runner=backtest_runner,
-        )
-        fold_results.append(result)
-        fold_objectives.append(result.val_objective)
+    if worker_count <= 1 or len(eval_folds) <= 1:
+        for fold in eval_folds:
+            result = _evaluate_fold(
+                request=request,
+                fold=fold,
+                data_dir=data_dir,
+                objective=objective,
+                evaluation_mode=evaluation_mode,
+                precompute=precompute,
+                backtest_runner=backtest_runner,
+            )
+            fold_results.append(result)
+            fold_objectives.append(result.val_objective)
+    else:
+        ordered: list[FoldResult | None] = [None] * len(eval_folds)
+        with ThreadPoolExecutor(max_workers=min(worker_count, len(eval_folds))) as pool:
+            future_to_idx = {
+                pool.submit(
+                    _evaluate_fold,
+                    request=request,
+                    fold=fold,
+                    data_dir=data_dir,
+                    objective=objective,
+                    evaluation_mode=evaluation_mode,
+                    precompute=precompute,
+                    backtest_runner=backtest_runner,
+                ): idx
+                for idx, fold in enumerate(eval_folds)
+            }
+            for future in as_completed(future_to_idx):
+                ordered[future_to_idx[future]] = future.result()
+        fold_results = [item for item in ordered if item is not None]
+        fold_objectives = [item.val_objective for item in fold_results]
+
     aggregated = aggregate_objectives(fold_objectives, aggregation, objective_mode=objective.mode)
     negative_stats = _negative_fold_stats(fold_results=fold_results, objective=objective)
     negative_penalty = float(objective.lambda_negative_folds) * float(negative_stats["negative_share"])
@@ -129,6 +197,9 @@ def _evaluate_trial(
             "negative_fold_threshold": float(objective.negative_fold_threshold),
             "negative_fold_penalty": float(negative_penalty),
             "hard_negative_gate_pass": 1.0 if hard_negative_gate_pass else 0.0,
+            "folds_total": float(len(folds)),
+            "folds_evaluated": float(len(fold_results)),
+            "is_partial_fold_eval": 1.0 if len(fold_results) < len(folds) else 0.0,
         }
     )
     return TrialResult(
@@ -139,7 +210,6 @@ def _evaluate_trial(
         evaluation_scope=evaluation_scope,
         objective_breakdown=objective_breakdown,
     )
-
 
 def _evaluate_fold(
     *,
@@ -308,6 +378,45 @@ def _set_nested(target: dict[str, Any], path: list[str], value: Any) -> None:
         target[key] = {}
     _set_nested(target[key], path[1:], value)
 
+
+
+def _params_signature(params: Mapping[str, Any]) -> str:
+    normalized = {str(key): params[key] for key in sorted(params.keys())}
+    return str(normalized)
+
+
+def _select_fold_subset(folds: list[WalkForwardFold], max_fold_evaluations: int) -> list[WalkForwardFold]:
+    if not folds:
+        return []
+    limit = max(int(max_fold_evaluations), 0)
+    if limit <= 0 or limit >= len(folds):
+        return list(folds)
+    if limit == 1:
+        return [folds[-1]]
+    if limit == 2:
+        return [folds[0], folds[-1]]
+
+    last_idx = len(folds) - 1
+    selected = {0, last_idx}
+    middle_slots = limit - 2
+    if middle_slots > 0 and last_idx > 1:
+        for slot in range(1, middle_slots + 1):
+            ratio = slot / float(middle_slots + 1)
+            idx = int(round(ratio * last_idx))
+            idx = min(max(idx, 1), max(last_idx - 1, 1))
+            selected.add(idx)
+    ordered_idx = sorted(selected)
+    if len(ordered_idx) > limit:
+        ordered_idx = ordered_idx[:limit]
+    while len(ordered_idx) < limit:
+        for idx in range(last_idx + 1):
+            if idx not in selected:
+                ordered_idx.append(idx)
+                selected.add(idx)
+                if len(ordered_idx) >= limit:
+                    break
+    ordered_idx = sorted(ordered_idx[:limit])
+    return [folds[idx] for idx in ordered_idx]
 
 def _objective_scope(objective: ObjectiveConfig) -> str:
     return str(objective.scope or "PORTFOLIO").upper()

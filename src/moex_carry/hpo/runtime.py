@@ -14,7 +14,7 @@ from moex_carry.contracts.strategy_test import HpoRequest
 from moex_carry.data.history_store import HistoryDataStore
 from moex_carry.hpo.folds import build_walk_forward_folds
 from moex_carry.hpo.objective import ObjectiveConfig, invalid_objective
-from moex_carry.hpo.runner import _apply_params, _default_backtest_runner, _evaluate_trial
+from moex_carry.hpo.runner import _apply_params, _default_backtest_runner, _evaluate_trial, _params_signature
 from moex_carry.hpo.search_space import parse_search_space, sample_random, sample_tpe
 from moex_carry.hpo.types import AggregationMode, EvaluationMode, HpoResult, TrialResult
 
@@ -474,6 +474,9 @@ def start_hpo_run(
     evaluation_mode = str(request.optimization.evaluation_mode or DEFAULT_EVALUATION).upper()
     if evaluation_mode not in {"CONTINUOUS", "WARMUP_THEN_FLAT"}:
         evaluation_mode = DEFAULT_EVALUATION
+    parallel_fold_workers = max(int(request.optimization.parallel_fold_workers or 1), 1)
+    max_fold_evaluations_per_trial = max(int(request.optimization.max_fold_evaluations_per_trial or 0), 0)
+    refit_top_n_full_folds = max(int(request.optimization.refit_top_n_full_folds or 0), 0)
 
     status_payload = {
         "run_id": run_id,
@@ -497,6 +500,9 @@ def start_hpo_run(
         "aggregation": aggregation,
         "evaluation_mode": evaluation_mode,
         "precompute": precompute,
+        "parallel_fold_workers": parallel_fold_workers,
+        "max_fold_evaluations_per_trial": max_fold_evaluations_per_trial,
+        "refit_top_n_full_folds": refit_top_n_full_folds,
     }
     _write_json(run_dir / "run.json", metadata)
     _write_active_run(data_dir, run_id, created_at)
@@ -516,11 +522,13 @@ def start_hpo_run(
             "aggregation": aggregation,
             "evaluation_mode": evaluation_mode,
             "precompute": precompute,
+            "parallel_fold_workers": parallel_fold_workers,
+            "max_fold_evaluations_per_trial": max_fold_evaluations_per_trial,
+            "refit_top_n_full_folds": refit_top_n_full_folds,
         },
     )
     thread.start()
     return status_payload
-
 
 def load_hpo_status(data_dir: Path, *, run_id: str | None = None) -> dict[str, Any]:
     if run_id is None:
@@ -551,6 +559,9 @@ def _run_hpo_async(
     aggregation: str,
     evaluation_mode: str,
     precompute: bool | None,
+    parallel_fold_workers: int,
+    max_fold_evaluations_per_trial: int,
+    refit_top_n_full_folds: int,
 ) -> None:
     status_path = _status_path(run_dir)
     status_seed = _read_json(status_path) or {}
@@ -573,22 +584,31 @@ def _run_hpo_async(
             hard_max_negative_fold_share=request.optimization.hard_max_negative_fold_share,
         )
         trials: list[TrialResult] = []
+        trial_cache: dict[str, TrialResult] = {}
         for idx in range(max_trials):
             if str(algorithm).upper() == "TPE":
                 params = sample_tpe(space, trials, rng, mode=mode)
             else:
                 params = sample_random(space, rng)
-            trial = _evaluate_trial(
-                base_request=request.base,
-                params=params,
-                folds=folds,
-                data_dir=data_dir,
-                objective=objective,
-                aggregation=str(aggregation).lower(),
-                evaluation_mode=str(evaluation_mode).upper(),
-                precompute=precompute,
-                backtest_runner=_default_backtest_runner,
-            )
+            params_sig = _params_signature(params)
+            cached_trial = trial_cache.get(params_sig)
+            if cached_trial is None:
+                trial = _evaluate_trial(
+                    base_request=request.base,
+                    params=params,
+                    folds=folds,
+                    data_dir=data_dir,
+                    objective=objective,
+                    aggregation=str(aggregation).lower(),
+                    evaluation_mode=str(evaluation_mode).upper(),
+                    max_fold_evaluations=max_fold_evaluations_per_trial,
+                    parallel_fold_workers=parallel_fold_workers,
+                    precompute=precompute,
+                    backtest_runner=_default_backtest_runner,
+                )
+                trial_cache[params_sig] = trial
+            else:
+                trial = cached_trial
             trials.append(trial)
             completed = idx + 1
             _write_json(
@@ -603,6 +623,32 @@ def _run_hpo_async(
                     "message": "HPO running",
                 },
             )
+
+        if refit_top_n_full_folds > 0 and max_fold_evaluations_per_trial > 0 and trials:
+            reverse = mode != "min"
+            ranked_sigs = sorted(
+                trial_cache.items(),
+                key=lambda item: float(item[1].objective),
+                reverse=reverse,
+            )
+            top_sigs = [sig for sig, _trial in ranked_sigs[: refit_top_n_full_folds]]
+            for sig in top_sigs:
+                params = trial_cache[sig].params
+                full_trial = _evaluate_trial(
+                    base_request=request.base,
+                    params=params,
+                    folds=folds,
+                    data_dir=data_dir,
+                    objective=objective,
+                    aggregation=str(aggregation).lower(),
+                    evaluation_mode=str(evaluation_mode).upper(),
+                    max_fold_evaluations=0,
+                    parallel_fold_workers=parallel_fold_workers,
+                    precompute=precompute,
+                    backtest_runner=_default_backtest_runner,
+                )
+                trial_cache[sig] = full_trial
+            trials = [trial_cache.get(_params_signature(trial.params), trial) for trial in trials]
         result = HpoResult(trials=trials, mode=mode)
         quality_review = _build_quality_review(
             request=request,

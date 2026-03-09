@@ -8,7 +8,7 @@ import pytest
 from moex_carry.contracts.strategy_test import BacktestRequest
 from moex_carry.hpo.objective import compute_objective, invalid_objective
 from moex_carry.hpo.runner import _evaluate_fold, _evaluate_trial, run_hpo
-from moex_carry.hpo.types import ObjectiveConfig, WalkForwardFold
+from moex_carry.hpo.types import FoldResult, ObjectiveConfig, WalkForwardFold
 
 
 def test_portfolio_utility_with_penalties():
@@ -336,3 +336,174 @@ def test_hard_max_negative_fold_share_invalidates_trial(monkeypatch):
     assert trial.objective == invalid_objective("max")
     assert trial.objective_breakdown is not None
     assert trial.objective_breakdown["hard_negative_gate_pass"] == 0.0
+
+def test_run_hpo_trial_cache_reuses_duplicate_params(monkeypatch):
+    folds = [
+        WalkForwardFold(
+            train_start=date(2025, 1, 1),
+            train_end=date(2025, 1, 10),
+            val_start=date(2025, 1, 11),
+            val_end=date(2025, 1, 12),
+            test_start=date(2025, 1, 13),
+            test_end=date(2025, 1, 14),
+        ),
+        WalkForwardFold(
+            train_start=date(2025, 1, 2),
+            train_end=date(2025, 1, 11),
+            val_start=date(2025, 1, 12),
+            val_end=date(2025, 1, 13),
+            test_start=date(2025, 1, 14),
+            test_end=date(2025, 1, 15),
+        ),
+        WalkForwardFold(
+            train_start=date(2025, 1, 3),
+            train_end=date(2025, 1, 12),
+            val_start=date(2025, 1, 13),
+            val_end=date(2025, 1, 14),
+            test_start=date(2025, 1, 15),
+            test_end=date(2025, 1, 16),
+        ),
+    ]
+    sampled = [
+        {"strategy.execution_lag_minutes": 20},
+        {"strategy.execution_lag_minutes": 20},
+        {"strategy.execution_lag_minutes": 25},
+        {"strategy.execution_lag_minutes": 25},
+        {"strategy.execution_lag_minutes": 20},
+    ]
+    sample_state = {"idx": 0}
+
+    def _fake_sample_random(space, rng):
+        del space, rng
+        idx = sample_state["idx"]
+        sample_state["idx"] = idx + 1
+        return dict(sampled[idx])
+
+    calls = {"count": 0}
+
+    def _fake_evaluate_fold(*, request, fold, data_dir, objective, evaluation_mode, precompute, backtest_runner):
+        del data_dir, objective, evaluation_mode, precompute, backtest_runner
+        calls["count"] += 1
+        val = float(request.strategy.execution_lag_minutes or 0.0) / 100.0
+        return FoldResult(
+            fold=fold,
+            val_metrics={"ExcessAnn": val},
+            test_metrics=None,
+            val_objective=val,
+        )
+
+    monkeypatch.setattr("moex_carry.hpo.runner.sample_random", _fake_sample_random)
+    monkeypatch.setattr("moex_carry.hpo.runner._evaluate_fold", _fake_evaluate_fold)
+
+    result = run_hpo(
+        base_request=BacktestRequest(),
+        search_space={"strategy.execution_lag_minutes": {"type": "int", "min": 20, "max": 30, "step": 5}},
+        folds=folds,
+        data_dir=Path("."),
+        objective=ObjectiveConfig(scope="PAIR_MEAN", mode="max"),
+        max_trials=len(sampled),
+        algorithm="RANDOM",
+        random_seed=11,
+    )
+
+    assert len(result.trials) == len(sampled)
+    assert calls["count"] == 2 * len(folds)
+
+
+def test_run_hpo_partial_eval_and_top_refit(monkeypatch):
+    folds = [
+        WalkForwardFold(
+            train_start=date(2025, 1, 1),
+            train_end=date(2025, 1, 10),
+            val_start=date(2025, 1, 11),
+            val_end=date(2025, 1, 12),
+            test_start=date(2025, 1, 13),
+            test_end=date(2025, 1, 14),
+        ),
+        WalkForwardFold(
+            train_start=date(2025, 1, 2),
+            train_end=date(2025, 1, 11),
+            val_start=date(2025, 1, 12),
+            val_end=date(2025, 1, 13),
+            test_start=date(2025, 1, 14),
+            test_end=date(2025, 1, 15),
+        ),
+        WalkForwardFold(
+            train_start=date(2025, 1, 3),
+            train_end=date(2025, 1, 12),
+            val_start=date(2025, 1, 13),
+            val_end=date(2025, 1, 14),
+            test_start=date(2025, 1, 15),
+            test_end=date(2025, 1, 16),
+        ),
+        WalkForwardFold(
+            train_start=date(2025, 1, 4),
+            train_end=date(2025, 1, 13),
+            val_start=date(2025, 1, 14),
+            val_end=date(2025, 1, 15),
+            test_start=date(2025, 1, 16),
+            test_end=date(2025, 1, 17),
+        ),
+        WalkForwardFold(
+            train_start=date(2025, 1, 5),
+            train_end=date(2025, 1, 14),
+            val_start=date(2025, 1, 15),
+            val_end=date(2025, 1, 16),
+            test_start=date(2025, 1, 17),
+            test_end=date(2025, 1, 18),
+        ),
+    ]
+    sampled = [
+        {"strategy.execution_lag_minutes": 20},
+        {"strategy.execution_lag_minutes": 25},
+        {"strategy.execution_lag_minutes": 30},
+    ]
+    sample_state = {"idx": 0}
+
+    def _fake_sample_random(space, rng):
+        del space, rng
+        idx = sample_state["idx"]
+        sample_state["idx"] = idx + 1
+        return dict(sampled[idx])
+
+    calls_by_lag: dict[int, int] = {}
+
+    def _fake_evaluate_fold(*, request, fold, data_dir, objective, evaluation_mode, precompute, backtest_runner):
+        del data_dir, objective, evaluation_mode, precompute, backtest_runner
+        lag = int(request.strategy.execution_lag_minutes or 0)
+        calls_by_lag[lag] = calls_by_lag.get(lag, 0) + 1
+        val = float(lag) / 100.0
+        return FoldResult(
+            fold=fold,
+            val_metrics={"ExcessAnn": val},
+            test_metrics=None,
+            val_objective=val,
+        )
+
+    monkeypatch.setattr("moex_carry.hpo.runner.sample_random", _fake_sample_random)
+    monkeypatch.setattr("moex_carry.hpo.runner._evaluate_fold", _fake_evaluate_fold)
+
+    result = run_hpo(
+        base_request=BacktestRequest(),
+        search_space={"strategy.execution_lag_minutes": {"type": "int", "min": 20, "max": 30, "step": 5}},
+        folds=folds,
+        data_dir=Path("."),
+        objective=ObjectiveConfig(scope="PAIR_MEAN", mode="max"),
+        max_trials=len(sampled),
+        algorithm="RANDOM",
+        random_seed=17,
+        max_fold_evaluations_per_trial=2,
+        refit_top_n_full_folds=1,
+    )
+
+    by_lag = {int(trial.params["strategy.execution_lag_minutes"]): trial for trial in result.trials}
+    assert by_lag[30].objective_breakdown is not None
+    assert by_lag[30].objective_breakdown["folds_evaluated"] == pytest.approx(float(len(folds)))
+    assert by_lag[30].objective_breakdown["is_partial_fold_eval"] == 0.0
+    assert by_lag[20].objective_breakdown is not None
+    assert by_lag[20].objective_breakdown["folds_evaluated"] == pytest.approx(2.0)
+    assert by_lag[20].objective_breakdown["is_partial_fold_eval"] == 1.0
+
+    assert calls_by_lag[20] == 2
+    assert calls_by_lag[25] == 2
+    assert calls_by_lag[30] == 2 + len(folds)

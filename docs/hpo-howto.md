@@ -132,26 +132,11 @@ You can switch the metric and mode:
   - `optimization.negative_fold_metric` (for example `portfolio_excess_ann`)
   - `optimization.hard_max_negative_fold_share` (for example `0.35`)
   - `optimization.aggregation=p25` (more conservative than median)
-
-For morning-plan walk-forward (`scripts/run_morning_plan_walk_forward.py`) keep
-optimization on active baseline knobs:
-- `--selection-objective {robust_median_mad|robust_normalized}`
-- `--objective-negative-fold-penalty`
-- `--objective-subfold-days`
-- `--objective-concentration-penalty-weight`
-- `--objective-concentration-top-share-soft-cap`
-
-Retired from active loop:
-- `fold_stability` selection objective,
-- cluster-prefixed v4 search profile (`intraday_goal_v4_clustered`).
-
-Strict walk-forward controls:
-- `--embargo-days`, `--purge-days`
-- fixed holdout window: `--holdout-start-date`, `--holdout-end-date`
-- acceptance gates: `--accept-max-negative-fold-share`,
-  `--accept-min-median-fold-net-ticks`, `--accept-min-tail-cvar-ticks`
-- cost stress: `--cost-stress-mult` (for example `1.5`)
-
+  - Runtime acceleration knobs (for fast screening before final refit):
+    - `optimization.parallel_fold_workers` (set to CPU cores available for fold-level parallelism)
+    - `optimization.max_fold_evaluations_per_trial` (for example `2..4` instead of full fold count)
+    - `optimization.refit_top_n_full_folds` (for example `5..15` best trials rechecked on full folds)
+    - Typical speedup is multiplicative: fewer folds per trial * fold parallelism (10x+ is realistic on medium/large fold counts).
 ### 3.2 Portfolio utility objective (default)
 
 ```
