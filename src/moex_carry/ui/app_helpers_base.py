@@ -409,6 +409,9 @@ SIGNAL_METRIC_CONTRACT_KEYS: tuple[str, ...] = (
     "unfilled_entry_rate",
     "unfilled_exit_rate",
     "forced_exit_rate",
+    "strategy_id",
+    "strategy_type",
+    "strategy_stream",
 )
 
 
@@ -431,6 +434,98 @@ def _merge_signal_metrics(record: dict[str, object]) -> dict[str, object]:
         if key not in merged:
             merged[key] = _sanitize_value(value)
     return merged
+
+
+_ALLOWED_STRATEGY_TYPES: set[str] = {"arbitrage", "speculative", "fundamental"}
+_ALLOWED_STRATEGY_STREAMS: set[str] = {"arbitrage", "commodity_futures", "fundamental"}
+
+
+def _normalize_strategy_type_value(value: object) -> str | None:
+    raw = str(value or "").strip().lower()
+    aliases = {
+        "commodity": "speculative",
+        "commodity_futures": "speculative",
+        "futures": "speculative",
+    }
+    normalized = aliases.get(raw, raw)
+    if normalized in _ALLOWED_STRATEGY_TYPES:
+        return normalized
+    return None
+
+
+def _normalize_strategy_stream_value(value: object) -> str | None:
+    raw = str(value or "").strip().lower()
+    if raw == "speculative":
+        return "commodity_futures"
+    if raw in _ALLOWED_STRATEGY_STREAMS:
+        return raw
+    return None
+
+
+def _strategy_stream_from_type(strategy_type: str | None) -> str:
+    if strategy_type == "speculative":
+        return "commodity_futures"
+    if strategy_type in _ALLOWED_STRATEGY_TYPES:
+        return str(strategy_type)
+    return "arbitrage"
+
+
+def _string_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    return raw or None
+
+
+def _extract_strategy_metadata(row: dict[str, object]) -> dict[str, str | None]:
+    metrics = row.get("signal_metrics")
+    metrics_map = metrics if isinstance(metrics, dict) else {}
+    nested_two_layer = metrics_map.get("two_layer")
+    nested_map = nested_two_layer if isinstance(nested_two_layer, dict) else {}
+
+    strategy_type = _normalize_strategy_type_value(row.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = _normalize_strategy_type_value(metrics_map.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = _normalize_strategy_type_value(nested_map.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = "arbitrage"
+
+    strategy_stream = _normalize_strategy_stream_value(row.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _normalize_strategy_stream_value(metrics_map.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _normalize_strategy_stream_value(nested_map.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _strategy_stream_from_type(strategy_type)
+
+    strategy_id = _string_or_none(row.get("strategy_id"))
+    if strategy_id is None:
+        strategy_id = _string_or_none(metrics_map.get("strategy_id"))
+    if strategy_id is None:
+        strategy_id = _string_or_none(nested_map.get("strategy_id"))
+
+    return {
+        "strategy_type": strategy_type,
+        "strategy_stream": strategy_stream,
+        "strategy_id": strategy_id,
+    }
+
+
+def _matches_strategy_filters(
+    row: dict[str, object],
+    *,
+    strategy_type_filter: str | None,
+    strategy_stream_filter: str | None,
+) -> bool:
+    metadata = _extract_strategy_metadata(row)
+    row_strategy_type = _normalize_strategy_type_value(metadata.get("strategy_type"))
+    row_strategy_stream = _normalize_strategy_stream_value(metadata.get("strategy_stream"))
+    if strategy_type_filter and row_strategy_type != strategy_type_filter:
+        return False
+    if strategy_stream_filter and row_strategy_stream != strategy_stream_filter:
+        return False
+    return True
 
 
 def _build_execution_quality(record: dict[str, object]) -> dict[str, object]:

@@ -130,6 +130,8 @@ def test_run_signal_cycle_two_layer_runtime_adapter_overrides_legacy_fields(tmp_
     assert row["signal_direction"] == "cash_and_carry"
     assert isinstance(row["signal_metrics"], dict)
     assert "two_layer" in row["signal_metrics"]
+    assert row["signal_metrics"]["strategy_type"] == "speculative"
+    assert row["signal_metrics"]["strategy_stream"] == "commodity_futures"
 
 
 def test_backfill_signal_history_persists_days(tmp_path, monkeypatch):

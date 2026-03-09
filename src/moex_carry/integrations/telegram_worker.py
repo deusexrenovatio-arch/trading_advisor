@@ -18,6 +18,11 @@ from moex_carry.integrations.telegram_runtime_utils import (
 )
 from moex_carry.integrations.telegram_news_broadcast import broadcast_news_alerts
 from moex_carry.integrations.telegram_root_broadcast import broadcast_root_alerts
+from moex_carry.integrations.telegram_strategy import (
+    normalize_strategy_stream,
+    resolve_strategy_metadata,
+    strategy_label,
+)
 from moex_carry.integrations.telegram_shock_broadcast import broadcast_shock_alerts
 from moex_carry.signals_ack import build_ack_note, build_signal_fingerprint
 from moex_carry.signals_delivery import (
@@ -405,18 +410,20 @@ class TelegramWorker:
             normalized["future"] = future
         if stock and future:
             normalized.setdefault("pair_id", f"{stock}__{future}")
-
         metrics = normalized.get("metrics")
         if not isinstance(normalized.get("signal_metrics"), dict) and isinstance(metrics, dict):
             normalized["signal_metrics"] = dict(metrics)
-
+        strategy_id, strategy_type, strategy_stream = resolve_strategy_metadata(normalized)
+        if strategy_id is not None:
+            normalized.setdefault("strategy_id", strategy_id)
+        normalized.setdefault("strategy_type", strategy_type)
+        normalized.setdefault("strategy_stream", strategy_stream)
         delivery = normalized.get("delivery")
         if isinstance(delivery, dict):
             normalized.setdefault("delivery_action", delivery.get("delivery_action"))
             normalized.setdefault("delivery_allowed", delivery.get("delivery_allowed"))
             normalized.setdefault("delivery_suppressed_reason", delivery.get("delivery_suppressed_reason"))
             normalized.setdefault("signal_fingerprint", delivery.get("signal_fingerprint"))
-
         intent = normalized.get("intent")
         intent_status = ""
         if isinstance(intent, dict):
@@ -939,6 +946,9 @@ class TelegramWorker:
         stock = str(row.get("stock") or "").strip() or "N/A"
         future = str(row.get("future") or "").strip() or "N/A"
         timestamp = _fmt_timestamp(row.get("timestamp") or row.get("snapshot_as_of"))
+        strategy_stream_raw = str(row.get("strategy_stream") or row.get("strategy_type") or "").strip().lower()
+        strategy_stream_raw = "commodity_futures" if strategy_stream_raw == "speculative" else strategy_stream_raw
+        strategy_label_text = strategy_label(strategy_stream_raw)
 
         entry_stock_min = row.get("entry_stock_min")
         entry_stock_max = row.get("entry_stock_max")
@@ -1056,6 +1066,7 @@ class TelegramWorker:
             "📣 Новый сигнал",
             f"{action_label}",
             f"📈 Пара: {stock}/{future}",
+            f"🧩 Стратегия: {strategy_label_text}",
             f"🧭 Направление: {direction_label}",
             f"⭐ Score: {_fmt_number(score)}",
             f"⏱ Время: {timestamp}",
@@ -1200,7 +1211,12 @@ class TelegramWorker:
             action = str(delivery.get("delivery_action") or "").strip().lower()
             if action not in _SIGNAL_ACTIONS:
                 continue
-            pair_key = f"{str(row.get('stock') or '').strip()}|{str(row.get('future') or '').strip()}"
+            stock = str(row.get("stock") or "").strip()
+            future = str(row.get("future") or "").strip()
+            strategy_stream = normalize_strategy_stream(row.get("strategy_stream")) or normalize_strategy_stream(
+                row.get("strategy_type")
+            ) or "arbitrage"
+            pair_key = f"{stock}|{future}|{strategy_stream}"
             fingerprint_raw = str(row.get("signal_fingerprint") or "").strip()
             if action == "enter" and bool(delivery.get("signal_used")):
                 continue
@@ -1208,8 +1224,6 @@ class TelegramWorker:
                 continue
             run_id = str(row.get("run_id") or "").strip()
             timestamp = str(row.get("timestamp") or "").strip()
-            stock = str(row.get("stock") or "").strip()
-            future = str(row.get("future") or "").strip()
             direction = row.get("signal_direction")
             if not run_id or not timestamp or not stock or not future:
                 continue
@@ -1222,6 +1236,7 @@ class TelegramWorker:
                     stock=stock,
                     future=future,
                     signal_action=action,
+                    strategy_stream=strategy_stream,
                 )
             )
 
@@ -1317,6 +1332,9 @@ class TelegramWorker:
                     "idempotency_key": f"telegram-ack:{token}",
                     "signal_action": action,
                     "signal_direction": direction,
+                    "strategy_id": row.get("strategy_id"),
+                    "strategy_type": row.get("strategy_type"),
+                    "strategy_stream": row.get("strategy_stream"),
                     "chat_id": chat_id,
                     "created_at": now_iso,
                 }

@@ -121,6 +121,10 @@ from moex_carry.ui.app_helpers_base import (
     _coerce_string_list,
     _contains_reason_token,
     _normalize_evidence_item,
+    _normalize_strategy_type_value,
+    _normalize_strategy_stream_value,
+    _extract_strategy_metadata,
+    _matches_strategy_filters,
     _ACTIONABILITY_GATE_PRIORITIES,
 )
 from moex_carry.ui.app_helpers_base import SIGNAL_METRIC_CONTRACT_KEYS as _SIGNAL_METRIC_CONTRACT_KEYS
@@ -773,6 +777,7 @@ def _build_signal_actionability_projection(
         consumed_action = "enter"
 
     signal_metrics = row.get("signal_metrics") if isinstance(row.get("signal_metrics"), dict) else {}
+    strategy_meta = _extract_strategy_metadata(row)
     entry_plan = {
         "plan_revision": int(signal_metrics.get("plan_revision") or (1 if has_origin else 0)),
         "generated_at": row.get("timestamp"),
@@ -854,6 +859,9 @@ def _build_signal_actionability_projection(
         "signal_action": signal_action,
         "signal_direction": row.get("signal_direction"),
         "signal_score": row.get("signal_score"),
+        "strategy_id": strategy_meta.get("strategy_id"),
+        "strategy_type": strategy_meta.get("strategy_type"),
+        "strategy_stream": strategy_meta.get("strategy_stream"),
         "entry_stock_min": _to_float(row.get("entry_stock_min")),
         "entry_stock_max": _to_float(row.get("entry_stock_max")),
         "entry_future_min_per_share": _to_float(row.get("entry_future_min_per_share")),
@@ -4118,6 +4126,22 @@ def create_app(settings: AppSettings) -> Dash:
         instrument_type_filter = str(request.args.get("instrument_type") or "").strip().lower()
         if instrument_type_filter not in {"", "stock", "future"}:
             return _bad_request("instrument_type must be one of: stock, future")
+        strategy_type_raw = str(request.args.get("strategy_type") or "").strip().lower()
+        strategy_type_filter: str | None = None
+        if strategy_type_raw:
+            strategy_type_filter = _normalize_strategy_type_value(strategy_type_raw)
+            if strategy_type_filter is None:
+                return _bad_request(
+                    "strategy_type must be one of: arbitrage, speculative, fundamental, commodity_futures"
+                )
+        strategy_stream_raw = str(request.args.get("strategy_stream") or "").strip().lower()
+        strategy_stream_filter: str | None = None
+        if strategy_stream_raw:
+            strategy_stream_filter = _normalize_strategy_stream_value(strategy_stream_raw)
+            if strategy_stream_filter is None:
+                return _bad_request(
+                    "strategy_stream must be one of: arbitrage, commodity_futures, fundamental"
+                )
         include_non_actionable = _coerce_bool(
             request.args.get("include_non_actionable"),
             default=False,
@@ -4136,6 +4160,16 @@ def create_app(settings: AppSettings) -> Dash:
                 row
                 for row in projected
                 if str(row.get("instrument_type") or "").strip().lower() == instrument_type_filter
+            ]
+        if strategy_type_filter or strategy_stream_filter:
+            projected = [
+                row
+                for row in projected
+                if _matches_strategy_filters(
+                    row,
+                    strategy_type_filter=strategy_type_filter,
+                    strategy_stream_filter=strategy_stream_filter,
+                )
             ]
 
         if not include_non_actionable:
@@ -4161,6 +4195,22 @@ def create_app(settings: AppSettings) -> Dash:
             request.args.get("include_open_holds"),
             default=True,
         )
+        strategy_type_raw = str(request.args.get("strategy_type") or "").strip().lower()
+        strategy_type_filter: str | None = None
+        if strategy_type_raw:
+            strategy_type_filter = _normalize_strategy_type_value(strategy_type_raw)
+            if strategy_type_filter is None:
+                return _bad_request(
+                    "strategy_type must be one of: arbitrage, speculative, fundamental, commodity_futures"
+                )
+        strategy_stream_raw = str(request.args.get("strategy_stream") or "").strip().lower()
+        strategy_stream_filter: str | None = None
+        if strategy_stream_raw:
+            strategy_stream_filter = _normalize_strategy_stream_value(strategy_stream_raw)
+            if strategy_stream_filter is None:
+                return _bad_request(
+                    "strategy_stream must be one of: arbitrage, commodity_futures, fundamental"
+                )
         limit = max(_parse_int(request.args.get("limit"), 500), 0)
 
         rows, status_code = _collect_signal_actionability_rows()
@@ -4169,6 +4219,13 @@ def create_app(settings: AppSettings) -> Dash:
 
         projected: list[dict[str, object]] = []
         for row in rows:
+            if strategy_type_filter or strategy_stream_filter:
+                if not _matches_strategy_filters(
+                    row,
+                    strategy_type_filter=strategy_type_filter,
+                    strategy_stream_filter=strategy_stream_filter,
+                ):
+                    continue
             state = str(row.get("actionability_state") or "").strip().lower()
             if not include_non_actionable and state not in {
                 "actionable_enter",
@@ -4239,6 +4296,9 @@ def create_app(settings: AppSettings) -> Dash:
                 "signal_origin_timestamp": row.get("signal_origin_timestamp"),
                 "metrics": row.get("metrics") or {},
                 "signal_id": row.get("signal_id"),
+                "strategy_id": row.get("strategy_id"),
+                "strategy_type": row.get("strategy_type"),
+                "strategy_stream": row.get("strategy_stream"),
             }
             projected.append(pair_row)
 

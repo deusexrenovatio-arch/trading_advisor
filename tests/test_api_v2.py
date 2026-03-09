@@ -489,6 +489,83 @@ def test_v2_pairs_actionability_preserves_entry_plan_and_live_range_fields(tmp_p
     assert live["spread_pct_now"] == 0.01
 
 
+def test_v2_actionability_strategy_filters_split_streams(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 8, 12, 0, 0)
+        store_signal_run(session, "run-v2-actionability-strategy-filter", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-actionability-strategy-filter",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.21,
+                    "signal_reasons": ["arb"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_type": "arbitrage",
+                        "strategy_stream": "arbitrage",
+                    },
+                },
+                {
+                    "stock": "BBB",
+                    "future": "BBH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.37,
+                    "signal_reasons": ["spec"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_type": "speculative",
+                        "strategy_stream": "commodity_futures",
+                    },
+                },
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    stream_response = client.get(
+        "/api/v2/pairs/actionability?include_non_actionable=true&strategy_stream=commodity_futures"
+    )
+    assert stream_response.status_code == 200
+    stream_rows = stream_response.get_json()
+    assert isinstance(stream_rows, list)
+    assert len(stream_rows) == 1
+    assert stream_rows[0]["pair_id"] == "BBB__BBH6"
+    assert stream_rows[0]["strategy_type"] == "speculative"
+    assert stream_rows[0]["strategy_stream"] == "commodity_futures"
+
+    alias_type_response = client.get(
+        "/api/v2/signals/actionability?entity_type=pair&include_non_actionable=true&strategy_type=commodity_futures"
+    )
+    assert alias_type_response.status_code == 200
+    alias_type_rows = alias_type_response.get_json()
+    assert isinstance(alias_type_rows, list)
+    assert len(alias_type_rows) == 1
+    assert alias_type_rows[0]["stock"] == "BBB"
+    assert alias_type_rows[0]["strategy_stream"] == "commodity_futures"
+
+    type_response = client.get(
+        "/api/v2/signals/actionability?entity_type=pair&include_non_actionable=true&strategy_type=arbitrage"
+    )
+    assert type_response.status_code == 200
+    type_rows = type_response.get_json()
+    assert isinstance(type_rows, list)
+    assert len(type_rows) == 1
+    assert type_rows[0]["stock"] == "AAA"
+    assert type_rows[0]["strategy_stream"] == "arbitrage"
+
+
 def test_v2_entity_and_pair_actions_endpoints_are_idempotent(tmp_path):
     settings = _build_settings(tmp_path)
     engine = create_engine_from_settings(settings)
