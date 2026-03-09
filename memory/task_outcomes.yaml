@@ -686,3 +686,30 @@ items:
   start_recommendations:
   - No diff yet. Using request/session intent fallback.
   - Intent spans multiple contexts. Set an explicit target module before implementation.
+- task_id: APT-20260309T173607Z-fa8178e0
+  closed_at: '2026-03-09T17:40:25Z'
+  branch: codex/process-regression-gate-staging
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  route_match: matched
+  time_to_first_patch_sec: 258
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: architecture
+  improvement_artifact: docs/architecture/adr/0004-context-telemetry-observability.md
+  linked_plan_id: P1-CONTEXT-TELEMETRY-064
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.

@@ -2,6 +2,16 @@ version: 1
 updated_at: 2026-03-09
 
 decisions:
+  - id: ADM-2026-03-09-100
+    date: 2026-03-09
+    title: Model telemetry as layered context-cost, summary-lineage, execution, and outcome events
+    context: Existing repository telemetry is strong on task lifecycle and process-quality proxies, but it does not directly capture real context acquisition cost or long-conversation failure modes such as compaction drift and recall loss.
+    decision: Define one multi-layer telemetry model with separate event surfaces for task lifecycle, turn progression, context acquisition, summary or compaction lineage, execution behavior, and final outcomes; treat direct context-cost metrics and outcome proxies as different classes of evidence and make long-conversation observability a first-class design concern.
+    impact: Future telemetry work can improve the system systematically instead of adding isolated counters, and governance can evolve from proxy-only process scoring toward real context-cost and long-chat resilience metrics without losing compatibility with existing rollups.
+    links:
+      - docs/architecture/adr/0004-context-telemetry-observability.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
   - id: ADM-2026-03-09-095
     date: 2026-03-09
     title: Stage post-burn-in process regression gating around acknowledged baseline debt

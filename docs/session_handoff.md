@@ -1,58 +1,58 @@
 # Session Handoff
-Updated: 2026-03-09 16:33 UTC
+Updated: 2026-03-09 17:12 UTC
 
 ## Goal
-- Normalize the post-burn-in `process_regressions` gate so ordinary development is not blocked by acknowledged historical process debt while real new regressions still fail closed.
+- Design a deep telemetry architecture that measures real context cost, long-conversation drift, and improvement outcomes so future agent/process optimization can be systematic instead of proxy-only.
 
 ## Task Request Contract
-- Objective: convert the process-regression validator from a hard stop on the first full historical window into a staged policy that distinguishes acknowledged baseline debt from fresh or worsening regressions.
-- In Scope: introduce a machine-readable staged policy for process regression gating; attach current decision-quality/context-efficiency debt to an explicit active plan item; make `validate_process_regressions.py`, process reports, and human summaries reflect blocking vs remediation states consistently; add tests for acknowledged-debt and worsening-regression behavior; update governance docs.
-- Out of Scope: rewriting historical task outcomes to cosmetically improve metrics, disabling telemetry, or weakening repeat-error/environment blocker safeguards that already behave like real regressions.
-- Constraints: keep the gate fail-closed for unacknowledged regressions and for any worsening beyond the acknowledged baseline debt; preserve the existing rolling metrics and burn-in accounting; keep one clear source of truth for the staged policy rather than diverging script/report rules.
-- Done Evidence: a new diff can pass `python scripts/run_lean_gate.py` after burn-in when only acknowledged baseline debt remains; the validator still fails on unacknowledged or worsening regressions; reports and tests explain the staged state clearly.
-- Priority Rule: governance credibility beats convenience; only downgrade blocking when the debt is explicit, tracked, and mechanically bounded.
+- Objective: produce a durable telemetry design that separates direct context-consumption signals from process-quality proxies and explains how to instrument long conversations, summaries, file reads, planning drift, execution behavior, and final outcomes.
+- In Scope: capture the current telemetry baseline and its blind spots; design telemetry layers, event schema, IDs, rollups, and storage boundaries; account for long chats, summary lineage, and context-loss detection; define derived metrics, anti-gaming guardrails, rollout phases, and acceptance checks; record the result in an ADR plus traceability artifacts.
+- Out of Scope: implementing the full telemetry pipeline, changing model/provider APIs, rewriting historical ledgers, or replacing the existing process-governance system in this slice.
+- Constraints: keep the design repository-native and mechanically auditable; optimize for future implementation rather than abstract theory; avoid relying on raw chat transcript retention as the main observability source; preserve privacy/minimization by default and store counts/hashes/references before raw content whenever possible.
+- Done Evidence: one ADR captures architecture, schema, phases, risks, and metrics; plans and memory point to the design as the new source of truth; validators for handoff/plans/memory pass and lean gate stays green.
+- Priority Rule: measurement truth beats convenience; if a metric can be gamed or does not distinguish direct context cost from outcome quality, it must be called out as a proxy rather than treated as a primary KPI.
 
 ## Current Delta
-- The staged process-regression policy now distinguishes `acknowledged_debt`, `regressed`, and ordinary `fail` states.
-- Current decision-quality/context-efficiency debt is tied to an explicit active remediation plan instead of silently weakening the validator.
-- Process reports, human summaries, and validator output now agree on blocking vs remediation semantics.
-- Focused tests cover no-plan hard fail, acknowledged-debt pass, worsening-after-ack fail, and API exposure of remediation state.
-- Governance docs, acceptance scenarios, and user-needs mapping are synced to the new staged behavior.
+- Captured the current telemetry baseline and its main blind spots around direct context cost and long-conversation drift.
+- Added an ADR that defines layered telemetry for task, turn, context acquisition, summary lineage, execution, and outcome signals.
+- Separated direct context-cost metrics from outcome proxies and documented anti-gaming guardrails.
+- Defined long-conversation observability through summary or compaction lineage, recall checks, and handoff refresh semantics.
+- Recorded phased rollout so implementation can start small without losing architectural coherence.
 
 ## First-Time-Right Report
-1. Confirmed coverage: validator behavior, rollup/report semantics, machine-readable remediation tracking, and regression tests are all in scope.
-2. Missing or risky scenarios: if the staged rule is too loose, the gate becomes decorative; if it is too strict, the repository stays permanently blocked by old history.
-3. Resource/time risks and chosen controls: centralize the staged decision in the process report layer, keep validator/report/API semantics aligned, and prove both pass and fail paths with focused tests before running lean gate.
-4. Highest-priority fixes or follow-ups: make the gate policy coherent first, then sync the explanatory docs and plan linkage that justify the downgrade.
+1. Confirmed coverage: task lifecycle telemetry, context-budget workflow, process reports, quality scorecards, and long-conversation risk are all included in the design scope.
+2. Missing or risky scenarios: direct token-level telemetry may be unavailable in some tool paths; long chats can hide loss through summaries instead of obvious failures; naive “smaller context is always better” metrics can incentivize under-reading.
+3. Resource/time risks and chosen controls: build the design around layered events and derived rollups, keep direct-cost metrics separate from outcome proxies, and define rollout in phases so implementation can start small without losing architectural coherence.
+4. Highest-priority fixes or follow-ups: establish the telemetry model and long-conversation semantics first, then implement capture points, then connect governance thresholds and dashboards to the new direct-cost layer.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
-- Stop Trigger: two consecutive policy edits still either keep the same baseline-debt hard stop or incorrectly let an unacknowledged failing dimension pass.
-- Reset Action: stop patching the validator only, move the staged policy into the shared rollup layer, and replay both acknowledged-debt and worsening-regression cases with narrow fixtures.
-- New Search Space: (1) process rollup threshold state, (2) validator blocking criteria, (3) human summary/status mapping, (4) plan-linked remediation metadata, (5) focused governance/API tests.
-- Next Probe: encode a non-blocking acknowledged-debt state for current failing dimensions, then add one worsening-delta test that must still fail.
+- Stop Trigger: two consecutive design edits still leave long-conversation handling or direct-context metrics undefined at the schema level.
+- Reset Action: stop editing prose only, extract the missing concern into an explicit capability block with event names, inputs, outputs, and rollout phase.
+- New Search Space: (1) task lifecycle events, (2) turn and summary lineage events, (3) file-read and tool-output cost signals, (4) rollup/KPI model, (5) governance/dashboard consumers.
+- Next Probe: inventory the current telemetry surface, then map it into a layered event model and call out the gaps for long conversations and real context cost.
 
 ## Task Outcome
-- Outcome Status: in_progress
-- Decision Quality: pending
-- Final Contexts: CTX-OPS, CTX-API-UI
-- Route Match: pending
+- Outcome Status: completed
+- Decision Quality: correct_first_time
+- Final Contexts: CTX-OPS, CTX-API-UI, CTX-CONTRACTS
+- Route Match: matched
 - Primary Rework Cause: none
 - Incident Signature: none
-- Improvement Action: pending
-- Improvement Artifact: pending
-- Linked Plan ID: P1-PROCESS-REG-GATE-063
+- Improvement Action: architecture
+- Improvement Artifact: docs/architecture/adr/0004-context-telemetry-observability.md
+- Linked Plan ID: P1-CONTEXT-TELEMETRY-064
 
 ## Blockers
-- No code-level blocker remains for this slice.
+- None.
 
 ## Next Step
-- Run final closeout checks, then push this governance fix branch and open the PR into `codex/signals_engine`.
+- Use the ADR as the source of truth for Phase 1 implementation: direct context-acquisition events, turn boundaries, and summary-lineage capture.
 
 ## Validation
 - `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
 - `python scripts/validate_task_request_contract.py`
-- `python -m pytest tests/test_agent_process_telemetry.py tests/test_process_reports.py tests/test_api_v2.py -q`
-- `python scripts/validate_quality_scorecards.py`
-- `python scripts/validate_process_regressions.py`
+- `python scripts/validate_session_handoff.py`
+- `python scripts/validate_plans.py`
+- `python scripts/validate_agent_memory.py`
 - `python scripts/run_lean_gate.py`

@@ -1,6 +1,33 @@
 version: 1
 updated_at: 2026-03-09
 items:
+  - id: P1-CONTEXT-TELEMETRY-064
+    title: Design multi-layer telemetry for real context cost, long conversations, and improvement loops
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - design covers task, turn, read/inspect, summary-compaction, execution, and outcome telemetry layers
+      - long-conversation handling defines summary lineage, compaction events, and context-loss detection instead of only task-level proxies
+      - proposal separates direct context-cost metrics from outcome proxies and specifies how both drive future governance and dashboards
+      - ADR, handoff, and traceability artifacts define phased rollout and acceptance checks for implementation work
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/validate_plans.py
+      - python scripts/validate_agent_memory.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - docs/architecture/adr/0004-context-telemetry-observability.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-PROCESS-REG-GATE-063
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
   - id: P1-PROCESS-REG-GATE-063
     title: Stage post-burn-in process regression gating around acknowledged baseline debt
     lane: governance

@@ -1,0 +1,2 @@
+- added an ADR for deep telemetry design that separates direct context-cost metrics from process-quality proxies and makes long-conversation summary lineage a first-class observability concern
+- linked the design to governance planning and durable memory so future telemetry implementation can proceed in phased, reviewable slices
