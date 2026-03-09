@@ -4,6 +4,8 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
+from moex_carry.signal_execution_contract import resolve_signal_expire_ts
+
 
 DELIVERY_ACTIONS = frozenset({"enter", "exit", "hold_open"})
 
@@ -162,10 +164,13 @@ def is_entry_signal_expired(
     callback_ttl_hours: int,
     now_utc: datetime | None = None,
 ) -> bool:
+    now_value = now_utc if isinstance(now_utc, datetime) else datetime.now(timezone.utc)
+    expire_ts = resolve_signal_expire_ts(row)
+    if expire_ts is not None:
+        return now_value > expire_ts
     signal_ts = parse_iso_utc(row.get("timestamp"))
     if signal_ts is None:
         return True
-    now_value = now_utc if isinstance(now_utc, datetime) else datetime.now(timezone.utc)
     ttl_hours = max(int(callback_ttl_hours or 0), 1)
     return now_value > (signal_ts + timedelta(hours=ttl_hours))
 
@@ -178,6 +183,11 @@ def signal_delivery_state(
 ) -> dict[str, object]:
     action = signal_action_for_delivery(row)
     action_supported = action in DELIVERY_ACTIONS
+    operator_signal_status = str(
+        row.get("operator_signal_status")
+        or row.get("signal_operator_status")
+        or ""
+    ).strip().lower()
     signal_used = bool(row.get("signal_used"))
     entry_plan = entry_plan_from_row(row)
     entry_range_eligible = True
@@ -192,7 +202,11 @@ def signal_delivery_state(
             now_utc=now_utc,
         )
         entry_range_eligible = entry_range_eligible_for_plan(row, entry_plan)
-        if signal_used:
+        if operator_signal_status == "enter_submitted":
+            suppressed_reason = "execution_pending"
+        elif operator_signal_status in {"entry_cancelled", "manual_override"}:
+            suppressed_reason = operator_signal_status
+        elif signal_used:
             suppressed_reason = "signal_used"
         elif entry_signal_expired:
             suppressed_reason = "entry_expired"
@@ -204,6 +218,7 @@ def signal_delivery_state(
         "delivery_allowed": suppressed_reason is None,
         "delivery_suppressed_reason": suppressed_reason,
         "signal_used": signal_used,
+        "operator_signal_status": operator_signal_status,
         "entry_signal_expired": entry_signal_expired,
         "entry_range_eligible": entry_range_eligible,
         "entry_plan": entry_plan,

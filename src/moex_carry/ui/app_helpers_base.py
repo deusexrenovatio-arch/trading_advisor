@@ -10,6 +10,10 @@ import requests
 from flask import jsonify
 
 from moex_carry.config import AppSettings
+from moex_carry.signal_execution_contract import (
+    normalize_execution_action as _normalize_execution_action_contract,
+    normalize_signal_action_request as _normalize_signal_action_request_contract,
+)
 from moex_carry.domain.decision_engine import (
     build_signal_gate_results,
     derive_signal_lifecycle_state,
@@ -525,33 +529,13 @@ def _normalize_execution_leg(value: object) -> str:
 
 
 def _normalize_execution_action(value: object) -> str:
-    raw = str(value or "").strip().lower()
-    if raw in {"exit", "close"}:
-        return "exit"
-    if raw in {"ack", "acknowledged"}:
-        return "ack"
-    if raw in {"enter", "open", "hold_open", "hold"}:
-        # hold_open in execution logs is treated as opening/maintaining leg exposure.
-        return "enter"
-    return raw or "enter"
+    return _normalize_execution_action_contract(value)
 
 
 def _coerce_signal_action_request(
     value: object, *, legacy_mode: bool = False
 ) -> tuple[str, str] | None:
-    raw = str(value or "").strip().lower()
-    if raw in {"ack", "acknowledged"}:
-        return "ack", "ack"
-    if raw in {"enter", "open"}:
-        return "enter", "enter"
-    if raw in {"exit", "close"}:
-        return "exit", "exit"
-    if raw in {"hold", "hold_open"}:
-        if legacy_mode:
-            # Keep v1 storage semantics: hold-like actions are persisted as enter.
-            return "enter", "enter"
-        return "hold", "hold_open"
-    return None
+    return _normalize_signal_action_request_contract(value, legacy_mode=legacy_mode)
 
 
 def _normalize_signal_action_source(value: object, *, default: str) -> str:
