@@ -503,7 +503,7 @@ items:
   start_recommendations:
   - Patch is scoped to one context.
 - task_id: APT-20260309T111717Z-dd0144f2
-  closed_at: '2026-03-09T11:52:37Z'
+  closed_at: '2026-03-09T11:54:39Z'
   branch: codex/signals_engine
   goal_class: ops
   start_primary_context: CTX-OPS
