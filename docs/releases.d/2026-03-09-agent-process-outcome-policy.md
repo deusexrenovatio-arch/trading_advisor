@@ -1,0 +1,1 @@
+Agent-process governance now uses one explicit task-outcome status policy: telemetry and ledger status are derived from decision quality plus blockers, while linked worktrees continue to share one repository-level local telemetry history.
