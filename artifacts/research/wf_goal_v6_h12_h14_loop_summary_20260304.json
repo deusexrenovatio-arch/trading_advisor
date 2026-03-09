@@ -1,0 +1,25 @@
+{
+  "runs": [
+    {
+      "out": "artifacts/research/wf_goal_v6_h12_slot1415_slpen200_tail5_20260304.json",
+      "filled": 72,
+      "wr": 0.375,
+      "net": 5063.0,
+      "tpw": 1.3732970027247955
+    },
+    {
+      "out": "artifacts/research/wf_goal_v6_h13_slot1415_slpen300_exit50_tail8_20260304.json",
+      "filled": 72,
+      "wr": 0.375,
+      "net": 5063.0,
+      "tpw": 1.3732970027247955
+    },
+    {
+      "out": "artifacts/research/wf_goal_v6_h14_slot1415_slpen500_exit100_tail12_20260304.json",
+      "filled": 72,
+      "wr": 0.375,
+      "net": 5063.0,
+      "tpw": 1.3732970027247955
+    }
+  ]
+}

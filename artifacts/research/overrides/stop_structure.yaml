@@ -1,0 +1,6 @@
+signal_engine:
+  morning_plan:
+    setups:
+      stop_model: "structure"
+      stop_lookback_bars: 24
+      stop_volume_quantile: 0.75

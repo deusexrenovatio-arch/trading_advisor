@@ -1,0 +1,39 @@
+database:
+  url: "sqlite:///./data/news_livecheck_ng.db"
+
+news_ingest:
+  gdelt_enabled: true
+  gdelt_max_records_per_call: 80
+  gdelt_min_request_interval_sec: 0.2
+  gdelt_request_timeout_sec: 12
+  gdelt_retry_attempts: 1
+  gdelt_retry_backoff_sec: 0.5
+  live_lookback_minutes: 120
+  backfill_chunk_days: 21
+  backfill_max_windows_per_commodity: 2
+  feed_path: "data/output/news_live/live_news_signals.csv"
+  feed_min_impact_score: 0.25
+  feed_min_confidence: 0.7
+  feed_max_rows: 10000
+  newsapi:
+    enabled: false
+  commodity_profiles:
+    - ticker: "NG_US"
+      name: "US Natural Gas"
+      gdelt_query: "(\"natural gas\" OR \"henry hub\" OR \"nymex gas\")"
+      newsapi_query: "(natural gas OR \"henry hub\" OR nymex gas)"
+      language: "en"
+    - ticker: "BRN"
+      name: "Brent Oil"
+      gdelt_query: "(brent OR oil OR OPEC OR \"middle east\" OR hormuz)"
+      newsapi_query: "(brent OR crude oil OR OPEC OR hormuz OR red sea)"
+      language: "en"
+    - ticker: "GOLD"
+      name: "Gold"
+      gdelt_query: "(gold OR xau OR bullion OR \"safe haven\" OR fed rates)"
+      newsapi_query: "(gold OR bullion OR xau OR \"safe haven\" OR \"real yields\")"
+      language: "en"
+
+news_models:
+  primary_model: "keyword"
+  device: "cpu"
