@@ -6,8 +6,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_process_telemetry import load_task_outcomes
-
 
 @dataclass(frozen=True)
 class Finding:
@@ -30,6 +28,16 @@ def _changed_files(base_sha: str | None, head_sha: str | None) -> list[str]:
     if code != 0:
         return []
     return sorted([line.strip() for line in out.splitlines() if line.strip()])
+
+
+def _load_task_outcomes_safe(path: Path) -> dict[str, object]:
+    try:
+        from agent_process_telemetry import load_task_outcomes
+    except ModuleNotFoundError as exc:
+        if exc.name == "yaml":
+            return {"items": []}
+        raise
+    return load_task_outcomes(path)
 
 
 def _build_findings(changed: list[str]) -> list[Finding]:
@@ -114,7 +122,7 @@ def _build_findings(changed: list[str]) -> list[Finding]:
                 )
             )
 
-    ledger = load_task_outcomes(Path("memory/task_outcomes.yaml"))
+    ledger = _load_task_outcomes_safe(Path("memory/task_outcomes.yaml"))
     repeated_without_followup = []
     seen_signatures: set[str] = set()
     for row in ledger.get("items", []):
