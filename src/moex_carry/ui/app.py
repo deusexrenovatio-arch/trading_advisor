@@ -34,6 +34,18 @@ from moex_carry.observability.runtime_metrics import ApiObservability
 from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.pretrade.delay_gate import run_delay_gate
+from moex_carry.signal_execution_contract import (
+    ACTIVE_BASELINE_ID,
+    H4A_EXIT_REASON_CODES,
+    build_h4a_execution_contract,
+    build_h4a_followup_state,
+    build_h4a_fill_state,
+    expand_h4a_followup_stage,
+    normalize_exit_reason_code,
+    normalize_h4a_followup_stage,
+    normalize_operator_execution_mode,
+    normalize_same_bar_resolution,
+)
 from moex_carry.signal_engine.core import MarketCalendar, parse_time_window
 from moex_carry.signal_engine.data import IssCandleProvider, IssInstrumentRoute
 from moex_carry.signal_engine.plan import MorningPlanBuilder
@@ -146,6 +158,7 @@ from moex_carry.ui.app_helpers_feed import (
     DECISION_STYLE,
 )
 from moex_carry.ui.app_helpers_news_bridge import build_silver_explain_payload
+from moex_carry.ui.actionability_live_routing import apply_live_routing_guards
 from moex_carry.ui.decision_actions import DecisionActionService
 from moex_carry.ui.data import (
     load_backtest_summary,
@@ -157,6 +170,11 @@ from moex_carry.ui.data import (
     load_signals_with_source,
     load_top_pairs,
     load_top_pairs_with_source,
+)
+from moex_carry.ui.operator_execution_projection import (
+    default_operator_event_entry,
+    register_operator_event,
+    serialize_followup_confirmations,
 )
 from moex_carry.ui.refresh_scheduler import SignalRefreshScheduler
 from moex_carry.ui.routes_market_data import register_market_data_routes
@@ -623,6 +641,14 @@ def _map_delivery_suppressed_reason_v2(reason: object) -> str | None:
         "signal_used": "intent_consumed",
         "entry_expired": "intent_expired",
         "entry_out_of_range": "out_of_range",
+        "execution_pending": "execution_pending",
+        "entry_cancelled": "intent_cancelled",
+        "manual_override": "manual_override",
+        "manual_review_required": "manual_review_required",
+        "policy_blocked": "policy_blocked",
+        "portfolio_limits": "portfolio_limits",
+        "no_mini_universe": "no_mini_universe",
+        "synthetic_history_promotion_blocked": "synthetic_promotion",
         "unsupported_action": "unsupported_action",
     }
     return mapping.get(normalized, "not_actionable")
@@ -632,6 +658,17 @@ def _derive_intent_state_v2(row: dict[str, object], delivery: dict[str, object])
     action = str(row.get("signal_action") or "").strip().lower()
     if action != "enter":
         return "none"
+    operator_signal_status = str(row.get("operator_signal_status") or "").strip().lower()
+    if operator_signal_status == "manual_override":
+        return "manual_override"
+    if operator_signal_status == "entry_cancelled":
+        return "cancelled"
+    if operator_signal_status == "enter_submitted":
+        return "submitted"
+    if operator_signal_status == "enter_filled":
+        return "filled"
+    if operator_signal_status == "mark_viewed" or bool(row.get("signal_viewed")):
+        return "viewed"
     if bool(row.get("signal_used")):
         return "consumed"
     if bool(delivery.get("entry_signal_expired")):
@@ -672,10 +709,14 @@ def _derive_actionability_state_v2(
             return "review_entry"
         if intent_state == "out_of_range" or execution_state == "out_of_range":
             return "enter_out_of_range"
-        if intent_state == "active":
+        if intent_state in {"active", "viewed"}:
             if has_origin:
                 return "actionable_enter_repriced"
             return "actionable_enter"
+        if intent_state in {"filled", "submitted", "cancelled", "manual_override", "consumed"}:
+            if position_state == "open":
+                return "hold_open"
+            return "inactive"
         if position_state == "open":
             return "hold_open"
         return "inactive"
@@ -687,6 +728,7 @@ def _derive_actionability_state_v2(
 def _build_signal_actionability_projection(
     row: dict[str, object],
     *,
+    settings: AppSettings,
     callback_ttl_hours: int,
 ) -> dict[str, object]:
     signal_id = str(row.get("signal_id") or _build_signal_id_from_row(row))
@@ -745,18 +787,79 @@ def _build_signal_actionability_projection(
         execution_state=execution_state,
         has_origin=has_origin,
     )
+    signal_metrics = row.get("signal_metrics") if isinstance(row.get("signal_metrics"), dict) else {}
+    portfolio_limit_reasons = _coerce_string_list(signal_metrics.get("portfolio_limit_reasons"))
+    source_freshness_reasons = _coerce_string_list(signal_metrics.get("source_freshness_reasons"))
 
     timestamp_raw = row.get("timestamp")
     signal_ts = parse_iso_utc(timestamp_raw)
+    h4a_contract = build_h4a_execution_contract(
+        settings=settings,
+        row=row,
+        operator_execution_mode=str(row.get("operator_execution_mode") or ""),
+    )
+    h4a_followup_row = dict(row)
+    h4a_followup_row.setdefault("baseline_id", h4a_contract.get("baseline_id"))
+    h4a_followup_row["execution_contract"] = h4a_contract
+    if not h4a_followup_row.get("operator_execution_mode"):
+        h4a_followup_row["operator_execution_mode"] = h4a_contract.get("operator_execution_mode")
+    h4a_followup = build_h4a_followup_state(row=h4a_followup_row)
+    signal_expire_ts = str(h4a_contract.get("signal_expire_ts") or "").strip() or None
     ttl_expires_at = None
     if signal_ts is not None:
         ttl_expires_at = (
             signal_ts + timedelta(hours=max(int(callback_ttl_hours or 72), 1))
         ).isoformat().replace("+00:00", "Z")
+    if signal_expire_ts:
+        ttl_expires_at = signal_expire_ts
 
     delivery_action = str(delivery.get("delivery_action") or "").strip().lower()
     if delivery_action not in {"enter", "exit", "hold_open"}:
         delivery_action = "none"
+    delivery_allowed = bool(delivery.get("delivery_allowed"))
+    delivery_suppressed_reason = str(delivery.get("delivery_suppressed_reason") or "").strip().lower() or None
+    if signal_action == "enter":
+        if actionability_state not in {
+            "actionable_enter",
+            "actionable_enter_repriced",
+            "enter_out_of_range",
+        }:
+            delivery_allowed = False
+            if "no_mini_universe" in portfolio_limit_reasons:
+                delivery_suppressed_reason = "no_mini_universe"
+            elif any(
+                reason in {
+                    "max_positions_live_routing",
+                    "max_contracts_per_instrument_live_routing",
+                    "max_correlated_exposure_live_routing",
+                    "mini_full_duplicate_live_routing",
+                    "duplicate_pair_candidate",
+                }
+                for reason in portfolio_limit_reasons
+            ):
+                delivery_suppressed_reason = "portfolio_limits"
+            elif "synthetic_history_promotion_blocked" in source_freshness_reasons:
+                delivery_suppressed_reason = "synthetic_history_promotion_blocked"
+            elif delivery_suppressed_reason is None:
+                if policy_state == "review":
+                    delivery_suppressed_reason = "manual_review_required"
+                elif policy_state == "block":
+                    delivery_suppressed_reason = "policy_blocked"
+                else:
+                    delivery_suppressed_reason = "not_actionable"
+    elif signal_action == "exit":
+        if actionability_state != "actionable_exit":
+            delivery_allowed = False
+            delivery_suppressed_reason = delivery_suppressed_reason or "not_actionable"
+    elif delivery_action == "hold_open" and actionability_state != "hold_open":
+        delivery_allowed = False
+        delivery_suppressed_reason = delivery_suppressed_reason or "not_actionable"
+    delivery_state = _derive_delivery_state_v2(
+        {
+            "delivery_allowed": delivery_allowed,
+            "delivery_suppressed_reason": delivery_suppressed_reason,
+        }
+    )
 
     signal_fingerprint = str(row.get("signal_fingerprint") or "").strip()
     if not signal_fingerprint:
@@ -771,12 +874,11 @@ def _build_signal_actionability_projection(
         )
 
     intent_id = _stable_id("intent", signal_fingerprint, signal_id, length=24)
-    intent_consumed = intent_state == "consumed"
-    consumed_action = "ack" if intent_consumed else None
-    if intent_consumed and _contains_reason_token(signal_reasons, "enter_used", "explicit_enter"):
-        consumed_action = "enter"
+    intent_consumed = intent_state in {"consumed", "submitted", "filled", "cancelled", "manual_override"}
+    consumed_action = str(row.get("operator_signal_status") or "").strip().lower() or None
+    if intent_consumed and consumed_action is None:
+        consumed_action = "enter_filled"
 
-    signal_metrics = row.get("signal_metrics") if isinstance(row.get("signal_metrics"), dict) else {}
     strategy_meta = _extract_strategy_metadata(row)
     entry_plan = {
         "plan_revision": int(signal_metrics.get("plan_revision") or (1 if has_origin else 0)),
@@ -790,6 +892,19 @@ def _build_signal_actionability_projection(
         "entry_spread_pct_min": _to_float(row.get("entry_spread_pct_min")),
         "entry_spread_pct_max": _to_float(row.get("entry_spread_pct_max")),
         "execution_window_sec": int(signal_metrics.get("execution_window_sec") or 0) or None,
+        "baseline_id": ACTIVE_BASELINE_ID,
+        "execution_profile_id": ACTIVE_BASELINE_ID,
+        "entry_order_type": h4a_contract.get("entry_order_type"),
+        "entry_improve_ticks": h4a_contract.get("entry_improve_ticks"),
+        "entry_fallback_after_minutes": h4a_contract.get("entry_fallback_after_minutes"),
+        "entry_fallback_slip_ticks": h4a_contract.get("entry_fallback_slip_ticks"),
+        "break_even_rr": h4a_contract.get("break_even_rr"),
+        "break_even_buffer_ticks": h4a_contract.get("break_even_buffer_ticks"),
+        "trail_activation_rr": h4a_contract.get("trail_activation_rr"),
+        "trail_offset_ticks": h4a_contract.get("trail_offset_ticks"),
+        "time_stop_minutes": h4a_contract.get("time_stop_minutes"),
+        "same_bar_policy": h4a_contract.get("same_bar_policy"),
+        "same_bar_policy_source": h4a_contract.get("same_bar_policy_source"),
     }
 
     entry_range_now = {
@@ -832,18 +947,24 @@ def _build_signal_actionability_projection(
             "consumed_by_action": consumed_action,
             "consumed_at": row.get("signal_used_at") if intent_consumed else None,
             "consumed_by": row.get("signal_used_by") if intent_consumed else None,
+            "viewed_at": row.get("signal_viewed_at"),
+            "viewed_by": row.get("signal_viewed_by"),
+            "operator_signal_status": row.get("operator_signal_status"),
+            "operator_execution_mode": row.get("operator_execution_mode")
+            or h4a_contract.get("operator_execution_mode"),
         },
         "entry_plan": entry_plan,
         "entry_range_now": entry_range_now,
         "delivery": {
             "delivery_action": delivery_action,
-            "delivery_allowed": bool(delivery.get("delivery_allowed")),
+            "delivery_allowed": delivery_allowed,
             "delivery_suppressed_reason": _map_delivery_suppressed_reason_v2(
-                delivery.get("delivery_suppressed_reason")
+                delivery_suppressed_reason
             ),
             "signal_fingerprint": signal_fingerprint,
             "out_of_range_notified": delivery_state == "out_of_range_notified",
             "last_notified_at": None,
+            "operator_signal_status": row.get("operator_signal_status"),
         },
         "evidence_summary": evidence_summary,
         "evidence_items": evidence_items,
@@ -859,6 +980,44 @@ def _build_signal_actionability_projection(
         "signal_action": signal_action,
         "signal_direction": row.get("signal_direction"),
         "signal_score": row.get("signal_score"),
+        "baseline_id": h4a_contract.get("baseline_id"),
+        "execution_profile_id": h4a_contract.get("execution_profile_id"),
+        "historical_source_kind": row.get("historical_source_kind"),
+        "cost_source_kind": row.get("cost_source_kind"),
+        "synthetic_promotion_blocked": bool(row.get("synthetic_promotion_blocked")),
+        "live_routing": row.get("live_routing"),
+        "operator_execution_mode": row.get("operator_execution_mode")
+        or h4a_contract.get("operator_execution_mode"),
+        "signal_expire_ts": signal_expire_ts,
+        "execution_contract": h4a_contract,
+        "h4a_followup": h4a_followup,
+        "operator_signal_status": row.get("operator_signal_status"),
+        "signal_viewed": bool(row.get("signal_viewed")),
+        "signal_viewed_at": row.get("signal_viewed_at"),
+        "signal_viewed_by": row.get("signal_viewed_by"),
+        "signal_used": bool(row.get("signal_used")),
+        "signal_used_at": row.get("signal_used_at"),
+        "signal_used_by": row.get("signal_used_by"),
+        "signal_details_pending": bool(row.get("signal_details_pending")),
+        "enter_submitted_at": row.get("enter_submitted_at"),
+        "enter_filled_at": row.get("enter_filled_at"),
+        "entry_cancelled_at": row.get("entry_cancelled_at"),
+        "exit_submitted_at": row.get("exit_submitted_at"),
+        "exit_filled_at": row.get("exit_filled_at"),
+        "effective_fill_price": row.get("effective_fill_price"),
+        "initial_loss_sl": row.get("initial_loss_sl"),
+        "tp_limit": row.get("tp_limit"),
+        "protective_sl": row.get("protective_sl"),
+        "break_even_activation_price": row.get("break_even_activation_price"),
+        "break_even_stop_price": row.get("break_even_stop_price"),
+        "trail_activation_price": row.get("trail_activation_price"),
+        "fill_ts": row.get("fill_ts"),
+        "fill_price": row.get("fill_price"),
+        "fallback_applied": row.get("fallback_applied"),
+        "recalc_applied": row.get("recalc_applied"),
+        "time_stop_deadline_ts": row.get("time_stop_deadline_ts"),
+        "same_bar_resolution": row.get("same_bar_resolution"),
+        "exit_reason_code": row.get("exit_reason_code"),
         "strategy_id": strategy_meta.get("strategy_id"),
         "strategy_type": strategy_meta.get("strategy_type"),
         "strategy_stream": strategy_meta.get("strategy_stream"),
@@ -986,8 +1145,41 @@ def _parse_signal_action_note(note: object) -> dict[str, object] | None:
         return None
     kind = str(payload.get("kind") or "").strip()
     if kind not in {"signal_action_v1_adapter", "signal_action_v2"}:
+        fingerprint = str(payload.get("fingerprint") or "").strip()
+        requested_action = str(payload.get("requested_action") or payload.get("action") or "").strip()
+        if not fingerprint:
+            return None
+        if requested_action:
+            return payload
+        if any(
+            key in payload
+            for key in (
+                "operator_execution_mode",
+                "fill_ts",
+                "fill_price",
+                "effective_fill_price",
+                "initial_loss_sl",
+                "tp_limit",
+                "protective_sl",
+                "break_even_activation_price",
+                "break_even_stop_price",
+                "trail_activation_price",
+                "time_stop_deadline_ts",
+                "same_bar_resolution",
+                "exit_reason_code",
+                "h4a_stage",
+            )
+        ):
+            return payload
         return None
     return payload
+
+
+def _canonical_requested_signal_action(value: object) -> str:
+    normalized = _coerce_signal_action_request(value, legacy_mode=False)
+    if normalized is not None:
+        return normalized[0]
+    return _normalize_execution_action(value)
 
 
 def _parse_ack_note_from_execution_note(note: object) -> dict[str, object] | None:
@@ -3190,28 +3382,10 @@ def create_app(settings: AppSettings) -> Dash:
                 return jsonify([])
             rows = load_active_signals(session, latest.run_id)
             executions = load_open_executions(session)
-            usage_by_fingerprint: dict[str, dict[str, object]] = {}
+            operator_events_by_fingerprint: dict[str, dict[str, object]] = {}
+            operator_events_by_pair: dict[tuple[str, str], dict[str, object]] = {}
             pair_trade_timestamps: dict[tuple[str, str], list[datetime]] = {}
             position_state: dict[tuple[str, str], dict[str, object]] = {}
-
-            def _register_usage(
-                fingerprint: str,
-                *,
-                used_at: datetime,
-                used_by: str | None,
-            ) -> None:
-                existing = usage_by_fingerprint.get(fingerprint)
-                existing_ts_raw = existing.get("timestamp") if isinstance(existing, dict) else None
-                existing_ts = (
-                    _normalize_datetime(existing_ts_raw)
-                    if isinstance(existing_ts_raw, datetime)
-                    else None
-                )
-                if existing_ts is None or used_at >= existing_ts:
-                    usage_by_fingerprint[fingerprint] = {
-                        "timestamp": used_at,
-                        "used_by": used_by,
-                    }
 
             for exec_row in sorted(executions, key=lambda item: item.timestamp):
                 if not isinstance(exec_row.timestamp, datetime):
@@ -3233,51 +3407,59 @@ def create_app(settings: AppSettings) -> Dash:
                     },
                 )
                 action = _normalize_execution_action(exec_row.action)
-                if action == "ack":
-                    ack_note = _parse_ack_note_from_execution_note(exec_row.note)
-                    if isinstance(ack_note, dict):
-                        fingerprint_raw = ack_note.get("fingerprint")
-                        if isinstance(fingerprint_raw, str) and fingerprint_raw.strip():
-                            _register_usage(
-                                fingerprint_raw.strip(),
-                                used_at=exec_ts,
-                                used_by=_signal_used_by_from_ack(ack_note),
-                            )
-                    action_note = _parse_signal_action_note(exec_row.note)
-                    if isinstance(action_note, dict):
-                        fingerprint_raw = action_note.get("fingerprint")
-                        source = str(action_note.get("source") or "").strip().lower()
-                        if (
-                            isinstance(fingerprint_raw, str)
-                            and fingerprint_raw.strip()
-                            and source in {"ui", "telegram", "v1_adapter"}
-                        ):
-                            _register_usage(
-                                fingerprint_raw.strip(),
-                                used_at=exec_ts,
-                                used_by=_signal_used_by_from_action(action_note),
-                            )
-                    continue
-
                 action_note = _parse_signal_action_note(exec_row.note)
+                ack_note = _parse_ack_note_from_execution_note(exec_row.note)
                 if isinstance(action_note, dict):
-                    fingerprint_raw = action_note.get("fingerprint")
-                    requested_action = str(action_note.get("requested_action") or "").strip().lower()
-                    source = str(action_note.get("source") or "").strip().lower()
+                    note_payload = dict(action_note)
+                    fingerprint_raw = note_payload.get("fingerprint")
+                    requested_action_raw = note_payload.get("requested_action") or action
+                    requested_action = _canonical_requested_signal_action(requested_action_raw)
+                    actor = _signal_used_by_from_action(note_payload)
+                    if isinstance(ack_note, dict):
+                        ack_fingerprint = str(ack_note.get("fingerprint") or "").strip()
+                        if not fingerprint_raw and ack_fingerprint:
+                            fingerprint_raw = ack_fingerprint
+                            note_payload["fingerprint"] = ack_fingerprint
+                        note_payload["legacy_consumes_intent"] = (
+                            str(note_payload.get("kind") or "").strip() == "signal_action_v1_adapter"
+                            and str(requested_action_raw or "").strip().lower() in {"ack", "acknowledged"}
+                        )
+                        if bool(note_payload.get("legacy_consumes_intent")):
+                            actor = _signal_used_by_from_ack(ack_note) or actor
+                        elif actor is None:
+                            actor = _signal_used_by_from_ack(ack_note)
                     if (
                         isinstance(fingerprint_raw, str)
                         and fingerprint_raw.strip()
-                        and requested_action in {"enter", "ack"}
-                        and source in {"ui", "telegram", "v1_adapter"}
                     ):
-                        _register_usage(
-                            fingerprint_raw.strip(),
-                            used_at=exec_ts,
-                            used_by=_signal_used_by_from_action(action_note),
+                        register_operator_event(
+                            operator_events_by_fingerprint=operator_events_by_fingerprint,
+                            operator_events_by_pair=operator_events_by_pair,
+                            fingerprint=fingerprint_raw.strip(),
+                            pair_key=key,
+                            status=requested_action,
+                            event_at=exec_ts,
+                            actor=actor,
+                            note_payload=note_payload,
                         )
+                elif action == "mark_viewed":
+                    if isinstance(ack_note, dict):
+                        fingerprint_raw = ack_note.get("fingerprint")
+                        if isinstance(fingerprint_raw, str) and fingerprint_raw.strip():
+                            register_operator_event(
+                                operator_events_by_fingerprint=operator_events_by_fingerprint,
+                                operator_events_by_pair=operator_events_by_pair,
+                                fingerprint=fingerprint_raw.strip(),
+                                pair_key=key,
+                                status="mark_viewed",
+                                event_at=exec_ts,
+                                actor=_signal_used_by_from_ack(ack_note),
+                                note_payload={**ack_note, "legacy_consumes_intent": True},
+                            )
 
-                if action not in {"enter", "exit"}:
+                if action not in {"enter_filled", "exit_filled"}:
                     continue
+                position_action = "enter" if action == "enter_filled" else "exit"
                 pair_trade_timestamps.setdefault(key, []).append(exec_ts)
                 leg = _normalize_execution_leg(exec_row.side)
                 order_id = _normalize_order_id(getattr(exec_row, "order_id", None))
@@ -3309,7 +3491,7 @@ def create_app(settings: AppSettings) -> Dash:
                             order_legs[order_key] = set(str(item) for item in value)
                 else:
                     order_legs = {}
-                group_key = (action, order_id)
+                group_key = (position_action, order_id)
                 group_legs = order_legs.setdefault(group_key, set())
                 group_legs.add(leg)
                 state["order_legs"] = order_legs
@@ -3319,12 +3501,12 @@ def create_app(settings: AppSettings) -> Dash:
                 exit_orders_raw = state.get("exit_orders")
                 exit_orders = set(exit_orders_raw) if isinstance(exit_orders_raw, set) else set()
 
-                if action == "enter":
+                if position_action == "enter":
                     state["enter_count"] = int(state["enter_count"]) + 1
                     state["net_executions"] = int(state["net_executions"]) + 1
                     open_legs[leg] = int(open_legs.get(leg, 0)) + 1
                     enter_orders.add(order_id)
-                elif action == "exit":
+                elif position_action == "exit":
                     state["exit_count"] = int(state["exit_count"]) + 1
                     state["net_executions"] = max(int(state["net_executions"]) - 1, 0)
                     _decrement_leg_bucket(open_legs, leg)
@@ -3349,6 +3531,7 @@ def create_app(settings: AppSettings) -> Dash:
                 strategy_stream: str | None = None,
             ) -> dict[str, object]:
                 fingerprint = str(signal_fingerprint or "").strip()
+                matched_by_pair = False
                 if not fingerprint:
                     fingerprint = build_signal_fingerprint(
                         run_id=run_id,
@@ -3358,25 +3541,104 @@ def create_app(settings: AppSettings) -> Dash:
                         signal_action=signal_action,
                         strategy_stream=strategy_stream,
                     )
-                usage_entry = usage_by_fingerprint.get(fingerprint)
-                if not isinstance(usage_entry, dict):
+                operator_entry = operator_events_by_fingerprint.get(fingerprint)
+                if not isinstance(operator_entry, dict):
+                    pair_lookup_key = (str(stock or "").strip(), str(future or "").strip())
+                    operator_entry = operator_events_by_pair.get(pair_lookup_key)
+                    matched_by_pair = isinstance(operator_entry, dict)
+                if not isinstance(operator_entry, dict):
                     return {
+                        "signal_viewed": False,
+                        "signal_viewed_at": None,
+                        "signal_viewed_by": None,
                         "signal_used": False,
                         "signal_used_at": None,
                         "signal_used_by": None,
                         "signal_details_pending": False,
+                        "operator_signal_status": "none",
+                        "operator_status_at": None,
+                        "operator_status_by": None,
+                        "operator_execution_mode": normalize_operator_execution_mode(None),
+                        "enter_submitted_at": None,
+                        "enter_filled_at": None,
+                        "entry_cancelled_at": None,
+                        "exit_submitted_at": None,
+                        "exit_filled_at": None,
+                        "fill_ts": None,
+                        "fill_price": None,
+                        "effective_fill_price": None,
+                        "initial_loss_sl": None,
+                        "tp_limit": None,
+                        "protective_sl": None,
+                        "break_even_activation_price": None,
+                        "break_even_stop_price": None,
+                        "trail_activation_price": None,
+                        "fallback_applied": None,
+                        "recalc_applied": None,
+                        "time_stop_deadline_ts": None,
+                        "same_bar_resolution": None,
+                        "exit_reason_code": None,
+                        "h4a_followup_confirmations": default_operator_event_entry()["h4a_followup_confirmations"],
                     }
-                usage_ts_raw = usage_entry.get("timestamp")
-                usage_ts = _normalize_datetime(usage_ts_raw) if isinstance(usage_ts_raw, datetime) else None
-                has_trade_after_usage = False
-                if usage_ts is not None:
-                    trades = pair_trade_timestamps.get((stock, future), [])
-                    has_trade_after_usage = any(trade_ts > usage_ts for trade_ts in trades)
+                operator_status = str(operator_entry.get("operator_signal_status") or "").strip().lower()
+                pair_scope_intent_hidden = matched_by_pair and signal_action not in {"enter", "exit"}
+
+                def _to_iso(value: object) -> str | None:
+                    return value.isoformat() if isinstance(value, datetime) else None
+
                 return {
-                    "signal_used": True,
-                    "signal_used_at": usage_ts.isoformat() if usage_ts is not None else None,
-                    "signal_used_by": usage_entry.get("used_by"),
-                    "signal_details_pending": not has_trade_after_usage,
+                    "signal_viewed": (
+                        False
+                        if pair_scope_intent_hidden
+                        else isinstance(operator_entry.get("signal_viewed_at"), datetime)
+                    ),
+                    "signal_viewed_at": (
+                        None
+                        if pair_scope_intent_hidden
+                        else _to_iso(operator_entry.get("signal_viewed_at"))
+                    ),
+                    "signal_viewed_by": None if pair_scope_intent_hidden else operator_entry.get("signal_viewed_by"),
+                    "signal_used": False if pair_scope_intent_hidden else bool(operator_entry.get("signal_used")),
+                    "signal_used_at": (
+                        None
+                        if pair_scope_intent_hidden
+                        else _to_iso(operator_entry.get("signal_used_at"))
+                    ),
+                    "signal_used_by": None if pair_scope_intent_hidden else operator_entry.get("signal_used_by"),
+                    "signal_details_pending": (
+                        False
+                        if pair_scope_intent_hidden
+                        else operator_status in {"mark_viewed", "enter_submitted"}
+                    ),
+                    "operator_signal_status": operator_status or "none",
+                    "operator_status_at": _to_iso(operator_entry.get("operator_status_at")),
+                    "operator_status_by": operator_entry.get("operator_status_by"),
+                    "operator_execution_mode": (
+                        operator_entry.get("operator_execution_mode")
+                        or normalize_operator_execution_mode(None)
+                    ),
+                    "enter_submitted_at": _to_iso(operator_entry.get("enter_submitted_at")),
+                    "enter_filled_at": _to_iso(operator_entry.get("enter_filled_at")),
+                    "entry_cancelled_at": _to_iso(operator_entry.get("entry_cancelled_at")),
+                    "exit_submitted_at": _to_iso(operator_entry.get("exit_submitted_at")),
+                    "exit_filled_at": _to_iso(operator_entry.get("exit_filled_at")),
+                    "fill_ts": operator_entry.get("fill_ts"),
+                    "fill_price": operator_entry.get("fill_price"),
+                    "effective_fill_price": operator_entry.get("effective_fill_price"),
+                    "initial_loss_sl": operator_entry.get("initial_loss_sl"),
+                    "tp_limit": operator_entry.get("tp_limit"),
+                    "protective_sl": operator_entry.get("protective_sl"),
+                    "break_even_activation_price": operator_entry.get("break_even_activation_price"),
+                    "break_even_stop_price": operator_entry.get("break_even_stop_price"),
+                    "trail_activation_price": operator_entry.get("trail_activation_price"),
+                    "fallback_applied": operator_entry.get("fallback_applied"),
+                    "recalc_applied": operator_entry.get("recalc_applied"),
+                    "time_stop_deadline_ts": operator_entry.get("time_stop_deadline_ts"),
+                    "same_bar_resolution": operator_entry.get("same_bar_resolution"),
+                    "exit_reason_code": operator_entry.get("exit_reason_code"),
+                    "h4a_followup_confirmations": serialize_followup_confirmations(
+                        operator_entry.get("h4a_followup_confirmations")
+                    ),
                 }
 
             def _strategy_metadata_for_history_row(
@@ -3620,6 +3882,8 @@ def create_app(settings: AppSettings) -> Dash:
                     "strategy_type": row_strategy_meta.get("strategy_type"),
                     "strategy_stream": row_strategy_meta.get("strategy_stream"),
                     "strategy_id": row_strategy_meta.get("strategy_id"),
+                    "baseline_id": ACTIVE_BASELINE_ID,
+                    "execution_profile_id": ACTIVE_BASELINE_ID,
                     "signal_reasons": signal_reasons,
                     "signal_metrics": signal_metrics,
                     "position_open": is_open,
@@ -3756,6 +4020,8 @@ def create_app(settings: AppSettings) -> Dash:
                     "strategy_type": row_strategy_meta.get("strategy_type"),
                     "strategy_stream": row_strategy_meta.get("strategy_stream"),
                     "strategy_id": row_strategy_meta.get("strategy_id"),
+                    "baseline_id": ACTIVE_BASELINE_ID,
+                    "execution_profile_id": ACTIVE_BASELINE_ID,
                     "signal_reasons": signal_reasons,
                     "signal_metrics": signal_metrics,
                     "position_open": True,
@@ -4162,15 +4428,36 @@ def create_app(settings: AppSettings) -> Dash:
 
         callback_ttl_hours = int(getattr(settings.telegram, "callback_ttl_hours", 72) or 72)
         payload: list[dict[str, object]] = []
-        for row in rows:
+        guarded_rows = apply_live_routing_guards(rows, settings=settings)
+        for row in guarded_rows:
             if not isinstance(row, dict):
                 continue
-            payload.append(
-                _build_signal_actionability_projection(
-                    row,
-                    callback_ttl_hours=callback_ttl_hours,
-                )
+            projection = _build_signal_actionability_projection(
+                row,
+                settings=settings,
+                callback_ttl_hours=callback_ttl_hours,
             )
+            projection_contract = projection.get("execution_contract")
+            if not isinstance(projection_contract, dict) or not projection_contract:
+                projection_contract = build_h4a_execution_contract(
+                    settings=settings,
+                    row=row,
+                    operator_execution_mode=str(
+                        projection.get("operator_execution_mode")
+                        or row.get("operator_execution_mode")
+                        or ""
+                    ),
+                )
+                projection["execution_contract"] = projection_contract
+            if not projection.get("baseline_id"):
+                projection["baseline_id"] = projection_contract.get("baseline_id")
+            if not projection.get("execution_profile_id"):
+                projection["execution_profile_id"] = projection_contract.get("execution_profile_id")
+            projection_followup_row = dict(row)
+            projection_followup_row.update(projection)
+            projection_followup_row["execution_contract"] = projection_contract
+            projection["h4a_followup"] = build_h4a_followup_state(row=projection_followup_row)
+            payload.append(projection)
         payload.sort(key=lambda item: str(item.get("snapshot_as_of") or ""), reverse=True)
         payload.sort(key=lambda item: 0 if str(item.get("position_state") or "") == "open" else 1)
         return payload, 200
@@ -4333,6 +4620,53 @@ def create_app(settings: AppSettings) -> Dash:
                     "entry_spread_max": row.get("entry_spread_max"),
                     "entry_spread_pct_min": row.get("entry_spread_pct_min"),
                     "entry_spread_pct_max": row.get("entry_spread_pct_max"),
+                    "baseline_id": (row.get("entry_plan") or {}).get("baseline_id")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "execution_profile_id": (row.get("entry_plan") or {}).get("execution_profile_id")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "entry_order_type": (row.get("entry_plan") or {}).get("entry_order_type")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "entry_improve_ticks": (row.get("entry_plan") or {}).get("entry_improve_ticks")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "entry_fallback_after_minutes": (
+                        (row.get("entry_plan") or {}).get("entry_fallback_after_minutes")
+                        if isinstance(row.get("entry_plan"), dict)
+                        else None
+                    ),
+                    "entry_fallback_slip_ticks": (
+                        (row.get("entry_plan") or {}).get("entry_fallback_slip_ticks")
+                        if isinstance(row.get("entry_plan"), dict)
+                        else None
+                    ),
+                    "break_even_rr": (row.get("entry_plan") or {}).get("break_even_rr")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "break_even_buffer_ticks": (
+                        (row.get("entry_plan") or {}).get("break_even_buffer_ticks")
+                        if isinstance(row.get("entry_plan"), dict)
+                        else None
+                    ),
+                    "trail_activation_rr": (row.get("entry_plan") or {}).get("trail_activation_rr")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "trail_offset_ticks": (row.get("entry_plan") or {}).get("trail_offset_ticks")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "time_stop_minutes": (row.get("entry_plan") or {}).get("time_stop_minutes")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "same_bar_policy": (row.get("entry_plan") or {}).get("same_bar_policy")
+                    if isinstance(row.get("entry_plan"), dict)
+                    else None,
+                    "same_bar_policy_source": (
+                        (row.get("entry_plan") or {}).get("same_bar_policy_source")
+                        if isinstance(row.get("entry_plan"), dict)
+                        else None
+                    ),
                 },
                 "entry_range_now": {
                     "stock_now": row.get("spot_mid"),
@@ -4357,6 +4691,43 @@ def create_app(settings: AppSettings) -> Dash:
                 "signal_origin_timestamp": row.get("signal_origin_timestamp"),
                 "metrics": row.get("metrics") or {},
                 "signal_id": row.get("signal_id"),
+                "baseline_id": row.get("baseline_id"),
+                "execution_profile_id": row.get("execution_profile_id"),
+                "historical_source_kind": row.get("historical_source_kind"),
+                "cost_source_kind": row.get("cost_source_kind"),
+                "synthetic_promotion_blocked": bool(row.get("synthetic_promotion_blocked")),
+                "live_routing": row.get("live_routing"),
+                "operator_execution_mode": row.get("operator_execution_mode"),
+                "signal_expire_ts": row.get("signal_expire_ts"),
+                "execution_contract": row.get("execution_contract"),
+                "h4a_followup": row.get("h4a_followup"),
+                "operator_signal_status": row.get("operator_signal_status"),
+                "signal_viewed": bool(row.get("signal_viewed")),
+                "signal_viewed_at": row.get("signal_viewed_at"),
+                "signal_viewed_by": row.get("signal_viewed_by"),
+                "signal_used": bool(row.get("signal_used")),
+                "signal_used_at": row.get("signal_used_at"),
+                "signal_used_by": row.get("signal_used_by"),
+                "signal_details_pending": bool(row.get("signal_details_pending")),
+                "enter_submitted_at": row.get("enter_submitted_at"),
+                "enter_filled_at": row.get("enter_filled_at"),
+                "entry_cancelled_at": row.get("entry_cancelled_at"),
+                "exit_submitted_at": row.get("exit_submitted_at"),
+                "exit_filled_at": row.get("exit_filled_at"),
+                "effective_fill_price": row.get("effective_fill_price"),
+                "initial_loss_sl": row.get("initial_loss_sl"),
+                "tp_limit": row.get("tp_limit"),
+                "protective_sl": row.get("protective_sl"),
+                "break_even_activation_price": row.get("break_even_activation_price"),
+                "break_even_stop_price": row.get("break_even_stop_price"),
+                "trail_activation_price": row.get("trail_activation_price"),
+                "fill_ts": row.get("fill_ts"),
+                "fill_price": row.get("fill_price"),
+                "fallback_applied": row.get("fallback_applied"),
+                "recalc_applied": row.get("recalc_applied"),
+                "time_stop_deadline_ts": row.get("time_stop_deadline_ts"),
+                "same_bar_resolution": row.get("same_bar_resolution"),
+                "exit_reason_code": row.get("exit_reason_code"),
                 "strategy_id": row.get("strategy_id"),
                 "strategy_type": row.get("strategy_type"),
                 "strategy_stream": row.get("strategy_stream"),
@@ -4385,6 +4756,7 @@ def create_app(settings: AppSettings) -> Dash:
         response_payload = {
             "status": payload.get("status", "ok"),
             "action": payload.get("action"),
+            "action_alias": payload.get("action_alias"),
             "entity_ref": entity_ref,
             "intent_id": intent_id,
             "signal_id": payload.get("signal_id") or signal_id_hint,
@@ -4546,8 +4918,10 @@ def create_app(settings: AppSettings) -> Dash:
 
         intent_id = str(payload.get("intent_id") or "").strip() or None
         action = str(payload.get("action") or "").strip().lower()
-        if action not in {"ack", "enter", "exit", "hold"}:
-            return _bad_request("action must be one of: ack, enter, exit, hold")
+        if _coerce_signal_action_request(action, legacy_mode=False) is None:
+            return _bad_request(
+                "action must be one of: ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, confirm_followup, manual_override"
+            )
         instrument_id = str(entity_id).strip()
         if not instrument_id:
             return _bad_request("entity_id is required for instrument")
@@ -4650,11 +5024,16 @@ def create_app(settings: AppSettings) -> Dash:
         source_default: str,
         legacy_mode: bool = False,
     ):
+        requested_action_raw = str(payload.get("action") or "").strip().lower()
         action_pair = _coerce_signal_action_request(payload.get("action"), legacy_mode=legacy_mode)
         if action_pair is None:
             if legacy_mode:
-                return _bad_request("action must be one of: enter, exit, hold_open")
-            return _bad_request("action must be one of: ack, enter, exit, hold")
+                return _bad_request(
+                    "action must be one of: mark_viewed, enter_submitted, enter_filled, entry_cancelled, exit_submitted, exit_filled, confirm_followup, manual_override"
+                )
+            return _bad_request(
+                "action must be one of: ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, confirm_followup, manual_override"
+            )
         requested_action, execution_action = action_pair
 
         source = _normalize_signal_action_source(payload.get("source"), default=source_default)
@@ -4744,9 +5123,15 @@ def create_app(settings: AppSettings) -> Dash:
             if pretrade_degraded_hint is None:
                 pretrade_degraded_hint = _parse_bool(pretrade_payload.get("degraded"))
 
+        fail_closed_action = requested_action
+        if requested_action in {"enter_submitted", "enter_filled"}:
+            fail_closed_action = "enter"
+        elif requested_action in {"exit_submitted", "exit_filled"}:
+            fail_closed_action = "exit"
+
         fail_closed = evaluate_fail_closed_entry(
             enabled=bool(settings.ui.ff_fail_closed_execution),
-            requested_action=requested_action,
+            requested_action=fail_closed_action,
             signal_row=signal_row if isinstance(signal_row, dict) else None,
             source=source,
             override=fail_closed_override,
@@ -4777,10 +5162,26 @@ def create_app(settings: AppSettings) -> Dash:
 
         side = payload.get("side")
         order_id = _normalize_order_id(payload.get("order_id"))
-        if order_id is None and execution_action in {"enter", "exit", "hold_open"}:
+        if order_id is None and requested_action in {
+            "enter_submitted",
+            "enter_filled",
+            "exit_submitted",
+            "exit_filled",
+        }:
             leg = _normalize_execution_leg(side)
             if leg in {"stock", "future"}:
-                order_id = f"{stock}-{future}-{execution_action}-{uuid.uuid4().hex[:10]}"
+                order_action = (
+                    execution_action
+                    if execution_action in {"enter", "exit", "enter_submitted", "exit_submitted"}
+                    else requested_action
+                )
+                order_id = f"{stock}-{future}-{order_action}-{uuid.uuid4().hex[:10]}"
+
+        operator_execution_mode_hint = payload.get("operator_execution_mode")
+        if requested_action == "manual_override":
+            operator_execution_mode_hint = "manual_override"
+        operator_execution_mode = normalize_operator_execution_mode(operator_execution_mode_hint)
+        now = datetime.now(timezone.utc)
 
         note_payload: dict[str, object] = {
             "kind": "signal_action_v1_adapter" if legacy_mode else "signal_action_v2",
@@ -4789,7 +5190,10 @@ def create_app(settings: AppSettings) -> Dash:
             "actor_id": actor_id,
             "idempotency_key": idempotency_key,
             "requested_action": requested_action,
+            "operator_execution_mode": operator_execution_mode,
         }
+        if requested_action_raw and requested_action_raw != requested_action:
+            note_payload["requested_action_alias"] = requested_action_raw
         if signal_fingerprint is not None:
             note_payload["fingerprint"] = signal_fingerprint
         if signal_run_id:
@@ -4803,6 +5207,13 @@ def create_app(settings: AppSettings) -> Dash:
         if fail_closed.status == "override":
             note_payload["fail_closed_override"] = True
             note_payload["fail_closed_reason"] = fail_closed.reason_code
+        note_payload.update(
+            build_h4a_execution_contract(
+                settings=settings,
+                row=signal_row if isinstance(signal_row, dict) else None,
+                operator_execution_mode=operator_execution_mode,
+            )
+        )
         operator_note = payload.get("note") or payload.get("comment")
         operator_note_value = str(operator_note).strip() if operator_note is not None else None
         if operator_note_value:
@@ -4812,9 +5223,76 @@ def create_app(settings: AppSettings) -> Dash:
                 ack_fingerprint = str(ack_note.get("fingerprint") or "").strip()
                 if ack_fingerprint and "fingerprint" not in note_payload:
                     note_payload["fingerprint"] = ack_fingerprint
-        note = json.dumps(note_payload, ensure_ascii=False, separators=(",", ":"))
 
-        now = datetime.now(timezone.utc)
+        fill_price_value = payload.get("fill_price")
+        if fill_price_value is None:
+            fill_price_value = payload.get("price")
+        fill_ts_value = payload.get("fill_ts")
+        if fill_ts_value is None and requested_action in {"enter_filled", "exit_filled"}:
+            fill_ts_value = now.isoformat().replace("+00:00", "Z")
+        same_bar_resolution = (
+            normalize_same_bar_resolution(payload.get("same_bar_resolution"))
+            if payload.get("same_bar_resolution") is not None
+            else None
+        )
+        if same_bar_resolution is not None:
+            note_payload["same_bar_resolution"] = same_bar_resolution
+        fallback_applied = bool(_parse_bool(payload.get("fallback_applied")))
+        if fallback_applied:
+            note_payload["fallback_applied"] = True
+        if requested_action == "enter_filled":
+            note_payload.update(
+                build_h4a_fill_state(
+                    settings=settings,
+                    row=signal_row if isinstance(signal_row, dict) else None,
+                    fill_price=fill_price_value,
+                    fill_ts=fill_ts_value,
+                    side_action=payload.get("side_action"),
+                    tick_size=payload.get("tick_size"),
+                    base_risk_ticks=payload.get("risk_ticks"),
+                    fallback_applied=fallback_applied,
+                    same_bar_resolution=same_bar_resolution,
+                    operator_execution_mode=operator_execution_mode,
+                )
+            )
+        elif requested_action == "exit_filled":
+            exit_reason_code_raw = (
+                str(payload.get("exit_reason_code") or reason_code or "").strip() or None
+            )
+            if exit_reason_code_raw is None:
+                return _bad_request(
+                    "exit_reason_code is required for H4A exit_filled "
+                    f"and must be one of: {', '.join(sorted(H4A_EXIT_REASON_CODES))}"
+                )
+            exit_reason_code = normalize_exit_reason_code(exit_reason_code_raw)
+            if exit_reason_code is None:
+                return _bad_request(
+                    "exit_reason_code must be one of: "
+                    f"{', '.join(sorted(H4A_EXIT_REASON_CODES))}"
+                )
+            note_payload["exit_reason_code"] = exit_reason_code
+            if exit_reason_code == "same_bar_ambiguous" and same_bar_resolution is None:
+                note_payload["same_bar_resolution"] = "same_bar_ambiguous"
+            if fill_ts_value is not None:
+                note_payload["fill_ts"] = fill_ts_value
+            if fill_price_value is not None:
+                note_payload["fill_price"] = fill_price_value
+        elif requested_action == "confirm_followup":
+            h4a_stage = normalize_h4a_followup_stage(payload.get("h4a_stage"))
+            if h4a_stage is None:
+                return _bad_request(
+                    "h4a_stage is required for confirm_followup and must be one of: "
+                    "entry_fallback_due, post_fill_packet, break_even_due, trailing_due, "
+                    "break_even_trailing_due, time_stop_due, time_stop_overdue"
+                )
+            note_payload["h4a_stage"] = h4a_stage
+            note_payload["confirmed_at"] = now.isoformat().replace("+00:00", "Z")
+            expanded_stages = expand_h4a_followup_stage(h4a_stage)
+            if expanded_stages:
+                note_payload["h4a_stage_aliases"] = list(expanded_stages)
+        elif requested_action == "mark_viewed":
+            note_payload["viewed_at"] = now.isoformat().replace("+00:00", "Z")
+        note = json.dumps(note_payload, ensure_ascii=False, separators=(",", ":"))
         action_id = f"act-{uuid.uuid4().hex[:12]}"
 
         def _duplicate_signal_action_response(row) -> tuple[object, int] | object:
@@ -4848,7 +5326,16 @@ def create_app(settings: AppSettings) -> Dash:
 
             status = payload.get("status")
             if status is None:
-                status = "acknowledged" if requested_action == "ack" else "recorded"
+                status = {
+                    "mark_viewed": "viewed",
+                    "enter_submitted": "submitted",
+                    "enter_filled": "filled",
+                    "entry_cancelled": "cancelled",
+                    "exit_submitted": "submitted",
+                    "exit_filled": "filled",
+                    "confirm_followup": "confirmed",
+                    "manual_override": "manual_override",
+                }.get(requested_action, "recorded")
             try:
                 store_signal_execution(
                     session,
@@ -4894,12 +5381,16 @@ def create_app(settings: AppSettings) -> Dash:
                     length=20,
                 ),
                 "action": requested_action,
+                "action_alias": requested_action_raw or None,
                 "source": source,
                 "actor_id": actor_id,
                 "idempotency_key": idempotency_key,
                 "stored_action": execution_action,
                 "order_id": order_id,
                 "created_at": now.isoformat().replace("+00:00", "Z"),
+                "baseline_id": ACTIVE_BASELINE_ID,
+                "execution_profile_id": ACTIVE_BASELINE_ID,
+                "operator_execution_mode": operator_execution_mode,
                 "fail_closed": {
                     "enabled": bool(settings.ui.ff_fail_closed_execution),
                     "status": fail_closed.status,
@@ -5020,6 +5511,8 @@ def create_app(settings: AppSettings) -> Dash:
                 "direction": candidate.direction,
                 "source": "system",
                 "actor_id": actor_id,
+                "operator_execution_mode": "manual_override",
+                "exit_reason_code": "manual_override",
                 "reason_code": "LEG_IMBALANCE_TIMEOUT",
                 "comment": f"auto_unwind_after_{candidate.age_sec}s",
                 "status": "policy_submitted",

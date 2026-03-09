@@ -16,11 +16,15 @@ from moex_carry.integrations.telegram_runtime_utils import (
     resolve_display_timezone,
 )
 from moex_carry.integrations.telegram_news_broadcast import broadcast_news_alerts
+from moex_carry.integrations.telegram_h4a_followup import (
+    broadcast_h4a_followups,
+    has_post_fill_state,
+)
 from moex_carry.integrations.telegram_root_broadcast import broadcast_root_alerts
+from moex_carry.integrations.telegram_signal_message import format_signal_message
 from moex_carry.integrations.telegram_strategy import (
     normalize_strategy_stream,
     resolve_strategy_metadata,
-    strategy_label,
 )
 from moex_carry.integrations.telegram_worker_state import (
     iso_now as _iso_now,
@@ -122,6 +126,24 @@ class TelegramWorker:
             timeout=20,
         )
 
+    def _send_message_with_keyboard(
+        self,
+        *,
+        chat_id: int,
+        text: str,
+        keyboard: list[list[dict[str, object]]],
+    ) -> None:
+        self._telegram_api(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "disable_web_page_preview": True,
+                "reply_markup": {"inline_keyboard": keyboard},
+            },
+            timeout=20,
+        )
+
     def _answer_callback(self, callback_query_id: str, text: str) -> None:
         self._telegram_api(
             "answerCallbackQuery",
@@ -141,20 +163,35 @@ class TelegramWorker:
         token: str,
     ) -> None:
         keyboard: list[list[dict[str, object]]] = [
-            [{"text": "✅ Использовал сигнал", "callback_data": f"ack:{token}"}]
+            [{"text": "👀 Отметить просмотр", "callback_data": f"ack:{token}"}]
         ]
         if isinstance(self.cfg.ui_base_url, str) and self.cfg.ui_base_url.strip():
             keyboard.append([{"text": "🔎 Открыть UI", "url": str(self.cfg.ui_base_url).strip()}])
-        self._telegram_api(
-            "sendMessage",
-            {
-                "chat_id": chat_id,
-                "text": text,
-                "disable_web_page_preview": True,
-                "reply_markup": {"inline_keyboard": keyboard},
-            },
-            timeout=20,
-        )
+        self._send_message_with_keyboard(chat_id=chat_id, text=text, keyboard=keyboard)
+
+    def _send_followup_message(
+        self,
+        *,
+        chat_id: int,
+        text: str,
+        actions: list[dict[str, str]],
+    ) -> None:
+        callback_buttons: list[dict[str, object]] = []
+        for action in actions:
+            label = str(action.get("text") or "").strip()
+            callback_action = str(action.get("callback_action") or "").strip().lower()
+            token = str(action.get("token") or "").strip()
+            if not label or not callback_action or not token:
+                continue
+            callback_buttons.append(
+                {"text": label, "callback_data": f"act:{callback_action}:{token}"}
+            )
+        keyboard: list[list[dict[str, object]]] = []
+        if callback_buttons:
+            keyboard.append(callback_buttons)
+        if isinstance(self.cfg.ui_base_url, str) and self.cfg.ui_base_url.strip():
+            keyboard.append([{"text": "🔎 Открыть UI", "url": str(self.cfg.ui_base_url).strip()}])
+        self._send_message_with_keyboard(chat_id=chat_id, text=text, keyboard=keyboard)
     def _fetch_updates(self) -> list[dict[str, object]]:
         offset = int(self._state.get("last_update_id") or 0) + 1
         payload = {
@@ -242,7 +279,7 @@ class TelegramWorker:
         self._save_state()
         self._send_text(
             chat_id,
-            "Бот подключен.\nБуду присылать actionable-сигналы и принимать ACK.",
+            "Бот подключен.\nБуду присылать actionable-сигналы, post-fill H4A follow-up и принимать отметку просмотра.",
         )
     def _handle_help(self, message: dict[str, object]) -> None:
         from_user = message.get("from")
@@ -258,7 +295,13 @@ class TelegramWorker:
             return
         self._send_text(
             chat_id,
-            "Команды:\n/start — зарегистрировать чат для рассылки\n/help — показать эту справку",
+            (
+                "Команды:\n"
+                "/start — зарегистрировать чат для рассылки\n"
+                "/help — показать эту справку\n\n"
+                "После `enter_submitted` и `enter_filled` бот присылает H4A follow-up: fallback, post-fill packet, break-even/trailing и time stop.\n"
+                "В follow-up сообщении используйте `Confirm`, если шаг H4A выполнен, или `Manual override`, если исполнение ушло от baseline."
+            ),
         )
 
     @staticmethod
@@ -320,8 +363,16 @@ class TelegramWorker:
             intent_status = str(intent.get("status") or "").strip().lower()
             normalized.setdefault("run_id", intent.get("source_run_id"))
             normalized.setdefault("timestamp", intent.get("source_timestamp"))
-            normalized.setdefault("signal_used", intent_status == "consumed")
+            normalized.setdefault(
+                "signal_used",
+                intent_status in {"consumed", "submitted", "filled", "cancelled", "manual_override"},
+            )
             normalized.setdefault("signal_used_at", intent.get("consumed_at"))
+            normalized.setdefault("signal_viewed", intent_status == "viewed")
+            normalized.setdefault("signal_viewed_at", intent.get("viewed_at"))
+            normalized.setdefault("signal_viewed_by", intent.get("viewed_by"))
+            normalized.setdefault("operator_signal_status", intent.get("operator_signal_status"))
+            normalized.setdefault("operator_execution_mode", intent.get("operator_execution_mode"))
             normalized.setdefault("intent_id", intent.get("intent_id"))
             normalized.setdefault("entry_signal_expired", intent_status == "expired")
         else:
@@ -379,10 +430,11 @@ class TelegramWorker:
 
         return normalized
 
-    def _post_ack(
+    def _post_operator_action(
         self,
         callback_entry: dict[str, object],
         *,
+        action: str,
         user_id: int,
         username: str | None,
         chat_id: int,
@@ -397,34 +449,55 @@ class TelegramWorker:
         pair_id = str(callback_entry.get("pair_id") or "").strip()
         if not pair_id and stock and future:
             pair_id = f"{stock}__{future}"
-        if not all([run_id, timestamp, stock, future, signal_action, fingerprint, pair_id]):
+        if not all([stock, future, fingerprint, pair_id]):
             raise ValueError("invalid_callback_entry")
 
-        note = build_ack_note(
-            fingerprint=fingerprint,
-            signal_run_id=run_id,
-            signal_timestamp=timestamp,
-            signal_action=signal_action,
-            telegram_user_id=user_id,
-            telegram_username=username,
-            telegram_chat_id=chat_id,
-        )
+        requested_action = str(action or "").strip().lower()
+        if requested_action == "mark_viewed":
+            if not all([run_id, timestamp, signal_action]):
+                raise ValueError("invalid_callback_entry")
+            note = build_ack_note(
+                fingerprint=fingerprint,
+                signal_run_id=run_id,
+                signal_timestamp=timestamp,
+                signal_action=signal_action,
+                telegram_user_id=user_id,
+                telegram_username=username,
+                telegram_chat_id=chat_id,
+            )
+        else:
+            note = str(callback_entry.get("note") or "").strip() or f"telegram_callback:{requested_action}"
         idempotency_key = str(callback_entry.get("idempotency_key") or "").strip()
         if not idempotency_key:
             token = str(callback_entry.get("token") or "").strip()
-            idempotency_key = f"telegram-ack:{token or fingerprint}"
+            if requested_action == "mark_viewed":
+                idempotency_key = f"telegram-ack:{token or fingerprint}"
+            else:
+                idempotency_key = f"telegram-{requested_action}:{token or fingerprint}"
         actor_id = (
             f"telegram:{username}"
             if isinstance(username, str) and username.strip()
             else f"telegram:{int(user_id)}"
         )
         payload = {
-            "action": "ack",
+            "action": requested_action,
             "source": "telegram",
             "actor_id": actor_id,
             "idempotency_key": idempotency_key,
             "note": note,
         }
+        if requested_action == "confirm_followup":
+            payload["reason_code"] = (
+                str(callback_entry.get("reason_code") or "").strip()
+                or "telegram_h4a_followup_confirmed"
+            )
+            h4a_stage = str(callback_entry.get("h4a_stage") or "").strip()
+            if h4a_stage:
+                payload["h4a_stage"] = h4a_stage
+        if requested_action == "manual_override":
+            payload["reason_code"] = (
+                str(callback_entry.get("reason_code") or "").strip() or "telegram_manual_override"
+            )
         intent_id = str(callback_entry.get("intent_id") or "").strip()
         if intent_id:
             payload["intent_id"] = intent_id
@@ -451,6 +524,22 @@ class TelegramWorker:
                 return "intent_stale"
         response.raise_for_status()
         return "ok"
+
+    def _post_ack(
+        self,
+        callback_entry: dict[str, object],
+        *,
+        user_id: int,
+        username: str | None,
+        chat_id: int,
+    ) -> str:
+        return self._post_operator_action(
+            callback_entry,
+            action="mark_viewed",
+            user_id=user_id,
+            username=username,
+            chat_id=chat_id,
+        )
 
     def _is_callback_expired(self, callback_entry: dict[str, object]) -> bool:
         created_at = _parse_iso(callback_entry.get("created_at"))
@@ -531,12 +620,20 @@ class TelegramWorker:
             if callback_query_id:
                 self._answer_callback(callback_query_id, "Нет доступа.")
             return
-        if not data.startswith("ack:"):
+        callback_action = ""
+        token = ""
+        if data.startswith("ack:"):
+            callback_action = "mark_viewed"
+            token = data.split(":", 1)[1].strip()
+        elif data.startswith("act:"):
+            _, callback_action, token = (data.split(":", 2) + ["", ""])[:3]
+            callback_action = str(callback_action or "").strip().lower()
+            token = str(token or "").strip()
+        else:
             if callback_query_id:
                 self._answer_callback(callback_query_id, "Неизвестное действие.")
             return
-        token = data.split(":", 1)[1].strip()
-        if not token:
+        if callback_action not in {"mark_viewed", "confirm_followup", "manual_override"} or not token:
             if callback_query_id:
                 self._answer_callback(callback_query_id, "Некорректный token.")
             return
@@ -547,40 +644,65 @@ class TelegramWorker:
         entry = callbacks.get(token)
         if not isinstance(entry, dict):
             if callback_query_id:
-                self._answer_callback(callback_query_id, "ACK уже обработан или истек.")
+                self._answer_callback(callback_query_id, "Действие уже обработано или истекло.")
             return
         entry_chat_id = _safe_int(entry.get("chat_id"))
         if entry_chat_id is not None and entry_chat_id != chat_id:
             if callback_query_id:
-                self._answer_callback(callback_query_id, "ACK token не для этого чата.")
+                self._answer_callback(callback_query_id, "Токен не для этого чата.")
             return
         if self._is_callback_expired(entry):
             callbacks.pop(token, None)
             self._save_state()
             if callback_query_id:
-                self._answer_callback(callback_query_id, "ACK token истек.")
+                self._answer_callback(callback_query_id, "Токен действия истек.")
             return
 
         username_raw = from_user.get("username")
         username = str(username_raw).strip() if isinstance(username_raw, str) and username_raw.strip() else None
-        try:
-            ack_result = self._post_ack(entry, user_id=user_id, username=username, chat_id=chat_id)
-        except Exception:
-            logger.exception("Failed to store Telegram ACK.")
+        expected_action = str(entry.get("callback_action") or "mark_viewed").strip().lower()
+        if expected_action != callback_action:
             if callback_query_id:
-                self._answer_callback(callback_query_id, "Не удалось записать ACK.")
+                self._answer_callback(callback_query_id, "Токен не для этого действия.")
+            return
+        try:
+            ack_result = self._post_operator_action(
+                entry,
+                action=callback_action,
+                user_id=user_id,
+                username=username,
+                chat_id=chat_id,
+            )
+        except Exception:
+            logger.exception("Failed to store Telegram callback action=%s.", callback_action)
+            if callback_query_id:
+                self._answer_callback(callback_query_id, "Не удалось записать действие.")
             return
         if ack_result == "intent_stale":
             callbacks.pop(token, None)
             self._save_state()
             if callback_query_id:
-                self._answer_callback(callback_query_id, "Сигнал устарел, используйте новый enter.")
+                stale_text = (
+                    "Сигнал устарел, используйте новый enter."
+                    if callback_action == "mark_viewed"
+                    else "Follow-up уже устарел, откройте актуальный сигнал."
+                    if callback_action == "confirm_followup"
+                    else "Intent уже устарел, откройте актуальный сигнал."
+                )
+                self._answer_callback(callback_query_id, stale_text)
             return
 
         callbacks.pop(token, None)
         self._save_state()
         if callback_query_id:
-            self._answer_callback(callback_query_id, "ACK записан.")
+            success_text = (
+                "Просмотр отмечен."
+                if callback_action == "mark_viewed"
+                else "Подтверждение сохранено."
+                if callback_action == "confirm_followup"
+                else "Manual override зафиксирован."
+            )
+            self._answer_callback(callback_query_id, success_text)
     def _process_updates(self) -> None:
         updates = self._fetch_updates()
         if not updates:
@@ -640,6 +762,23 @@ class TelegramWorker:
             for key in list(tracking.keys()):
                 if key not in valid_fingerprints:
                     tracking.pop(key, None)
+                    changed = True
+
+        for key_name in (
+            "post_fill_last_sent_at_by_fingerprint",
+            "entry_fallback_reminder_sent_at_by_fingerprint",
+            "break_even_trigger_sent_at_by_fingerprint",
+            "trailing_trigger_sent_at_by_fingerprint",
+            "time_stop_reminder_sent_at_by_fingerprint",
+            "time_stop_overdue_sent_at_by_fingerprint",
+        ):
+            state_map = self._state.get(key_name)
+            if not isinstance(state_map, dict):
+                continue
+            for key in list(state_map.keys()):
+                ts = _parse_iso(state_map.get(key))
+                if ts is None or now > (ts + timedelta(hours=_SENT_FINGERPRINT_TTL_HOURS)):
+                    state_map.pop(key, None)
                     changed = True
 
         if changed:
@@ -763,286 +902,12 @@ class TelegramWorker:
             self._save_state()
 
     def _format_signal_message(self, row: dict[str, object]) -> str:
-        def _to_float(value: object) -> float | None:
-            try:
-                if value is None:
-                    return None
-                return float(value)
-            except (TypeError, ValueError):
-                return None
-
-        def _to_bool(value: object) -> bool | None:
-            if isinstance(value, bool):
-                return value
-            if value is None:
-                return None
-            raw = str(value).strip().lower()
-            if raw in {"1", "true", "yes", "y", "on"}:
-                return True
-            if raw in {"0", "false", "no", "n", "off"}:
-                return False
-            return None
-
-        def _fmt_number(value: object, digits: int = 4) -> str:
-            parsed = _to_float(value)
-            if parsed is None:
-                return "n/a"
-            return f"{parsed:.{digits}f}"
-
-        def _fmt_percent(value: object, digits: int = 2) -> str:
-            parsed = _to_float(value)
-            if parsed is None:
-                return "n/a"
-            return f"{parsed * 100:.{digits}f}%"
-
-        def _fmt_timestamp(value: object) -> str:
-            raw = str(value or "").strip()
-            parsed = _parse_iso(raw)
-            if parsed is None:
-                return raw or "n/a"
-            localized = parsed.astimezone(self._display_timezone)
-            tz_label = localized.tzname() or self._display_timezone_name
-            return f"{localized.strftime('%d.%m.%Y %H:%M')} {tz_label}"
-
-        delivery_payload = row.get("delivery")
-        delivery_action = (
-            str(delivery_payload.get("delivery_action") or "").strip().lower()
-            if isinstance(delivery_payload, dict)
-            else ""
+        return format_signal_message(
+            row,
+            display_timezone=self._display_timezone,
+            display_timezone_name=self._display_timezone_name,
         )
-        action_raw = str(row.get("signal_action") or delivery_action).strip().lower()
-        action_label = {
-            "enter": "🟢 ENTER",
-            "exit": "🔴 EXIT",
-            "hold_open": "🟡 HOLD_OPEN",
-        }.get(action_raw, f"⚪ {action_raw.upper() or 'UNKNOWN'}")
 
-        entry_plan = row.get("entry_plan")
-        entry_plan_map = entry_plan if isinstance(entry_plan, dict) else {}
-        entry_range_now = row.get("entry_range_now")
-        entry_range_map = entry_range_now if isinstance(entry_range_now, dict) else {}
-        metrics = row.get("signal_metrics")
-        metrics_map = metrics if isinstance(metrics, dict) else {}
-
-        direction_raw = str(row.get("signal_direction") or "").strip().lower()
-        if not direction_raw:
-            direction_raw = str(entry_plan_map.get("direction") or "").strip().lower()
-        direction_label = {
-            "cash_and_carry": "Cash-and-carry",
-            "reverse": "Reverse",
-            "neutral": "Neutral",
-        }.get(direction_raw, direction_raw or "n/a")
-
-        stock = str(row.get("stock") or "").strip() or "N/A"
-        future = str(row.get("future") or "").strip() or "N/A"
-        timestamp = _fmt_timestamp(row.get("timestamp") or row.get("snapshot_as_of"))
-        strategy_stream_raw = str(row.get("strategy_stream") or row.get("strategy_type") or "").strip().lower()
-        strategy_stream_raw = "commodity_futures" if strategy_stream_raw == "speculative" else strategy_stream_raw
-        strategy_label_text = strategy_label(strategy_stream_raw)
-
-        entry_stock_min = row.get("entry_stock_min")
-        entry_stock_max = row.get("entry_stock_max")
-        if entry_stock_min is None:
-            entry_stock_min = entry_plan_map.get("entry_stock_min")
-        if entry_stock_max is None:
-            entry_stock_max = entry_plan_map.get("entry_stock_max")
-        if entry_stock_min is None:
-            entry_stock_min = entry_plan_map.get("entry_price_min")
-        if entry_stock_max is None:
-            entry_stock_max = entry_plan_map.get("entry_price_max")
-
-        entry_future_min = row.get("entry_future_min_per_share")
-        entry_future_max = row.get("entry_future_max_per_share")
-        if entry_future_min is None:
-            entry_future_min = entry_plan_map.get("entry_future_min_per_share")
-        if entry_future_max is None:
-            entry_future_max = entry_plan_map.get("entry_future_max_per_share")
-
-        entry_spread_min = row.get("entry_spread_min")
-        entry_spread_max = row.get("entry_spread_max")
-        if entry_spread_min is None:
-            entry_spread_min = entry_plan_map.get("entry_spread_min")
-        if entry_spread_max is None:
-            entry_spread_max = entry_plan_map.get("entry_spread_max")
-
-        entry_spread_pct_min = row.get("entry_spread_pct_min")
-        entry_spread_pct_max = row.get("entry_spread_pct_max")
-        if entry_spread_pct_min is None:
-            entry_spread_pct_min = entry_plan_map.get("entry_spread_pct_min")
-        if entry_spread_pct_max is None:
-            entry_spread_pct_max = entry_plan_map.get("entry_spread_pct_max")
-
-        current_spread_pct = row.get("spread_pct")
-        if current_spread_pct is None:
-            current_spread_pct = entry_range_map.get("spread_pct_now")
-        tp = row.get("tp_spread_pct_level")
-        if tp is None:
-            tp = metrics_map.get("tp_spread_pct_level")
-        sl = row.get("sl_spread_pct_level")
-        if sl is None:
-            sl = metrics_map.get("sl_spread_pct_level")
-        forecast_days = row.get("forecast_exit_days")
-        if forecast_days is None:
-            forecast_days = metrics_map.get("forecast_exit_days")
-        forecast_tp_probability = row.get("forecast_tp_probability")
-        if forecast_tp_probability is None:
-            forecast_tp_probability = metrics_map.get("forecast_tp_probability")
-        forecast_sl_probability = row.get("forecast_sl_probability")
-        if forecast_sl_probability is None:
-            forecast_sl_probability = metrics_map.get("forecast_sl_probability")
-        forecast_model = str(row.get("forecast_model") or metrics_map.get("forecast_model") or "").strip()
-        score = row.get("signal_score")
-        if score is None:
-            score = metrics_map.get("total_score")
-        seq_entry_enabled = _to_bool(row.get("sequential_entry_enabled"))
-        if seq_entry_enabled is None:
-            seq_entry_enabled = _to_bool(metrics_map.get("sequential_entry_enabled"))
-        entry_protocol_raw = str(
-            row.get("entry_execution_protocol")
-            or metrics_map.get("entry_execution_protocol")
-            or ""
-        ).strip().lower()
-        if not entry_protocol_raw:
-            entry_protocol_raw = "sequential" if seq_entry_enabled else "atomic"
-        seq_entry_first_leg = str(
-            row.get("sequential_entry_first_leg")
-            or metrics_map.get("sequential_entry_first_leg")
-            or "future"
-        ).strip().lower()
-        if seq_entry_first_leg not in {"stock", "future"}:
-            seq_entry_first_leg = "future"
-        seq_entry_second_leg_wait = row.get("sequential_entry_second_leg_max_wait_minutes")
-        if seq_entry_second_leg_wait is None:
-            seq_entry_second_leg_wait = metrics_map.get("sequential_entry_second_leg_max_wait_minutes")
-        seq_entry_unwind_penalty = row.get("sequential_entry_unwind_penalty_bps")
-        if seq_entry_unwind_penalty is None:
-            seq_entry_unwind_penalty = metrics_map.get("sequential_entry_unwind_penalty_bps")
-
-        seq_exit_enabled = _to_bool(row.get("sequential_exit_enabled"))
-        if seq_exit_enabled is None:
-            seq_exit_enabled = _to_bool(metrics_map.get("sequential_exit_enabled"))
-        exit_protocol_raw = str(
-            row.get("exit_execution_protocol")
-            or metrics_map.get("exit_execution_protocol")
-            or ""
-        ).strip().lower()
-        if not exit_protocol_raw:
-            exit_protocol_raw = "sequential" if seq_exit_enabled else "atomic"
-        seq_exit_first_leg = str(
-            row.get("sequential_exit_first_leg")
-            or metrics_map.get("sequential_exit_first_leg")
-            or "future"
-        ).strip().lower()
-        if seq_exit_first_leg not in {"stock", "future"}:
-            seq_exit_first_leg = "future"
-        seq_exit_second_leg_wait = row.get("sequential_exit_second_leg_max_wait_minutes")
-        if seq_exit_second_leg_wait is None:
-            seq_exit_second_leg_wait = metrics_map.get("sequential_exit_second_leg_max_wait_minutes")
-        seq_exit_force_penalty = row.get("sequential_exit_force_penalty_bps")
-        if seq_exit_force_penalty is None:
-            seq_exit_force_penalty = metrics_map.get("sequential_exit_force_penalty_bps")
-
-        def _entry_leg_action(leg: str) -> str:
-            if direction_raw == "reverse":
-                return "SELL акцию" if leg == "stock" else "BUY фьюч"
-            return "BUY акцию" if leg == "stock" else "SELL фьюч"
-
-        def _exit_leg_action(leg: str) -> str:
-            if direction_raw == "reverse":
-                return "BUY акцию" if leg == "stock" else "SELL фьюч"
-            return "SELL акцию" if leg == "stock" else "BUY фьюч"
-
-        lines = [
-            "📣 Новый сигнал",
-            f"{action_label}",
-            f"📈 Пара: {stock}/{future}",
-            f"🧩 Стратегия: {strategy_label_text}",
-            f"🧭 Направление: {direction_label}",
-            f"⭐ Score: {_fmt_number(score)}",
-            f"⏱ Время: {timestamp}",
-        ]
-
-        has_entry_plan = any(
-            value is not None
-            for value in [
-                entry_stock_min,
-                entry_stock_max,
-                entry_future_min,
-                entry_future_max,
-                entry_spread_min,
-                entry_spread_max,
-                entry_spread_pct_min,
-                entry_spread_pct_max,
-            ]
-        )
-        if has_entry_plan:
-            lines.append("📍 План входа")
-            if entry_stock_min is not None or entry_stock_max is not None:
-                lines.append(
-                    f"• {stock}: {_fmt_number(entry_stock_min)} .. {_fmt_number(entry_stock_max)}"
-                )
-            if entry_future_min is not None or entry_future_max is not None:
-                lines.append(
-                    f"• {future}: {_fmt_number(entry_future_min)} .. {_fmt_number(entry_future_max)}"
-                )
-            if entry_spread_min is not None or entry_spread_max is not None:
-                lines.append(
-                    f"• Допустимый spread: {_fmt_number(entry_spread_min)} .. {_fmt_number(entry_spread_max)}"
-                )
-            if entry_spread_pct_min is not None or entry_spread_pct_max is not None:
-                lines.append(
-                    f"• Допустимый spread (%): {_fmt_percent(entry_spread_pct_min)} .. {_fmt_percent(entry_spread_pct_max)}"
-                )
-            if current_spread_pct is not None:
-                lines.append(f"• Текущий spread (%): {_fmt_percent(current_spread_pct)}")
-        if entry_protocol_raw == "sequential":
-            second_leg = "stock" if seq_entry_first_leg == "future" else "future"
-            lines.append(
-                "• Протокол входа: staged "
-                f"({_entry_leg_action(seq_entry_first_leg)} -> {_entry_leg_action(second_leg)})"
-            )
-            lines.append(
-                f"• Макс. разрыв между ногами: {int(_to_float(seq_entry_second_leg_wait) or 0)} мин"
-            )
-            lines.append(
-                "• Если 2-я нога не встала: unwind 1-й "
-                f"(penalty {(_to_float(seq_entry_unwind_penalty) or 0.0):.2f} bps)"
-            )
-        else:
-            lines.append("• Протокол входа: atomic (обе ноги одновременно)")
-
-        if tp is not None or sl is not None:
-            lines.append(f"• TP/SL spread: {_fmt_percent(tp)} / {_fmt_percent(sl)}")
-        if exit_protocol_raw == "sequential":
-            second_leg = "stock" if seq_exit_first_leg == "future" else "future"
-            lines.append(
-                "• Протокол выхода: staged "
-                f"({_exit_leg_action(seq_exit_first_leg)} -> {_exit_leg_action(second_leg)})"
-            )
-            lines.append(
-                f"• Макс. разрыв между ногами (выход): {int(_to_float(seq_exit_second_leg_wait) or 0)} мин"
-            )
-            lines.append(
-                "• Если 2-я нога не встала: force-close 2-й "
-                f"(penalty {(_to_float(seq_exit_force_penalty) or 0.0):.2f} bps)"
-            )
-        else:
-            lines.append("• Протокол выхода: atomic (обе ноги одновременно)")
-        if forecast_tp_probability is not None or forecast_sl_probability is not None:
-            lines.append(
-                "• Forecast TP/SL prob: "
-                f"{_fmt_percent(forecast_tp_probability)} / {_fmt_percent(forecast_sl_probability)}"
-            )
-        if forecast_days is not None:
-            if forecast_model:
-                lines.append(f"• Прогноз выхода: {forecast_days} дн ({forecast_model})")
-            else:
-                lines.append(f"• Прогноз выхода: {forecast_days} дн")
-
-        lines.append("")
-        lines.append("Нажмите кнопку ниже, если использовали сигнал.")
-
-        return "\n".join(lines)
     def _broadcast_signals(self) -> None:
         target_chats = self._registered_chats()
         if not target_chats:
@@ -1071,6 +936,30 @@ class TelegramWorker:
         if not isinstance(callbacks, dict):
             callbacks = {}
             self._state["pending_callbacks"] = callbacks
+        post_fill_map = self._state.get("post_fill_last_sent_at_by_fingerprint")
+        if not isinstance(post_fill_map, dict):
+            post_fill_map = {}
+            self._state["post_fill_last_sent_at_by_fingerprint"] = post_fill_map
+        entry_fallback_map = self._state.get("entry_fallback_reminder_sent_at_by_fingerprint")
+        if not isinstance(entry_fallback_map, dict):
+            entry_fallback_map = {}
+            self._state["entry_fallback_reminder_sent_at_by_fingerprint"] = entry_fallback_map
+        break_even_map = self._state.get("break_even_trigger_sent_at_by_fingerprint")
+        if not isinstance(break_even_map, dict):
+            break_even_map = {}
+            self._state["break_even_trigger_sent_at_by_fingerprint"] = break_even_map
+        trailing_map = self._state.get("trailing_trigger_sent_at_by_fingerprint")
+        if not isinstance(trailing_map, dict):
+            trailing_map = {}
+            self._state["trailing_trigger_sent_at_by_fingerprint"] = trailing_map
+        reminder_map = self._state.get("time_stop_reminder_sent_at_by_fingerprint")
+        if not isinstance(reminder_map, dict):
+            reminder_map = {}
+            self._state["time_stop_reminder_sent_at_by_fingerprint"] = reminder_map
+        overdue_map = self._state.get("time_stop_overdue_sent_at_by_fingerprint")
+        if not isinstance(overdue_map, dict):
+            overdue_map = {}
+            self._state["time_stop_overdue_sent_at_by_fingerprint"] = overdue_map
 
         now_iso = _iso_now()
         now_dt = datetime.now(timezone.utc)
@@ -1101,6 +990,18 @@ class TelegramWorker:
             action = str(delivery.get("delivery_action") or "").strip().lower()
             if action not in _SIGNAL_ACTIONS:
                 continue
+            actionability_state = str(row.get("actionability_state") or "").strip().lower()
+            if actionability_state:
+                if action == "enter" and actionability_state not in {
+                    "actionable_enter",
+                    "actionable_enter_repriced",
+                    "enter_out_of_range",
+                }:
+                    continue
+                if action == "exit" and actionability_state != "actionable_exit":
+                    continue
+                if action == "hold_open" and actionability_state != "hold_open" and not bool(row.get("hold_required")):
+                    continue
             stock = str(row.get("stock") or "").strip()
             future = str(row.get("future") or "").strip()
             strategy_stream = normalize_strategy_stream(row.get("strategy_stream")) or normalize_strategy_stream(
@@ -1108,7 +1009,17 @@ class TelegramWorker:
             ) or "arbitrage"
             pair_key = f"{stock}|{future}|{strategy_stream}"
             fingerprint_raw = str(row.get("signal_fingerprint") or "").strip()
-            if action == "enter" and bool(delivery.get("signal_used")):
+            operator_signal_status = str(
+                row.get("operator_signal_status")
+                or delivery.get("operator_signal_status")
+                or ""
+            ).strip().lower()
+            if action == "enter" and operator_signal_status in {
+                "enter_submitted",
+                "enter_filled",
+                "entry_cancelled",
+                "manual_override",
+            }:
                 continue
             if action == "enter" and bool(delivery.get("entry_signal_expired")):
                 continue
@@ -1191,6 +1102,9 @@ class TelegramWorker:
             elif fingerprint in sent_map:
                 continue
 
+            if action == "hold_open" and has_post_fill_state(row):
+                continue
+
             if action == "hold_open" and int(self.cfg.hold_open_daily_limit or 0) >= 1:
                 last_sent_date = str(hold_open_map.get(pair_key) or "")
                 if last_sent_date == today:
@@ -1209,6 +1123,7 @@ class TelegramWorker:
                 )
                 callbacks[token] = {
                     "token": token,
+                    "callback_action": "mark_viewed",
                     "fingerprint": fingerprint,
                     "run_id": run_id,
                     "timestamp": timestamp,
@@ -1250,6 +1165,23 @@ class TelegramWorker:
                         "baseline_plan": _entry_plan_from_row(row),
                     }
                 changed = True
+
+        if broadcast_h4a_followups(
+            rows=rows,
+            target_chats=target_chats,
+            callbacks=callbacks,
+            post_fill_map=post_fill_map,
+            entry_fallback_map=entry_fallback_map,
+            break_even_map=break_even_map,
+            trailing_map=trailing_map,
+            reminder_map=reminder_map,
+            overdue_map=overdue_map,
+            now_dt=now_dt,
+            now_iso=now_iso,
+            send_followup_message=self._send_followup_message,
+            logger=logger,
+        ):
+            changed = True
 
         if changed:
             self._save_state()

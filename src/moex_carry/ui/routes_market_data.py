@@ -7,6 +7,8 @@ import uuid
 import pandas as pd
 from flask import Flask, jsonify, request
 
+from moex_carry.signal_execution_contract import normalize_legacy_execution_action
+
 
 def register_market_data_routes(
     server: Flask,
@@ -117,6 +119,11 @@ def register_market_data_routes(
         limit = int(request.args.get("limit", "200"))
         stock = request.args.get("stock")
         future = request.args.get("future")
+        action_serializer = (
+            normalize_execution_action
+            if request.path.startswith("/api/v2/")
+            else normalize_legacy_execution_action
+        )
         with session_factory() as session:
             rows = load_signal_executions_fn(session, stock=stock, future=future, limit=limit)
             return jsonify(
@@ -126,7 +133,7 @@ def register_market_data_routes(
                         "stock": row.stock_secid,
                         "future": row.future_secid,
                         "direction": row.direction,
-                        "action": normalize_execution_action(row.action),
+                        "action": action_serializer(row.action),
                         "price": row.price,
                         "quantity": row.quantity,
                         "side": row.side,

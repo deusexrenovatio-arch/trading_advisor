@@ -94,7 +94,7 @@
 ### ExecutionEvent
 - `execution_event_id`
 - `signal_id` or `decision_id`
-- `action` (`ack|enter|exit|hold_open`)
+- `action` (`mark_viewed|enter_submitted|enter_filled|entry_cancelled|exit_submitted|exit_filled|manual_override`; legacy `ack|enter|exit|hold_open` accepted as aliases)
 - `order_id` (optional)
 - `metadata`
 

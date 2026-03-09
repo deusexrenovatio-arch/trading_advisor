@@ -482,6 +482,18 @@ def apply_runtime_adapter_to_frame(
                 getattr(forecast, "probability_source", None),
             )
         engine_metadata["synthetic_history_events"] = len(historical_outcomes)
+        historical_source_kind = "synthetic" if historical_outcomes else "none"
+        cost_source_kind = "pair_row_derived"
+        legacy_action = str(row_mapping.get("signal_action") or "").strip().lower()
+        synthetic_promotion_blocked = (
+            bool(override_signal_fields)
+            and historical_source_kind == "synthetic"
+            and two_layer_action == "enter"
+            and legacy_action != "enter"
+        )
+        if synthetic_promotion_blocked:
+            reason_list = [item for item in dict.fromkeys([*reason_list, "synthetic_history_promotion_blocked"]) if item]
+            engine_metadata["promotion_blocked_reason"] = "synthetic_history_cannot_promote_enter"
 
         expected_return = _float_or_none(getattr(strategy_signal, "expected_return", None))
         risk_estimate = _float_or_none(getattr(strategy_signal, "risk_estimate", None))
@@ -501,7 +513,12 @@ def apply_runtime_adapter_to_frame(
             "strategy_id": strategy_id,
             "strategy_type": strategy_type,
             "strategy_stream": strategy_stream,
-            "override_applied": bool(override_signal_fields),
+            "legacy_action": legacy_action or None,
+            "override_requested": bool(override_signal_fields),
+            "override_applied": False,
+            "historical_source_kind": historical_source_kind,
+            "cost_source_kind": cost_source_kind,
+            "synthetic_promotion_blocked": bool(synthetic_promotion_blocked),
             "metadata": engine_metadata,
         }
 
@@ -511,7 +528,17 @@ def apply_runtime_adapter_to_frame(
         adapted.at[idx, "signal_reasons_two_layer"] = reason_list
         adapted.at[idx, "signal_metrics_two_layer"] = two_layer_metrics
 
-        if not override_signal_fields:
+        current_metrics = row_mapping.get("signal_metrics")
+        merged_metrics = dict(current_metrics) if isinstance(current_metrics, dict) else {}
+        merged_metrics["two_layer"] = two_layer_metrics
+        merged_metrics["strategy_id"] = strategy_id
+        merged_metrics["strategy_type"] = strategy_type
+        merged_metrics["strategy_stream"] = strategy_stream
+        merged_metrics["historical_source_kind"] = historical_source_kind
+        merged_metrics["cost_source_kind"] = cost_source_kind
+        adapted.at[idx, "signal_metrics"] = merged_metrics
+
+        if not override_signal_fields or synthetic_promotion_blocked:
             continue
 
         adapted.at[idx, "signal_action_legacy"] = row_mapping.get("signal_action")
@@ -523,12 +550,9 @@ def apply_runtime_adapter_to_frame(
         adapted.at[idx, "signal_direction"] = two_layer_direction
         adapted.at[idx, "signal_score"] = float(confidence)
         adapted.at[idx, "signal_reasons"] = reason_list
-        current_metrics = row_mapping.get("signal_metrics")
-        merged_metrics = dict(current_metrics) if isinstance(current_metrics, dict) else {}
+        two_layer_metrics["override_applied"] = True
+        adapted.at[idx, "signal_metrics_two_layer"] = two_layer_metrics
         merged_metrics["two_layer"] = two_layer_metrics
-        merged_metrics["strategy_id"] = strategy_id
-        merged_metrics["strategy_type"] = strategy_type
-        merged_metrics["strategy_stream"] = strategy_stream
         adapted.at[idx, "signal_metrics"] = merged_metrics
         if "decision" in adapted.columns:
             adapted.at[idx, "decision"] = "ENTER_OK" if two_layer_action == "enter" else "HOLD"

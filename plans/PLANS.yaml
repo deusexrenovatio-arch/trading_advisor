@@ -1,6 +1,57 @@
 version: 1
 updated_at: 2026-03-09
 items:
+  - id: P1-H4A-LIVE-061
+    title: Align live/manual futures execution with H4A baseline contract
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - active runtime baseline is H4A_CAP_OFF everywhere user-visible and runtime-visible
+      - signal lifecycle distinguishes viewed, submitted, filled, cancelled, and manual override states
+      - actionable signal payload includes H4A execution contract fields and real signal expiry
+      - execution audit stores fill-driven recalculation and same-bar resolution metadata
+      - no-mini and concentration guardrails stay outside baseline semantics and are enforced in live routing
+    checks:
+      - python scripts/run_lean_gate.py
+      - pytest tests/test_api_v2.py tests/test_telegram_worker.py
+    docs:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+    dependencies:
+      - P1-PUSH-GATE-060
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P1-H4A-LIVE-062
+    title: Finish H4A live-routing guards and Telegram post-fill operator loop
+    lane: operations
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - mini-contract roots are excluded from new H4A live enter publication and mini/full duplicates are not broadcast to Telegram
+      - live pair actionability enforces deterministic pre-publication routing caps using max_positions and correlated-exposure limits
+      - synthetic-history runtime adapter output cannot promote a non-enter legacy row into an actionable enter
+      - H4A fill state exposes operator-ready post-fill thresholds and time-stop deadlines for Telegram/manual execution
+      - Telegram worker sends dedicated post-fill recalculation messages and time-stop reminders and allows explicit operator deviation logging
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - pytest tests/test_api_v2.py tests/test_signal_cycle.py tests/test_telegram_worker.py -q
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/session_handoff.md
+    dependencies:
+      - P1-H4A-LIVE-061
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
     lane: governance

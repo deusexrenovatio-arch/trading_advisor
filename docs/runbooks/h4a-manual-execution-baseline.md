@@ -5,8 +5,8 @@ Operator contract for the current morning-plan intraday futures execution baseli
 
 ## Baseline Status
 - Current runtime baseline: `H4A_CAP_OFF`.
-- Practical meaning: this is not only "profit-cap off".
-- The live baseline is the inherited `O1` trade-management package plus `max_profit_rr=0.0`.
+- Practical meaning: this is a live operator execution contract, not only "profit-cap off".
+- `O1` remains the reference baseline for lineage and comparison, but the active runtime baseline is `H4A_CAP_OFF`.
 - If an operator does not follow the rules below, the trade must be treated as a manual override, not as a true `H4A` execution.
 
 ## Fixed Baseline Rules
@@ -28,6 +28,16 @@ Operator contract for the current morning-plan intraday futures execution baseli
 - Effective TP is derived from widened risk because `tp_rr=0.6`.
 - This means the final live TP/SL levels can differ from the static levels seen before fill.
 - Operator must confirm the realized fill, then recalculate the active bracket immediately.
+- Telegram follow-up must carry the recalculated packet:
+  - effective fill,
+  - initial loss stop,
+  - TP limit,
+  - current protective stop,
+  - break-even trigger and stop,
+  - trailing trigger and offset,
+  - time-stop deadline,
+  - explicit `Confirm` action for each completed H4A step,
+  - manual override action if execution leaves the baseline.
 
 ## Protective Stop Logic
 - The stop is dynamic, not static.
@@ -48,12 +58,14 @@ Operator contract for the current morning-plan intraday futures execution baseli
 ## Minimum Operator Checklist
 1. Confirm entry corridor and planned quantity before sending the order.
 2. Start a `10`-minute timer for every `H4A` LIMIT entry.
-3. If no fill by `10` minutes, replace with a marketable order or abort and log the deviation.
-4. After fill, recalculate effective TP and active stop from the actual fill price.
-5. Start a `180`-minute holding timer from the actual fill timestamp.
-6. Move the stop to break-even plus buffer when `0.1R` is reached.
-7. Maintain the trailing stop with `2`-tick offset after activation.
-8. Log the exit reason explicitly.
+3. If no fill by `10` minutes, replace with a marketable order or abort and log the deviation as `entry_fallback_market` or `manual_override`.
+4. Confirm the fallback decision in Telegram follow-up when the `10`-minute timeout is reached.
+5. After fill, recalculate effective TP and active stop from the actual fill price.
+6. Review the Telegram post-fill packet and confirm that the recalculated bracket matches the broker-side position.
+7. Start a `180`-minute holding timer from the actual fill timestamp.
+8. Move the stop to break-even plus buffer when `0.1R` is reached and confirm the Telegram follow-up.
+9. Maintain the trailing stop with `2`-tick offset after activation and confirm the Telegram follow-up.
+10. Log the exit reason explicitly.
 
 ## Recommended Exit Note Taxonomy
 - `tp_limit`

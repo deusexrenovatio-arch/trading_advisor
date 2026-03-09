@@ -802,7 +802,7 @@ def test_worker_callback_ack_happy_path(tmp_path):
 
     assert len(backend_session.execute_payloads) == 1
     payload = backend_session.execute_payloads[0]
-    assert payload["action"] == "ack"
+    assert payload["action"] == "mark_viewed"
     assert payload["source"] == "telegram"
     assert str(payload.get("idempotency_key") or "").startswith("telegram-ack:")
     assert backend_session.post_calls
@@ -920,6 +920,241 @@ def test_worker_callback_marks_stale_intent_and_drops_token(tmp_path):
     assert len(telegram_session.answered_callbacks) == 1
     answer_text = str(telegram_session.answered_callbacks[0]["text"])
     assert "устарел" in answer_text
+
+
+def test_worker_sends_entry_fallback_followup_once(tmp_path):
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        daily_healthcheck_enabled=False,
+    )
+    now = datetime.now(timezone.utc)
+    row = {
+        "signal_fingerprint": "fp-fallback-1",
+        "run_id": "run-fallback",
+        "timestamp": now.isoformat().replace("+00:00", "Z"),
+        "signal_id": "sig-fallback-1",
+        "stock": "AAA",
+        "future": "AAH6",
+        "signal_action": "enter",
+        "signal_direction": "cash_and_carry",
+        "strategy_stream": "commodity_futures",
+        "position_state": "flat",
+        "operator_signal_status": "enter_submitted",
+        "enter_submitted_at": (now - timedelta(minutes=11)).isoformat().replace("+00:00", "Z"),
+        "execution_contract": {
+            "baseline_id": "H4A_CAP_OFF",
+            "entry_fallback_after_minutes": 10,
+            "trail_offset_ticks": 2,
+        },
+        "delivery": {"delivery_action": "enter", "delivery_allowed": False},
+    }
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[[row], [row]])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker.run_cycle()
+    worker._next_signal_fetch_at = 0.0
+    worker.run_cycle()
+
+    assert len(telegram_session.sent_messages) == 1
+    message_text = str(telegram_session.sent_messages[0]["text"])
+    assert "H4A fallback timeout" in message_text
+    reply_markup = telegram_session.sent_messages[0]["reply_markup"]
+    keyboard = reply_markup["inline_keyboard"][0]
+    button_labels = [str(item["text"]) for item in keyboard]
+    assert button_labels == ["✅ Confirm", "⚠️ Manual override"]
+    callbacks = worker._state["pending_callbacks"]
+    assert isinstance(callbacks, dict)
+    assert len(callbacks) == 2
+    reason_codes = {str(item["reason_code"]) for item in callbacks.values()}
+    assert "telegram_confirm_followup_entry_fallback_due" in reason_codes
+    assert "telegram_manual_override_entry_fallback_due" in reason_codes
+    state_map = worker._state["entry_fallback_reminder_sent_at_by_fingerprint"]
+    assert state_map["fp-fallback-1"]
+
+
+def test_worker_sends_post_fill_break_even_and_time_stop_followups(tmp_path):
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        daily_healthcheck_enabled=False,
+    )
+    now = datetime.now(timezone.utc)
+    row = {
+        "signal_fingerprint": "fp-post-fill-1",
+        "run_id": "run-post-fill",
+        "timestamp": now.isoformat().replace("+00:00", "Z"),
+        "signal_id": "sig-post-fill-1",
+        "stock": "BBB",
+        "future": "BBH6",
+        "signal_action": "enter",
+        "signal_direction": "cash_and_carry",
+        "strategy_stream": "commodity_futures",
+        "position_state": "open",
+        "baseline_id": "H4A_CAP_OFF",
+        "operator_signal_status": "enter_filled",
+        "operator_execution_mode": "baseline_h4a",
+        "fill_ts": (now - timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
+        "fill_price": 100.0,
+        "effective_fill_price": 100.0,
+        "initial_loss_sl": 95.0,
+        "tp_limit": 103.0,
+        "protective_sl": 95.0,
+        "break_even_activation_price": 100.5,
+        "break_even_stop_price": 100.1,
+        "trail_activation_price": 100.5,
+        "time_stop_deadline_ts": (now + timedelta(minutes=10)).isoformat().replace("+00:00", "Z"),
+        "spread_mid": 100.6,
+        "execution_contract": {
+            "baseline_id": "H4A_CAP_OFF",
+            "trail_offset_ticks": 2,
+            "entry_fallback_after_minutes": 10,
+            "time_stop_minutes": 180,
+        },
+        "delivery": {"delivery_action": "hold_open", "delivery_allowed": True},
+    }
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[[row]])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker.run_cycle()
+
+    assert len(telegram_session.sent_messages) == 3
+    texts = [str(item["text"]) for item in telegram_session.sent_messages]
+    assert any("H4A post-fill" in text for text in texts)
+    assert any("H4A trigger reached" in text for text in texts)
+    assert any("H4A time stop" in text for text in texts)
+    first_keyboard = telegram_session.sent_messages[0]["reply_markup"]["inline_keyboard"][0]
+    first_labels = [str(item["text"]) for item in first_keyboard]
+    assert first_labels == ["✅ Confirm", "⚠️ Manual override"]
+    callbacks = worker._state["pending_callbacks"]
+    assert isinstance(callbacks, dict)
+    assert len(callbacks) == 6
+    reason_codes = {str(item["reason_code"]) for item in callbacks.values()}
+    assert "telegram_confirm_followup_post_fill_packet" in reason_codes
+    assert "telegram_manual_override_post_fill_packet" in reason_codes
+    assert "telegram_confirm_followup_break_even_trailing_due" in reason_codes
+    assert "telegram_manual_override_break_even_trailing_due" in reason_codes
+    assert "telegram_confirm_followup_time_stop_due" in reason_codes
+    assert "telegram_manual_override_time_stop_due" in reason_codes
+
+
+def test_worker_callback_confirm_followup_posts_stage_payload(tmp_path):
+    settings = _build_settings(tmp_path, allowed_user_ids=[111], daily_healthcheck_enabled=False)
+    token = "confirm1"
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    telegram_session = _FakeTelegramSession(
+        updates_batches=[
+            [
+                {
+                    "update_id": 1,
+                    "callback_query": {
+                        "id": "cb-confirm",
+                        "data": f"act:confirm_followup:{token}",
+                        "from": {"id": 111, "username": "alice"},
+                        "message": {"chat": {"id": 111}},
+                    },
+                }
+            ]
+        ]
+    )
+    backend_session = _FakeBackendSession()
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["pending_callbacks"] = {
+        token: {
+            "token": token,
+            "callback_action": "confirm_followup",
+            "fingerprint": "fp-confirm-1",
+            "run_id": "run-1",
+            "timestamp": "2025-01-01T10:00:00Z",
+            "stock": "AAA",
+            "future": "AAH6",
+            "pair_id": "AAA__AAH6",
+            "created_at": now_iso,
+            "h4a_stage": "post_fill_packet",
+            "reason_code": "telegram_confirm_followup_post_fill_packet",
+            "note": "telegram_callback:confirm_followup:post_fill_packet",
+        }
+    }
+
+    worker._process_updates()
+
+    assert len(backend_session.execute_payloads) == 1
+    payload = backend_session.execute_payloads[0]
+    assert payload["action"] == "confirm_followup"
+    assert payload["h4a_stage"] == "post_fill_packet"
+    assert payload["reason_code"] == "telegram_confirm_followup_post_fill_packet"
+    assert payload["note"] == "telegram_callback:confirm_followup:post_fill_packet"
+    assert token not in worker._state["pending_callbacks"]
+    assert len(telegram_session.answered_callbacks) == 1
+    assert telegram_session.answered_callbacks[0]["text"] == "Подтверждение сохранено."
+
+
+def test_worker_callback_manual_override_uses_stage_reason_code(tmp_path):
+    settings = _build_settings(tmp_path, allowed_user_ids=[111], daily_healthcheck_enabled=False)
+    token = "override1"
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    telegram_session = _FakeTelegramSession(
+        updates_batches=[
+            [
+                {
+                    "update_id": 1,
+                    "callback_query": {
+                        "id": "cb-override",
+                        "data": f"act:manual_override:{token}",
+                        "from": {"id": 111, "username": "alice"},
+                        "message": {"chat": {"id": 111}},
+                    },
+                }
+            ]
+        ]
+    )
+    backend_session = _FakeBackendSession()
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["pending_callbacks"] = {
+        token: {
+            "token": token,
+            "callback_action": "manual_override",
+            "fingerprint": "fp-override-1",
+            "run_id": "run-1",
+            "timestamp": "2025-01-01T10:00:00Z",
+            "stock": "AAA",
+            "future": "AAH6",
+            "pair_id": "AAA__AAH6",
+            "created_at": now_iso,
+            "reason_code": "telegram_manual_override_break_even_due",
+            "note": "telegram_callback:manual_override:break_even_due",
+        }
+    }
+
+    worker._process_updates()
+
+    assert len(backend_session.execute_payloads) == 1
+    payload = backend_session.execute_payloads[0]
+    assert payload["action"] == "manual_override"
+    assert payload["reason_code"] == "telegram_manual_override_break_even_due"
+    assert payload["note"] == "telegram_callback:manual_override:break_even_due"
+    assert token not in worker._state["pending_callbacks"]
+    assert len(telegram_session.answered_callbacks) == 1
 
 
 def test_worker_daily_healthcheck_sent_once_per_day(tmp_path):
