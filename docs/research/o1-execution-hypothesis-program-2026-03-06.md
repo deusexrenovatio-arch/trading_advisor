@@ -3,7 +3,7 @@
 ## Objective
 - Quality in this research stream means larger net revenue after costs, not a prettier win rate by itself.
 - Primary metric: `net_ticks_sum` relative to `O1`.
-- Supporting diagnostics: `win_rate_net`, `trades_per_week`, concentration, fold dispersion, and stress stability.
+- Supporting diagnostics: `win_rate_net`, `trades_per_week`, concentration, per-root contribution, fold dispersion, and stress stability.
 - Promotion rule: no candidate replaces `O1` unless it beats `O1` on the same window and still respects hard constraints.
 
 ## O1 Reference Baseline
@@ -97,6 +97,10 @@
 ## Experiment Contract
 - One hypothesis must make one causal claim.
 - One family at a time.
+- If concentration is material, every serious candidate must be looked at in two views:
+  - full universe
+  - supplemental no-dominant-top view
+- Every serious candidate must also explain which roots or instruments carry the quality.
 - Every artifact must include:
   - hypothesis id
   - changed parameters
@@ -130,6 +134,7 @@
 ## Completed Run (2026-03-06)
 - Final ladder summary: `artifacts/research/wf_goal_v6_h24_o1_execution_hypothesis_ladder_20260306.json`
 - Full write-up: `docs/research/o1-execution-hypothesis-results-2026-03-06.md`
+- Supplemental dominant-top diagnostic: `artifacts/research/wf_goal_v6_h24_o1_h3_h4_compare_without_dominant_root_20260306.json`
 - Outcome:
   - `H0`: reproduced `O1` exactly.
   - `H1`: noisy.
@@ -138,3 +143,4 @@
   - `H4`: noisy but identified `max_profit_rr` clipping as the dominant revenue/concentration trade-off.
   - `H5`: disallowed for promotion; sensitivity only.
 - Baseline decision after completed ladder: keep `O1`.
+- Future reading rule: discuss candidates on the whole universe first, then show whether the same mechanism still holds without dominant tops and which roots actually carry the edge.

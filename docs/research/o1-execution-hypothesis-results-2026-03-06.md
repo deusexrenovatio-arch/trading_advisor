@@ -92,3 +92,12 @@
 - `hold`: `H3B_SL_3P0` and `H4A_CAP_OFF` as mechanism evidence only
 - `fail`: all other `H1`-`H4` candidates for baseline promotion
 - Baseline after completed ladder: `O1`
+
+## Supplemental diagnostic rule adopted after the ladder
+- Future execution reviews must show three views, not one aggregate number:
+  - whole-universe result
+  - no-dominant-top result when concentration is material
+  - per-root or per-instrument contribution table
+- This rule was motivated by the supplemental comparison artifact `artifacts/research/wf_goal_v6_h24_o1_h3_h4_compare_without_dominant_root_20260306.json`:
+  - `H4A_CAP_OFF` remained positive without the dominant `PD` root, so its uplift is not purely single-root driven.
+  - `H3B_SL_3P0` lost its edge without `PD`, so its uplift is less structurally broad.

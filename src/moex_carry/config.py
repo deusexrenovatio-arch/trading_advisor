@@ -808,14 +808,14 @@ class SignalEngineMorningExecutionConfig(BaseModel):
     buffer_atr_mult: float = 0.10
     buffer_min_ticks: int = 1
     limit_slip_ticks: int = 2
-    # O1 is the working execution baseline. Any alternative execution profile must be
-    # evaluated and explained relative to O1 before it can replace the default.
+    # H4A_CAP_OFF is the working execution baseline after historical validation on the
+    # whole universe and after removing duplicated mini-contract exposure.
     break_even_rr: float = 0.1
     break_even_buffer_ticks: int = 2
     tp_rr: float = 0.6
     sl_rr: float = 2.5
     max_holding_minutes: int = 180
-    max_profit_rr: float = 0.3
+    max_profit_rr: float = 0.0
     max_profit_ticks: int = 0
     trail_activation_rr: float = 0.1
     trail_offset_ticks: int = 2

@@ -154,7 +154,7 @@ signal_engine:
     assert settings.signal_engine.morning_plan.news_gate.commodity_map["BR"] == "BRN"
 
 
-def test_signal_engine_morning_execution_defaults_preserve_o1_baseline():
+def test_signal_engine_morning_execution_defaults_preserve_h4_baseline():
     cfg = SignalEngineMorningExecutionConfig()
 
     assert cfg.break_even_rr == 0.1
@@ -162,7 +162,7 @@ def test_signal_engine_morning_execution_defaults_preserve_o1_baseline():
     assert cfg.tp_rr == 0.6
     assert cfg.sl_rr == 2.5
     assert cfg.max_holding_minutes == 180
-    assert cfg.max_profit_rr == 0.3
+    assert cfg.max_profit_rr == 0.0
     assert cfg.max_profit_ticks == 0
     assert cfg.trail_activation_rr == 0.1
     assert cfg.trail_offset_ticks == 2

@@ -30,6 +30,16 @@ Applies to Backtest v2, HPO, and forward readiness decisions.
    - Cost stress and stricter execution assumptions must be run.
 5. Forward sanity:
    - Forward initialization under same assumptions must complete.
+6. Concentration diagnostics:
+   - Full-universe result remains the primary decision basis.
+   - When one or a few dominant instruments materially drive net revenue, add a supplemental diagnostic without those top contributors and state whether the edge survives.
+   - Always report per-instrument or per-root quality and contribution; aggregate net alone is insufficient to claim a structural improvement.
+7. Universe hygiene:
+   - If both a full and a mini contract exist for the same underlying, exclude the mini contract from whole-universe evaluation by default.
+   - Human-facing reports should refer to roots as `TICKER (Name)`.
+8. Calendar diagnostics:
+   - Month-level reporting must distinguish active trading months from the full calendar inside the requested window.
+   - Months with no filled trades count as flat months and must be disclosed explicitly.
 
 ## Promotion decision
 - `pass`: OOS gain, constraints respected, dispersion acceptable, stress stable, forward sane.
@@ -41,3 +51,5 @@ Applies to Backtest v2, HPO, and forward readiness decisions.
 - HPO request payload + status/result.
 - Summary report with baseline/candidate/stress.
 - Note on fallback folds and residual risks.
+- Per-instrument or per-root contribution table, plus a no-dominant-top diagnostic when concentration is material.
+- Active-month and full-calendar month summary, including flat no-fill months.
