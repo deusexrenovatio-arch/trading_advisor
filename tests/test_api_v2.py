@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
+import yaml
+
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
 from moex_carry.contracts.strategy_test import BacktestRequest, HpoRequest
 from moex_carry.storage import models as db_models
@@ -1750,6 +1752,90 @@ def test_v2_ops_process_improvement_report_unavailable(tmp_path, monkeypatch):
     assert payload["error"] == "process_report_unavailable"
     assert payload["query"] == {"weeks": 3, "window_size": 9}
     assert payload["source_path"] == report_path.as_posix()
+
+
+def test_v2_ops_process_improvement_report_exposes_acknowledged_debt(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    report_path = tmp_path / "task_outcomes.yaml"
+    plans_path = tmp_path / "plans.yaml"
+    plans_path.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "updated_at: 2026-03-09",
+                "items:",
+                "- id: P1-PROCESS-REG-GATE-063",
+                "  title: staged process regression remediation",
+                "  lane: governance",
+                "  status: active",
+                "  execution_mode: autonomous",
+                "  owner: test",
+                "  acceptance:",
+                "  - x",
+                "  checks:",
+                "  - pytest",
+                "  docs:",
+                "  - docs/session_handoff.md",
+                "  dependencies: []",
+                "  started_at: 2026-03-09",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "updated_at": "2026-03-09",
+                "items": [
+                    {
+                        "task_id": f"TASK-{index}",
+                        "closed_at": (
+                            datetime(2026, 3, 1, 10, 0, 0) + timedelta(minutes=index)
+                        ).isoformat()
+                        + "Z",
+                        "branch": "codex/process-regression-gate-staging",
+                        "goal_class": "ops",
+                        "start_primary_context": "CTX-OPS",
+                        "start_contexts": ["CTX-OPS"],
+                        "final_contexts": ["CTX-OPS"],
+                        "route_match": "expanded" if index < 6 else "matched",
+                        "time_to_first_patch_sec": 30 + index,
+                        "same_path_attempts": 1,
+                        "decision_quality": "wrong_path" if index < 8 else "correct_first_time",
+                        "primary_rework_cause": "none",
+                        "incident_signature": "none",
+                        "improvement_action": "none",
+                        "improvement_artifact": "none",
+                        "linked_plan_id": None,
+                        "linked_memory_id": None,
+                        "outcome_status": "completed",
+                        "unmapped_files_count": 0,
+                        "intent_sources": ["session_handoff"],
+                        "start_recommendations": ["Patch is scoped to one context."],
+                    }
+                    for index in range(20)
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MOEX_CARRY_TASK_OUTCOMES_PATH", str(report_path))
+    monkeypatch.setenv("MOEX_CARRY_PLANS_PATH", str(plans_path))
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get("/api/v2/ops/process-improvement?weeks=4&window_size=20")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["human_summary"]["status"] == "remediation"
+    assert payload["current_rollup"]["threshold_results"]["decision-quality"]["status"] == "acknowledged_debt"
+    assert payload["current_rollup"]["threshold_results"]["decision-quality"]["blocking"] is False
+    assert payload["current_rollup"]["threshold_results"]["context-efficiency"]["status"] == "acknowledged_debt"
+    assert payload["current_rollup"]["threshold_results"]["context-efficiency"]["blocking"] is False
 
 
 def test_v2_ops_process_improvement_report_uses_snapshot_source(tmp_path, monkeypatch):

@@ -7,11 +7,13 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import agent_process_telemetry as telemetry  # noqa: E402
+import validate_process_regressions  # noqa: E402
 
 
 def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -99,11 +101,56 @@ def _write_handoff(
     handoff_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _init_repo(tmp_path: Path) -> Path:
+def _init_repo(tmp_path: Path, *, include_remediation_plan: bool = False) -> Path:
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     (repo_root / "scripts").mkdir()
+    (repo_root / "memory").mkdir()
+    (repo_root / "plans").mkdir()
     (repo_root / "scripts/sample.py").write_text("print('baseline')\n", encoding="utf-8")
+    plan_lines = [
+        "version: 1",
+        "updated_at: 2026-03-06",
+        "items:",
+        "- id: P1-TEMP-001",
+        "  title: temp",
+        "  lane: governance",
+        "  status: active",
+        "  execution_mode: autonomous",
+        "  owner: test",
+        "  acceptance:",
+        "  - x",
+        "  checks:",
+        "  - pytest",
+        "  docs:",
+        "  - docs/session_handoff.md",
+        "  dependencies: []",
+        "  started_at: 2026-03-06",
+    ]
+    if include_remediation_plan:
+        plan_lines.extend(
+            [
+                "- id: P1-PROCESS-REG-GATE-063",
+                "  title: staged process regression remediation",
+                "  lane: governance",
+                "  status: active",
+                "  execution_mode: autonomous",
+                "  owner: test",
+                "  acceptance:",
+                "  - x",
+                "  checks:",
+                "  - pytest",
+                "  docs:",
+                "  - docs/session_handoff.md",
+                "  dependencies: []",
+                "  started_at: 2026-03-06",
+            ]
+        )
+    (repo_root / "plans/PLANS.yaml").write_text("\n".join(plan_lines) + "\n", encoding="utf-8")
+    (repo_root / "memory/task_outcomes.yaml").write_text(
+        "version: 1\nupdated_at: 2026-03-06\nitems: []\n",
+        encoding="utf-8",
+    )
     _write_handoff(repo_root)
     assert _run(["git", "init"], repo_root).returncode == 0
     assert _run(["git", "config", "user.email", "test@example.com"], repo_root).returncode == 0
@@ -218,7 +265,10 @@ def test_first_patch_records_event_and_same_path_attempts(tmp_path: Path, monkey
     assert state["active_task"]["max_same_path_attempts_observed"] == 2
 
 
-def test_rollup_respects_burn_in_and_thresholds() -> None:
+def test_rollup_respects_burn_in_and_thresholds(tmp_path: Path, monkeypatch) -> None:
+    plan_path = tmp_path / "plans.yaml"
+    plan_path.write_text("version: 1\nupdated_at: 2026-03-09\nitems: []\n", encoding="utf-8")
+    monkeypatch.setenv("MOEX_CARRY_PLANS_PATH", str(plan_path))
     payload_under_burn_in = {"items": [_build_record(index) for index in range(19)]}
     rollup_under_burn_in = telemetry.compute_process_rollup(payload_under_burn_in)
     assert rollup_under_burn_in["burn_in_complete"] is False
@@ -238,6 +288,90 @@ def test_rollup_respects_burn_in_and_thresholds() -> None:
     weak_rollup = telemetry.compute_process_rollup(weak_payload)
     assert weak_rollup["burn_in_complete"] is True
     assert weak_rollup["current_metrics"]["correct_first_time_pct"] == 0.60
-    assert weak_rollup["threshold_results"]["decision-quality"]["ok"] is False
-    assert weak_rollup["threshold_results"]["context-efficiency"]["ok"] is False
-    assert weak_rollup["threshold_results"]["self-learning"]["ok"] is False
+    assert weak_rollup["threshold_results"]["decision-quality"]["status"] == "fail"
+    assert weak_rollup["threshold_results"]["decision-quality"]["blocking"] is True
+    assert weak_rollup["threshold_results"]["context-efficiency"]["status"] == "fail"
+    assert weak_rollup["threshold_results"]["context-efficiency"]["blocking"] is True
+    assert weak_rollup["threshold_results"]["self-learning"]["status"] == "fail"
+    assert weak_rollup["threshold_results"]["self-learning"]["blocking"] is True
+
+
+def test_validate_process_regressions_allows_acknowledged_baseline_debt(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = _init_repo(tmp_path, include_remediation_plan=True)
+    monkeypatch.chdir(repo_root)
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    payload = {
+        "version": 1,
+        "updated_at": "2026-03-09",
+        "items": [
+            _build_record(
+                index,
+                decision_quality="wrong_path" if index < 8 else "correct_first_time",
+                route_match="expanded" if index < 6 else "matched",
+            )
+            for index in range(20)
+        ],
+    }
+    task_outcomes_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    assert (
+        validate_process_regressions.run(
+            task_outcomes_path=task_outcomes_path,
+            focus=None,
+            report=None,
+        )
+        == 0
+    )
+    rollup = telemetry.compute_process_rollup(payload)
+    assert rollup["threshold_results"]["decision-quality"]["status"] == "acknowledged_debt"
+    assert rollup["threshold_results"]["decision-quality"]["blocking"] is False
+    assert rollup["threshold_results"]["context-efficiency"]["status"] == "acknowledged_debt"
+    assert rollup["threshold_results"]["context-efficiency"]["blocking"] is False
+
+
+def test_validate_process_regressions_blocks_worsening_acknowledged_debt(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = _init_repo(tmp_path, include_remediation_plan=True)
+    monkeypatch.chdir(repo_root)
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    previous_window = [
+        _build_record(
+            index,
+            decision_quality="wrong_path" if index < 7 else "correct_first_time",
+            route_match="expanded" if index < 6 else "matched",
+        )
+        for index in range(20)
+    ]
+    current_window = [
+        _build_record(
+            20 + index,
+            decision_quality="wrong_path" if index < 8 else "correct_first_time",
+            route_match="expanded" if index < 7 else "matched",
+        )
+        for index in range(20)
+    ]
+    payload = {
+        "version": 1,
+        "updated_at": "2026-03-09",
+        "items": previous_window + current_window,
+    }
+    task_outcomes_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    assert (
+        validate_process_regressions.run(
+            task_outcomes_path=task_outcomes_path,
+            focus=None,
+            report=None,
+        )
+        == 1
+    )
+    rollup = telemetry.compute_process_rollup(payload)
+    assert rollup["threshold_results"]["decision-quality"]["status"] == "regressed"
+    assert rollup["threshold_results"]["decision-quality"]["blocking"] is True
+    assert rollup["threshold_results"]["context-efficiency"]["status"] == "regressed"
+    assert rollup["threshold_results"]["context-efficiency"]["blocking"] is True
