@@ -1,0 +1,2 @@
+- staged post-burn-in process regression gating so acknowledged decision-quality and context-efficiency baseline debt can stay non-blocking only under explicit remediation tracking
+- kept governance fail-closed for new or worsening process regressions and synchronized validator, reports, acceptance mapping, and user-needs coverage to the staged policy
