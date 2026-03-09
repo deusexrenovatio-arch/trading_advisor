@@ -58,6 +58,7 @@ ALLOWED_IMPROVEMENT_ACTIONS = {
 ROLLING_WINDOW_SIZE = 20
 TASK_OUTCOMES_REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 MARKDOWN_KEY_RE = re.compile(r"[^a-z0-9]+")
+WINDOWS_ABS_PATH_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
 ROLLING_THRESHOLDS = {
     "decision-quality": {
@@ -74,16 +75,46 @@ ROLLING_THRESHOLDS = {
 }
 
 
+def _resolve_path_from_repo(repo_root: Path, raw_path: str | Path) -> Path:
+    candidate = Path(raw_path)
+    if candidate.is_absolute():
+        return candidate
+    return (repo_root / candidate).resolve()
+
+
 def default_process_root() -> Path:
-    return Path(os.getenv("MOEX_CARRY_AGENT_PROCESS_ROOT", ".runlogs/agent-process"))
+    override = os.getenv("MOEX_CARRY_AGENT_PROCESS_ROOT", "").strip()
+    try:
+        repo_root = get_repo_root()
+    except RuntimeError:
+        repo_root = Path.cwd().resolve()
+    if override:
+        return _resolve_path_from_repo(repo_root, override)
+    common_dir = get_git_common_dir(repo_root)
+    shared_root = common_dir.parent if common_dir.name == ".git" else repo_root
+    return (shared_root / ".runlogs" / "agent-process").resolve()
 
 
 def default_events_path() -> Path:
-    return Path(os.getenv("MOEX_CARRY_AGENT_PROCESS_EVENTS", default_process_root() / "task-events.jsonl"))
+    override = os.getenv("MOEX_CARRY_AGENT_PROCESS_EVENTS", "").strip()
+    if override:
+        try:
+            repo_root = get_repo_root()
+        except RuntimeError:
+            repo_root = Path.cwd().resolve()
+        return _resolve_path_from_repo(repo_root, override)
+    return default_process_root() / "task-events.jsonl"
 
 
 def default_state_path() -> Path:
-    return Path(os.getenv("MOEX_CARRY_AGENT_PROCESS_STATE", default_process_root() / "state.json"))
+    override = os.getenv("MOEX_CARRY_AGENT_PROCESS_STATE", "").strip()
+    if override:
+        try:
+            repo_root = get_repo_root()
+        except RuntimeError:
+            repo_root = Path.cwd().resolve()
+        return _resolve_path_from_repo(repo_root, override)
+    return default_process_root() / "state.json"
 
 
 def default_session_handoff_path() -> Path:
@@ -298,6 +329,24 @@ def get_repo_root() -> Path:
     return Path(completed.stdout.strip()).resolve()
 
 
+def get_git_common_dir(repo_root: Path | None = None) -> Path:
+    cwd = repo_root or Path.cwd()
+    completed = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_git_env(),
+    )
+    if completed.returncode != 0 or not completed.stdout.strip():
+        raise RuntimeError("unable to resolve git common dir")
+    raw = Path(completed.stdout.strip())
+    if raw.is_absolute():
+        return raw.resolve()
+    return (cwd / raw).resolve()
+
+
 def _run_git(repo_root: Path, *args: str) -> str:
     completed = subprocess.run(
         ["git", *args],
@@ -497,14 +546,362 @@ def upsert_task_outcome(path: Path, record: dict[str, Any]) -> dict[str, Any]:
 
 def load_state(path: Path) -> dict[str, Any]:
     state = load_json(path, default={"version": 1})
-    if "version" not in state:
-        state["version"] = 1
-    return state
+    return _normalize_state_payload(state)
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
-    state["version"] = 1
-    write_json(path, state)
+    write_json(path, _normalize_state_payload(state))
+
+
+def _looks_like_filesystem_path(value: str | None) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    return bool(
+        WINDOWS_ABS_PATH_RE.match(text)
+        or text.startswith(("/", "\\"))
+        or "/" in text
+        or "\\" in text
+    )
+
+
+def _normalize_worktree_root(path_value: str | Path) -> Path:
+    resolved = Path(path_value).resolve()
+    if resolved.name.lower() == "agent-process" and resolved.parent.name.lower() == ".runlogs":
+        return resolved.parent.parent
+    if resolved.name.lower() == ".runlogs":
+        return resolved.parent
+    return resolved
+
+
+def _normalize_worktree_path(path_value: str | Path) -> str:
+    return _normalize_worktree_root(path_value).as_posix().lower()
+
+
+def _scope_id_for_worktree(path_value: str | Path) -> str:
+    return _normalize_worktree_path(path_value)
+
+
+def _current_scope_id(repo_root: Path) -> str:
+    return _scope_id_for_worktree(repo_root)
+
+
+def _current_scope_key(state: dict[str, Any], repo_root: Path) -> str:
+    scope_id = _current_scope_id(repo_root)
+    tasks_by_scope = state.get("tasks_by_scope", {})
+    if isinstance(tasks_by_scope, dict) and scope_id in tasks_by_scope:
+        return scope_id
+    return scope_id
+
+
+def _derive_scope_id(scope_id_raw: str | None, worktree_path: str | Path | None) -> str:
+    if worktree_path:
+        return _scope_id_for_worktree(worktree_path)
+    raw = str(scope_id_raw or "").strip()
+    if not raw or raw.lower() == "default":
+        return "default"
+    if _looks_like_filesystem_path(raw):
+        return _scope_id_for_worktree(raw)
+    return raw
+
+
+def _canonicalize_task_payload(
+    task: dict[str, Any],
+    *,
+    fallback_worktree_path: str | Path | None = None,
+) -> dict[str, Any]:
+    clone = dict(task)
+    worktree_path = str(clone.get("worktree_path", "")).strip()
+    if worktree_path:
+        clone["worktree_path"] = str(_normalize_worktree_root(worktree_path))
+        worktree_path = str(clone["worktree_path"])
+    elif fallback_worktree_path is not None:
+        clone["worktree_path"] = str(_normalize_worktree_root(fallback_worktree_path))
+        worktree_path = str(clone["worktree_path"])
+    scope_id = _derive_scope_id(str(clone.get("scope_id", "")).strip(), worktree_path or None)
+    clone["scope_id"] = scope_id
+    return clone
+
+
+def _normalize_state_payload(state: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(state or {})
+    raw_tasks = normalized.get("tasks_by_scope")
+    tasks_by_scope: dict[str, dict[str, Any]] = {}
+    if isinstance(raw_tasks, dict):
+        for scope_id, task in raw_tasks.items():
+            if isinstance(task, dict):
+                fallback_worktree = str(scope_id) if _looks_like_filesystem_path(str(scope_id)) else None
+                clone = _canonicalize_task_payload(
+                    task,
+                    fallback_worktree_path=fallback_worktree,
+                )
+                _merge_task_snapshot(
+                    tasks_by_scope,
+                    incoming_task=clone,
+                    fallback_mtime=0.0,
+                )
+    active = normalized.get("active_task")
+    if isinstance(active, dict):
+        clone = _canonicalize_task_payload(active)
+        _merge_task_snapshot(
+            tasks_by_scope,
+            incoming_task=clone,
+            fallback_mtime=0.0,
+        )
+        normalized["active_task"] = clone
+    else:
+        normalized["active_task"] = None
+    normalized["version"] = max(int(normalized.get("version", 1) or 1), 2)
+    normalized["tasks_by_scope"] = tasks_by_scope
+    migration = normalized.get("migration", {})
+    normalized["migration"] = migration if isinstance(migration, dict) else {}
+    return normalized
+
+
+def _event_identity(event: dict[str, Any]) -> tuple[str, str, str]:
+    event_type = str(event.get("event_type", "")).strip()
+    task_id = str(event.get("task_id", "")).strip()
+    marker = ""
+    for field in ("started_at", "timestamp", "closed_at"):
+        marker = str(event.get(field, "")).strip()
+        if marker:
+            break
+    if not marker:
+        marker = json.dumps(event, ensure_ascii=False, sort_keys=True)
+    return event_type, task_id, marker
+
+
+def _event_sort_key(event: dict[str, Any]) -> tuple[datetime, str, str]:
+    for field in ("started_at", "timestamp", "closed_at"):
+        parsed = parse_iso_datetime(str(event.get(field, "")).strip())
+        if parsed is not None:
+            return parsed, str(event.get("task_id", "")), str(event.get("event_type", ""))
+    return datetime.min.replace(tzinfo=timezone.utc), str(event.get("task_id", "")), str(event.get("event_type", ""))
+
+
+def _load_events_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    items: list[dict[str, Any]] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        payload = json.loads(stripped)
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items
+
+
+def _write_events_jsonl(path: Path, events: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for event in sorted(events, key=_event_sort_key):
+            handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+def _state_freshness(task: dict[str, Any], *, fallback_mtime: float) -> float:
+    for field in ("closed_at", "first_patch_at", "started_at"):
+        parsed = parse_iso_datetime(str(task.get(field, "")).strip())
+        if parsed is not None:
+            return parsed.timestamp()
+    return fallback_mtime
+
+
+def _merge_task_snapshot(
+    tasks_by_scope: dict[str, dict[str, Any]],
+    *,
+    incoming_task: dict[str, Any],
+    fallback_mtime: float,
+    fallback_worktree_path: str | Path | None = None,
+) -> None:
+    task = _canonicalize_task_payload(
+        incoming_task,
+        fallback_worktree_path=fallback_worktree_path,
+    )
+    scope_id = str(task.get("scope_id", "")).strip() or "default"
+    task["scope_id"] = scope_id
+    existing = tasks_by_scope.get(scope_id)
+    if existing is None:
+        tasks_by_scope[scope_id] = task
+        return
+    if _state_freshness(task, fallback_mtime=fallback_mtime) >= _state_freshness(existing, fallback_mtime=fallback_mtime):
+        tasks_by_scope[scope_id] = task
+
+
+def list_git_worktrees(repo_root: Path) -> list[Path]:
+    completed = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_git_env(),
+    )
+    if completed.returncode != 0:
+        return [repo_root]
+    worktrees: list[Path] = []
+    for raw in completed.stdout.splitlines():
+        if not raw.startswith("worktree "):
+            continue
+        worktrees.append(Path(raw.replace("worktree ", "", 1).strip()).resolve())
+    return worktrees or [repo_root]
+
+
+def legacy_process_roots(repo_root: Path, canonical_root: Path) -> list[Path]:
+    roots: list[Path] = []
+    seen: set[str] = set()
+    canonical = canonical_root.resolve()
+    for worktree in list_git_worktrees(repo_root):
+        candidate = (worktree / ".runlogs" / "agent-process").resolve()
+        if candidate == canonical or not candidate.exists():
+            continue
+        key = candidate.as_posix().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(candidate)
+    return roots
+
+
+def _worktree_for_process_root(process_root: Path, fallback_worktree: Path) -> Path:
+    resolved = process_root.resolve()
+    if resolved.name.lower() == "agent-process" and resolved.parent.name.lower() == ".runlogs":
+        return resolved.parent.parent.resolve()
+    return _normalize_worktree_root(fallback_worktree)
+
+
+def reconcile_legacy_process_storage_with_summary(
+    repo_root: Path,
+    *,
+    events_path: Path,
+    state_path: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    canonical_root = state_path.parent.resolve()
+    canonical_worktree = _worktree_for_process_root(canonical_root, repo_root)
+    canonical_state = load_json(state_path, default={"version": 2})
+    state = _normalize_state_payload(canonical_state)
+    default_scope = state.get("tasks_by_scope", {}).get("default")
+    canonical_scope_id = _scope_id_for_worktree(canonical_worktree)
+    repaired_scope_count = 0
+    if isinstance(default_scope, dict):
+        state["tasks_by_scope"].pop("default", None)
+        _merge_task_snapshot(
+            state["tasks_by_scope"],
+            incoming_task=default_scope,
+            fallback_mtime=state_path.stat().st_mtime if state_path.exists() else 0.0,
+            fallback_worktree_path=canonical_worktree,
+        )
+        repaired_scope_count += 1
+    canonical_events = _load_events_jsonl(events_path)
+    known_event_ids = {_event_identity(event) for event in canonical_events}
+    imported_roots: list[str] = []
+    imported_event_count = 0
+    merged_scope_count = 0
+    changed_events = False
+    changed_state = False
+    initial_state_signature = json.dumps(state, ensure_ascii=False, sort_keys=True)
+
+    for legacy_root in legacy_process_roots(repo_root, canonical_root):
+        imported_roots.append(str(legacy_root))
+        legacy_worktree = _worktree_for_process_root(legacy_root, legacy_root.parent.parent)
+        legacy_events_path = legacy_root / "task-events.jsonl"
+        if legacy_events_path.exists():
+            for event in _load_events_jsonl(legacy_events_path):
+                identity = _event_identity(event)
+                if identity in known_event_ids:
+                    continue
+                canonical_events.append(event)
+                known_event_ids.add(identity)
+                imported_event_count += 1
+                changed_events = True
+
+        legacy_state_path = legacy_root / "state.json"
+        if legacy_state_path.exists():
+            legacy_state = _normalize_state_payload(load_json(legacy_state_path, default={"version": 1}))
+            fallback_mtime = legacy_state_path.stat().st_mtime
+            for scope_id, task in legacy_state.get("tasks_by_scope", {}).items():
+                incoming = dict(task)
+                incoming.setdefault("scope_id", scope_id)
+                incoming.setdefault("worktree_path", str(legacy_worktree))
+                before_signature = json.dumps(state.get("tasks_by_scope", {}), ensure_ascii=False, sort_keys=True)
+                _merge_task_snapshot(
+                    state["tasks_by_scope"],
+                    incoming_task=incoming,
+                    fallback_mtime=fallback_mtime,
+                    fallback_worktree_path=legacy_worktree,
+                )
+                after_signature = json.dumps(state.get("tasks_by_scope", {}), ensure_ascii=False, sort_keys=True)
+                if after_signature != before_signature:
+                    merged_scope_count += 1
+                    changed_state = True
+
+    summary = {
+        "canonical_root": str(canonical_root),
+        "canonical_worktree": str(canonical_worktree),
+        "canonical_scope_id": canonical_scope_id,
+        "legacy_roots_seen": sorted(imported_roots),
+        "legacy_root_count": len(imported_roots),
+        "imported_event_count": imported_event_count,
+        "merged_scope_count": merged_scope_count,
+        "repaired_scope_count": repaired_scope_count,
+        "event_count": len(canonical_events),
+        "tasks_by_scope_count": len(state.get("tasks_by_scope", {})),
+        "last_reconciled_at": now_utc_iso(),
+    }
+    state["migration"]["canonical_root"] = summary["canonical_root"]
+    state["migration"]["canonical_worktree"] = summary["canonical_worktree"]
+    state["migration"]["canonical_scope_id"] = summary["canonical_scope_id"]
+    state["migration"]["legacy_roots_seen"] = summary["legacy_roots_seen"]
+    state["migration"]["last_reconciled_at"] = summary["last_reconciled_at"]
+    state["migration"]["last_reconcile_summary"] = summary
+    current = state["tasks_by_scope"].get(_current_scope_id(repo_root))
+    state["active_task"] = dict(current) if isinstance(current, dict) else None
+    final_state_signature = json.dumps(state, ensure_ascii=False, sort_keys=True)
+    changed_state = changed_state or final_state_signature != initial_state_signature
+
+    if changed_events:
+        _write_events_jsonl(events_path, canonical_events)
+    if changed_state:
+        save_state(state_path, state)
+        state = load_state(state_path)
+    return state, summary
+
+
+def reconcile_legacy_process_storage(repo_root: Path, *, events_path: Path, state_path: Path) -> dict[str, Any]:
+    state, _ = reconcile_legacy_process_storage_with_summary(
+        repo_root,
+        events_path=events_path,
+        state_path=state_path,
+    )
+    return state
+
+
+def get_active_task(state: dict[str, Any], repo_root: Path) -> dict[str, Any] | None:
+    normalized = _normalize_state_payload(state)
+    scope_id = _current_scope_id(repo_root)
+    task = normalized.get("tasks_by_scope", {}).get(scope_id)
+    if isinstance(task, dict):
+        return dict(task)
+    if normalized.get("tasks_by_scope"):
+        return None
+    active = normalized.get("active_task")
+    return dict(active) if isinstance(active, dict) else None
+
+
+def set_active_task(state: dict[str, Any], repo_root: Path, task: dict[str, Any] | None) -> dict[str, Any]:
+    normalized = _normalize_state_payload(state)
+    scope_id = _current_scope_id(repo_root)
+    if task is None:
+        normalized.get("tasks_by_scope", {}).pop(scope_id, None)
+        normalized["active_task"] = None
+        return normalized
+    clone = dict(task)
+    clone["scope_id"] = scope_id
+    clone["worktree_path"] = str(repo_root.resolve())
+    normalized["tasks_by_scope"][scope_id] = clone
+    normalized["active_task"] = clone
+    return normalized
 
 
 def _base_active_task_payload(
@@ -520,10 +917,13 @@ def _base_active_task_payload(
     start_recommendations: list[str],
     baseline_changed_files: list[str],
     baseline_diff_hash: str,
+    worktree_path: Path,
 ) -> dict[str, Any]:
     return {
         "task_id": task_id,
         "task_key": task_key,
+        "scope_id": _scope_id_for_worktree(worktree_path),
+        "worktree_path": str(worktree_path.resolve()),
         "started_at": now_utc_iso(),
         "branch": branch,
         "head_sha": head_sha,
@@ -555,11 +955,11 @@ def _base_active_task_payload(
 
 def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tuple[bool, dict[str, Any]]:
     repo_root = get_repo_root()
-    state = load_state(state_path)
+    state = reconcile_legacy_process_storage(repo_root, events_path=events_path, state_path=state_path)
     handoff = parse_session_handoff(handoff_path)
     branch = get_current_branch(repo_root)
     task_key = build_task_key(branch, handoff)
-    active = state.get("active_task")
+    active = get_active_task(state, repo_root)
     if (
         isinstance(active, dict)
         and active.get("task_key") == task_key
@@ -584,6 +984,7 @@ def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tu
         start_recommendations=list(route.get("recommendations", [])),
         baseline_changed_files=changed_files,
         baseline_diff_hash=baseline_diff_hash,
+        worktree_path=repo_root,
     )
     append_jsonl(
         events_path,
@@ -598,17 +999,19 @@ def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tu
             "intent_sources": active_task["intent_sources"],
             "unmapped_files_count": active_task["unmapped_files_count"],
             "start_recommendations": active_task["start_recommendations"],
+            "scope_id": active_task["scope_id"],
+            "worktree_path": active_task["worktree_path"],
         },
     )
-    state["active_task"] = active_task
+    state = set_active_task(state, repo_root, active_task)
     save_state(state_path, state)
     return True, active_task
 
 
 def record_first_patch(*, events_path: Path, state_path: Path, handoff_path: Path) -> tuple[bool, dict[str, Any] | None]:
     repo_root = get_repo_root()
-    state = load_state(state_path)
-    active = state.get("active_task")
+    state = reconcile_legacy_process_storage(repo_root, events_path=events_path, state_path=state_path)
+    active = get_active_task(state, repo_root)
     if not isinstance(active, dict) or active.get("closed_at"):
         return False, None
 
@@ -642,9 +1045,11 @@ def record_first_patch(*, events_path: Path, state_path: Path, handoff_path: Pat
                 "changed_files_count": len(changed_files),
                 "changed_contexts": list(route.get("contexts", [])),
                 "time_to_first_patch_sec": active["time_to_first_patch_sec"],
+                "scope_id": active["scope_id"],
+                "worktree_path": active["worktree_path"],
             },
         )
-        state["active_task"] = active
+        state = set_active_task(state, repo_root, active)
         save_state(state_path, state)
         return True, active
 
@@ -662,7 +1067,7 @@ def record_first_patch(*, events_path: Path, state_path: Path, handoff_path: Pat
         int(active.get("current_same_path_attempts", 1)),
     )
     active["last_seen_diff_hash"] = diff_hash
-    state["active_task"] = active
+    state = set_active_task(state, repo_root, active)
     save_state(state_path, state)
     return False, active
 
@@ -674,8 +1079,9 @@ def record_task_end(
     handoff_path: Path,
     task_outcome: dict[str, Any] | None = None,
 ) -> tuple[bool, dict[str, Any] | None]:
-    state = load_state(state_path)
-    active = state.get("active_task")
+    repo_root = get_repo_root()
+    state = reconcile_legacy_process_storage(repo_root, events_path=events_path, state_path=state_path)
+    active = get_active_task(state, repo_root)
     if not isinstance(active, dict):
         return False, None
     if active.get("closed_at"):
@@ -710,9 +1116,11 @@ def record_task_end(
             "incident_signature": active["incident_signature"],
             "improvement_action": active["improvement_action"],
             "improvement_artifact": active["improvement_artifact"],
+            "scope_id": active["scope_id"],
+            "worktree_path": active["worktree_path"],
         },
     )
-    state["active_task"] = active
+    state = set_active_task(state, repo_root, active)
     save_state(state_path, state)
     return True, active
 
@@ -848,6 +1256,10 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--state-path", default=str(default_state_path()))
         sub.add_argument("--session-handoff-path", default=str(default_session_handoff_path()))
 
+    reconcile = subparsers.add_parser("reconcile")
+    reconcile.add_argument("--events-path", default=str(default_events_path()))
+    reconcile.add_argument("--state-path", default=str(default_state_path()))
+
     rollup = subparsers.add_parser("rollup")
     rollup.add_argument("--task-outcomes-path", default=str(default_task_outcomes_path()))
     rollup.add_argument("--window-size", type=int, default=ROLLING_WINDOW_SIZE)
@@ -860,9 +1272,10 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == "start":
+        state_path = Path(args.state_path)
         created, active = start_task(
             events_path=Path(args.events_path),
-            state_path=Path(args.state_path),
+            state_path=state_path,
             handoff_path=Path(args.session_handoff_path),
         )
         if active is None:
@@ -871,14 +1284,16 @@ def main() -> int:
         verb = "started" if created else "unchanged"
         print(
             "agent process telemetry: "
-            f"{verb} task_id={active['task_id']} context={active['start_primary_context']}"
+            f"{verb} task_id={active['task_id']} context={active['start_primary_context']} "
+            f"root={state_path.parent.resolve()} worktree={active['worktree_path']}"
         )
         return 0
 
     if args.command == "first-patch":
+        state_path = Path(args.state_path)
         recorded, active = record_first_patch(
             events_path=Path(args.events_path),
-            state_path=Path(args.state_path),
+            state_path=state_path,
             handoff_path=Path(args.session_handoff_path),
         )
         if active is None:
@@ -888,16 +1303,18 @@ def main() -> int:
             print(
                 "agent process telemetry: "
                 f"first_patch task_id={active['task_id']} "
-                f"time_to_first_patch_sec={active['time_to_first_patch_sec']}"
+                f"time_to_first_patch_sec={active['time_to_first_patch_sec']} "
+                f"root={state_path.parent.resolve()} worktree={active['worktree_path']}"
             )
         else:
             print("agent process telemetry: first_patch no-op")
         return 0
 
     if args.command == "end":
+        state_path = Path(args.state_path)
         recorded, active = record_task_end(
             events_path=Path(args.events_path),
-            state_path=Path(args.state_path),
+            state_path=state_path,
             handoff_path=Path(args.session_handoff_path),
         )
         if active is None:
@@ -906,10 +1323,31 @@ def main() -> int:
         if recorded:
             print(
                 "agent process telemetry: "
-                f"ended task_id={active['task_id']} outcome={active['outcome_status']}"
+                f"ended task_id={active['task_id']} outcome={active['outcome_status']} "
+                f"root={state_path.parent.resolve()} worktree={active['worktree_path']}"
             )
         else:
             print("agent process telemetry: end no-op")
+        return 0
+
+    if args.command == "reconcile":
+        state, summary = reconcile_legacy_process_storage_with_summary(
+            get_repo_root(),
+            events_path=Path(args.events_path),
+            state_path=Path(args.state_path),
+        )
+        active = state.get("active_task")
+        active_task_id = active.get("task_id") if isinstance(active, dict) else "none"
+        print(
+            "agent process telemetry: "
+            f"reconciled root={summary['canonical_root']} "
+            f"worktree={summary['canonical_worktree']} active_task_id={active_task_id} "
+            f"legacy_roots={summary['legacy_root_count']} imported_events={summary['imported_event_count']} "
+            f"merged_scopes={summary['merged_scope_count']} repaired_scopes={summary['repaired_scope_count']} "
+            f"tasks_by_scope={summary['tasks_by_scope_count']} events={summary['event_count']}"
+        )
+        for root in summary["legacy_roots_seen"]:
+            print(f"  legacy_root={root}")
         return 0
 
     payload = load_task_outcomes(Path(args.task_outcomes_path))

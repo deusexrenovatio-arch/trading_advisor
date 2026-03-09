@@ -1,58 +1,57 @@
 # Session Handoff
-Updated: 2026-03-09 10:30 UTC
+Updated: 2026-03-09 14:09 UTC
 
 ## Goal
-- Close the remaining advisory tied to the Process Governance change-set, then push the branch and integrate it to `main` through a PR.
+- Make agent-process telemetry write to one repo-shared local root across worktrees/windows and migrate existing local history into that canonical store without losing task continuity.
 
 ## Task Request Contract
-- Objective: remove the remaining advisory from the checks that belongs to this branch, specifically the target line budget overrun in the process-governance reporting layer, then push the branch and open a PR to merge into `main`.
-- In Scope: small refactor of `src/moex_carry/governance/process_reports.py` and adjacent helpers/tests, final governance/frontend verification, git push, and PR creation.
-- Out of Scope: unrelated repo-wide advisories in other oversized modules, feature redesign, or new governance/report functionality.
-- Constraints: keep report/API behavior stable; preserve the existing `news_root_cycle` operational contract untouched; prefer extraction of cohesive helper logic over semantic rewrites; do not touch unrelated dirty files; do not merge directly to `main`.
-- Done Evidence: `python scripts/validate_task_request_contract.py`, `python scripts/run_lean_gate.py`, targeted report/API tests, and a pushed branch with an opened PR against `main`.
-- Priority Rule: preserve behavior and governance correctness first, then eliminate the advisory, then complete the PR flow.
+- Objective: replace per-worktree `.runlogs/agent-process` storage with one canonical repo-level local telemetry root that every worktree resolves the same way, then backfill/merge already-written local telemetry so task history remains continuous.
+- In Scope: telemetry root resolution, worktree guard/start logging behavior, local history migration/merge logic, targeted governance tests, and any required docs/runbook updates.
+- Out of Scope: changing the tracked `memory/task_outcomes.yaml` contract, redesigning process metrics, adding new product UI behavior, or changing the existing `news_root_cycle` operational contract.
+- Constraints: preserve existing event/state schema as much as possible; keep current ledger/rollup behavior stable; do not lose or silently overwrite task events from existing worktrees; surface start-path failures instead of swallowing them silently.
+- Done Evidence: all worktrees resolve the same local telemetry root, historical local telemetry from older worktrees is merged or discoverable from that root, `python scripts/validate_task_request_contract.py`, `python scripts/run_lean_gate.py`, and targeted telemetry/task-outcome tests pass.
+- Priority Rule: history continuity and deterministic cross-worktree writes beat cosmetic cleanup; prefer explicit migration and observability over minimal but opaque behavior.
 
 ## Current Delta
-- The blocker-label bug is fixed and verified in the live API payload.
-- The target line budget overrun in `src/moex_carry/governance/process_reports.py` is removed by extracting governance text/summary helpers into a dedicated module.
-- The repository still has other oversized modules, but they are unrelated to this branch and out of scope for this PR.
+- Shared telemetry root now resolves to one repo-level `.runlogs/agent-process` store for all worktrees of the repository.
+- Legacy local shards from three hidden worktrees were reconciled into the canonical store.
+- Canonical state now tracks four worktree scopes without stale `default` or `.runlogs` scope IDs.
+- `worktree_guard.ps1` now surfaces telemetry diagnostics, and `python scripts/agent_process_telemetry.py reconcile` provides an explicit history-repair entry point.
 
 ## First-Time-Right Report
-1. Confirmed coverage: process-governance advisory cleanup, regression verification, and PR preparation are included.
-2. Missing or risky scenarios: line-budget cleanup can accidentally spread logic across modules in a way that obscures ownership, so the extraction must stay cohesive and governance-local.
-3. Resource/time risks and chosen controls: move one coherent helper slice out of `process_reports.py`, preserve imports/contracts, and rerun lean gate plus focused tests before any git operations.
-4. Highest-priority fixes or follow-ups: if the file still exceeds budget after the first extraction, move only another clearly bounded helper group instead of broad reformatting.
+1. Confirmed coverage: cross-worktree root resolution, history continuity, silent start-path failure visibility, and regression tests are included.
+2. Missing or risky scenarios: naive migration can duplicate events, replace a newer state snapshot with an older one, or strand telemetry in hidden worktrees that are not scanned.
+3. Resource/time risks and chosen controls: keep migration deterministic and local-only, prefer append-only event union plus newest-state selection, and validate with focused fixtures rather than manual file surgery.
+4. Highest-priority fixes or follow-ups: establish one canonical root first, add migration/merge logic second, then expose clearer start logging so future failures are diagnosable.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
-- Stop Trigger: two consecutive extractions that still leave `process_reports.py` above target budget or change report behavior.
-- Reset Action: stop moving code blindly, measure the file again, and extract the next smallest self-contained helper group under `src/moex_carry/governance/`.
-- New Search Space: (1) formatting helpers, (2) summary/localization helpers, (3) markdown rendering helpers, (4) PR-only cleanup after behavior is stable.
-- Next Probe: extract one cohesive helper slice from `process_reports.py`, rerun targeted tests, and check the line budget before doing anything broader.
+- Stop Trigger: two consecutive telemetry-root changes still leave new worktrees writing to separate local stores or produce duplicate/missing migrated events in tests.
+- Reset Action: stop patching path helpers, inventory every caller and every read/write location, then redesign around one explicit repo-shared root resolver plus a dedicated migration function.
+- New Search Space: (1) resolver-only fix, (2) resolver + migration helper, (3) worktree-guard orchestration changes, (4) dedicated repair command for legacy `.runlogs` shards.
+- Next Probe: trace all telemetry writers/readers, define the canonical shared-root rule, and build one focused migration test fixture before broad edits.
 
 ## Task Outcome
 - Outcome Status: completed
-- Decision Quality: correct_first_time
+- Decision Quality: correct_after_replan
 - Final Contexts: CTX-OPS
 - Route Match: matched
-- Primary Rework Cause: none
+- Primary Rework Cause: test_gap
 - Incident Signature: none
-- Improvement Action: none
-- Improvement Artifact: none
-- Linked Plan ID: P1-PROCESS-GOV-ADVISORY-053
-- Linked Memory ID:
+- Improvement Action: test
+- Improvement Artifact: tests/test_agent_process_telemetry.py
+- Linked Plan ID: P1-PROCESS-TELEMETRY-UNIFIED-054
+- Linked Memory ID: ADM-2026-03-09-093
 
 ## Blockers
 - None.
 
 ## Next Step
-- Push the branch and open the PR against `main`; no additional code changes are needed for the advisory cleanup itself.
+- Watch the next hidden-worktree start to confirm no new local shard appears; no additional code change is planned in this task.
 
 ## Validation
 - `powershell -ExecutionPolicy Bypass -File .\scripts\worktree_guard.ps1 -Action Check`
-- `python scripts/validate_session_handoff.py`
-- `python scripts/validate_task_request_contract.py`
-- `python -m pytest tests/test_process_reports.py tests/test_api_v2.py::test_v2_ops_process_improvement_report -q`
-- `cmd /c npm.cmd --prefix ui-web run lint`
-- `cmd /c npm.cmd --prefix ui-web run build`
+- `python scripts/agent_process_telemetry.py reconcile`
+- `python -m pytest tests/test_agent_process_telemetry.py tests/test_task_outcomes.py -q`
 - `python scripts/run_lean_gate.py`
+- `python scripts/validate_task_request_contract.py`

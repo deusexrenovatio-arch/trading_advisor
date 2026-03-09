@@ -119,6 +119,59 @@ def _events(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+def _task_snapshot(
+    *,
+    task_id: str,
+    branch: str,
+    worktree_path: Path,
+    started_at: str,
+    outcome_status: str = "in_progress",
+    closed_at: str | None = None,
+) -> dict[str, object]:
+    snapshot: dict[str, object] = {
+        "task_id": task_id,
+        "task_key": f"{task_id.lower()}-key",
+        "started_at": started_at,
+        "branch": branch,
+        "head_sha": "deadbeef",
+        "scope_id": worktree_path.resolve().as_posix().lower(),
+        "worktree_path": str(worktree_path.resolve()),
+        "start_primary_context": "CTX-OPS",
+        "start_contexts": ["CTX-OPS"],
+        "intent_sources": ["session_handoff"],
+        "unmapped_files_count": 0,
+        "start_recommendations": ["No diff yet. Using request/session intent fallback."],
+        "baseline_changed_files": [],
+        "baseline_diff_hash": "base",
+        "last_seen_diff_hash": "base",
+        "last_path_signature": "",
+        "current_same_path_attempts": 0,
+        "max_same_path_attempts_observed": 0,
+        "first_patch_at": None,
+        "time_to_first_patch_sec": None,
+        "first_patch_changed_files_count": 0,
+        "first_patch_changed_contexts": [],
+        "closed_at": closed_at,
+        "outcome_status": outcome_status,
+        "decision_quality": "pending" if outcome_status == "in_progress" else "correct_first_time",
+        "route_match": "pending" if outcome_status == "in_progress" else "matched",
+        "primary_rework_cause": "none",
+        "incident_signature": "none",
+        "improvement_action": "pending" if outcome_status == "in_progress" else "none",
+        "improvement_artifact": "pending" if outcome_status == "in_progress" else "none",
+    }
+    if outcome_status != "in_progress":
+        snapshot["final_contexts"] = ["CTX-OPS"]
+    return snapshot
+
+
+def _legacy_task_snapshot(snapshot: dict[str, object]) -> dict[str, object]:
+    legacy = dict(snapshot)
+    legacy.pop("scope_id", None)
+    legacy.pop("worktree_path", None)
+    return legacy
+
+
 def _build_record(index: int, **overrides: object) -> dict[str, object]:
     closed_at = (
         datetime(2026, 3, 1, tzinfo=timezone.utc) + timedelta(minutes=index)
@@ -241,3 +294,123 @@ def test_rollup_respects_burn_in_and_thresholds() -> None:
     assert weak_rollup["threshold_results"]["decision-quality"]["ok"] is False
     assert weak_rollup["threshold_results"]["context-efficiency"]["ok"] is False
     assert weak_rollup["threshold_results"]["self-learning"]["ok"] is False
+
+
+def test_start_task_in_linked_worktree_uses_shared_canonical_root(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _init_repo(tmp_path)
+    linked = tmp_path / "linked"
+    assert _run(["git", "worktree", "add", "-b", "feat/linked", str(linked)], repo_root).returncode == 0
+
+    monkeypatch.chdir(linked)
+    events_path = telemetry.default_events_path()
+    state_path = telemetry.default_state_path()
+    handoff_path = linked / "docs/session_handoff.md"
+
+    created, active = telemetry.start_task(
+        events_path=events_path,
+        state_path=state_path,
+        handoff_path=handoff_path,
+    )
+
+    assert created is True
+    assert active["worktree_path"] == str(linked.resolve())
+    assert events_path == (repo_root / ".runlogs/agent-process/task-events.jsonl").resolve()
+    assert state_path == (repo_root / ".runlogs/agent-process/state.json").resolve()
+    assert events_path.exists()
+    assert not (linked / ".runlogs/agent-process/task-events.jsonl").exists()
+
+
+def test_reconcile_legacy_process_storage_merges_worktree_shards(tmp_path: Path) -> None:
+    repo_root = _init_repo(tmp_path)
+    linked = tmp_path / "linked"
+    assert _run(["git", "worktree", "add", "-b", "feat/linked", str(linked)], repo_root).returncode == 0
+
+    canonical_root = repo_root / ".runlogs/agent-process"
+    canonical_events = canonical_root / "task-events.jsonl"
+    canonical_state = canonical_root / "state.json"
+    legacy_root = linked / ".runlogs/agent-process"
+    legacy_events = legacy_root / "task-events.jsonl"
+    legacy_state = legacy_root / "state.json"
+
+    root_task = _task_snapshot(
+        task_id="ROOT-1",
+        branch="main",
+        worktree_path=repo_root,
+        started_at="2026-03-09T10:00:00Z",
+    )
+    linked_task = _task_snapshot(
+        task_id="LINKED-1",
+        branch="feat/linked",
+        worktree_path=linked,
+        started_at="2026-03-09T10:05:00Z",
+        outcome_status="completed",
+        closed_at="2026-03-09T10:07:00Z",
+    )
+    telemetry.write_json(canonical_state, {"version": 1, "active_task": _legacy_task_snapshot(root_task)})
+    telemetry.append_jsonl(
+        canonical_events,
+        {"event_type": "task_start", "task_id": "ROOT-1", "started_at": "2026-03-09T10:00:00Z"},
+    )
+    telemetry.write_json(legacy_state, {"version": 1, "active_task": _legacy_task_snapshot(linked_task)})
+    telemetry.append_jsonl(
+        legacy_events,
+        {"event_type": "task_start", "task_id": "LINKED-1", "started_at": "2026-03-09T10:05:00Z"},
+    )
+
+    state = telemetry.reconcile_legacy_process_storage(
+        linked,
+        events_path=canonical_events,
+        state_path=canonical_state,
+    )
+
+    merged_events = _events(canonical_events)
+    assert {event["task_id"] for event in merged_events} == {"ROOT-1", "LINKED-1"}
+    assert telemetry.get_active_task(state, repo_root) is not None
+    assert telemetry.get_active_task(state, repo_root)["task_id"] == "ROOT-1"
+    assert telemetry.get_active_task(state, linked) is not None
+    assert telemetry.get_active_task(state, linked)["task_id"] == "LINKED-1"
+    assert "default" not in state["tasks_by_scope"]
+    assert all(not key.endswith("/.runlogs") for key in state["tasks_by_scope"])
+
+    persisted = telemetry.load_state(canonical_state)
+    assert len(persisted["tasks_by_scope"]) == 2
+    assert set(persisted["tasks_by_scope"]) == {
+        repo_root.resolve().as_posix().lower(),
+        linked.resolve().as_posix().lower(),
+    }
+    assert persisted["migration"]["canonical_worktree"] == str(repo_root.resolve())
+
+
+def test_reconcile_legacy_process_storage_repairs_buggy_runlogs_scope(tmp_path: Path) -> None:
+    repo_root = _init_repo(tmp_path)
+    canonical_root = repo_root / ".runlogs/agent-process"
+    canonical_state = canonical_root / "state.json"
+    buggy_worktree_path = repo_root / ".runlogs"
+    buggy_task = _task_snapshot(
+        task_id="BUG-1",
+        branch="main",
+        worktree_path=buggy_worktree_path,
+        started_at="2026-03-09T10:00:00Z",
+    )
+    telemetry.write_json(
+        canonical_state,
+        {
+            "version": 2,
+            "tasks_by_scope": {
+                buggy_worktree_path.resolve().as_posix().lower(): buggy_task,
+            },
+            "active_task": buggy_task,
+        },
+    )
+
+    state = telemetry.reconcile_legacy_process_storage(
+        repo_root,
+        events_path=canonical_root / "task-events.jsonl",
+        state_path=canonical_state,
+    )
+
+    assert set(state["tasks_by_scope"]) == {repo_root.resolve().as_posix().lower()}
+    repaired = telemetry.get_active_task(state, repo_root)
+    assert repaired is not None
+    assert repaired["task_id"] == "BUG-1"
+    assert repaired["worktree_path"] == str(repo_root.resolve())

@@ -2,6 +2,18 @@ version: 1
 updated_at: 2026-03-09
 
 decisions:
+  - id: ADM-2026-03-09-093
+    date: 2026-03-09
+    title: Unify local agent-process telemetry at the repository root and add explicit history reconciliation
+    context: Agent-process telemetry had already become an operational governance signal, but hidden worktrees still carried legacy per-worktree `.runlogs/agent-process` shards and prior migration logic could mis-key canonical state to `.runlogs` instead of the owning worktree.
+    decision: Resolve the canonical local telemetry root from the repository's shared git directory, normalize every task scope to the owning worktree path, expose root and `task_id` in `worktree_guard` start output, and add an explicit `agent_process_telemetry.py reconcile` command that merges legacy shards into the canonical store without deleting source logs.
+    impact: All worktrees for the repository now write to one local telemetry store, historical task continuity survives window/worktree changes, and operators can diagnose missing writes or run one deterministic repair pass when old shards are discovered.
+    links:
+      - scripts/agent_process_telemetry.py
+      - scripts/worktree_guard.ps1
+      - tests/test_agent_process_telemetry.py
+      - tests/test_task_outcomes.py
+      - docs/DEV_WORKFLOW.md
   - id: ADM-2026-03-09-092
     date: 2026-03-09
     title: Serve weekly process-improvement reports from the tracked outcome ledger and surface them in a dedicated governance workspace

@@ -11,7 +11,7 @@
   - `python --version`
   - `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
 - `worktree_guard -Action Check` prints CTX routing from current diff plus `docs/session_handoff.md`.
-- Successful `worktree_guard -Action Check` also emits/refreshes local task-start telemetry under `.runlogs/agent-process/`.
+- Successful `worktree_guard -Action Check` also emits/refreshes local task-start telemetry under one repo-shared `.runlogs/agent-process/` root and prints the active `task_id` plus write location.
 - Optional intent sharpeners for start-of-task routing:
   - `MOEX_CARRY_CONTEXT_ROUTER_REQUEST="<user request>"`
   - `MOEX_CARRY_CONTEXT_ROUTER_TARGET_MODULES="pipeline,ui,news_live_runtime"`

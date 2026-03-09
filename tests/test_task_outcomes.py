@@ -309,11 +309,14 @@ def test_worktree_guard_check_emits_start_event_when_powershell_available(tmp_pa
         repo_root,
     )
     assert check_result.returncode == 0
+    assert "task_id=" in check_result.stdout
+    assert "root=" in check_result.stdout
     assert (repo_root / ".runlogs/agent-process/state.json").exists()
 
 
-def test_run_lean_gate_records_first_patch_in_minimal_repo(tmp_path: Path) -> None:
+def test_run_lean_gate_records_first_patch_in_minimal_repo(tmp_path: Path, monkeypatch) -> None:
     repo_root = _init_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
     scripts_dir = repo_root / "scripts"
     for name in (
         "agent_process_telemetry.py",

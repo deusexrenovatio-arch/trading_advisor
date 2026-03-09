@@ -20,13 +20,14 @@ from agent_process_telemetry import (
     default_session_handoff_path,
     default_state_path,
     default_task_outcomes_path,
+    get_active_task,
     get_repo_root,
     is_non_trivial_diff,
     is_terminal_outcome_status,
-    load_state,
     load_task_outcomes,
     normalize_task_outcome,
     parse_session_handoff,
+    reconcile_legacy_process_storage,
     resolve_context_route,
 )
 
@@ -146,8 +147,9 @@ def run(
     )
     non_trivial = is_non_trivial_diff(changed_files)
     ledger = load_task_outcomes(task_outcomes_path)
-    state = load_state(state_path)
-    active = state.get("active_task")
+    events_path = state_path.parent / "task-events.jsonl"
+    state = reconcile_legacy_process_storage(repo_root, events_path=events_path, state_path=state_path)
+    active = get_active_task(state, repo_root)
     max_same_path_attempts = _load_incident_policy_max_attempts(incident_policy_path)
 
     errors_by_focus: dict[str, list[str]] = {

@@ -61,7 +61,7 @@ Use this guide when a governance gate fails.
   - `Incident Signature`
   - `Improvement Action`
   - `Improvement Artifact`
-- For active tasks, ensure `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check` has created `.runlogs/agent-process/state.json`.
+- For active tasks, ensure `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check` has created the repo-shared `.runlogs/agent-process/state.json`.
 - Sync ledger with `python scripts/sync_task_outcomes.py` so `memory/task_outcomes.yaml` contains the current task record.
 - If `decision_quality` is not `correct_first_time` or `correct_after_replan`, set a non-`none` improvement action.
 - If an incident signature repeats, use a new improvement artifact and link a plan or memory item.

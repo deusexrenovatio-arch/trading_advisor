@@ -13,10 +13,13 @@ from agent_process_telemetry import (
     default_session_handoff_path,
     default_state_path,
     default_task_outcomes_path,
+    get_active_task,
+    get_repo_root,
     is_terminal_outcome_status,
     load_state,
     normalize_task_outcome,
     parse_session_handoff,
+    reconcile_legacy_process_storage,
     record_task_end,
     upsert_task_outcome,
 )
@@ -48,8 +51,13 @@ def run(
     events_path: Path,
     task_outcomes_path: Path,
 ) -> int:
-    state = load_state(state_path)
-    active = state.get("active_task")
+    repo_root = get_repo_root()
+    state = reconcile_legacy_process_storage(
+        repo_root,
+        events_path=events_path,
+        state_path=state_path,
+    )
+    active = get_active_task(state, repo_root)
     if not isinstance(active, dict):
         print("task outcome sync skipped: active task telemetry state not found")
         return 0
@@ -64,7 +72,7 @@ def run(
             task_outcome=task_outcome,
         )
         state = load_state(state_path)
-        active = state.get("active_task")
+        active = get_active_task(state, repo_root)
         if not isinstance(active, dict):
             print("task outcome sync failed: active task disappeared after closeout")
             print(f"remediation: see {TASK_OUTCOMES_REMEDIATION_DOC}")
