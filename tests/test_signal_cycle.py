@@ -52,7 +52,9 @@ def test_run_signal_cycle_persists_history(tmp_path, monkeypatch):
         assert rows[0].stock_secid == "AAA"
 
 
-def test_run_signal_cycle_two_layer_runtime_adapter_overrides_legacy_fields(tmp_path, monkeypatch):
+def test_run_signal_cycle_two_layer_runtime_adapter_does_not_promote_synthetic_hold_to_enter(
+    tmp_path, monkeypatch
+):
     sample = pd.DataFrame(
         [
             {
@@ -124,14 +126,16 @@ def test_run_signal_cycle_two_layer_runtime_adapter_overrides_legacy_fields(tmp_
     assert len(calls) == 1
     assert len(calls[0]["historical_outcomes"]) == 120
     row = result.iloc[0]
-    assert row["signal_action_legacy"] == "hold"
     assert row["signal_action_two_layer"] == "enter"
-    assert row["signal_action"] == "enter"
+    assert row["signal_action"] == "hold"
     assert row["signal_direction"] == "cash_and_carry"
     assert isinstance(row["signal_metrics"], dict)
     assert "two_layer" in row["signal_metrics"]
     assert row["signal_metrics"]["strategy_type"] == "speculative"
     assert row["signal_metrics"]["strategy_stream"] == "commodity_futures"
+    assert row["signal_metrics"]["two_layer"]["historical_source_kind"] == "synthetic"
+    assert row["signal_metrics"]["two_layer"]["synthetic_promotion_blocked"] is True
+    assert row["signal_metrics"]["two_layer"]["override_applied"] is False
 
 
 def test_backfill_signal_history_persists_days(tmp_path, monkeypatch):
@@ -310,10 +314,10 @@ def test_run_signal_cycle_unified_runtime_adapter_keeps_top_pairs_and_signals_in
             {
                 "stock": "AAA",
                 "future": "AAH6",
-                "signal_action": "enter",
-                "signal_direction": "cash_and_carry",
+                "signal_action": "hold",
+                "signal_direction": None,
                 "signal_score": 0.45,
-                "signal_reasons": ["legacy_enter_signals"],
+                "signal_reasons": ["legacy_hold_signals"],
                 "signal_metrics": {"legacy": "signals"},
                 "forecast_tp_probability": 0.50,
                 "forecast_sl_probability": 0.30,
@@ -404,5 +408,5 @@ def test_run_signal_cycle_unified_runtime_adapter_keeps_top_pairs_and_signals_in
     )
     assert not merged.empty
     row = merged.iloc[0]
-    assert row["signal_action_top"] == row["signal_action_sig"] == "enter"
-    assert row["signal_direction_top"] == row["signal_direction_sig"] == "cash_and_carry"
+    assert row["signal_action_top"] == row["signal_action_sig"] == "hold"
+    assert row["signal_direction_top"] == row["signal_direction_sig"] is None
