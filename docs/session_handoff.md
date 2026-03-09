@@ -8,7 +8,7 @@ Updated: 2026-03-09 10:30 UTC
 - Objective: remove the remaining advisory from the checks that belongs to this branch, specifically the target line budget overrun in the process-governance reporting layer, then push the branch and open a PR to merge into `main`.
 - In Scope: small refactor of `src/moex_carry/governance/process_reports.py` and adjacent helpers/tests, final governance/frontend verification, git push, and PR creation.
 - Out of Scope: unrelated repo-wide advisories in other oversized modules, feature redesign, or new governance/report functionality.
-- Constraints: keep report/API behavior stable; prefer extraction of cohesive helper logic over semantic rewrites; do not touch unrelated dirty files; do not merge directly to `main`.
+- Constraints: keep report/API behavior stable; preserve the existing `news_root_cycle` operational contract untouched; prefer extraction of cohesive helper logic over semantic rewrites; do not touch unrelated dirty files; do not merge directly to `main`.
 - Done Evidence: `python scripts/validate_task_request_contract.py`, `python scripts/run_lean_gate.py`, targeted report/API tests, and a pushed branch with an opened PR against `main`.
 - Priority Rule: preserve behavior and governance correctness first, then eliminate the advisory, then complete the PR flow.
 

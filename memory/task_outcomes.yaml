@@ -451,3 +451,28 @@ items:
   - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
     -> code -> docs.'
   - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T094417Z-c12c87c1
+  closed_at: '2026-03-09T09:49:41Z'
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-PROCESS-GOV-ADVISORY-053
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
