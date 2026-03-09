@@ -10,7 +10,7 @@ import random
 import re
 import sqlite3
 import statistics
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -246,7 +246,10 @@ COMPARISON_POINTS: list[str] = [
     "exit_rate",
     "win_rate_net",
     "expectancy_net_ticks",
+    "expectancy_net_money",
     "net_ticks_sum",
+    "net_money_sum",
+    "return_on_equity_pct",
 ]
 
 SAME_BAR_POLICIES: tuple[str, ...] = ("sl_first", "tp_first", "open_direction")
@@ -277,6 +280,14 @@ class CostAssumptions:
 
 
 @dataclass(frozen=True)
+class PositionSizingConfig:
+    mode: str
+    account_equity: float | None
+    target_risk_pct: float | None
+    max_contracts_per_instrument: int
+
+
+@dataclass(frozen=True)
 class SetupResult:
     instrument_id: str
     trade_date: str
@@ -293,6 +304,7 @@ class SetupResult:
     cost_ticks: float
     entry_ticks: int | None
     exit_ticks: int | None
+    qty_lots: int = 1
     gate_status: str | None = None
     gate_reason: str | None = None
     gate_expected_return_ticks: float | None = None
@@ -322,6 +334,10 @@ class PlannedSignal:
     stop_model: str | None
     target_return_pct: float | None
     gate_status: str
+    qty_lots: int = 1
+    sizing_mode: str | None = None
+    estimated_risk_money_per_lot: float | None = None
+    estimated_position_risk_money: float | None = None
     gate_reason: str | None = None
     gate_expected_return_ticks: float | None = None
     gate_n_effective: float | None = None
@@ -334,6 +350,11 @@ class PlannedSignal:
     simulated_exit_ts: str | None = None
     simulated_gross_ticks: float | None = None
     simulated_net_ticks: float | None = None
+    tick_value: float | None = None
+    simulated_cost_money: float | None = None
+    simulated_gross_money: float | None = None
+    simulated_net_money: float | None = None
+    simulated_net_return_on_equity_pct: float | None = None
 
 
 @dataclass(frozen=True)
@@ -921,6 +942,260 @@ def _resolve_tick_sizes(
     return resolved
 
 
+def _tick_value_from_spec_row(row: dict[str, Any] | None, tick_size: float) -> float:
+    if not isinstance(row, dict):
+        return max(float(tick_size), 0.0)
+    for key in ("STEPPRICE", "STEPPRICECL", "STEPVALUE", "TICKVALUE"):
+        raw_value = row.get(key)
+        try:
+            tick_value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if tick_value > 0:
+            return float(tick_value)
+    multiplier_raw = row.get("MULTIPLIER")
+    try:
+        multiplier = float(multiplier_raw)
+    except (TypeError, ValueError):
+        multiplier = 0.0
+    if multiplier > 0 and float(tick_size) > 0:
+        return float(tick_size) * multiplier
+    return 0.0
+
+
+def _resolve_tick_values(
+    *,
+    client: MoexIssClient,
+    board: str,
+    instruments: list[str],
+    tick_sizes: dict[str, float],
+) -> dict[str, float]:
+    rows = client.get_futures_specs(board)
+    by_secid = {str(row.get("SECID")): row for row in rows}
+    by_group_values: dict[str, list[float]] = {}
+    overall_values: list[float] = []
+    for row in rows:
+        secid_raw = row.get("SECID")
+        if secid_raw is None:
+            continue
+        instrument_id = str(secid_raw)
+        tick_size = max(float(tick_sizes.get(instrument_id, 0.0) or 0.0), 0.0)
+        tick_value = _tick_value_from_spec_row(row, tick_size)
+        if tick_value <= 0:
+            continue
+        overall_values.append(float(tick_value))
+        by_group_values.setdefault(_instrument_group(instrument_id), []).append(float(tick_value))
+    overall_default = float(statistics.median(overall_values)) if overall_values else 0.0
+    resolved: dict[str, float] = {}
+    for instrument_id in instruments:
+        tick_size = max(float(tick_sizes.get(instrument_id, 0.0) or 0.0), 0.0)
+        row = by_secid.get(instrument_id)
+        tick_value = _tick_value_from_spec_row(row, tick_size) if row is not None else 0.0
+        if tick_value <= 0:
+            group_values = by_group_values.get(_instrument_group(instrument_id), [])
+            if group_values:
+                tick_value = float(statistics.median(group_values))
+            elif overall_default > 0:
+                tick_value = float(overall_default)
+            else:
+                tick_value = tick_size
+        resolved[instrument_id] = float(max(tick_value, 0.0))
+    return resolved
+
+
+def _coerce_metric_float(raw: Any) -> float | None:
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return float(value)
+
+
+def _primary_metric_value(payload: dict[str, Any], money_key: str, fallback_key: str) -> float:
+    money_value = _coerce_metric_float(payload.get(money_key))
+    if money_value is not None:
+        return float(money_value)
+    fallback_value = _coerce_metric_float(payload.get(fallback_key))
+    if fallback_value is not None:
+        return float(fallback_value)
+    return 0.0
+
+
+def _summary_expectancy_value(summary: dict[str, Any]) -> float:
+    return _primary_metric_value(summary, "expectancy_net_money", "expectancy_net_ticks")
+
+
+def _summary_net_value(summary: dict[str, Any]) -> float:
+    return _primary_metric_value(summary, "net_money_sum", "net_ticks_sum")
+
+
+def _summary_abs_gross_value(summary: dict[str, Any]) -> float:
+    return _primary_metric_value(summary, "abs_gross_money_sum", "abs_gross_ticks_sum")
+
+
+def _tail_metric_value(metrics: dict[str, Any], money_key: str, fallback_key: str) -> float:
+    return _primary_metric_value(metrics, money_key, fallback_key)
+
+
+def _resolve_instrument_tick_value(
+    instrument_id: str,
+    tick_values: dict[str, float] | None,
+) -> float:
+    if not isinstance(tick_values, dict) or not tick_values:
+        return 0.0
+    direct = _coerce_metric_float(tick_values.get(instrument_id))
+    if direct is not None and direct > 0.0:
+        return float(direct)
+    group = _instrument_group(instrument_id)
+    group_values = [
+        float(value)
+        for secid, value in tick_values.items()
+        if _instrument_group(str(secid)) == group and (_coerce_metric_float(value) or 0.0) > 0.0
+    ]
+    if group_values:
+        return float(statistics.median(group_values))
+    all_values = [float(value) for value in tick_values.values() if (_coerce_metric_float(value) or 0.0) > 0.0]
+    if all_values:
+        return float(statistics.median(all_values))
+    return 0.0
+
+
+def _return_on_equity_pct(net_money: float, account_equity: float | None) -> float | None:
+    equity_value = _coerce_metric_float(account_equity)
+    if equity_value is None or equity_value <= 0.0:
+        return None
+    return float((float(net_money) / float(equity_value)) * 100.0)
+
+
+def _normalize_position_sizing_mode(raw: Any) -> str:
+    normalized = str(raw or "fixed_lots").strip().lower()
+    if normalized in {"fixed", "fixed_lots", "legacy"}:
+        return "fixed_lots"
+    if normalized in {"target_risk_pct", "risk", "risk_pct"}:
+        return "target_risk_pct"
+    raise ValueError("unknown_position_sizing_mode")
+
+
+def _normalize_qty_lots(raw: Any) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    return max(value, 1)
+
+
+def _setup_qty_lots(setup: Setup) -> int:
+    return _normalize_qty_lots(getattr(setup.entry_order, "qty_lots", 1))
+
+
+def _result_qty_lots(row: SetupResult) -> int:
+    return _normalize_qty_lots(getattr(row, "qty_lots", 1))
+
+
+def _estimated_stop_distance_ticks(*, setup: Setup, sl_rr: float = 0.0) -> int:
+    entry_ticks = int(setup.entry_order.price_ticks)
+    sl_ticks = int(setup.sl_order.price_ticks)
+    base_risk_ticks = max(abs(entry_ticks - sl_ticks), 1)
+    sl_rr_value = max(float(sl_rr), 0.0)
+    if sl_rr_value > 0.0:
+        return max(int(math.ceil(float(base_risk_ticks) * sl_rr_value)), 1)
+    return int(base_risk_ticks)
+
+
+def _position_sizing_details(
+    *,
+    setup: Setup,
+    instrument_id: str,
+    tick_values: dict[str, float] | None,
+    costs: CostAssumptions,
+    position_sizing: PositionSizingConfig | None,
+    sl_rr: float = 0.0,
+    sl_cost_mult: float = 1.0,
+) -> dict[str, Any]:
+    base_qty_lots = _setup_qty_lots(setup)
+    sizing = position_sizing or PositionSizingConfig(
+        mode="fixed_lots",
+        account_equity=None,
+        target_risk_pct=None,
+        max_contracts_per_instrument=base_qty_lots,
+    )
+    mode = _normalize_position_sizing_mode(sizing.mode)
+    tick_value = _resolve_instrument_tick_value(str(instrument_id), tick_values)
+    stop_distance_ticks = _estimated_stop_distance_ticks(setup=setup, sl_rr=float(sl_rr))
+    risk_cost_ticks = float(costs.round_trip_ticks) * max(float(sl_cost_mult), 0.0)
+    risk_money_per_lot = (
+        float(stop_distance_ticks + risk_cost_ticks) * float(tick_value)
+        if float(tick_value) > 0.0
+        else None
+    )
+    qty_lots = int(base_qty_lots)
+    if mode == "target_risk_pct":
+        account_equity = _coerce_metric_float(sizing.account_equity)
+        target_risk_pct = _coerce_metric_float(sizing.target_risk_pct)
+        max_contracts = max(int(sizing.max_contracts_per_instrument), 1)
+        if (
+            account_equity is not None
+            and account_equity > 0.0
+            and target_risk_pct is not None
+            and target_risk_pct > 0.0
+            and risk_money_per_lot is not None
+            and risk_money_per_lot > 0.0
+        ):
+            risk_budget_money = float(account_equity * target_risk_pct / 100.0)
+            sized_qty_lots = int(math.floor(risk_budget_money / risk_money_per_lot))
+            qty_lots = min(max(sized_qty_lots, 1), max_contracts)
+        else:
+            qty_lots = min(max(base_qty_lots, 1), max_contracts)
+    position_risk_money = (
+        float(risk_money_per_lot) * float(qty_lots)
+        if risk_money_per_lot is not None
+        else None
+    )
+    return {
+        "mode": mode,
+        "qty_lots": int(qty_lots),
+        "tick_value": (float(tick_value) if float(tick_value) > 0.0 else None),
+        "stop_distance_ticks": int(stop_distance_ticks),
+        "risk_money_per_lot": (float(risk_money_per_lot) if risk_money_per_lot is not None else None),
+        "position_risk_money": (float(position_risk_money) if position_risk_money is not None else None),
+    }
+
+
+def _apply_position_sizing(
+    *,
+    setup: Setup,
+    instrument_id: str,
+    tick_values: dict[str, float] | None,
+    costs: CostAssumptions,
+    position_sizing: PositionSizingConfig | None,
+    sl_rr: float = 0.0,
+    sl_cost_mult: float = 1.0,
+) -> tuple[Setup, dict[str, Any]]:
+    sizing_details = _position_sizing_details(
+        setup=setup,
+        instrument_id=instrument_id,
+        tick_values=tick_values,
+        costs=costs,
+        position_sizing=position_sizing,
+        sl_rr=sl_rr,
+        sl_cost_mult=sl_cost_mult,
+    )
+    qty_lots = int(sizing_details["qty_lots"])
+    if qty_lots == _setup_qty_lots(setup):
+        return setup, sizing_details
+    return (
+        replace(
+            setup,
+            entry_order=replace(setup.entry_order, qty_lots=qty_lots),
+            sl_order=replace(setup.sl_order, qty_lots=qty_lots),
+            tp_order=replace(setup.tp_order, qty_lots=qty_lots),
+        ),
+        sizing_details,
+    )
+
+
 def _build_inmemory_payload(
     *,
     client: MoexIssClient,
@@ -1046,7 +1321,7 @@ def _summary_concentration_top_share(summary: dict[str, Any]) -> float:
     for payload in by_instrument.values():
         if not isinstance(payload, dict):
             continue
-        abs_nets.append(abs(float(payload.get("net_ticks_sum", 0.0))))
+        abs_nets.append(abs(_primary_metric_value(payload, "net_money_sum", "net_ticks_sum")))
     total_abs = float(sum(abs_nets))
     if total_abs <= 0.0:
         return 0.0
@@ -1092,6 +1367,7 @@ def _negative_subfold_metrics(
     period_end: date,
     subfold_days: int,
     penalty_weight: float,
+    tick_values: dict[str, float] | None = None,
 ) -> dict[str, float]:
     window_days = max(int(subfold_days), 0)
     bucket_metrics = _subfold_bucket_metrics(
@@ -1099,6 +1375,7 @@ def _negative_subfold_metrics(
         period_start=period_start,
         period_end=period_end,
         subfold_days=window_days,
+        tick_values=tick_values,
     )
     if window_days <= 0:
         return {
@@ -1130,6 +1407,7 @@ def _subfold_bucket_metrics(
     period_start: date,
     period_end: date,
     subfold_days: int,
+    tick_values: dict[str, float] | None = None,
 ) -> list[dict[str, float]]:
     window_days = max(int(subfold_days), 0)
     if window_days <= 0:
@@ -1159,10 +1437,26 @@ def _subfold_bucket_metrics(
         if not bucket:
             continue
         net_sum = float(sum(item.net_ticks for item in bucket))
-        expectancy = float(net_sum / float(len(bucket)))
+        net_money_sum = float(
+            sum(
+                float(item.net_ticks)
+                * _resolve_instrument_tick_value(item.instrument_id, tick_values)
+                * float(_result_qty_lots(item))
+                for item in bucket
+            )
+        )
+        expectancy_ticks = float(net_sum / float(len(bucket)))
+        expectancy_money = float(net_money_sum / float(len(bucket)))
+        use_money = any(
+            _resolve_instrument_tick_value(item.instrument_id, tick_values) > 0.0 for item in bucket
+        )
+        expectancy = float(expectancy_money if use_money else expectancy_ticks)
         buckets.append(
             {
                 "net_ticks_sum": float(net_sum),
+                "net_money_sum": float(net_money_sum),
+                "expectancy_ticks": float(expectancy_ticks),
+                "expectancy_money": float(expectancy_money),
                 "expectancy": float(expectancy),
                 "count": float(len(bucket)),
             }
@@ -1246,6 +1540,7 @@ def _causal_first_components(
     period_end: date,
     subfold_days: int,
     confidence: float,
+    tick_values: dict[str, float] | None = None,
 ) -> dict[str, float]:
     filled = max(int(summary.get("filled_trades", 0) or 0), 0)
     days = max((period_end - period_start).days + 1, 1)
@@ -1266,6 +1561,7 @@ def _causal_first_components(
         period_start=period_start,
         period_end=period_end,
         subfold_days=max(int(subfold_days), 0),
+        tick_values=tick_values,
     )
     expectancies = [float(item.get("expectancy", 0.0)) for item in bucket_metrics]
     if len(expectancies) >= 2:
@@ -1288,6 +1584,7 @@ def _tail_risk_metrics(
     subfold_days: int,
     tail_alpha: float,
     lower_quantile: float,
+    tick_values: dict[str, float] | None = None,
 ) -> dict[str, float]:
     window_days = max(int(subfold_days), 0)
     bucket_metrics = _subfold_bucket_metrics(
@@ -1295,31 +1592,51 @@ def _tail_risk_metrics(
         period_start=period_start,
         period_end=period_end,
         subfold_days=window_days,
+        tick_values=tick_values,
     )
-    net_sums = [float(item["net_ticks_sum"]) for item in bucket_metrics]
-    if not net_sums:
+    net_sums_ticks = [float(item["net_ticks_sum"]) for item in bucket_metrics]
+    net_sums_money = [float(item.get("net_money_sum", 0.0)) for item in bucket_metrics]
+    if not net_sums_ticks:
         return {
             "subfold_net_ticks_median": 0.0,
             "subfold_net_ticks_lower_quantile": 0.0,
             "subfold_net_ticks_cvar": 0.0,
+            "subfold_net_money_median": 0.0,
+            "subfold_net_money_lower_quantile": 0.0,
+            "subfold_net_money_cvar": 0.0,
             "subfold_negative_count": 0.0,
             "subfold_negative_share": 0.0,
             "subfold_count": 0.0,
         }
-    median = float(statistics.median(net_sums))
-    lower_q = _sample_quantile(net_sums, float(lower_quantile))
+    median_ticks = float(statistics.median(net_sums_ticks))
+    lower_q_ticks = _sample_quantile(net_sums_ticks, float(lower_quantile))
     alpha = min(max(float(tail_alpha), 1e-6), 1.0)
-    tail_count = max(int(math.ceil(alpha * float(len(net_sums)))), 1)
-    tail_values = sorted(net_sums)[:tail_count]
-    cvar = float(sum(tail_values) / float(len(tail_values)))
-    negative_count = sum(1 for value in net_sums if value < 0.0)
+    tail_count = max(int(math.ceil(alpha * float(len(net_sums_ticks)))), 1)
+    tail_values_ticks = sorted(net_sums_ticks)[:tail_count]
+    cvar_ticks = float(sum(tail_values_ticks) / float(len(tail_values_ticks)))
+    money_available = any(abs(value) > 0.0 for value in net_sums_money)
+    if money_available:
+        median_money = float(statistics.median(net_sums_money))
+        lower_q_money = _sample_quantile(net_sums_money, float(lower_quantile))
+        tail_values_money = sorted(net_sums_money)[:tail_count]
+        cvar_money = float(sum(tail_values_money) / float(len(tail_values_money)))
+        active_net_sums = net_sums_money
+    else:
+        median_money = 0.0
+        lower_q_money = 0.0
+        cvar_money = 0.0
+        active_net_sums = net_sums_ticks
+    negative_count = sum(1 for value in active_net_sums if value < 0.0)
     return {
-        "subfold_net_ticks_median": median,
-        "subfold_net_ticks_lower_quantile": float(lower_q),
-        "subfold_net_ticks_cvar": float(cvar),
+        "subfold_net_ticks_median": float(median_ticks),
+        "subfold_net_ticks_lower_quantile": float(lower_q_ticks),
+        "subfold_net_ticks_cvar": float(cvar_ticks),
+        "subfold_net_money_median": float(median_money),
+        "subfold_net_money_lower_quantile": float(lower_q_money),
+        "subfold_net_money_cvar": float(cvar_money),
         "subfold_negative_count": float(negative_count),
-        "subfold_negative_share": float(negative_count / float(len(net_sums))),
-        "subfold_count": float(len(net_sums)),
+        "subfold_negative_share": float(negative_count / float(len(active_net_sums))),
+        "subfold_count": float(len(active_net_sums)),
     }
 
 
@@ -1351,11 +1668,11 @@ def _normalized_selection_components(
         count = int(row.get("count", 0) or 0)
         if count < threshold:
             continue
-        expectancy = float(row.get("expectancy_net_ticks", 0.0))
-        abs_gross_sum = abs(float(row.get("abs_gross_ticks_sum", 0.0)))
+        expectancy = _primary_metric_value(row, "expectancy_net_money", "expectancy_net_ticks")
+        abs_gross_sum = abs(_primary_metric_value(row, "abs_gross_money_sum", "abs_gross_ticks_sum"))
         avg_abs_gross = abs_gross_sum / float(max(count, 1))
         normalized_values.append(expectancy / max(avg_abs_gross, floor_ticks))
-        positive_nets.append(max(float(row.get("net_ticks_sum", 0.0)), 0.0))
+        positive_nets.append(max(_primary_metric_value(row, "net_money_sum", "net_ticks_sum"), 0.0))
     if not normalized_values:
         return {
             "normalized_robust_score": float("-inf"),
@@ -1532,6 +1849,7 @@ def _gated_out_result(
     reason: str,
     expected_return_ticks: float,
     forecast: dict[str, float],
+    qty_lots: int | None = None,
 ) -> SetupResult:
     return SetupResult(
         instrument_id=instrument_id,
@@ -1549,6 +1867,7 @@ def _gated_out_result(
         cost_ticks=0.0,
         entry_ticks=None,
         exit_ticks=None,
+        qty_lots=(_normalize_qty_lots(qty_lots) if qty_lots is not None else _setup_qty_lots(setup)),
         gate_status="BLOCK",
         gate_reason=str(reason),
         gate_expected_return_ticks=float(expected_return_ticks),
@@ -1820,10 +2139,45 @@ def _build_planned_signal(
     gate_p_sl: float | None = None,
     gate_p_exit: float | None = None,
     simulated: SetupResult | None = None,
+    tick_values: dict[str, float] | None = None,
+    account_equity: float | None = None,
+    sizing_info: dict[str, Any] | None = None,
 ) -> PlannedSignal:
     range_low, range_high = _entry_range_ticks(setup)
     target_return_pct = _setup_target_return_pct(setup)
     stop_model = _setup_stop_model(setup)
+    sizing_payload = sizing_info or {}
+    sizing_tick_value = _coerce_metric_float(sizing_payload.get("tick_value"))
+    tick_value = (
+        float(sizing_tick_value)
+        if sizing_tick_value is not None and sizing_tick_value > 0.0
+        else _resolve_instrument_tick_value(str(instrument_id), tick_values)
+    )
+    qty_lots = _normalize_qty_lots(sizing_payload.get("qty_lots", _setup_qty_lots(setup)))
+    sizing_mode = sizing_payload.get("mode")
+    estimated_risk_money_per_lot = _coerce_metric_float(sizing_payload.get("risk_money_per_lot"))
+    estimated_position_risk_money = _coerce_metric_float(sizing_payload.get("position_risk_money"))
+    simulated_qty_lots = _result_qty_lots(simulated) if simulated is not None else qty_lots
+    simulated_cost_money = (
+        float(simulated.cost_ticks) * tick_value * float(simulated_qty_lots)
+        if simulated is not None and tick_value > 0.0
+        else None
+    )
+    simulated_gross_money = (
+        float(simulated.gross_ticks) * tick_value * float(simulated_qty_lots)
+        if simulated is not None and tick_value > 0.0
+        else None
+    )
+    simulated_net_money = (
+        float(simulated.net_ticks) * tick_value * float(simulated_qty_lots)
+        if simulated is not None and tick_value > 0.0
+        else None
+    )
+    simulated_net_return_on_equity_pct = (
+        _return_on_equity_pct(float(simulated_net_money), account_equity)
+        if simulated_net_money is not None
+        else None
+    )
     return PlannedSignal(
         instrument_id=str(instrument_id),
         trade_date=as_of_ts.date().isoformat(),
@@ -1839,6 +2193,14 @@ def _build_planned_signal(
         tp_ticks=int(setup.tp_order.price_ticks),
         horizon=str(setup.horizon),
         risk_ticks=int(setup.risk_ticks),
+        qty_lots=int(qty_lots),
+        sizing_mode=(str(sizing_mode) if sizing_mode is not None else None),
+        estimated_risk_money_per_lot=(
+            float(estimated_risk_money_per_lot) if estimated_risk_money_per_lot is not None else None
+        ),
+        estimated_position_risk_money=(
+            float(estimated_position_risk_money) if estimated_position_risk_money is not None else None
+        ),
         entry_expire_ts=setup.entry_order.expire_ts.isoformat() if setup.entry_order.expire_ts else None,
         stop_model=stop_model,
         target_return_pct=target_return_pct,
@@ -1855,6 +2217,11 @@ def _build_planned_signal(
         simulated_exit_ts=(str(simulated.exit_ts) if simulated is not None else None),
         simulated_gross_ticks=(float(simulated.gross_ticks) if simulated is not None else None),
         simulated_net_ticks=(float(simulated.net_ticks) if simulated is not None else None),
+        tick_value=(float(tick_value) if tick_value > 0.0 else None),
+        simulated_cost_money=simulated_cost_money,
+        simulated_gross_money=simulated_gross_money,
+        simulated_net_money=simulated_net_money,
+        simulated_net_return_on_equity_pct=simulated_net_return_on_equity_pct,
     )
 
 
@@ -2341,6 +2708,7 @@ def _simulate_setup(
         limit_fallback_to_market_minutes=limit_fallback_to_market_minutes,
         limit_fallback_slip_ticks=limit_fallback_slip_ticks,
     )
+    qty_lots = _setup_qty_lots(setup)
     if fill is None:
         return SetupResult(
             instrument_id=instrument_id,
@@ -2358,6 +2726,7 @@ def _simulate_setup(
             cost_ticks=0.0,
             entry_ticks=None,
             exit_ticks=None,
+            qty_lots=qty_lots,
         )
     fill_ts, fill_ticks = fill
     raw_time_stop_minutes = setup.entry_order.meta.get("time_stop_minutes")
@@ -2431,10 +2800,16 @@ def _simulate_setup(
         cost_ticks=float(effective_cost_ticks),
         entry_ticks=int(fill_ticks),
         exit_ticks=int(exit_ticks),
+        qty_lots=qty_lots,
     )
 
 
-def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
+def _summarize(
+    results: list[SetupResult],
+    setups_total: int,
+    tick_values: dict[str, float] | None = None,
+    account_equity: float | None = None,
+) -> dict[str, Any]:
     filled = [row for row in results if row.filled]
     gated = [row for row in results if row.outcome == "GATED_OUT"]
     filled_count = len(filled)
@@ -2446,14 +2821,34 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
     gross_sum = float(sum(row.gross_ticks for row in filled))
     expectancy = net_sum / float(filled_count) if filled_count > 0 else 0.0
     fill_rate = float(filled_count / float(setups_total)) if setups_total > 0 else 0.0
+    net_money_sum = 0.0
+    gross_money_sum = 0.0
+    abs_gross_money_sum = 0.0
+    cost_money_sum = 0.0
     by_kind: dict[str, dict[str, float]] = {}
     by_instrument: dict[str, dict[str, float]] = {}
     for row in filled:
+        tick_value = _resolve_instrument_tick_value(row.instrument_id, tick_values)
+        qty_lots = _result_qty_lots(row)
+        gross_money = float(row.gross_ticks) * tick_value * float(qty_lots)
+        net_money = float(row.net_ticks) * tick_value * float(qty_lots)
+        cost_money = float(row.cost_ticks) * tick_value * float(qty_lots)
+        net_money_sum += float(net_money)
+        gross_money_sum += float(gross_money)
+        abs_gross_money_sum += abs(float(gross_money))
+        cost_money_sum += float(cost_money)
         slot = by_kind.setdefault(
             row.setup_kind,
             {
                 "count": 0.0,
                 "net_ticks_sum": 0.0,
+                "gross_ticks_sum": 0.0,
+                "abs_gross_ticks_sum": 0.0,
+                "cost_ticks_sum": 0.0,
+                "net_money_sum": 0.0,
+                "gross_money_sum": 0.0,
+                "abs_gross_money_sum": 0.0,
+                "cost_money_sum": 0.0,
                 "win_count": 0.0,
                 "tp_count": 0.0,
                 "sl_count": 0.0,
@@ -2462,6 +2857,13 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
         )
         slot["count"] += 1.0
         slot["net_ticks_sum"] += float(row.net_ticks)
+        slot["gross_ticks_sum"] += float(row.gross_ticks)
+        slot["abs_gross_ticks_sum"] += abs(float(row.gross_ticks))
+        slot["cost_ticks_sum"] += float(row.cost_ticks)
+        slot["net_money_sum"] += float(net_money)
+        slot["gross_money_sum"] += float(gross_money)
+        slot["abs_gross_money_sum"] += abs(float(gross_money))
+        slot["cost_money_sum"] += float(cost_money)
         if row.net_ticks > 0.0:
             slot["win_count"] += 1.0
         if row.outcome == "TP":
@@ -2477,6 +2879,12 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
                 "net_ticks_sum": 0.0,
                 "gross_ticks_sum": 0.0,
                 "abs_gross_ticks_sum": 0.0,
+                "cost_ticks_sum": 0.0,
+                "net_money_sum": 0.0,
+                "gross_money_sum": 0.0,
+                "abs_gross_money_sum": 0.0,
+                "cost_money_sum": 0.0,
+                "tick_value": 0.0,
                 "tp_count": 0.0,
                 "sl_count": 0.0,
                 "exit_count": 0.0,
@@ -2487,6 +2895,12 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
         inst_slot["net_ticks_sum"] += float(row.net_ticks)
         inst_slot["gross_ticks_sum"] += float(row.gross_ticks)
         inst_slot["abs_gross_ticks_sum"] += abs(float(row.gross_ticks))
+        inst_slot["cost_ticks_sum"] += float(row.cost_ticks)
+        inst_slot["net_money_sum"] += float(net_money)
+        inst_slot["gross_money_sum"] += float(gross_money)
+        inst_slot["abs_gross_money_sum"] += abs(float(gross_money))
+        inst_slot["cost_money_sum"] += float(cost_money)
+        inst_slot["tick_value"] = float(tick_value)
         if row.outcome == "TP":
             inst_slot["tp_count"] += 1.0
         elif row.outcome == "SL":
@@ -2498,10 +2912,13 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
     for kind, slot in by_kind.items():
         count = slot["count"]
         slot["expectancy_net_ticks"] = float(slot["net_ticks_sum"] / count) if count > 0 else 0.0
+        slot["expectancy_net_money"] = float(slot["net_money_sum"] / count) if count > 0 else 0.0
         slot["win_rate_net"] = float(slot["win_count"] / count) if count > 0 else 0.0
         slot["tp_rate"] = float(slot["tp_count"] / count) if count > 0 else 0.0
         slot["sl_rate"] = float(slot["sl_count"] / count) if count > 0 else 0.0
         slot["exit_rate"] = float(slot["exit_count"] / count) if count > 0 else 0.0
+        roe = _return_on_equity_pct(float(slot["net_money_sum"]), account_equity)
+        slot["return_on_equity_pct"] = float(roe) if roe is not None else None
         slot["count"] = int(count)
         slot["win_count"] = int(slot["win_count"])
         slot["tp_count"] = int(slot["tp_count"])
@@ -2511,16 +2928,21 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
     for instrument_id, slot in by_instrument.items():
         count = slot["count"]
         slot["expectancy_net_ticks"] = float(slot["net_ticks_sum"] / count) if count > 0 else 0.0
+        slot["expectancy_net_money"] = float(slot["net_money_sum"] / count) if count > 0 else 0.0
         slot["tp_rate"] = float(slot["tp_count"] / count) if count > 0 else 0.0
         slot["sl_rate"] = float(slot["sl_count"] / count) if count > 0 else 0.0
         slot["exit_rate"] = float(slot["exit_count"] / count) if count > 0 else 0.0
         slot["win_rate_net"] = float(slot["win_count"] / count) if count > 0 else 0.0
+        roe = _return_on_equity_pct(float(slot["net_money_sum"]), account_equity)
+        slot["return_on_equity_pct"] = float(roe) if roe is not None else None
         slot["count"] = int(count)
         slot["tp_count"] = int(slot["tp_count"])
         slot["sl_count"] = int(slot["sl_count"])
         slot["exit_count"] = int(slot["exit_count"])
         slot["win_count"] = int(slot["win_count"])
         by_instrument[instrument_id] = slot
+    expectancy_net_money = net_money_sum / float(filled_count) if filled_count > 0 else 0.0
+    return_on_equity_pct = _return_on_equity_pct(float(net_money_sum), account_equity)
     return {
         "setups_total": int(setups_total),
         "gated_out": int(len(gated)),
@@ -2533,7 +2955,14 @@ def _summarize(results: list[SetupResult], setups_total: int) -> dict[str, Any]:
         "expectancy_net_ticks": float(expectancy),
         "gross_ticks_sum": float(gross_sum),
         "abs_gross_ticks_sum": float(sum(abs(row.gross_ticks) for row in filled)),
+        "cost_ticks_sum": float(sum(float(row.cost_ticks) for row in filled)),
         "net_ticks_sum": float(net_sum),
+        "expectancy_net_money": float(expectancy_net_money),
+        "gross_money_sum": float(gross_money_sum),
+        "abs_gross_money_sum": float(abs_gross_money_sum),
+        "cost_money_sum": float(cost_money_sum),
+        "net_money_sum": float(net_money_sum),
+        "return_on_equity_pct": (float(return_on_equity_pct) if return_on_equity_pct is not None else None),
         "by_setup_kind": by_kind,
         "by_instrument": by_instrument,
     }
@@ -2572,7 +3001,7 @@ def _train_selection_metrics(
     instrument_rows = [item for item in by_instrument.values() if isinstance(item, dict)]
     instruments_with_trades = sum(1 for item in instrument_rows if int(item.get("count", 0) or 0) > 0)
     robust_expectancies = [
-        float(item.get("expectancy_net_ticks", 0.0))
+        _primary_metric_value(item, "expectancy_net_money", "expectancy_net_ticks")
         for item in instrument_rows
         if int(item.get("count", 0) or 0) >= max(int(min_trades_per_instrument), 1)
     ]
@@ -2800,6 +3229,7 @@ def _build_train_score_row(
     tz: ZoneInfo,
     payload: dict[tuple[str, TF], list[Candle]],
     tick_sizes: dict[str, float],
+    tick_values: dict[str, float] | None = None,
     calendar: MarketCalendar,
     costs: CostAssumptions,
     instrument_costs: dict[str, CostAssumptions] | None,
@@ -2816,6 +3246,8 @@ def _build_train_score_row(
     objective_subfold_days: int,
     precision_filter: PrecisionFilterConfig,
     expert_gate: ExpertGateConfig,
+    account_equity: float | None = None,
+    position_sizing: PositionSizingConfig | None = None,
 ) -> dict[str, Any]:
     global_overrides, cluster_overrides = _split_cluster_overrides(combo)
     cfg = _apply_overrides(base_cfg, global_overrides)
@@ -2828,6 +3260,7 @@ def _build_train_score_row(
         cfg=cfg,
         payload=payload,
         tick_sizes=tick_sizes,
+        tick_values=tick_values,
         calendar=calendar,
         costs=costs,
         instrument_costs=instrument_costs,
@@ -2839,6 +3272,8 @@ def _build_train_score_row(
         collect_history=False,
         precision_filter=precision_filter,
         expert_gate=expert_gate,
+        account_equity=account_equity,
+        position_sizing=position_sizing,
     )
     metrics = asdict(
         _train_selection_metrics(
@@ -2860,6 +3295,7 @@ def _build_train_score_row(
         period_end=period_end,
         subfold_days=objective_subfold_days,
         penalty_weight=objective_negative_fold_penalty,
+        tick_values=tick_values,
     )
     metrics.update(negative_fold_metrics)
     tail_metrics = _tail_risk_metrics(
@@ -2869,6 +3305,7 @@ def _build_train_score_row(
         subfold_days=objective_subfold_days,
         tail_alpha=float(objective_scoring.tail_alpha),
         lower_quantile=float(objective_scoring.lower_quantile),
+        tick_values=tick_values,
     )
     metrics.update(tail_metrics)
     causal_components = _causal_first_components(
@@ -2878,14 +3315,15 @@ def _build_train_score_row(
         period_end=period_end,
         subfold_days=objective_subfold_days,
         confidence=float(objective_scoring.causal_confidence),
+        tick_values=tick_values,
     )
     metrics.update(causal_components)
     concentration_penalty = 0.0
     negative_subfold_penalty = float(negative_fold_metrics.get("negative_subfold_penalty", 0.0))
     tail_reference = (
-        float(tail_metrics.get("subfold_net_ticks_cvar", 0.0))
+        _tail_metric_value(tail_metrics, "subfold_net_money_cvar", "subfold_net_ticks_cvar")
         if str(objective_scoring.tail_metric).strip().lower() == "cvar"
-        else float(tail_metrics.get("subfold_net_ticks_lower_quantile", 0.0))
+        else _tail_metric_value(tail_metrics, "subfold_net_money_lower_quantile", "subfold_net_ticks_lower_quantile")
     )
     tail_penalty = max(-tail_reference, 0.0) * max(float(objective_scoring.tail_penalty_weight), 0.0)
     sl_rate = float(train_summary.get("sl_rate", 0.0))
@@ -2904,7 +3342,7 @@ def _build_train_score_row(
     )
     metrics["causal_instability_penalty"] = float(causal_instability_penalty)
     if selection_objective == "expectancy_net_ticks":
-        base_score = float(train_summary.get("expectancy_net_ticks", 0.0))
+        base_score = _summary_expectancy_value(train_summary)
     elif selection_objective == "robust_normalized":
         base_score = float(normalized_metrics.get("normalized_robust_score", float("-inf")))
         concentration_penalty = float(normalized_metrics.get("concentration_penalty", 0.0))
@@ -2914,7 +3352,7 @@ def _build_train_score_row(
             * float(objective_scoring.causal_winrate_lcb_weight)
             + float(causal_components.get("causal_trades_per_week_lcb", 0.0))
             * float(objective_scoring.causal_tpw_lcb_weight)
-            + float(train_summary.get("expectancy_net_ticks", 0.0))
+            + _summary_expectancy_value(train_summary)
             * float(objective_scoring.causal_expectancy_weight)
         )
     else:
@@ -2971,6 +3409,7 @@ def _evaluate_window(
     cfg: dict[str, Any],
     payload: dict[tuple[str, TF], list[Candle]],
     tick_sizes: dict[str, float],
+    tick_values: dict[str, float] | None = None,
     calendar: MarketCalendar,
     costs: CostAssumptions,
     instrument_costs: dict[str, CostAssumptions] | None = None,
@@ -2985,6 +3424,8 @@ def _evaluate_window(
     expert_gate: ExpertGateConfig | None = None,
     collect_generator_rejection_trace: bool = False,
     generator_rejection_trace_sample_limit: int = 80,
+    account_equity: float | None = None,
+    position_sizing: PositionSizingConfig | None = None,
 ) -> tuple[list[SetupResult], dict[str, Any], list[ProbHistoryEvent], list[PlannedSignal]]:
     builders: dict[tuple[str, str], MorningPlanBuilder] = {}
     if eval_cache is None:
@@ -3164,6 +3605,15 @@ def _evaluate_window(
                     m5_ts_cache[secid] = m5_timestamps
                 setups_total += len(setups)
                 for setup in setups:
+                    setup, sizing_info = _apply_position_sizing(
+                        setup=setup,
+                        instrument_id=secid,
+                        tick_values=tick_values,
+                        costs=effective_costs,
+                        position_sizing=position_sizing,
+                        sl_rr=sl_rr,
+                        sl_cost_mult=sl_cost_mult,
+                    )
                     if bool(expert.enabled):
                         expert_reason = _expert_filter_reason(
                             instrument_id=report_instrument_id,
@@ -3185,6 +3635,9 @@ def _evaluate_window(
                                     gate_p_tp=0.0,
                                     gate_p_sl=0.0,
                                     gate_p_exit=0.0,
+                                    tick_values=tick_values,
+                                    account_equity=account_equity,
+                                    sizing_info=sizing_info,
                                 )
                             )
                             rows.append(
@@ -3195,6 +3648,7 @@ def _evaluate_window(
                                     reason=expert_reason,
                                     expected_return_ticks=0.0,
                                     forecast={"n_effective": 0.0, "p_tp": 0.0, "p_sl": 0.0, "p_exit": 0.0},
+                                    qty_lots=int(sizing_info["qty_lots"]),
                                 )
                             )
                             continue
@@ -3215,6 +3669,9 @@ def _evaluate_window(
                                         gate_p_tp=0.0,
                                         gate_p_sl=0.0,
                                         gate_p_exit=0.0,
+                                        tick_values=tick_values,
+                                        account_equity=account_equity,
+                                        sizing_info=sizing_info,
                                     )
                                 )
                                 rows.append(
@@ -3225,6 +3682,7 @@ def _evaluate_window(
                                         reason=reason,
                                         expected_return_ticks=0.0,
                                         forecast={"n_effective": 0.0, "p_tp": 0.0, "p_sl": 0.0, "p_exit": 0.0},
+                                        qty_lots=int(sizing_info["qty_lots"]),
                                     )
                                 )
                                 continue
@@ -3248,6 +3706,9 @@ def _evaluate_window(
                                     gate_p_tp=0.0,
                                     gate_p_sl=0.0,
                                     gate_p_exit=0.0,
+                                    tick_values=tick_values,
+                                    account_equity=account_equity,
+                                    sizing_info=sizing_info,
                                 )
                             )
                             rows.append(
@@ -3258,6 +3719,7 @@ def _evaluate_window(
                                     reason=precision_reason,
                                     expected_return_ticks=0.0,
                                     forecast={"n_effective": 0.0, "p_tp": 0.0, "p_sl": 0.0, "p_exit": 0.0},
+                                    qty_lots=int(sizing_info["qty_lots"]),
                                 )
                             )
                             continue
@@ -3301,6 +3763,9 @@ def _evaluate_window(
                                     gate_p_tp=float(forecast.get("p_tp", 0.0)),
                                     gate_p_sl=float(forecast.get("p_sl", 0.0)),
                                     gate_p_exit=float(forecast.get("p_exit", 0.0)),
+                                    tick_values=tick_values,
+                                    account_equity=account_equity,
+                                    sizing_info=sizing_info,
                                 )
                             )
                             rows.append(
@@ -3311,6 +3776,7 @@ def _evaluate_window(
                                     reason="low_n_effective",
                                     expected_return_ticks=float(expected_value),
                                     forecast=forecast,
+                                    qty_lots=int(sizing_info["qty_lots"]),
                                 )
                             )
                             continue
@@ -3327,6 +3793,9 @@ def _evaluate_window(
                                     gate_p_tp=float(forecast.get("p_tp", 0.0)),
                                     gate_p_sl=float(forecast.get("p_sl", 0.0)),
                                     gate_p_exit=float(forecast.get("p_exit", 0.0)),
+                                    tick_values=tick_values,
+                                    account_equity=account_equity,
+                                    sizing_info=sizing_info,
                                 )
                             )
                             rows.append(
@@ -3337,6 +3806,7 @@ def _evaluate_window(
                                     reason="expected_return_below_threshold",
                                     expected_return_ticks=float(expected_value),
                                     forecast=forecast,
+                                    qty_lots=int(sizing_info["qty_lots"]),
                                 )
                             )
                             continue
@@ -3383,6 +3853,9 @@ def _evaluate_window(
                                 gate_p_sl=float(forecast.get("p_sl", 0.0)),
                                 gate_p_exit=float(forecast.get("p_exit", 0.0)),
                                 simulated=simulated,
+                                tick_values=tick_values,
+                                account_equity=account_equity,
+                                sizing_info=sizing_info,
                             )
                         )
                     else:
@@ -3393,6 +3866,9 @@ def _evaluate_window(
                                 setup=setup,
                                 gate_status="DISABLED",
                                 simulated=simulated,
+                                tick_values=tick_values,
+                                account_equity=account_equity,
+                                sizing_info=sizing_info,
                             )
                         )
                     latest = rows[-1]
@@ -3408,7 +3884,12 @@ def _evaluate_window(
                         history_version += 1
                         if len(forecast_cache) > 20_000:
                             forecast_cache.clear()
-    summary = _summarize(rows, setups_total=setups_total)
+    summary = _summarize(
+        rows,
+        setups_total=setups_total,
+        tick_values=tick_values,
+        account_equity=account_equity,
+    )
     if bool(collect_generator_rejection_trace):
         sorted_counts = dict(
             sorted(
@@ -3600,6 +4081,36 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         board=settings.moex.futures_board,
         instruments=instruments,
         explicit=explicit_tick_sizes,
+    )
+    tick_values = _resolve_tick_values(
+        client=client,
+        board=settings.moex.futures_board,
+        instruments=instruments,
+        tick_sizes=tick_sizes,
+    )
+    risk_profile = getattr(settings, "risk_profile", None)
+    account_equity = _coerce_metric_float(getattr(risk_profile, "account_equity", None))
+    default_target_risk_pct = _coerce_metric_float(getattr(risk_profile, "max_risk_per_trade_pct", None))
+    try:
+        default_max_contracts = max(int(getattr(risk_profile, "max_contracts_per_instrument", 1)), 1)
+    except (TypeError, ValueError):
+        default_max_contracts = 1
+    position_sizing_mode = _normalize_position_sizing_mode(args.position_sizing_mode)
+    position_sizing_target_risk_pct = (
+        max(float(args.position_sizing_risk_pct), 0.0)
+        if args.position_sizing_risk_pct is not None
+        else (float(default_target_risk_pct) if default_target_risk_pct is not None else None)
+    )
+    position_sizing_max_contracts = (
+        max(int(args.position_sizing_max_contracts), 1)
+        if args.position_sizing_max_contracts is not None
+        else default_max_contracts
+    )
+    position_sizing = PositionSizingConfig(
+        mode=position_sizing_mode,
+        account_equity=account_equity,
+        target_risk_pct=position_sizing_target_risk_pct,
+        max_contracts_per_instrument=position_sizing_max_contracts,
     )
 
     start_date = _parse_iso_date(args.start_date)
@@ -3930,6 +4441,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                             tz=tz,
                             payload=payload,
                             tick_sizes=tick_sizes,
+                            tick_values=tick_values,
                             calendar=calendar,
                             costs=stressed_base_costs,
                             instrument_costs=fold_instrument_costs,
@@ -3946,6 +4458,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                             objective_subfold_days=objective_subfold_days,
                             precision_filter=precision_filter,
                             expert_gate=expert_gate,
+                            account_equity=account_equity,
                         )
                     )
             else:
@@ -3980,6 +4493,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                         tz=tz,
                         payload=payload,
                         tick_sizes=tick_sizes,
+                        tick_values=tick_values,
                         calendar=calendar,
                         costs=stressed_base_costs,
                         instrument_costs=fold_instrument_costs,
@@ -3996,6 +4510,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                         objective_subfold_days=objective_subfold_days,
                         precision_filter=precision_filter,
                         expert_gate=expert_gate,
+                        account_equity=account_equity,
+                        position_sizing=position_sizing,
                     )
                     eligible_trial = _is_train_row_eligible(
                         row=row,
@@ -4020,6 +4536,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                             tz=tz,
                             payload=payload,
                             tick_sizes=tick_sizes,
+                            tick_values=tick_values,
                             calendar=calendar,
                             costs=stressed_base_costs,
                             instrument_costs=fold_instrument_costs,
@@ -4036,6 +4553,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                             objective_subfold_days=objective_subfold_days,
                             precision_filter=precision_filter,
                             expert_gate=expert_gate,
+                            account_equity=account_equity,
+                            position_sizing=position_sizing,
                         )
                     )
             eligible = [
@@ -4052,8 +4571,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 key=lambda row: (
                     float(row["metrics"].get("selection_score", float("-inf"))),
                     float(row["metrics"].get("robust_score", float("-inf"))),
-                    float(row["summary"].get("expectancy_net_ticks", float("-inf"))),
-                    float(row["summary"].get("net_ticks_sum", float("-inf"))),
+                    _summary_expectancy_value(row["summary"]),
+                    _summary_net_value(row["summary"]),
                     int(row["summary"].get("filled_trades", 0)),
                 ),
                 reverse=True,
@@ -4078,6 +4597,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             cfg=selected_cfg,
             payload=payload,
             tick_sizes=tick_sizes,
+            tick_values=tick_values,
             calendar=calendar,
             costs=stressed_base_costs,
             instrument_costs=fold_instrument_costs,
@@ -4089,6 +4609,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             collect_history=probability_history_enabled,
             precision_filter=precision_filter,
             expert_gate=expert_gate,
+            account_equity=account_equity,
+            position_sizing=position_sizing,
         )
         selected_train_metrics = asdict(
             _train_selection_metrics(
@@ -4110,6 +4632,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             period_end=train_end,
             subfold_days=objective_subfold_days,
             penalty_weight=objective_negative_fold_penalty,
+            tick_values=tick_values,
         )
         selected_train_metrics.update(selected_negative_metrics)
         selected_tail_metrics = _tail_risk_metrics(
@@ -4119,6 +4642,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             subfold_days=objective_subfold_days,
             tail_alpha=float(objective_scoring.tail_alpha),
             lower_quantile=float(objective_scoring.lower_quantile),
+            tick_values=tick_values,
         )
         selected_train_metrics.update(selected_tail_metrics)
         selected_causal_components = _causal_first_components(
@@ -4128,13 +4652,18 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             period_end=train_end,
             subfold_days=objective_subfold_days,
             confidence=float(objective_scoring.causal_confidence),
+            tick_values=tick_values,
         )
         selected_train_metrics.update(selected_causal_components)
         selected_extra_penalty = 0.0
         selected_tail_reference = (
-            float(selected_tail_metrics.get("subfold_net_ticks_cvar", 0.0))
+            _tail_metric_value(selected_tail_metrics, "subfold_net_money_cvar", "subfold_net_ticks_cvar")
             if str(objective_scoring.tail_metric).strip().lower() == "cvar"
-            else float(selected_tail_metrics.get("subfold_net_ticks_lower_quantile", 0.0))
+            else _tail_metric_value(
+                selected_tail_metrics,
+                "subfold_net_money_lower_quantile",
+                "subfold_net_ticks_lower_quantile",
+            )
         )
         selected_tail_penalty = max(-selected_tail_reference, 0.0) * max(float(objective_scoring.tail_penalty_weight), 0.0)
         selected_sl_penalty = float(selected_train_summary.get("sl_rate", 0.0)) * max(
@@ -4154,7 +4683,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         )
         selected_train_metrics["causal_instability_penalty"] = float(selected_causal_instability_penalty)
         if objective == "expectancy_net_ticks":
-            selected_base_score = float(selected_train_summary.get("expectancy_net_ticks", 0.0))
+            selected_base_score = _summary_expectancy_value(selected_train_summary)
         elif objective == "robust_normalized":
             selected_base_score = float(normalized_metrics.get("normalized_robust_score", float("-inf")))
             selected_extra_penalty = float(normalized_metrics.get("concentration_penalty", 0.0))
@@ -4164,7 +4693,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 * float(objective_scoring.causal_winrate_lcb_weight)
                 + float(selected_causal_components.get("causal_trades_per_week_lcb", 0.0))
                 * float(objective_scoring.causal_tpw_lcb_weight)
-                + float(selected_train_summary.get("expectancy_net_ticks", 0.0))
+                + _summary_expectancy_value(selected_train_summary)
                 * float(objective_scoring.causal_expectancy_weight)
             )
         else:
@@ -4195,6 +4724,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             cfg=selected_cfg,
             payload=payload,
             tick_sizes=tick_sizes,
+            tick_values=tick_values,
             calendar=calendar,
             costs=stressed_base_costs,
             instrument_costs=fold_instrument_costs,
@@ -4209,6 +4739,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             expert_gate=expert_gate,
             collect_generator_rejection_trace=collect_generator_rejection_trace,
             generator_rejection_trace_sample_limit=generator_rejection_trace_sample_limit,
+            account_equity=account_equity,
+            position_sizing=position_sizing,
         )
         probability_gate_fallback: dict[str, Any] = {
             "applied": False,
@@ -4222,6 +4754,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             gated_test_summary = {
                 "filled_trades": int(test_summary.get("filled_trades", 0)),
                 "net_ticks_sum": float(test_summary.get("net_ticks_sum", 0.0)),
+                "net_money_sum": float(test_summary.get("net_money_sum", 0.0)),
                 "gated_out": int(test_summary.get("gated_out", 0)),
             }
             test_rows, test_summary, _, test_planned_rows = _evaluate_window(
@@ -4233,6 +4766,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 cfg=selected_cfg,
                 payload=payload,
                 tick_sizes=tick_sizes,
+                tick_values=tick_values,
                 calendar=calendar,
                 costs=stressed_base_costs,
                 instrument_costs=fold_instrument_costs,
@@ -4247,6 +4781,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                 expert_gate=expert_gate,
                 collect_generator_rejection_trace=collect_generator_rejection_trace,
                 generator_rejection_trace_sample_limit=generator_rejection_trace_sample_limit,
+                account_equity=account_equity,
+                position_sizing=position_sizing,
             )
             probability_gate_fallback = {
                 "applied": True,
@@ -4301,6 +4837,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                     cfg=last_selected_cfg,
                     payload=payload,
                     tick_sizes=tick_sizes,
+                    tick_values=tick_values,
                     calendar=calendar,
                     costs=stressed_base_costs,
                     instrument_costs=None,
@@ -4312,6 +4849,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
                     collect_history=True,
                     precision_filter=precision_filter,
                     expert_gate=expert_gate,
+                    account_equity=account_equity,
+                    position_sizing=position_sizing,
                 )
         holdout_rows, holdout_summary, _, holdout_planned = _evaluate_window(
             period_start=holdout_start,
@@ -4322,6 +4861,7 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             cfg=last_selected_cfg,
             payload=payload,
             tick_sizes=tick_sizes,
+            tick_values=tick_values,
             calendar=calendar,
             costs=stressed_base_costs,
             instrument_costs=None,
@@ -4336,6 +4876,8 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             expert_gate=expert_gate,
             collect_generator_rejection_trace=collect_generator_rejection_trace,
             generator_rejection_trace_sample_limit=generator_rejection_trace_sample_limit,
+            account_equity=account_equity,
+            position_sizing=position_sizing,
         )
         holdout_payload = {
             "start_date": holdout_start.isoformat(),
@@ -4346,7 +4888,12 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "sample_planned_signals": [asdict(item) for item in holdout_planned[: min(len(holdout_planned), 50)]],
         }
 
-    overall = _summarize(aggregate_results, setups_total=sum(int(item["test_summary"]["setups_total"]) for item in folds))
+    overall = _summarize(
+        aggregate_results,
+        setups_total=sum(int(item["test_summary"]["setups_total"]) for item in folds),
+        tick_values=tick_values,
+        account_equity=account_equity,
+    )
     acceptance = _acceptance_summary(
         folds=folds,
         tail_alpha=float(objective_scoring.tail_alpha),
@@ -4409,6 +4956,17 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
         "reporting_instruments": reporting_instruments,
         "instrument_mode": instrument_mode,
         "tick_sizes": tick_sizes,
+        "tick_values": tick_values,
+        "account_equity": account_equity,
+        "position_sizing": {
+            "mode": str(position_sizing.mode),
+            "target_risk_pct": (
+                float(position_sizing.target_risk_pct)
+                if position_sizing.target_risk_pct is not None
+                else None
+            ),
+            "max_contracts_per_instrument": int(position_sizing.max_contracts_per_instrument),
+        },
         "cache": {
             "enabled": use_cache,
             "cache_db": (str(cache_db_path) if cache_db_path is not None else None),
@@ -4437,6 +4995,15 @@ def run_walk_forward(args: argparse.Namespace) -> dict[str, Any]:
             "retune_every_folds": int(retune_every_folds),
             "cost_model_profile": cost_model_profile,
             "cost_stress_mult": float(cost_stress_mult),
+            "position_sizing": {
+                "mode": str(position_sizing.mode),
+                "target_risk_pct": (
+                    float(position_sizing.target_risk_pct)
+                    if position_sizing.target_risk_pct is not None
+                    else None
+                ),
+                "max_contracts_per_instrument": int(position_sizing.max_contracts_per_instrument),
+            },
             "cluster_root_map": dict(cluster_root_map),
             "probability_gate": {
                 "enabled": False,
@@ -4753,6 +5320,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Scale per-side cost assumptions for conservative stress (e.g. 1.5).",
     )
     parser.add_argument(
+        "--position-sizing-mode",
+        type=str,
+        default="fixed_lots",
+        choices=["fixed_lots", "target_risk_pct"],
+        help="Position sizing for money metrics and selection. fixed_lots keeps setup qty; target_risk_pct sizes by risk budget.",
+    )
+    parser.add_argument(
+        "--position-sizing-risk-pct",
+        type=float,
+        default=None,
+        help="Per-trade risk budget as percent of account equity when position-sizing-mode=target_risk_pct.",
+    )
+    parser.add_argument(
+        "--position-sizing-max-contracts",
+        type=int,
+        default=None,
+        help="Per-instrument contract cap when position-sizing-mode=target_risk_pct.",
+    )
+    parser.add_argument(
         "--execution-break-even-rr",
         type=float,
         default=None,
@@ -4955,6 +5541,12 @@ def main() -> int:
         print("overall_fill_rate", round(float(overall.get("fill_rate", 0.0)), 4))
         print("overall_expectancy_net_ticks", round(float(overall.get("expectancy_net_ticks", 0.0)), 4))
         print("overall_net_ticks_sum", round(float(overall.get("net_ticks_sum", 0.0)), 4))
+        if overall.get("expectancy_net_money") is not None:
+            print("overall_expectancy_net_money", round(float(overall.get("expectancy_net_money", 0.0)), 4))
+        if overall.get("net_money_sum") is not None:
+            print("overall_net_money_sum", round(float(overall.get("net_money_sum", 0.0)), 4))
+        if overall.get("return_on_equity_pct") is not None:
+            print("overall_return_on_equity_pct", round(float(overall.get("return_on_equity_pct", 0.0)), 4))
 
     if args.out_json:
         out_path = Path(args.out_json)

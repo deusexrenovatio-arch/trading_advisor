@@ -44,6 +44,9 @@ Applies to Backtest v2, HPO, and forward readiness decisions.
    - `thin-sample` is a confidence flag, not a diagnosis.
    - Sparse roots must be classified by cause before any pruning decision: `immature history`, `sparse-trigger`, `current-regime silent`, or `strategy-fit review`.
    - When current-regime silent roots cluster in one family, record the family-level hypothesis explicitly instead of treating them as isolated root failures.
+10. Manual execution contract:
+   - If a promoted execution baseline depends on dynamic trade management, post-fill bracket recalculation, fallback order conversion, or simulator-only tie-breaks, publish an explicit operator contract.
+   - Human-facing docs must separate executable operator rules from simulator-only assumptions.
 
 ## Promotion decision
 - `pass`: OOS gain, constraints respected, dispersion acceptable, stress stable, forward sane.

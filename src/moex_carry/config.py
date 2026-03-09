@@ -810,6 +810,9 @@ class SignalEngineMorningExecutionConfig(BaseModel):
     limit_slip_ticks: int = 2
     # H4A_CAP_OFF is the working execution baseline after historical validation on the
     # whole universe and after removing duplicated mini-contract exposure.
+    # In practice this means the inherited O1 management package below with the
+    # RR profit cap disabled; operator rules are documented in
+    # docs/runbooks/h4a-manual-execution-baseline.md.
     break_even_rr: float = 0.1
     break_even_buffer_ticks: int = 2
     tp_rr: float = 0.6
