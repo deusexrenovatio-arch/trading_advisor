@@ -144,7 +144,9 @@ def normalize_signal_action_request(
     legacy_mode: bool = False,
 ) -> tuple[str, str] | None:
     raw = str(value or "").strip().lower()
-    if raw in {"ack", "acknowledged", "mark_viewed", "viewed"}:
+    if raw in {"ack", "acknowledged"}:
+        return "mark_viewed", "ack" if legacy_mode else "mark_viewed"
+    if raw in {"mark_viewed", "viewed"}:
         return "mark_viewed", "mark_viewed"
     if raw in {"enter_submitted", "submit_enter", "submitted"}:
         return "enter_submitted", "enter_submitted"
@@ -161,12 +163,12 @@ def normalize_signal_action_request(
     if raw in {"manual_override", "override"}:
         return "manual_override", "manual_override"
     if raw in {"enter", "open"}:
-        return "enter_filled", "enter_filled"
+        return "enter_filled", "enter" if legacy_mode else "enter_filled"
     if raw in {"exit", "close"}:
-        return "exit_filled", "exit_filled"
+        return "exit_filled", "exit" if legacy_mode else "exit_filled"
     if raw in {"hold", "hold_open"}:
         if legacy_mode:
-            return "enter_filled", "enter_filled"
+            return "enter_filled", "enter"
         return "enter_filled", "enter_filled"
     return None
 
@@ -190,6 +192,41 @@ def normalize_execution_action(value: object) -> str:
     if raw in {"manual_override", "override"}:
         return "manual_override"
     return raw or "enter_filled"
+
+
+def normalize_legacy_execution_action(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in {"ack", "acknowledged", "mark_viewed", "viewed"}:
+        return "ack"
+    if raw in {
+        "enter",
+        "open",
+        "hold",
+        "hold_open",
+        "enter_submitted",
+        "submit_enter",
+        "submitted",
+        "enter_filled",
+        "filled",
+        "fill_enter",
+    }:
+        return "enter"
+    if raw in {
+        "exit",
+        "close",
+        "exit_submitted",
+        "submit_exit",
+        "exit_filled",
+        "fill_exit",
+    }:
+        return "exit"
+    if raw in {"entry_cancelled", "cancel_enter", "enter_cancelled"}:
+        return "cancel_enter"
+    if raw in {"confirm_followup", "followup_confirmed", "confirm_recalc", "confirm_h4a"}:
+        return "confirm_followup"
+    if raw in {"manual_override", "override"}:
+        return "manual_override"
+    return raw or "enter"
 
 
 def is_view_action(value: object) -> bool:

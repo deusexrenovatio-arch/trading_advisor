@@ -89,6 +89,9 @@ def apply_operator_event(
     note_payload: dict[str, object] | None = None,
 ) -> None:
     canonical_status = _canonical_operator_status(status)
+    legacy_consumes_intent = bool(
+        isinstance(note_payload, dict) and note_payload.get("legacy_consumes_intent")
+    )
     if canonical_status == "confirm_followup":
         if isinstance(note_payload, dict):
             stage = normalize_h4a_followup_stage(note_payload.get("h4a_stage"))
@@ -123,6 +126,15 @@ def apply_operator_event(
         _update_operator_event_field(
             entry,
             field_prefix=field_prefix,
+            event_at=event_at,
+            actor=actor,
+        )
+
+    if canonical_status == "mark_viewed" and legacy_consumes_intent:
+        entry["signal_used"] = True
+        _update_operator_event_field(
+            entry,
+            field_prefix="signal_used",
             event_at=event_at,
             actor=actor,
         )

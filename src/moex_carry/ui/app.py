@@ -3408,11 +3408,26 @@ def create_app(settings: AppSettings) -> Dash:
                 )
                 action = _normalize_execution_action(exec_row.action)
                 action_note = _parse_signal_action_note(exec_row.note)
+                ack_note = _parse_ack_note_from_execution_note(exec_row.note)
                 if isinstance(action_note, dict):
-                    fingerprint_raw = action_note.get("fingerprint")
-                    requested_action = _canonical_requested_signal_action(
-                        action_note.get("requested_action") or action
-                    )
+                    note_payload = dict(action_note)
+                    fingerprint_raw = note_payload.get("fingerprint")
+                    requested_action_raw = note_payload.get("requested_action") or action
+                    requested_action = _canonical_requested_signal_action(requested_action_raw)
+                    actor = _signal_used_by_from_action(note_payload)
+                    if isinstance(ack_note, dict):
+                        ack_fingerprint = str(ack_note.get("fingerprint") or "").strip()
+                        if not fingerprint_raw and ack_fingerprint:
+                            fingerprint_raw = ack_fingerprint
+                            note_payload["fingerprint"] = ack_fingerprint
+                        note_payload["legacy_consumes_intent"] = (
+                            str(note_payload.get("kind") or "").strip() == "signal_action_v1_adapter"
+                            and str(requested_action_raw or "").strip().lower() in {"ack", "acknowledged"}
+                        )
+                        if bool(note_payload.get("legacy_consumes_intent")):
+                            actor = _signal_used_by_from_ack(ack_note) or actor
+                        elif actor is None:
+                            actor = _signal_used_by_from_ack(ack_note)
                     if (
                         isinstance(fingerprint_raw, str)
                         and fingerprint_raw.strip()
@@ -3424,11 +3439,10 @@ def create_app(settings: AppSettings) -> Dash:
                             pair_key=key,
                             status=requested_action,
                             event_at=exec_ts,
-                            actor=_signal_used_by_from_action(action_note),
-                            note_payload=action_note,
+                            actor=actor,
+                            note_payload=note_payload,
                         )
                 elif action == "mark_viewed":
-                    ack_note = _parse_ack_note_from_execution_note(exec_row.note)
                     if isinstance(ack_note, dict):
                         fingerprint_raw = ack_note.get("fingerprint")
                         if isinstance(fingerprint_raw, str) and fingerprint_raw.strip():
@@ -3440,7 +3454,7 @@ def create_app(settings: AppSettings) -> Dash:
                                 status="mark_viewed",
                                 event_at=exec_ts,
                                 actor=_signal_used_by_from_ack(ack_note),
-                                note_payload=ack_note,
+                                note_payload={**ack_note, "legacy_consumes_intent": True},
                             )
 
                 if action not in {"enter_filled", "exit_filled"}:
@@ -3517,6 +3531,7 @@ def create_app(settings: AppSettings) -> Dash:
                 strategy_stream: str | None = None,
             ) -> dict[str, object]:
                 fingerprint = str(signal_fingerprint or "").strip()
+                matched_by_pair = False
                 if not fingerprint:
                     fingerprint = build_signal_fingerprint(
                         run_id=run_id,
@@ -3530,6 +3545,7 @@ def create_app(settings: AppSettings) -> Dash:
                 if not isinstance(operator_entry, dict):
                     pair_lookup_key = (str(stock or "").strip(), str(future or "").strip())
                     operator_entry = operator_events_by_pair.get(pair_lookup_key)
+                    matched_by_pair = isinstance(operator_entry, dict)
                 if not isinstance(operator_entry, dict):
                     return {
                         "signal_viewed": False,
@@ -3565,18 +3581,35 @@ def create_app(settings: AppSettings) -> Dash:
                         "h4a_followup_confirmations": default_operator_event_entry()["h4a_followup_confirmations"],
                     }
                 operator_status = str(operator_entry.get("operator_signal_status") or "").strip().lower()
+                pair_scope_intent_hidden = matched_by_pair and signal_action not in {"enter", "exit"}
 
                 def _to_iso(value: object) -> str | None:
                     return value.isoformat() if isinstance(value, datetime) else None
 
                 return {
-                    "signal_viewed": isinstance(operator_entry.get("signal_viewed_at"), datetime),
-                    "signal_viewed_at": _to_iso(operator_entry.get("signal_viewed_at")),
-                    "signal_viewed_by": operator_entry.get("signal_viewed_by"),
-                    "signal_used": bool(operator_entry.get("signal_used")),
-                    "signal_used_at": _to_iso(operator_entry.get("signal_used_at")),
-                    "signal_used_by": operator_entry.get("signal_used_by"),
-                    "signal_details_pending": operator_status in {"mark_viewed", "enter_submitted"},
+                    "signal_viewed": (
+                        False
+                        if pair_scope_intent_hidden
+                        else isinstance(operator_entry.get("signal_viewed_at"), datetime)
+                    ),
+                    "signal_viewed_at": (
+                        None
+                        if pair_scope_intent_hidden
+                        else _to_iso(operator_entry.get("signal_viewed_at"))
+                    ),
+                    "signal_viewed_by": None if pair_scope_intent_hidden else operator_entry.get("signal_viewed_by"),
+                    "signal_used": False if pair_scope_intent_hidden else bool(operator_entry.get("signal_used")),
+                    "signal_used_at": (
+                        None
+                        if pair_scope_intent_hidden
+                        else _to_iso(operator_entry.get("signal_used_at"))
+                    ),
+                    "signal_used_by": None if pair_scope_intent_hidden else operator_entry.get("signal_used_by"),
+                    "signal_details_pending": (
+                        False
+                        if pair_scope_intent_hidden
+                        else operator_status in {"mark_viewed", "enter_submitted"}
+                    ),
                     "operator_signal_status": operator_status or "none",
                     "operator_status_at": _to_iso(operator_entry.get("operator_status_at")),
                     "operator_status_by": operator_entry.get("operator_status_by"),
@@ -5129,7 +5162,7 @@ def create_app(settings: AppSettings) -> Dash:
 
         side = payload.get("side")
         order_id = _normalize_order_id(payload.get("order_id"))
-        if order_id is None and execution_action in {
+        if order_id is None and requested_action in {
             "enter_submitted",
             "enter_filled",
             "exit_submitted",
@@ -5137,7 +5170,12 @@ def create_app(settings: AppSettings) -> Dash:
         }:
             leg = _normalize_execution_leg(side)
             if leg in {"stock", "future"}:
-                order_id = f"{stock}-{future}-{execution_action}-{uuid.uuid4().hex[:10]}"
+                order_action = (
+                    execution_action
+                    if execution_action in {"enter", "exit", "enter_submitted", "exit_submitted"}
+                    else requested_action
+                )
+                order_id = f"{stock}-{future}-{order_action}-{uuid.uuid4().hex[:10]}"
 
         operator_execution_mode_hint = payload.get("operator_execution_mode")
         if requested_action == "manual_override":
