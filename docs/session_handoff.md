@@ -1,58 +1,60 @@
 # Session Handoff
-Updated: 2026-03-09 10:30 UTC
+Updated: 2026-03-09 11:02 UTC
 
 ## Goal
-- Close the remaining advisory tied to the Process Governance change-set, then push the branch and integrate it to `main` through a PR.
+- Rebase `codex/signals_engine` onto `main` without losing branch-specific governance history.
 
 ## Task Request Contract
-- Objective: remove the remaining advisory from the checks that belongs to this branch, specifically the target line budget overrun in the process-governance reporting layer, then push the branch and open a PR to merge into `main`.
-- In Scope: small refactor of `src/moex_carry/governance/process_reports.py` and adjacent helpers/tests, final governance/frontend verification, git push, and PR creation.
-- Out of Scope: unrelated repo-wide advisories in other oversized modules, feature redesign, or new governance/report functionality.
-- Constraints: keep report/API behavior stable; preserve the existing `news_root_cycle` operational contract untouched; prefer extraction of cohesive helper logic over semantic rewrites; do not touch unrelated dirty files; do not merge directly to `main`.
-- Done Evidence: `python scripts/validate_task_request_contract.py`, `python scripts/run_lean_gate.py`, targeted report/API tests, and a pushed branch with an opened PR against `main`.
-- Priority Rule: preserve behavior and governance correctness first, then eliminate the advisory, then complete the PR flow.
+- Objective: move local `codex/signals_engine` onto current `origin/main`, preserve recoverability of pre-rebase state, and restore any governance entries that existed only on `origin/codex/signals_engine`.
+- In Scope: backup refs, clean local rebase onto `origin/main`, semantic merge of `docs/session_handoff.md`, `plans/PLANS.yaml`, and `memory/agent_memory.yaml`, and governance validation.
+- Out of Scope: pushing rewritten history, changing remote state for unrelated branches, or broad code refactors outside the requested rebase flow.
+- Constraints: branch named by the user overrides active-checkout assumptions; governance history must be preserved semantically rather than dropped through `ours/theirs`; keep a recovery ref for both the local pre-cleanup tip and the original remote tip.
+- Done Evidence: local `codex/signals_engine` rebased on `origin/main`, backup refs created, missing governance entries restored into final files, and validators pass for handoff/plans/memory/task contract.
+- Priority Rule: branch correctness and governance-history retention beat speed; prefer a safer rebase route if an earlier route starts replaying stale governance churn.
 
 ## Current Delta
-- The blocker-label bug is fixed and verified in the live API payload.
-- The target line budget overrun in `src/moex_carry/governance/process_reports.py` is removed by extracting governance text/summary helpers into a dedicated module.
-- The repository still has other oversized modules, but they are unrelated to this branch and out of scope for this PR.
+- Created explicit backup refs for the pre-cleanup local tip and the original `origin/codex/signals_engine` tip before rewriting branch history.
+- Cleared a leftover `stash apply` conflict from governance files without discarding the saved content.
+- Direct replay from `origin/codex/signals_engine` onto `origin/main` became conflict-heavy in stale governance commits.
+- The safer route was used instead: rebase the already-local-rebased `codex/signals_engine` onto current `origin/main`.
+- The local rebase onto `origin/main` completed cleanly.
+- Restored branch-specific governance entries from `origin/codex/signals_engine` into final `plans` and `memory`, including safe renumbering for colliding `ADM-*` ids.
 
 ## First-Time-Right Report
-1. Confirmed coverage: process-governance advisory cleanup, regression verification, and PR preparation are included.
-2. Missing or risky scenarios: line-budget cleanup can accidentally spread logic across modules in a way that obscures ownership, so the extraction must stay cohesive and governance-local.
-3. Resource/time risks and chosen controls: move one coherent helper slice out of `process_reports.py`, preserve imports/contracts, and rerun lean gate plus focused tests before any git operations.
-4. Highest-priority fixes or follow-ups: if the file still exceeds budget after the first extraction, move only another clearly bounded helper group instead of broad reformatting.
+1. Confirmed coverage: recovery refs, target-branch rebase, governance-history parity, and validator-backed closeout are included.
+2. Missing or risky scenarios: force-pushing the rebased branch without `--force-with-lease` would still risk overwriting someone else's newer remote work.
+3. Resource/time risks and chosen controls: a direct replay of stale remote governance commits was abandoned once it became conflict-heavy; the final route reused the cleaner local branch state and restored remote-only governance records once, at final state.
+4. Highest-priority fixes or follow-ups: validate governance files now, then update the remote branch with `--force-with-lease` only after reviewing the rewritten graph.
 
 ## Repetition Control
-- Max Same-Path Attempts: 2
-- Stop Trigger: two consecutive extractions that still leave `process_reports.py` above target budget or change report behavior.
-- Reset Action: stop moving code blindly, measure the file again, and extract the next smallest self-contained helper group under `src/moex_carry/governance/`.
-- New Search Space: (1) formatting helpers, (2) summary/localization helpers, (3) markdown rendering helpers, (4) PR-only cleanup after behavior is stable.
-- Next Probe: extract one cohesive helper slice from `process_reports.py`, rerun targeted tests, and check the line budget before doing anything broader.
+- Max Same-Path Attempts: 1
+- Stop Trigger: any second attempt that starts replaying the old governance-churn path instead of preserving final-state parity.
+- Reset Action: stop the rebase, keep backup refs, return to the cleaner local rebased tip, and restore remote-only governance entries at the final state only.
+- New Search Space: (1) clean local rebase first, (2) final-state governance parity merge, (3) validator-backed closeout, (4) force-with-lease remote update.
+- Next Probe: run handoff/plans/memory/task-contract validators and lean gate on the completed rebased branch.
 
 ## Task Outcome
 - Outcome Status: completed
-- Decision Quality: correct_first_time
-- Final Contexts: CTX-OPS
+- Decision Quality: correct_after_replan
+- Final Contexts: CTX-OPS, CTX-ORCHESTRATION
 - Route Match: matched
-- Primary Rework Cause: none
+- Primary Rework Cause: workflow_gap
 - Incident Signature: none
 - Improvement Action: none
 - Improvement Artifact: none
-- Linked Plan ID: P1-PROCESS-GOV-ADVISORY-053
-- Linked Memory ID:
+- Linked Plan ID: P1-REBASE-GUARD-059
 
 ## Blockers
 - None.
 
 ## Next Step
-- Push the branch and open the PR against `main`; no additional code changes are needed for the advisory cleanup itself.
+- Review the rewritten graph and update `origin/codex/signals_engine` with `git push --force-with-lease origin codex/signals_engine` when ready.
 
 ## Validation
-- `powershell -ExecutionPolicy Bypass -File .\scripts\worktree_guard.ps1 -Action Check`
-- `python scripts/validate_session_handoff.py`
+- `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
+- `git rev-list --left-right --count origin/main...HEAD`
 - `python scripts/validate_task_request_contract.py`
-- `python -m pytest tests/test_process_reports.py tests/test_api_v2.py::test_v2_ops_process_improvement_report -q`
-- `cmd /c npm.cmd --prefix ui-web run lint`
-- `cmd /c npm.cmd --prefix ui-web run build`
+- `python scripts/validate_session_handoff.py`
+- `python scripts/validate_agent_memory.py`
+- `python scripts/validate_plans.py`
 - `python scripts/run_lean_gate.py`
