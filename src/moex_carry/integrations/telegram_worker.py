@@ -1,6 +1,5 @@
 ﻿from __future__ import annotations
 
-import json
 import logging
 import time
 import uuid
@@ -23,6 +22,14 @@ from moex_carry.integrations.telegram_strategy import (
     resolve_strategy_metadata,
     strategy_label,
 )
+from moex_carry.integrations.telegram_worker_state import (
+    iso_now as _iso_now,
+    load_state as _load_state_payload,
+    resolve_state_path as _resolve_state_path_payload,
+    safe_int as _safe_int,
+    save_state as _save_state_payload,
+    empty_state as _empty_state_payload,
+)
 from moex_carry.integrations.telegram_shock_broadcast import broadcast_shock_alerts
 from moex_carry.signals_ack import build_ack_note, build_signal_fingerprint
 from moex_carry.signals_delivery import (
@@ -43,19 +50,6 @@ _SIGNAL_ACTIONS = set(DELIVERY_ACTIONS)
 _SENT_FINGERPRINT_TTL_HOURS = 168
 _TELEGRAM_GET_UPDATES_MAX_ATTEMPTS = 2
 _TELEGRAM_GET_UPDATES_RETRY_SLEEP_SEC = 0.25
-
-
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _safe_int(value: object) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 class TelegramWorker:
@@ -96,121 +90,17 @@ class TelegramWorker:
 
     @staticmethod
     def _resolve_state_path(raw_path: str, data_dir: str | Path | None = None) -> Path:
-        path = Path(raw_path).expanduser()
-        if path.is_absolute():
-            return path
-        if data_dir is None:
-            return (Path.cwd() / path).resolve()
-        base_dir = Path(data_dir).expanduser()
-        if not base_dir.is_absolute():
-            base_dir = (Path.cwd() / base_dir).resolve()
-        text = str(path).replace("\\", "/")
-        if text.startswith("./data/"):
-            return (base_dir / text[len("./data/") :]).resolve()
-        if text.startswith("data/"):
-            return (base_dir / text[len("data/") :]).resolve()
-        return (base_dir / path).resolve()
+        return _resolve_state_path_payload(raw_path, data_dir)
 
     @staticmethod
     def _empty_state() -> dict[str, object]:
-        return {
-            "last_update_id": 0,
-            "registered_chats": {},
-            "sent_fingerprints": {},
-            "sent_root_fingerprints": {},
-            "sent_shock_fingerprints": {},
-            "sent_news_fingerprints": {},
-            "hold_open_last_sent_date_by_pair": {},
-            "enter_last_sent_at_by_pair": {},
-            "enter_tracking_by_fingerprint": {},
-            "daily_healthcheck_last_sent_date_by_chat": {},
-            "pending_callbacks": {},
-            "shock_topics": {},
-            "root_last_processed_ts": None,
-            "shock_last_processed_ts": None,
-            "news_last_processed_ts": None,
-            "shock_episode_counter": 0,
-        }
+        return _empty_state_payload()
 
     def _load_state(self) -> dict[str, object]:
-        if not self._state_path.exists():
-            return self._empty_state()
-        try:
-            payload = json.loads(self._state_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            logger.warning("Failed to load Telegram worker state, using empty state.")
-            return self._empty_state()
-        if not isinstance(payload, dict):
-            return self._empty_state()
-        state = self._empty_state()
-        state["last_update_id"] = _safe_int(payload.get("last_update_id")) or 0
-        state["registered_chats"] = {
-            str(key): int(value)
-            for key, value in (payload.get("registered_chats") or {}).items()
-            if _safe_int(value) is not None
-        }
-        state["sent_fingerprints"] = {
-            str(key): str(value)
-            for key, value in (payload.get("sent_fingerprints") or {}).items()
-            if isinstance(key, str) and isinstance(value, str)
-        }
-        for map_key in ("sent_root_fingerprints", "sent_shock_fingerprints", "sent_news_fingerprints"):
-            state[map_key] = {
-                str(key): str(value)
-                for key, value in (payload.get(map_key) or {}).items()
-                if isinstance(key, str) and isinstance(value, str)
-            }
-        state["hold_open_last_sent_date_by_pair"] = {
-            str(key): str(value)
-            for key, value in (payload.get("hold_open_last_sent_date_by_pair") or {}).items()
-            if isinstance(key, str) and isinstance(value, str)
-        }
-        state["enter_last_sent_at_by_pair"] = {
-            str(key): str(value)
-            for key, value in (payload.get("enter_last_sent_at_by_pair") or {}).items()
-            if isinstance(key, str) and isinstance(value, str)
-        }
-        raw_tracking = payload.get("enter_tracking_by_fingerprint") or {}
-        if isinstance(raw_tracking, dict):
-            normalized_tracking: dict[str, dict[str, object]] = {}
-            for key, value in raw_tracking.items():
-                if not isinstance(key, str) or not isinstance(value, dict):
-                    continue
-                normalized_tracking[key] = dict(value)
-            state["enter_tracking_by_fingerprint"] = normalized_tracking
-        state["daily_healthcheck_last_sent_date_by_chat"] = {
-            str(key): str(value)
-            for key, value in (payload.get("daily_healthcheck_last_sent_date_by_chat") or {}).items()
-            if isinstance(key, str) and isinstance(value, str)
-        }
-        callbacks = payload.get("pending_callbacks") or {}
-        if isinstance(callbacks, dict):
-            normalized_callbacks: dict[str, dict[str, object]] = {}
-            for key, value in callbacks.items():
-                if not isinstance(key, str) or not isinstance(value, dict):
-                    continue
-                normalized_callbacks[key] = dict(value)
-            state["pending_callbacks"] = normalized_callbacks
-        shock_topics = payload.get("shock_topics") or {}
-        if isinstance(shock_topics, dict):
-            normalized_topics: dict[str, dict[str, object]] = {}
-            for key, value in shock_topics.items():
-                if not isinstance(key, str) or not isinstance(value, dict):
-                    continue
-                normalized_topics[key] = dict(value)
-            state["shock_topics"] = normalized_topics
-        for key in ("root_last_processed_ts", "shock_last_processed_ts", "news_last_processed_ts"):
-            processed_ts = payload.get(key)
-            if isinstance(processed_ts, str) and processed_ts.strip():
-                state[key] = processed_ts
-        state["shock_episode_counter"] = _safe_int(payload.get("shock_episode_counter")) or 0
-        return state
+        return _load_state_payload(self._state_path, logger=logger)
 
     def _save_state(self) -> None:
-        self._state_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._state_path.with_suffix(f"{self._state_path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(self._state, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp_path.replace(self._state_path)
+        _save_state_payload(self._state_path, self._state)
 
     def _telegram_api(self, method: str, payload: dict[str, object], *, timeout: int = 30) -> object:
         url = f"{self._telegram_api_base}/{method}"

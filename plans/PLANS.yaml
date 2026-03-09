@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-03-06
+updated_at: 2026-03-09
 items:
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
@@ -2062,3 +2062,30 @@ items:
       - P1-PROCESS-GOV-ADVISORY-053
     started_at: 2026-03-09
     completed_at: 2026-03-09
+
+  - id: P1-PUSH-GATE-060
+    title: Unblock protected push by fixing signal-engine context coverage and hard size-limit files
+    lane: governance
+    status: active
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - "scripts/validate_agent_contexts.py covers the src/moex_carry/signal_engine/ tree and matching agent-context docs stay aligned"
+      - "src/moex_carry/config.py, src/moex_carry/integrations/telegram_worker.py, and src/moex_carry/ui/app_helpers_base.py are back under hard taste-invariant size limits"
+      - "python scripts/run_lean_gate.py passes on the rebased branch"
+      - "git push --force-with-lease origin codex/signals_engine succeeds"
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/validate_agent_contexts.py
+      - python scripts/validate_taste_invariants.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - docs/agent-contexts/README.md
+      - docs/agent-contexts/CTX-STRATEGY.md
+      - docs/agent-contexts/CTX-ORCHESTRATION.md
+      - plans/PLANS.yaml
+    dependencies:
+      - P1-REBASE-GUARD-059
+    started_at: 2026-03-09

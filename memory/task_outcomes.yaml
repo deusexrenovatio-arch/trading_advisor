@@ -502,3 +502,31 @@ items:
   - session_handoff
   start_recommendations:
   - Patch is scoped to one context.
+- task_id: APT-20260309T111717Z-dd0144f2
+  closed_at: null
+  branch: codex/signals_engine
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  - CTX-STRATEGY
+  - CTX-API-UI
+  route_match: pending
+  time_to_first_patch_sec: 954
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-PUSH-GATE-060
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.

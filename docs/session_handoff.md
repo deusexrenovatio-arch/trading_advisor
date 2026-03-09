@@ -1,60 +1,59 @@
 # Session Handoff
-Updated: 2026-03-09 11:02 UTC
+Updated: 2026-03-09 11:15 UTC
 
 ## Goal
-- Rebase `codex/signals_engine` onto `main` without losing branch-specific governance history.
+- Unblock the protected push for `codex/signals_engine` by fixing the remaining pre-push governance blockers.
 
 ## Task Request Contract
-- Objective: move local `codex/signals_engine` onto current `origin/main`, preserve recoverability of pre-rebase state, and restore any governance entries that existed only on `origin/codex/signals_engine`.
-- In Scope: backup refs, clean local rebase onto `origin/main`, semantic merge of `docs/session_handoff.md`, `plans/PLANS.yaml`, and `memory/agent_memory.yaml`, and governance validation.
-- Out of Scope: pushing rewritten history, changing remote state for unrelated branches, or broad code refactors outside the requested rebase flow.
-- Constraints: branch named by the user overrides active-checkout assumptions; governance history must be preserved semantically rather than dropped through `ours/theirs`; keep a recovery ref for both the local pre-cleanup tip and the original remote tip.
-- Done Evidence: local `codex/signals_engine` rebased on `origin/main`, backup refs created, missing governance entries restored into final files, and validators pass for handoff/plans/memory/task contract.
-- Priority Rule: branch correctness and governance-history retention beat speed; prefer a safer rebase route if an earlier route starts replaying stale governance churn.
+- Objective: remove the pre-push blockers that currently prevent `git push --force-with-lease origin codex/signals_engine`.
+- In Scope: agent-context coverage for `src/moex_carry/signal_engine/*`, matching `docs/agent-contexts` sync, and minimal cohesive extractions to bring hard-limit files back under taste-invariant size caps.
+- Out of Scope: relaxing the hard limits, large feature refactors, or unrelated behavior changes in strategy/news/runtime logic.
+- Constraints: keep runtime behavior stable; prefer small file moves over semantic rewrites; preserve the completed rebase/governance recovery work; fix blockers in a way that satisfies existing validators rather than bypassing them.
+- Done Evidence: `python scripts/validate_agent_contexts.py`, `python scripts/validate_taste_invariants.py`, `python scripts/run_lean_gate.py`, and successful `git push --force-with-lease origin codex/signals_engine`.
+- Priority Rule: make the branch pushable with the smallest defensible code movement; correctness and gate compliance beat cosmetic cleanup.
 
 ## Current Delta
-- Created explicit backup refs for the pre-cleanup local tip and the original `origin/codex/signals_engine` tip before rewriting branch history.
-- Cleared a leftover `stash apply` conflict from governance files without discarding the saved content.
-- Direct replay from `origin/codex/signals_engine` onto `origin/main` became conflict-heavy in stale governance commits.
-- The safer route was used instead: rebase the already-local-rebased `codex/signals_engine` onto current `origin/main`.
-- The local rebase onto `origin/main` completed cleanly.
-- Restored branch-specific governance entries from `origin/codex/signals_engine` into final `plans` and `memory`, including safe renumbering for colliding `ADM-*` ids.
+- The branch is already rebased onto current `origin/main`.
+- Push is blocked by two gate classes.
+- The first is unmapped `signal_engine` files in `validate_agent_contexts.py`.
+- The second is hard size-limit failures in `config.py`, `telegram_worker.py`, and `ui/app_helpers_base.py`.
+- Governance parity from the rebase recovery is already committed and must remain intact while fixing the push blockers.
 
 ## First-Time-Right Report
-1. Confirmed coverage: recovery refs, target-branch rebase, governance-history parity, and validator-backed closeout are included.
-2. Missing or risky scenarios: force-pushing the rebased branch without `--force-with-lease` would still risk overwriting someone else's newer remote work.
-3. Resource/time risks and chosen controls: a direct replay of stale remote governance commits was abandoned once it became conflict-heavy; the final route reused the cleaner local branch state and restored remote-only governance records once, at final state.
-4. Highest-priority fixes or follow-ups: validate governance files now, then update the remote branch with `--force-with-lease` only after reviewing the rewritten graph.
+1. Confirmed coverage: context routing, matching docs, hard-limit file size fixes, and the retry push are in scope.
+2. Missing or risky scenarios: moving helpers out of `telegram_worker.py` or `config.py` can accidentally change imports or defaults if the extraction crosses ownership boundaries.
+3. Resource/time risks and chosen controls: use cohesive helper/config modules, keep external interfaces unchanged, and validate the exact blocking gates before retrying push.
+4. Highest-priority fixes or follow-ups: map `signal_engine` first, then shrink the three hard-limit files, then rerun lean gate and retry the protected push.
 
 ## Repetition Control
-- Max Same-Path Attempts: 1
-- Stop Trigger: any second attempt that starts replaying the old governance-churn path instead of preserving final-state parity.
-- Reset Action: stop the rebase, keep backup refs, return to the cleaner local rebased tip, and restore remote-only governance entries at the final state only.
-- New Search Space: (1) clean local rebase first, (2) final-state governance parity merge, (3) validator-backed closeout, (4) force-with-lease remote update.
-- Next Probe: run handoff/plans/memory/task-contract validators and lean gate on the completed rebased branch.
+- Max Same-Path Attempts: 2
+- Stop Trigger: two extraction attempts still leave the same file above the hard limit or break the same validator.
+- Reset Action: stop splitting the same file, inspect validator output plus import graph, and choose a different cohesive slice or ownership placement.
+- New Search Space: (1) context-router/doc sync only, (2) config submodule extraction, (3) telegram state/helper extraction, (4) UI evidence/helper extraction.
+- Next Probe: add `signal_engine` context coverage first and rerun `validate_agent_contexts.py` before touching the oversized files.
 
 ## Task Outcome
-- Outcome Status: completed
-- Decision Quality: correct_after_replan
-- Final Contexts: CTX-OPS, CTX-ORCHESTRATION
-- Route Match: matched
-- Primary Rework Cause: workflow_gap
+- Outcome Status: in_progress
+- Decision Quality: pending
+- Final Contexts: CTX-OPS, CTX-ORCHESTRATION, CTX-STRATEGY, CTX-API-UI
+- Route Match: pending
+- Primary Rework Cause: none
 - Incident Signature: none
-- Improvement Action: none
-- Improvement Artifact: none
-- Linked Plan ID: P1-REBASE-GUARD-059
+- Improvement Action: pending
+- Improvement Artifact: pending
+- Linked Plan ID: P1-PUSH-GATE-060
 
 ## Blockers
 - None.
 
 ## Next Step
-- Review the rewritten graph and update `origin/codex/signals_engine` with `git push --force-with-lease origin codex/signals_engine` when ready.
+- Add `signal_engine` routing coverage and shrink the three hard-limit files, then rerun gates and retry the protected push.
 
 ## Validation
 - `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
-- `git rev-list --left-right --count origin/main...HEAD`
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
-- `python scripts/validate_agent_memory.py`
-- `python scripts/validate_plans.py`
+- `python scripts/validate_agent_contexts.py`
+- `python scripts/validate_taste_invariants.py`
 - `python scripts/run_lean_gate.py`
+- `git push --force-with-lease origin codex/signals_engine`

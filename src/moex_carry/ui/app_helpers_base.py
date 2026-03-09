@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 
 import pandas as pd
 import requests
-from dash.dash_table.Format import Format, Scheme, Trim
 from flask import jsonify
 
 from moex_carry.config import AppSettings
@@ -16,6 +15,11 @@ from moex_carry.domain.decision_engine import (
     derive_signal_lifecycle_state,
 )
 from moex_carry.signals_delivery import parse_iso_utc
+from moex_carry.ui.app_helpers_tables import (
+    _decision_columns as _decision_columns_impl,
+    _prepare_decisions as _prepare_decisions_impl,
+    _table_columns as _table_columns_impl,
+)
 
 
 def _to_float(value: object) -> float | None:
@@ -39,59 +43,9 @@ def _latest_by_decision_id(records: list[dict[str, object]]) -> dict[str, dict[s
     return latest
 
 
-def _table_columns(df):
-    return [{"name": col, "id": col} for col in df.columns]
-
-
-def _decision_columns():
-    return [
-        {"name": "Time", "id": "created_at"},
-        {"name": "Decision", "id": "decision_id"},
-        {"name": "Strategy", "id": "strategy_type"},
-        {"name": "Instrument", "id": "primary_instrument"},
-        {"name": "Action", "id": "action"},
-        {"name": "Risk", "id": "risk_state"},
-        {"name": "News", "id": "news_severity"},
-        {
-            "name": "Cost",
-            "id": "cost_round_trip",
-            "type": "numeric",
-            "format": Format(precision=2, scheme=Scheme.fixed, trim=Trim.yes),
-        },
-        {
-            "name": "Max DD",
-            "id": "max_drawdown",
-            "type": "numeric",
-            "format": Format(precision=4, scheme=Scheme.fixed, trim=Trim.yes),
-        },
-    ]
-
-
-def _prepare_decisions(decisions: pd.DataFrame) -> pd.DataFrame:
-    if decisions.empty:
-        return decisions
-    decisions = decisions.copy()
-    if "cost_summary.round_trip_cost" in decisions.columns:
-        decisions["cost_round_trip"] = decisions["cost_summary.round_trip_cost"]
-    if "backtest_metrics.max_drawdown" in decisions.columns:
-        decisions["max_drawdown"] = decisions["backtest_metrics.max_drawdown"]
-    display_columns = [
-        "created_at",
-        "decision_id",
-        "strategy_type",
-        "primary_instrument",
-        "action",
-        "risk_state",
-        "news_severity",
-        "cost_round_trip",
-        "max_drawdown",
-    ]
-    for col in display_columns:
-        if col not in decisions.columns:
-            decisions[col] = None
-    decisions["cost_round_trip"] = pd.to_numeric(decisions["cost_round_trip"], errors="coerce")
-    decisions["max_drawdown"] = pd.to_numeric(decisions["max_drawdown"], errors="coerce")
-    return decisions[display_columns].sort_values("created_at", ascending=False)
+_table_columns = _table_columns_impl
+_decision_columns = _decision_columns_impl
+_prepare_decisions = _prepare_decisions_impl
 
 
 def _sanitize_value(value):
