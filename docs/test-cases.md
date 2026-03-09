@@ -23,6 +23,8 @@
 - process-task-outcome-closeout -> TC-PROC-TELE-002
 - process-repeated-signature-prevention -> TC-PROC-TELE-003
 - process-regression-burn-in-thresholds -> TC-PROC-TELE-004
+- process-regression-acknowledged-debt -> TC-PROC-TELE-005
+- process-regression-worsening-after-ack -> TC-PROC-TELE-006
 - decision-view -> TC-DEC-API-001, TC-DEC-UI-001
 - decision-view-filters -> TC-DEC-API-005
 - decision-view-aggregation -> TC-DEC-API-002
@@ -1088,6 +1090,30 @@ Steps:
 Expected:
 - Burn-in window does not block before 20 completed tasks.
 - Threshold status flips to blocking once the 20-task window exists and metrics regress.
+
+### TC-PROC-TELE-005 Acknowledged baseline debt stays non-blocking under active remediation
+Acceptance: process-regression-acknowledged-debt
+Automation: tests/test_agent_process_telemetry.py::test_validate_process_regressions_allows_acknowledged_baseline_debt
+Steps:
+1. Seed 20 completed tasks with weak decision-quality and context-efficiency metrics.
+2. Keep an active remediation plan for the known baseline debt.
+3. Run `python scripts/validate_process_regressions.py`.
+Expected:
+- Validator returns success.
+- Failing dimensions are marked as `acknowledged_debt`, not `fail`.
+- Blocking remains false while the debt is tracked and does not worsen.
+
+### TC-PROC-TELE-006 Worsening after acknowledgement becomes blocking again
+Acceptance: process-regression-worsening-after-ack
+Automation: tests/test_agent_process_telemetry.py::test_validate_process_regressions_blocks_worsening_acknowledged_debt
+Steps:
+1. Seed one full baseline window with acknowledged weak metrics.
+2. Seed the next full window with worse decision-quality and context-efficiency values.
+3. Run `python scripts/validate_process_regressions.py`.
+Expected:
+- Validator fails again.
+- The worsening dimensions are marked as `regressed`.
+- The gate does not allow acknowledged debt to hide a fresh degradation.
 
 ## Regression Checklist (minimum)
 - /api/v2/signals/history returns JSON (no HTML).

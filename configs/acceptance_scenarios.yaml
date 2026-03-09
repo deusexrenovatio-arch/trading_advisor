@@ -130,6 +130,26 @@ scenarios:
       - "Burn-in status stays non-blocking before 20 completed tasks."
       - "Threshold failures become blocking after the 20-task rolling window exists."
 
+  - id: process-regression-acknowledged-debt
+    type: manual
+    scope: process
+    test_cases: [TC-PROC-TELE-005]
+    title: Process regression acknowledged baseline debt gate
+    user_story: Known baseline process debt can stay non-blocking only when an explicit remediation item is active.
+    expectations:
+      - "Decision-quality and context-efficiency debt is marked as acknowledged, not silently ignored."
+      - "Validator stays green only while the acknowledged debt does not worsen."
+
+  - id: process-regression-worsening-after-ack
+    type: manual
+    scope: process
+    test_cases: [TC-PROC-TELE-006]
+    title: Process regression worsening after acknowledgement gate
+    user_story: Once baseline debt is acknowledged, any further degradation must still fail closed.
+    expectations:
+      - "Worsening beyond the acknowledged baseline changes status to regressed."
+      - "Validator blocks push again on fresh degradation."
+
   - id: decision-view
     type: api_list
     scope: backend

@@ -224,11 +224,15 @@ needs:
       - process-task-outcome-closeout
       - process-repeated-signature-prevention
       - process-regression-burn-in-thresholds
+      - process-regression-acknowledged-debt
+      - process-regression-worsening-after-ack
     test_cases:
       - TC-PROC-TELE-001
       - TC-PROC-TELE-002
       - TC-PROC-TELE-003
       - TC-PROC-TELE-004
+      - TC-PROC-TELE-005
+      - TC-PROC-TELE-006
 
 user_cases:
   - id: uc-actionable-signal-to-execution
@@ -454,8 +458,12 @@ user_cases:
       - process-task-outcome-closeout
       - process-repeated-signature-prevention
       - process-regression-burn-in-thresholds
+      - process-regression-acknowledged-debt
+      - process-regression-worsening-after-ack
     test_cases:
       - TC-PROC-TELE-001
       - TC-PROC-TELE-002
       - TC-PROC-TELE-003
       - TC-PROC-TELE-004
+      - TC-PROC-TELE-005
+      - TC-PROC-TELE-006

@@ -99,6 +99,11 @@ def build_human_summary(rollup: dict[str, Any], *, status: str) -> dict[str, Any
             f"Телеметрия процесса ещё на прогреве: {rollup['completed_tasks_count']}/"
             f"{rollup['window_size']} завершённых задач."
         )
+    elif status == "remediation":
+        headline = (
+            "Process is in remediation mode: baseline debt is acknowledged, "
+            "but any new degradation must still block."
+        )
     elif status == "healthy":
         headline = "Состояние процесса стабильно в текущем rolling-окне."
     elif status == "watch":
@@ -140,6 +145,13 @@ def build_human_summary(rollup: dict[str, Any], *, status: str) -> dict[str, Any
         drift_fragments.append("в текущем окне нет заметного кластера повторных или частичных сбоев")
 
     next_actions: list[str] = []
+    if status == "remediation":
+        next_actions.append(
+            "Keep the active remediation plan open until the acknowledged baseline debt is recovered above threshold."
+        )
+        next_actions.append(
+            "Do not expand the acknowledged debt scope: any newly failing dimension must become a blocker again."
+        )
     if float(metrics["correct_first_time_pct"]) < 0.70:
         next_actions.append(
             "Жёстче сужайте маршрут до реализации и останавливайтесь после первого сигнала wrong-path."
@@ -167,7 +179,7 @@ def build_human_summary(rollup: dict[str, Any], *, status: str) -> dict[str, Any
         )
 
     current_risks: list[str] = []
-    if status in {"watch", "critical"}:
+    if status in {"watch", "critical", "remediation"}:
         current_risks.extend(
             [
                 METRIC_LABELS.get(item["metric"], item["metric"])

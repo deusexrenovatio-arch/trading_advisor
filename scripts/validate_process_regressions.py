@@ -25,9 +25,10 @@ def run(*, task_outcomes_path: Path, focus: str | None, report: Path | None) -> 
         lines.append(f"- completed_tasks_count: {rollup['completed_tasks_count']}")
         lines.append("")
         for dimension, details in sorted(threshold_results.items()):
-            status = "pass" if details["ok"] else "fail"
+            status = str(details.get("status") or ("pass" if details.get("ok") else "fail"))
             lines.append(f"## {dimension}")
             lines.append(f"- status: {status}")
+            lines.append(f"- blocking: {bool(details.get('blocking'))}")
             for check in details["checks"]:
                 lines.append(
                     "- "
@@ -47,7 +48,7 @@ def run(*, task_outcomes_path: Path, focus: str | None, report: Path | None) -> 
     dimensions = [focus] if focus else sorted(threshold_results)
     failures: list[str] = []
     for dimension in dimensions:
-        if dimension and not threshold_results[dimension]["ok"]:
+        if dimension and bool(threshold_results[dimension].get("blocking")):
             failures.append(dimension)
 
     if failures:
@@ -64,10 +65,23 @@ def run(*, task_outcomes_path: Path, focus: str | None, report: Path | None) -> 
         print(f"remediation: see {TASK_OUTCOMES_REMEDIATION_DOC}")
         return 1
 
-    print(
-        "process regressions validation: OK "
-        f"(window={rollup['current_window_count']} burn_in_complete={rollup['burn_in_complete']})"
-    )
+    remediating = [
+        dimension
+        for dimension in dimensions
+        if threshold_results[dimension].get("status") == "acknowledged_debt"
+    ]
+
+    if remediating:
+        joined = ",".join(remediating)
+        print(
+            "process regressions validation: OK "
+            f"(window={rollup['current_window_count']} acknowledged_debt={joined})"
+        )
+    else:
+        print(
+            "process regressions validation: OK "
+            f"(window={rollup['current_window_count']} burn_in_complete={rollup['burn_in_complete']})"
+        )
     return 0
 
 

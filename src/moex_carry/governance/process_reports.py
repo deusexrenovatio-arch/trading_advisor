@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
+import os
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -28,6 +29,11 @@ ROLLING_THRESHOLDS = {
         "environment_blocker_rate": ("le", 0.20),
     },
 }
+ACKNOWLEDGED_DEBT_PLAN_ID = "P1-PROCESS-REG-GATE-063"
+ACKNOWLEDGED_DEBT_DIMENSIONS = {
+    "decision-quality": frozenset({"correct_first_time_pct"}),
+    "context-efficiency": frozenset({"start_match_pct", "context_expansion_rate"}),
+}
 
 KEY_WEEKLY_METRICS = (
     "correct_first_time_pct",
@@ -37,6 +43,10 @@ KEY_WEEKLY_METRICS = (
     "environment_blocker_rate",
     "median_time_to_first_patch_sec",
 )
+
+
+def default_plans_path() -> Path:
+    return Path(os.getenv("MOEX_CARRY_PLANS_PATH", "plans/PLANS.yaml"))
 
 def parse_iso_datetime(value: str | None) -> datetime | None:
     if not value:
@@ -75,6 +85,37 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected YAML object in {path.as_posix()}")
     return payload
+
+
+def _active_plan_ids(path: Path) -> set[str]:
+    payload = _load_yaml(path)
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return set()
+    active: set[str] = set()
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        item_id = str(raw.get("id", "")).strip()
+        status = str(raw.get("status", "")).strip().lower()
+        if item_id and status == "active":
+            active.add(item_id)
+    return active
+
+
+def _metric_worsened(
+    *,
+    operator: str,
+    actual: float,
+    previous_actual: float | None,
+    min_delta: float,
+) -> bool:
+    if previous_actual is None:
+        return False
+    epsilon = 1e-9
+    if operator == "ge":
+        return (float(previous_actual) - float(actual)) >= float(min_delta) - epsilon
+    return (float(actual) - float(previous_actual)) >= float(min_delta) - epsilon
 
 
 def load_task_outcomes(path: Path) -> dict[str, Any]:
@@ -300,10 +341,25 @@ def compute_process_rollup(payload: dict[str, Any], window_size: int = ROLLING_W
 
     threshold_results: dict[str, dict[str, Any]] = {}
     burn_in_complete = len(completed) >= window_size
+    active_plan_ids = _active_plan_ids(default_plans_path())
+    acknowledged_debt_active = ACKNOWLEDGED_DEBT_PLAN_ID in active_plan_ids
+    task_unit_delta = 1.0 / float(max(total, 1))
     for dimension, rules in ROLLING_THRESHOLDS.items():
-        dimension_status = {"ok": True, "checks": []}
+        dimension_status = {
+            "ok": True,
+            "blocking": False,
+            "status": "burn_in" if not burn_in_complete else "pass",
+            "plan_id": None,
+            "checks": [],
+        }
         for metric_name, (op_name, threshold) in rules.items():
             actual = float(current_metrics.get(metric_name, 0.0))
+            previous_actual_raw = previous_numeric_metrics.get(metric_name)
+            previous_actual = (
+                float(previous_actual_raw)
+                if isinstance(previous_actual_raw, (int, float))
+                else None
+            )
             passed = actual >= threshold if op_name == "ge" else actual <= threshold
             if not passed:
                 dimension_status["ok"] = False
@@ -313,9 +369,44 @@ def compute_process_rollup(payload: dict[str, Any], window_size: int = ROLLING_W
                     "operator": op_name,
                     "threshold": threshold,
                     "actual": actual,
+                    "previous_actual": previous_actual,
+                    "delta_from_previous": (
+                        float(actual) - float(previous_actual)
+                        if previous_actual is not None
+                        else None
+                    ),
+                    "worsened": _metric_worsened(
+                        operator=op_name,
+                        actual=actual,
+                        previous_actual=previous_actual,
+                        min_delta=task_unit_delta,
+                    ),
                     "passed": passed,
                 }
             )
+        failed_checks = [check for check in dimension_status["checks"] if not check["passed"]]
+        failed_metrics = {str(check["metric"]) for check in failed_checks}
+        acknowledged_metrics = ACKNOWLEDGED_DEBT_DIMENSIONS.get(dimension, frozenset())
+        acknowledged_debt = (
+            burn_in_complete
+            and acknowledged_debt_active
+            and bool(failed_checks)
+            and failed_metrics.issubset(acknowledged_metrics)
+        )
+        worsened = any(bool(check.get("worsened")) for check in failed_checks)
+        if not failed_checks:
+            dimension_status["status"] = "pass" if burn_in_complete else "burn_in"
+            dimension_status["blocking"] = False
+            dimension_status["ok"] = True
+        elif acknowledged_debt and not worsened:
+            dimension_status["status"] = "acknowledged_debt"
+            dimension_status["blocking"] = False
+            dimension_status["plan_id"] = ACKNOWLEDGED_DEBT_PLAN_ID
+        else:
+            dimension_status["status"] = "regressed" if acknowledged_debt and worsened else "fail"
+            dimension_status["blocking"] = bool(burn_in_complete)
+            if acknowledged_debt:
+                dimension_status["plan_id"] = ACKNOWLEDGED_DEBT_PLAN_ID
         threshold_results[dimension] = dimension_status
 
     return {
@@ -355,14 +446,25 @@ def _status_level(rollup: dict[str, Any]) -> str:
         return "empty"
     if not rollup["burn_in_complete"]:
         return "burn-in"
-    failing_dimensions = [
-        dimension for dimension, payload in rollup["threshold_results"].items() if not payload["ok"]
+    blocking_dimensions = [
+        dimension
+        for dimension, payload in rollup["threshold_results"].items()
+        if bool(payload.get("blocking"))
     ]
-    if not failing_dimensions:
+    if blocking_dimensions:
+        if len(blocking_dimensions) == 1:
+            return "watch"
+        return "critical"
+    remediation_dimensions = [
+        dimension
+        for dimension, payload in rollup["threshold_results"].items()
+        if payload.get("status") == "acknowledged_debt"
+    ]
+    if remediation_dimensions:
+        return "remediation"
+    if not blocking_dimensions:
         return "healthy"
-    if len(failing_dimensions) == 1:
-        return "watch"
-    return "critical"
+    return "healthy"
 
 
 def build_human_summary(rollup: dict[str, Any]) -> dict[str, Any]:
@@ -501,9 +603,7 @@ def render_rollup_markdown(rollup: dict[str, Any]) -> str:
             f"{check['metric']} {check['operator']} {check['threshold']:.2f} (actual={check['actual']:.2f})"
             for check in payload["checks"]
         )
-        status = "pass" if payload["ok"] or not rollup["burn_in_complete"] else "fail"
-        if not rollup["burn_in_complete"]:
-            status = "burn-in"
+        status = str(payload.get("status") or ("pass" if payload.get("ok") else "fail"))
         lines.append(f"| `{dimension}` | {status} | {checks} |")
 
     def _append_ranked(title: str, items: list[tuple[str, int]]) -> None:

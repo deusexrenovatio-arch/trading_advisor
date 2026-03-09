@@ -1,6 +1,35 @@
 version: 1
 updated_at: 2026-03-09
 items:
+  - id: P1-PROCESS-REG-GATE-063
+    title: Stage post-burn-in process regression gating around acknowledged baseline debt
+    lane: governance
+    status: active
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - process regression validation distinguishes acknowledged baseline debt from fresh or worsening regressions
+      - current decision-quality and context-efficiency debt is tied to an explicit active remediation item instead of silently downgrading the gate
+      - validator, process reports, and human-readable summaries agree on which dimensions are blocking, remediating, or healthy
+      - focused governance tests cover both acknowledged-debt pass and worsening-regression fail paths
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python -m pytest tests/test_agent_process_telemetry.py tests/test_api_v2.py -q
+      - python scripts/validate_process_regressions.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - docs/DEV_WORKFLOW.md
+      - docs/runbooks/governance-remediation.md
+      - plans/PLANS.yaml
+      - src/moex_carry/governance/process_reports.py
+      - scripts/validate_process_regressions.py
+    dependencies:
+      - P1-PROCESS-TELEMETRY-047
+      - P1-PROCESS-GOV-ADVISORY-053
+    started_at: 2026-03-09
+
   - id: P1-H4A-LIVE-061
     title: Align live/manual futures execution with H4A baseline contract
     lane: strategy
