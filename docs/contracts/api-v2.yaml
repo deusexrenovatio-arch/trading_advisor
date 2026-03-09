@@ -794,6 +794,12 @@ paths:
       responses:
         '200':
           description: HPO status.
+  /research/morning-plan:
+    post:
+      summary: Build futures morning plan (D1/H1/M5 regime, levels, setups).
+      responses:
+        '200':
+          description: Morning plan payload.
   /portfolio/rebalance/preview:
     get:
       summary: Build rebalance proposal from active lifecycle.

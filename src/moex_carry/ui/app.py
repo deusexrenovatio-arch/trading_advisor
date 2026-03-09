@@ -4,6 +4,8 @@ import json
 import logging
 import math
 import os
+from dataclasses import asdict, is_dataclass
+from enum import Enum
 from pathlib import Path
 import threading
 import uuid
@@ -32,6 +34,9 @@ from moex_carry.observability.runtime_metrics import ApiObservability
 from moex_carry.parameter_specs import get_parameter_specs
 from moex_carry.pipeline import build_spread_series, run_signal_cycle
 from moex_carry.pretrade.delay_gate import run_delay_gate
+from moex_carry.signal_engine.core import MarketCalendar, parse_time_window
+from moex_carry.signal_engine.data import IssCandleProvider, IssInstrumentRoute
+from moex_carry.signal_engine.plan import MorningPlanBuilder
 from moex_carry.signals_ack import build_signal_fingerprint, parse_ack_note
 from moex_carry.signals_delivery import parse_iso_utc, signal_delivery_state
 from moex_carry.news import (
@@ -190,6 +195,20 @@ _CACHE_VERSION = "v5"
 _V1_DEPRECATION_SUNSET_HTTP = "Wed, 01 Jul 2026 00:00:00 GMT"
 _V1_DEPRECATION_SUNSET_DATE = "2026-07-01"
 _DEFAULT_ENTRY_PRICE_TOLERANCE_PCT = 0.0015
+
+
+def _to_jsonable(value: object):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if is_dataclass(value):
+        return {key: _to_jsonable(item) for key, item in asdict(value).items()}
+    if isinstance(value, dict):
+        return {str(key): _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_to_jsonable(item) for item in value]
+    return _sanitize_value(value)
 
 
 
@@ -3012,6 +3031,74 @@ def create_app(settings: AppSettings) -> Dash:
         winner = payload.get("winner") if isinstance(payload.get("winner"), dict) else {}
         _mark_news_compare_events(str(winner.get("model_id") or ""))
         return _observe_request("v2_news_compare", started_at, jsonify(payload))
+
+    @server.route("/api/v2/research/morning-plan", methods=["POST"])
+    def research_morning_plan_v2_api():
+        payload = request.get_json(silent=True)
+        if payload is None or not isinstance(payload, dict):
+            return _bad_request("invalid_json")
+        instrument_id = str(payload.get("instrument_id") or "").strip()
+        if not instrument_id:
+            return _bad_request("missing_instrument_id")
+        tick_size_raw = payload.get("tick_size")
+        if tick_size_raw is None:
+            return _bad_request("missing_tick_size")
+        try:
+            tick_size = float(tick_size_raw)
+        except (TypeError, ValueError):
+            return _bad_request("invalid_tick_size")
+        if not math.isfinite(tick_size) or tick_size <= 0:
+            return _bad_request("invalid_tick_size")
+
+        as_of_raw = payload.get("as_of_ts")
+        if as_of_raw is None:
+            as_of_ts = datetime.now(timezone.utc)
+        else:
+            as_of_ts = parse_iso_utc(as_of_raw)
+            if as_of_ts is None:
+                return _bad_request("invalid_as_of_ts")
+
+        morning_cfg_model = settings.signal_engine.morning_plan
+        morning_cfg = morning_cfg_model.model_dump(mode="python")
+        calendar_cfg = morning_cfg_model.calendar
+        try:
+            calendar = MarketCalendar(
+                tz_name=morning_cfg_model.timezone,
+                sessions=[parse_time_window(window.start, window.end) for window in calendar_cfg.sessions],
+                clearing=[parse_time_window(window.start, window.end) for window in calendar_cfg.clearing_windows],
+                forbid_margin_min=int(calendar_cfg.forbid_new_positions_margin_min),
+            )
+            board_raw = payload.get("board")
+            board = settings.moex.futures_board if board_raw is None else str(board_raw).strip() or None
+            route = IssInstrumentRoute(
+                engine=str(payload.get("engine") or settings.moex.engine_futures),
+                market=str(payload.get("market") or settings.moex.market_futures),
+                board=board,
+            )
+            client = MoexIssClient(
+                settings.moex.base_url,
+                settings.moex.request_timeout_sec,
+                max_retries=settings.moex.request_max_retries,
+                retry_backoff_sec=settings.moex.request_retry_backoff_sec,
+                retry_max_backoff_sec=settings.moex.request_retry_max_backoff_sec,
+                fallback_ips=settings.moex.fallback_ips,
+                force_fallback=settings.moex.force_fallback,
+            )
+            provider = IssCandleProvider(
+                client,
+                route=route,
+                timezone=str(morning_cfg.get("timezone") or "Europe/Moscow"),
+            )
+            builder = MorningPlanBuilder(provider, calendar, morning_cfg)
+            plan = builder.build_plan(as_of_ts=as_of_ts, instrument_id=instrument_id, tick_size=tick_size)
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        except Exception as exc:
+            logger.exception("Morning plan build failed")
+            return jsonify({"error": "server_error", "message": str(exc)}), 500
+
+        return jsonify(_to_jsonable(plan))
+
     @server.route("/api/v2/top-pairs", methods=["GET"])
     @server.route("/api/top-pairs", methods=["GET"])
     def top_pairs_api():
