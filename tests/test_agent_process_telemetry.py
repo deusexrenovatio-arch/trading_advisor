@@ -144,6 +144,7 @@ def _build_record(index: int, **overrides: object) -> dict[str, object]:
         "outcome_status": "completed",
         "unmapped_files_count": 0,
         "intent_sources": ["session_handoff"],
+        "start_recommendations": ["Patch is scoped to one context."],
     }
     record.update(overrides)
     return record
@@ -163,6 +164,8 @@ def test_start_task_deduplicates_and_restarts_on_contract_change(tmp_path: Path,
     )
     assert created is True
     assert first["start_primary_context"].startswith("CTX-")
+    assert isinstance(first["start_recommendations"], list)
+    assert first["start_recommendations"]
     assert len(_events(events_path)) == 1
 
     created_again, second = telemetry.start_task(

@@ -10,6 +10,7 @@ Governance automation, observability, and operational workflow tooling.
 - `docs/session_handoff.md`
 - `memory/`
 - `plans/`
+- `src/moex_carry/governance/`
 - `src/moex_carry/observability/`
 - `src/moex_carry/logging.py`
 - `scripts/`

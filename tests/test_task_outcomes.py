@@ -426,3 +426,4 @@ def test_build_governance_dashboard_runs_in_minimal_repo(tmp_path: Path) -> None
     assert result.returncode == 0
     assert (repo_root / "governance-dashboard.md").exists()
     assert (repo_root / ".runlogs/governance-dashboard/process-improvement-report.md").exists()
+    assert (repo_root / ".runlogs/governance-dashboard/process-improvement-report.json").exists()

@@ -1511,3 +1511,128 @@ items:
       - P1-AGENT-CONTEXT-V2-046
     started_at: 2026-03-06
     completed_at: 2026-03-06
+
+  - id: P1-PROCESS-REPORTS-UI-049
+    title: Surface weekly process-improvement reports in product UI with human-readable conclusions
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - process-improvement reporting exposes structured weekly history and readable conclusions derived from tracked task outcomes
+      - backend UI API serves current and historical process-health report payloads without depending on GitHub artifact browsing
+      - ui-web includes a dedicated governance/process workspace for weekly review with desktop and mobile-friendly UX
+      - weekly workflow and governance dashboard remain aligned with the new structured report contract
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/run_lean_gate.py
+      - python -m pytest tests/test_agent_process_telemetry.py tests/test_ui_api.py tests/test_api_v2.py -q
+      - npm --prefix ui-web run lint
+      - npm --prefix ui-web run build
+    docs:
+      - docs/session_handoff.md
+      - scripts/process_improvement_report.py
+      - src/moex_carry/ui/routes_ops.py
+      - ui-web/src/App.tsx
+      - memory/agent_memory.yaml
+    dependencies:
+      - P1-PROCESS-TELEMETRY-047
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P1-PROCESS-UI-BUNDLE-050
+    title: Split the Process Governance workspace out of the main frontend bundle and bring up a live preview
+    lane: frontend
+    status: completed
+    execution_mode: autonomous
+    owner: frontend-platform
+    acceptance:
+      - Process Governance loads behind a lazy route boundary instead of the main app bundle
+      - the build output shows separate chunks for the governance path or other heavy UI vendors
+      - frontend lint and build remain green after the split
+      - a live local preview is reachable for manual review
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/run_lean_gate.py
+      - cmd /c npm.cmd --prefix ui-web run lint
+      - cmd /c npm.cmd --prefix ui-web run build
+    docs:
+      - docs/session_handoff.md
+      - ui-web/src/App.tsx
+      - ui-web/vite.config.ts
+    dependencies:
+      - P1-PROCESS-REPORTS-UI-049
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P1-PROCESS-GOV-RU-UX-051
+    title: Make the Process Governance workspace readable in Russian with explicit guidance and tooltips
+    lane: frontend
+    status: completed
+    execution_mode: autonomous
+    owner: frontend-platform
+    acceptance:
+      - Process Governance shows Russian user-facing copy for headers, controls, empty states, and task summaries
+      - key governance metrics, sections, and controls expose human-readable tooltips using formula-plus-interpretation wording
+      - machine status values and route/outcome enums are rendered as readable operator-facing labels
+      - frontend lint and build remain green after the UX clarity patch
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/run_lean_gate.py
+      - cmd /c npm.cmd --prefix ui-web run lint
+      - cmd /c npm.cmd --prefix ui-web run build
+    docs:
+      - docs/session_handoff.md
+      - docs/ui-ux-standards.md
+      - ui-web/src/features/process-governance/ProcessGovernanceTab.tsx
+      - ui-web/src/features/process-governance/useProcessGovernance.ts
+    dependencies:
+      - P1-PROCESS-UI-BUNDLE-050
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P1-PROCESS-GOV-ENV-BLOCKER-052
+    title: Normalize missing environment-blocker signatures in process governance reports
+    lane: frontend
+    status: completed
+    execution_mode: autonomous
+    owner: frontend-platform
+    acceptance:
+      - process report no longer emits raw `none` for environment blockers when incident signatures are missing
+      - human summaries use the same normalized blocker wording as ranked blocker lists
+      - targeted report/API regression tests cover the missing-signature case
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/run_lean_gate.py
+      - python -m pytest tests/test_process_reports.py tests/test_api_v2.py::test_v2_ops_process_improvement_report -q
+    docs:
+      - docs/session_handoff.md
+      - src/moex_carry/governance/process_reports.py
+      - tests/test_process_reports.py
+    dependencies:
+      - P1-PROCESS-GOV-RU-UX-051
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P1-PROCESS-GOV-ADVISORY-053
+    title: Remove process-governance advisory overrun and prepare PR merge to main
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - src/moex_carry/governance/process_reports.py no longer exceeds the target line budget reported by taste invariants
+      - process-governance API/report behavior stays unchanged under focused regression tests
+      - branch is pushed and a PR targeting `main` is opened
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/run_lean_gate.py
+      - python -m pytest tests/test_process_reports.py tests/test_api_v2.py::test_v2_ops_process_improvement_report -q
+    docs:
+      - docs/session_handoff.md
+      - src/moex_carry/governance/process_reports.py
+      - plans/PLANS.yaml
+    dependencies:
+      - P1-PROCESS-GOV-ENV-BLOCKER-052
+    started_at: 2026-03-09
+    completed_at: 2026-03-09

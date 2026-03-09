@@ -113,6 +113,8 @@ def _validate_ledger_shape(payload: dict[str, Any], errors: list[str]) -> None:
             errors.append(f"{label}.start_contexts must be a list")
         if not isinstance(raw.get("final_contexts", []), list):
             errors.append(f"{label}.final_contexts must be a list")
+        if "start_recommendations" in raw and not isinstance(raw.get("start_recommendations", []), list):
+            errors.append(f"{label}.start_recommendations must be a list when present")
         if raw.get("improvement_action") not in {"none", "pending"}:
             if not raw.get("linked_plan_id") and not raw.get("linked_memory_id"):
                 errors.append(

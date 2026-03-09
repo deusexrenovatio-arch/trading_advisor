@@ -39,6 +39,9 @@ jobs:
           python scripts/process_improvement_report.py \
             --output process-improvement-report.md \
             --summary-file "$GITHUB_STEP_SUMMARY"
+          python scripts/process_improvement_report.py \
+            --output process-improvement-report.json \
+            --format json
       - name: Upload docs gardening artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -48,3 +51,4 @@ jobs:
             docs-gardening-report.md
             autonomy-kpi-report.md
             process-improvement-report.md
+            process-improvement-report.json

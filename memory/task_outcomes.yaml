@@ -47,6 +47,28 @@ items:
   unmapped_files_count: 11
   intent_sources:
   - session_handoff
+- task_id: APT-20260306T201947Z-c3d3f52f
+  closed_at: null
+  branch: feat/agent-context-routing-v2
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts: []
+  route_match: pending
+  time_to_first_patch_sec: 207
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: null
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
 - task_id: APT-20260306T193238Z-afb2829e
   closed_at: null
   branch: main
@@ -121,6 +143,71 @@ items:
   unmapped_files_count: 4
   intent_sources:
   - session_handoff
+- task_id: APT-20260306T204544Z-71f18885
+  closed_at: '2026-03-06T20:46:46Z'
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  route_match: expanded
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: architecture_gap
+  incident_signature: none
+  improvement_action: architecture
+  improvement_artifact: src/moex_carry/governance/process_reports.py
+  linked_plan_id: P1-PROCESS-REPORTS-UI-049
+  linked_memory_id: ADM-2026-03-09-092
+  outcome_status: completed
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T074419Z-100cc086
+  closed_at: '2026-03-09T07:57:20Z'
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-API-UI
+  route_match: expanded
+  time_to_first_patch_sec: 101
+  same_path_attempts: 3
+  decision_quality: correct_after_replan
+  primary_rework_cause: environment
+  incident_signature: none
+  improvement_action: workflow
+  improvement_artifact: src/moex_carry/ui/routes_ops.py
+  linked_plan_id: P1-PROCESS-UI-BUNDLE-050
+  linked_memory_id: ADM-2026-03-09-090
+  outcome_status: completed
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - Some files are unmapped. Classify manually before implementation.
 - task_id: APT-20260309T075320Z-2b5a71f8
   closed_at: '2026-03-09T07:55:28Z'
   branch: main
@@ -175,3 +262,192 @@ items:
   unmapped_files_count: 5
   intent_sources:
   - session_handoff
+- task_id: APT-20260309T075820Z-b66cea12
+  closed_at: '2026-03-09T07:58:37Z'
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-API-UI
+  route_match: expanded
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: environment
+  incident_signature: none
+  improvement_action: workflow
+  improvement_artifact: src/moex_carry/ui/routes_ops.py
+  linked_plan_id: P1-PROCESS-UI-BUNDLE-050
+  linked_memory_id: ADM-2026-03-09-090
+  outcome_status: completed
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T085238Z-b66cea12
+  closed_at: null
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-API-UI
+  route_match: pending
+  time_to_first_patch_sec: 171
+  same_path_attempts: 3
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-PROCESS-GOV-RU-UX-051
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T085712Z-8af4f94f
+  closed_at: '2026-03-09T09:07:25Z'
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-API-UI
+  route_match: matched
+  time_to_first_patch_sec: 519
+  same_path_attempts: 2
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-PROCESS-GOV-RU-UX-051
+  linked_memory_id: ADM-2026-03-09-091
+  outcome_status: completed
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T092844Z-8af4f94f
+  closed_at: '2026-03-09T09:31:28Z'
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 74
+  same_path_attempts: 3
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-PROCESS-GOV-ENV-BLOCKER-052
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T093217Z-bac4acfb
+  closed_at: '2026-03-09T09:32:34Z'
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-PROCESS-GOV-ENV-BLOCKER-052
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T093745Z-bac4acfb
+  closed_at: '2026-03-09T09:42:10Z'
+  branch: codex/process-reports-ui
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 62
+  same_path_attempts: 2
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-PROCESS-GOV-ADVISORY-053
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - Some files are unmapped. Classify manually before implementation.

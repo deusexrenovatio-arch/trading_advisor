@@ -2,11 +2,32 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
+import os
+from pathlib import Path
 from typing import Any, Callable
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, send_from_directory
 
 from moex_carry.observability.runtime_metrics import ApiObservability
+from moex_carry.governance.process_report_source import (
+    ProcessReportSourceError,
+    build_process_report_payload,
+)
+
+
+def _resolve_ui_preview_dist_dir() -> Path:
+    override = str(os.environ.get("MOEX_CARRY_UI_PREVIEW_DIST_DIR", "")).strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path(__file__).resolve().parents[3] / "ui-web" / "dist"
+
+
+def _clamp_int(raw: str | None, *, default: int, min_value: int, max_value: int) -> int:
+    try:
+        value = int(str(raw).strip()) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+    return max(min_value, min(value, max_value))
 
 
 def register_ops_routes(
@@ -20,6 +41,24 @@ def register_ops_routes(
     observe_request: Callable[[str, datetime, Any], Any],
     observability: ApiObservability,
 ) -> None:
+    ui_preview_dist_dir = _resolve_ui_preview_dist_dir()
+
+    def _serve_ui_preview_shell():
+        index_path = ui_preview_dist_dir / "index.html"
+        if not index_path.exists():
+            return (
+                jsonify(
+                    {
+                        "status": "unavailable",
+                        "error": "ui_preview_missing",
+                        "message": "Frontend preview build is not available.",
+                        "dist_dir": ui_preview_dist_dir.as_posix(),
+                    }
+                ),
+                503,
+            )
+        return send_from_directory(ui_preview_dist_dir, "index.html")
+
     @server.route("/api/v2/ops/health", methods=["GET"])
     def ops_health_v2_api():
         started_at = datetime.now(timezone.utc)
@@ -233,3 +272,67 @@ def register_ops_routes(
             }
         )
         return observe_request("v2_ops_slo", started_at, result)
+
+    @server.route("/api/v2/ops/process-improvement", methods=["GET"])
+    def ops_process_improvement_v2_api():
+        started_at = datetime.now(timezone.utc)
+        weeks = _clamp_int(request.args.get("weeks"), default=8, min_value=1, max_value=26)
+        window_size = _clamp_int(request.args.get("window_size"), default=20, min_value=1, max_value=52)
+        try:
+            report, source_path = build_process_report_payload(weeks=weeks, window_size=window_size)
+            result = jsonify(report)
+        except ProcessReportSourceError as exc:
+            logger.exception("Ops process-improvement report build failed")
+            result = (
+                jsonify(
+                    {
+                        "status": "unavailable",
+                        "error": "process_report_unavailable",
+                        "message": "Unable to build process-improvement report from configured source.",
+                        "query": {
+                            "weeks": weeks,
+                            "window_size": window_size,
+                        },
+                        "source_path": exc.source_path.as_posix(),
+                    }
+                ),
+                503,
+            )
+        except Exception:
+            logger.exception("Ops process-improvement report build failed (unexpected)")
+            result = (
+                jsonify(
+                    {
+                        "status": "unavailable",
+                        "error": "process_report_unavailable",
+                        "message": "Unable to build process-improvement report due to unexpected error.",
+                        "query": {
+                            "weeks": weeks,
+                            "window_size": window_size,
+                        },
+                        "source_path": source_path.as_posix() if "source_path" in locals() else "unknown",
+                    }
+                ),
+                503,
+            )
+        return observe_request("v2_ops_process_improvement", started_at, result)
+
+    @server.route("/assets/<path:asset_path>", methods=["GET"])
+    def frontend_preview_asset(asset_path: str):
+        return send_from_directory(ui_preview_dist_dir / "assets", asset_path)
+
+    @server.route("/vite.svg", methods=["GET"])
+    def frontend_preview_vite_logo():
+        return send_from_directory(ui_preview_dist_dir, "vite.svg")
+
+    @server.route("/decision-audit", methods=["GET"])
+    @server.route("/trade-console", methods=["GET"])
+    @server.route("/trade-console/<path:_spa_path>", methods=["GET"])
+    @server.route("/research-system", methods=["GET"])
+    @server.route("/research-system/<path:_spa_path>", methods=["GET"])
+    @server.route("/news-intelligence", methods=["GET"])
+    @server.route("/portfolio-control", methods=["GET"])
+    @server.route("/process-governance", methods=["GET"])
+    def frontend_preview_shell(_spa_path: str | None = None):
+        return _serve_ui_preview_shell()
+

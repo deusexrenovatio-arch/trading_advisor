@@ -1,7 +1,63 @@
 version: 1
-updated_at: 2026-03-06
+updated_at: 2026-03-09
 
 decisions:
+  - id: ADM-2026-03-09-092
+    date: 2026-03-09
+    title: Serve weekly process-improvement reports from the tracked outcome ledger and surface them in a dedicated governance workspace
+    context: Process telemetry and the tracked task-outcome ledger existed, but weekly process-health review still depended on markdown artifacts and lacked a product UI for human-readable conclusions, weekly trend inspection, and recommendation follow-up.
+    decision: Add a shared governance reporting module that builds deterministic human-readable summaries and weekly history from `memory/task_outcomes.yaml`, expose it through a new ops API endpoint, preserve router start recommendations in telemetry and the outcome ledger, and render the result in a dedicated `ui-web` Process Governance workspace with trend, leaderboard, and task drilldown views.
+    impact: Weekly process-health review now lives inside the product UI instead of GitHub artifacts alone, while the same tracked ledger continues to drive markdown/json reports, governance dashboard artifacts, and blocking process-quality checks.
+    links:
+      - src/moex_carry/governance/process_reports.py
+      - src/moex_carry/ui/routes_ops.py
+      - ui-web/src/features/process-governance/ProcessGovernanceTab.tsx
+      - scripts/process_improvement_report.py
+      - docs/contracts/api-v2.yaml
+  - id: ADM-2026-03-09-091
+    date: 2026-03-09
+    title: Localize Process Governance through a dedicated metadata layer instead of ad hoc JSX copy
+    context: The Process Governance workspace shipped with English copy, raw machine statuses, and almost no explanation for metrics or risk lists, which violated local UI/UX standards and made the new governance screen hard to interpret.
+    decision: Add one frontend metadata layer for Russian labels, status translations, and tooltip text, then localize backend-generated human summaries used by the screen so the UI stays readable without scattering copy rules across the component tree.
+    impact: The governance workspace now exposes Russian labels, formula-plus-interpretation tooltips, human-readable task cards, and localized weekly summaries while preserving the existing route structure and bundle split.
+    links:
+      - ui-web/src/features/process-governance/processGovernanceMeta.ts
+      - ui-web/src/features/process-governance/ProcessGovernanceTab.tsx
+      - ui-web/src/features/process-governance/useProcessGovernance.ts
+      - src/moex_carry/governance/process_reports.py
+  - id: ADM-2026-03-09-090
+    date: 2026-03-09
+    title: Split Process Governance into lazy frontend chunks and use backend-served preview for local review
+    context: The new Process Governance workspace pushed the frontend build into a large single entry chunk, and this shell blocked a separate Node/Vite background process for live review.
+    decision: Lazy-load the Process Governance workspace from `App.tsx`, split heavy UI vendors with explicit Vite manual chunks, and serve the built `ui-web/dist` shell plus assets from backend ops routes so review can happen on the same backend port.
+    impact: The entry bundle dropped from a single ~1.4 MB client chunk to a smaller split graph, and manual review of `/process-governance` is now possible from the backend at `127.0.0.1:8061` without relying on a separate frontend process.
+    links:
+      - ui-web/src/App.tsx
+      - ui-web/vite.config.ts
+      - src/moex_carry/ui/routes_ops.py
+      - tests/test_api_v2.py
+  - id: ADM-2026-03-09-089
+    date: 2026-03-09
+    title: Introduce process-report source ACL and centralize telemetry rollup engine usage
+    context: Process Governance API still had a shared-storage shortcut to task-outcomes YAML at the route layer, and telemetry script kept a duplicated rollup implementation that could drift from runtime reporting.
+    decision: Add `process_report_source` service as an anti-corruption layer (snapshot-first, outcomes fallback) and route API calls through it; make `agent_process_telemetry` delegate rollup/markdown rendering to `moex_carry.governance.process_reports`.
+    impact: API boundary no longer hard-codes task-outcomes storage access, and process-rollup semantics now come from one canonical implementation for both runtime and telemetry tooling.
+    links:
+      - src/moex_carry/governance/process_report_source.py
+      - src/moex_carry/ui/routes_ops.py
+      - scripts/agent_process_telemetry.py
+      - tests/test_api_v2.py
+  - id: ADM-2026-03-09-088
+    date: 2026-03-09
+    title: Fail-close process governance API when task-outcome source is unavailable
+    context: The new process-governance API route loaded task outcomes directly from YAML without an error boundary, so parse/source failures could surface as opaque 500 responses and break ops observability.
+    decision: Add explicit fail-closed handling in `/api/v2/ops/process-improvement` to return `503 unavailable` with structured diagnostic payload, and align API contract/test coverage with this degraded mode.
+    impact: Ops consumers now receive deterministic degraded-state semantics instead of unhandled runtime failures, while preserving the normal report contract on healthy source reads.
+    links:
+      - src/moex_carry/ui/routes_ops.py
+      - docs/contracts/api-v2.yaml
+      - tests/test_api_v2.py
+      - docs/session_handoff.md
   - id: ADM-2026-03-06-087
     date: 2026-03-06
     title: Promote Telegram root events to first-class runtime output and demote discovery to optional secondary flow

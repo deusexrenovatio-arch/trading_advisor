@@ -356,6 +356,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "memory/",
             "plans/",
             "scripts/",
+            "src/moex_carry/governance/",
             "src/moex_carry/logging.py",
             "src/moex_carry/observability/",
             "tests/architecture/",

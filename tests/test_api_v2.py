@@ -1018,6 +1018,131 @@ def test_v2_ops_health_and_slo_observability(tmp_path, monkeypatch):
     assert "PRETRADE_FAILURE_SPIKE" in alert_codes
 
 
+def test_v2_ops_process_improvement_report(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    report_path = tmp_path / "task_outcomes.yaml"
+    report_path.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "updated_at: 2026-03-06",
+                "items:",
+                "  - task_id: TASK-1",
+                "    closed_at: '2026-03-03T10:00:00Z'",
+                "    branch: codex/process-reports-ui",
+                "    goal_class: ops",
+                "    start_primary_context: CTX-OPS",
+                "    start_contexts: [CTX-OPS]",
+                "    final_contexts: [CTX-OPS]",
+                "    route_match: matched",
+                "    time_to_first_patch_sec: 42",
+                "    same_path_attempts: 1",
+                "    decision_quality: correct_first_time",
+                "    primary_rework_cause: none",
+                "    incident_signature: none",
+                "    improvement_action: none",
+                "    improvement_artifact: none",
+                "    linked_plan_id: null",
+                "    linked_memory_id: null",
+                "    outcome_status: completed",
+                "    unmapped_files_count: 0",
+                "    intent_sources: [session_handoff]",
+                "    start_recommendations:",
+                "      - Patch is scoped to one context.",
+                "  - task_id: TASK-2",
+                "    closed_at: '2026-03-04T10:00:00Z'",
+                "    branch: codex/process-reports-ui",
+                "    goal_class: ops",
+                "    start_primary_context: CTX-OPS",
+                "    start_contexts: [CTX-OPS]",
+                "    final_contexts: [CTX-OPS, CTX-CONTRACTS]",
+                "    route_match: expanded",
+                "    time_to_first_patch_sec: 120",
+                "    same_path_attempts: 2",
+                "    decision_quality: wrong_path",
+                "    primary_rework_cause: context_gap",
+                "    incident_signature: ctx.split",
+                "    improvement_action: workflow",
+                "    improvement_artifact: docs/runbooks/governance-remediation.md",
+                "    linked_plan_id: P1-PROCESS-REPORTS-UI-049",
+                "    linked_memory_id: null",
+                "    outcome_status: partial",
+                "    unmapped_files_count: 1",
+                "    intent_sources: [session_handoff]",
+                "    start_recommendations:",
+                "      - Patch touches multiple contexts. Split by ownership to keep review and agent context small.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MOEX_CARRY_TASK_OUTCOMES_PATH", str(report_path))
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get("/api/v2/ops/process-improvement?weeks=4&window_size=2")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["query"]["weeks"] == 4
+    assert payload["query"]["window_size"] == 2
+    assert payload["human_summary"]["headline"]
+    assert payload["current_rollup"]["top_start_recommendations"]
+    assert payload["weekly_reports"]
+    assert payload["weekly_reports"][0]["human_summary"]["what_happened"]
+
+
+def test_v2_ops_process_improvement_report_unavailable(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    report_path = tmp_path / "task_outcomes.yaml"
+    report_path.write_text("- not-a-mapping\n", encoding="utf-8")
+    monkeypatch.setenv("MOEX_CARRY_TASK_OUTCOMES_PATH", str(report_path))
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get("/api/v2/ops/process-improvement?weeks=3&window_size=9")
+    assert response.status_code == 503
+    payload = response.get_json()
+    assert payload["status"] == "unavailable"
+    assert payload["error"] == "process_report_unavailable"
+    assert payload["query"] == {"weeks": 3, "window_size": 9}
+    assert payload["source_path"] == report_path.as_posix()
+
+
+def test_v2_ops_process_improvement_report_uses_snapshot_source(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    snapshot_path = tmp_path / "process-improvement-report.json"
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-09T07:00:00Z",
+                "completed_tasks_count": 2,
+                "rolling_window_size": 20,
+                "burn_in_complete": False,
+                "human_summary": {"status": "burn-in", "headline": "snapshot"},
+                "current_rollup": {"current_metrics": {}, "threshold_results": {}},
+                "weekly_reports": [],
+                "weekly_trend": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    bad_outcomes_path = tmp_path / "task_outcomes.yaml"
+    bad_outcomes_path.write_text("- not-a-mapping\n", encoding="utf-8")
+    monkeypatch.setenv("MOEX_CARRY_PROCESS_REPORT_PATH", str(snapshot_path))
+    monkeypatch.setenv("MOEX_CARRY_TASK_OUTCOMES_PATH", str(bad_outcomes_path))
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get("/api/v2/ops/process-improvement?weeks=5&window_size=11")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["human_summary"]["headline"] == "snapshot"
+    assert payload["query"] == {"weeks": 5, "window_size": 11}
+
+
 def test_v2_decision_view_and_news_feed(tmp_path):
     settings = _build_settings(tmp_path)
     app = create_app(settings)
@@ -1600,5 +1725,32 @@ def test_v2_pretrade_check_post(tmp_path, monkeypatch):
     assert data["ready_to_place"] is True
     assert data["pretrade_status"] == "pass"
     assert data["params"]["snapshots"] == 3
+
+
+def test_frontend_preview_serves_process_governance_shell(tmp_path, monkeypatch):
+    dist_dir = tmp_path / "ui-dist"
+    assets_dir = dist_dir / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    (dist_dir / "index.html").write_text(
+        "<!doctype html><html><body><div id='root'></div></body></html>",
+        encoding="utf-8",
+    )
+    (dist_dir / "vite.svg").write_text("<svg></svg>", encoding="utf-8")
+    (assets_dir / "index.js").write_text("console.log('preview')", encoding="utf-8")
+    monkeypatch.setenv("MOEX_CARRY_UI_PREVIEW_DIST_DIR", str(dist_dir))
+
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    shell_response = client.get("/process-governance")
+    assert shell_response.status_code == 200
+    assert "text/html" in shell_response.content_type
+    assert "root" in shell_response.get_data(as_text=True)
+
+    asset_response = client.get("/assets/index.js")
+    assert asset_response.status_code == 200
+    assert "console.log('preview')" in asset_response.get_data(as_text=True)
+
 
 
