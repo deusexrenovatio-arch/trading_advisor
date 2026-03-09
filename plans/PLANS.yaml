@@ -1636,3 +1636,55 @@ items:
       - P1-PROCESS-GOV-ENV-BLOCKER-052
     started_at: 2026-03-09
     completed_at: 2026-03-09
+
+  - id: P1-PROCESS-TELEMETRY-UNIFIED-054
+    title: Unify local agent-process telemetry across worktrees and migrate legacy local history
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - every worktree resolves one shared local agent-process telemetry root for task events and state
+      - legacy per-worktree telemetry shards can be merged or discovered without losing task continuity
+      - worktree start-path telemetry failures are visible enough to diagnose missing writes from new windows
+      - focused telemetry and task-outcome tests cover root resolution and migration behavior
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/run_lean_gate.py
+      - python -m pytest tests/test_agent_process_telemetry.py tests/test_task_outcomes.py -q
+    docs:
+      - docs/session_handoff.md
+      - scripts/agent_process_telemetry.py
+      - scripts/worktree_guard.ps1
+      - memory/task_outcomes.yaml
+    dependencies:
+      - P1-PROCESS-TELEMETRY-047
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P1-PROCESS-OUTCOME-POLICY-055
+    title: Make task outcome status policy explicit and machine-derived
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - repository defines one explicit status policy for `in_progress`, `completed`, `partial`, and `blocked`
+      - sync and validation derive or enforce status from machine-checkable closeout fields instead of free-form choice
+      - inconsistent status selections fail deterministically in local governance checks
+      - focused tests cover positive and negative status-policy cases
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/run_lean_gate.py
+      - python -m pytest tests/test_task_outcomes.py tests/architecture/test_governance_policies.py -q
+    docs:
+      - configs/task_outcome_policy.yaml
+      - docs/session_handoff.md
+      - docs/DEV_WORKFLOW.md
+      - docs/runbooks/governance-remediation.md
+      - scripts/validate_task_outcomes.py
+      - scripts/sync_task_outcomes.py
+    dependencies:
+      - P1-PROCESS-TELEMETRY-UNIFIED-054
+    started_at: 2026-03-09
+    completed_at: 2026-03-09

@@ -1,0 +1,22 @@
+version: 1
+
+# Outcome status is derived from the stronger closeout signal.
+status_by_decision_quality:
+  pending: in_progress
+  correct_first_time: completed
+  correct_after_replan: completed
+  wrong_path: partial
+  partial_outcome: partial
+  environment_blocked: blocked
+
+# A blocked closeout must name a real unresolved blocker in the handoff.
+blocked_requires_blockers: true
+
+no_blocker_markers:
+  - none
+  - none reported
+  - no blocker
+  - no blockers
+  - n/a
+  - na
+  - pending

@@ -1036,8 +1036,8 @@ Steps:
 2. Make one first diff on the task path.
 3. Run `python scripts/run_lean_gate.py`.
 Expected:
-- `.runlogs/agent-process/task-events.jsonl` contains `task_start` and `first_patch`.
-- `.runlogs/agent-process/state.json` stores active task id and time-to-first-patch.
+- The repo-shared `.runlogs/agent-process/task-events.jsonl` contains `task_start` and `first_patch`.
+- The repo-shared `.runlogs/agent-process/state.json` stores active task id and time-to-first-patch.
 
 ### TC-PROC-TELE-002 Non-trivial diff requires task outcome sync and ledger record
 Acceptance: process-task-outcome-closeout

@@ -476,3 +476,103 @@ items:
   - session_handoff
   start_recommendations:
   - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260309T135814Z-b6d3f31d
+  closed_at: '2026-03-09T14:09:54Z'
+  branch: codex/agent-process-unified-root
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 196
+  same_path_attempts: 2
+  decision_quality: correct_after_replan
+  primary_rework_cause: test_gap
+  incident_signature: none
+  improvement_action: test
+  improvement_artifact: tests/test_agent_process_telemetry.py
+  linked_plan_id: P1-PROCESS-TELEMETRY-UNIFIED-054
+  linked_memory_id: ADM-2026-03-09-093
+  outcome_status: completed
+  unmapped_files_count: 1
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T141231Z-b6d3f31d
+  closed_at: '2026-03-09T14:15:03Z'
+  branch: codex/agent-process-unified-root
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: test_gap
+  incident_signature: none
+  improvement_action: test
+  improvement_artifact: tests/test_agent_process_telemetry.py
+  linked_plan_id: P1-PROCESS-TELEMETRY-UNIFIED-054
+  linked_memory_id: ADM-2026-03-09-093
+  outcome_status: completed
+  unmapped_files_count: 3
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T143259Z-b6d3f31d
+  closed_at: '2026-03-09T14:46:03Z'
+  branch: codex/agent-process-unified-root
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 124
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-PROCESS-OUTCOME-POLICY-055
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260309T145500Z-b9f1dfef
+  closed_at: '2026-03-09T14:57:27Z'
+  branch: codex/agent-process-unified-root
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-PROCESS-OUTCOME-POLICY-055
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 4
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Some files are unmapped. Classify manually before implementation.

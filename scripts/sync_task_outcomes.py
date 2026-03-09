@@ -8,15 +8,19 @@ import yaml
 
 from agent_process_telemetry import (
     TASK_OUTCOMES_REMEDIATION_DOC,
+    apply_task_outcome_status_policy,
     build_task_outcome_record,
     default_events_path,
     default_session_handoff_path,
     default_state_path,
     default_task_outcomes_path,
+    get_active_task,
+    get_repo_root,
     is_terminal_outcome_status,
     load_state,
     normalize_task_outcome,
     parse_session_handoff,
+    reconcile_legacy_process_storage,
     record_task_end,
     upsert_task_outcome,
 )
@@ -48,14 +52,30 @@ def run(
     events_path: Path,
     task_outcomes_path: Path,
 ) -> int:
-    state = load_state(state_path)
-    active = state.get("active_task")
+    repo_root = get_repo_root()
+    state = reconcile_legacy_process_storage(
+        repo_root,
+        events_path=events_path,
+        state_path=state_path,
+    )
+    active = get_active_task(state, repo_root)
     if not isinstance(active, dict):
         print("task outcome sync skipped: active task telemetry state not found")
         return 0
 
     handoff = parse_session_handoff(session_handoff_path)
-    task_outcome = normalize_task_outcome(handoff.get("task_outcome", {}))
+    task_outcome, policy_evaluation = apply_task_outcome_status_policy(
+        normalize_task_outcome(handoff.get("task_outcome", {})),
+        blocker_lines=handoff.get("blockers_lines", []),
+    )
+    if policy_evaluation["issues"]:
+        print("task outcome sync failed: task outcome policy rejected current closeout")
+        for issue in policy_evaluation["issues"]:
+            print(f"- {issue}")
+        print(f"policy: {policy_evaluation['policy_path']}")
+        print(f"remediation: see {TASK_OUTCOMES_REMEDIATION_DOC}")
+        return 1
+
     if is_terminal_outcome_status(task_outcome["outcome_status"]):
         record_task_end(
             events_path=events_path,
@@ -64,7 +84,7 @@ def run(
             task_outcome=task_outcome,
         )
         state = load_state(state_path)
-        active = state.get("active_task")
+        active = get_active_task(state, repo_root)
         if not isinstance(active, dict):
             print("task outcome sync failed: active task disappeared after closeout")
             print(f"remediation: see {TASK_OUTCOMES_REMEDIATION_DOC}")
@@ -84,6 +104,12 @@ def run(
         "task outcomes sync: OK "
         f"(task_id={record['task_id']} outcome_status={record['outcome_status']})"
     )
+    if not policy_evaluation["matches_declared_status"]:
+        print(
+            "task outcomes sync: status_policy_override "
+            f"{policy_evaluation['declared_outcome_status']} -> "
+            f"{policy_evaluation['derived_outcome_status']}"
+        )
     return 0
 
 

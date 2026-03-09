@@ -141,7 +141,24 @@ function Invoke-AgentProcessTelemetryStart {
         $pythonExe = $env:PYTHON.Trim()
     }
     try {
-        & $pythonExe $telemetryPath "start" "--session-handoff-path" (Join-Path $RepoRootPath "docs/session_handoff.md") 2>$null | Out-Null
+        $telemetryOutput = & $pythonExe $telemetryPath "start" "--session-handoff-path" (Join-Path $RepoRootPath "docs/session_handoff.md") 2>&1
+        $telemetryExitCode = $LASTEXITCODE
+        if ($telemetryExitCode -ne 0) {
+            Write-Host "agent_process_telemetry: start failed (exit_code=$telemetryExitCode)"
+            foreach ($line in $telemetryOutput) {
+                $text = [string]$line
+                if (-not [string]::IsNullOrWhiteSpace($text)) {
+                    Write-Host "  $text"
+                }
+            }
+            return
+        }
+        foreach ($line in $telemetryOutput) {
+            $text = [string]$line
+            if (-not [string]::IsNullOrWhiteSpace($text)) {
+                Write-Host $text
+            }
+        }
     } catch {
         Write-Host "agent_process_telemetry: skipped (python/telemetry unavailable)"
     }
