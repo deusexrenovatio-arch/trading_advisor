@@ -148,6 +148,7 @@ Blockers:
   - records first-patch telemetry when the diff meaningfully changes,
   - syncs `memory/task_outcomes.yaml` from `docs/session_handoff.md` + active local task state,
   - validates task-outcome closeout and rolling process regressions.
+- After burn-in, process regressions may surface as staged remediation instead of immediate hard-fail, but only when the failing baseline debt is tied to an explicit active plan item and is not worsening.
 - On gate failure, use deterministic remediation map:
   - `docs/runbooks/governance-remediation.md`
 - Keep machine-readable plan state fresh:

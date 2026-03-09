@@ -657,3 +657,32 @@ items:
   - session_handoff
   start_recommendations:
   - Patch is scoped to one context.
+- task_id: APT-20260309T163108Z-b444b69e
+  closed_at: null
+  branch: codex/h4a-live-hardening
+  goal_class: strategy
+  start_primary_context: CTX-STRATEGY
+  start_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  final_contexts:
+  - CTX-OPS
+  - CTX-API-UI
+  route_match: pending
+  time_to_first_patch_sec: 772
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-PROCESS-REG-GATE-063
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+  - Intent spans multiple contexts. Set an explicit target module before implementation.

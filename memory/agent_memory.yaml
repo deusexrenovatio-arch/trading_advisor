@@ -2,6 +2,18 @@ version: 1
 updated_at: 2026-03-09
 
 decisions:
+  - id: ADM-2026-03-09-095
+    date: 2026-03-09
+    title: Stage post-burn-in process regression gating around acknowledged baseline debt
+    context: Process telemetry burn-in completed, and the repository started hard-blocking every new task on historical decision-quality and context-efficiency debt even when no fresh regression had been introduced by the current diff.
+    decision: Keep rolling metrics and thresholds intact, but distinguish acknowledged baseline debt from fresh or worsening regressions; allow only explicitly tracked decision-quality and context-efficiency debt to remain non-blocking under an active remediation plan, and return to hard blocking as soon as a new dimension fails or the acknowledged debt worsens by at least one task-equivalent step.
+    impact: Ordinary development can continue without admin bypass while the baseline process debt is being remediated, and governance reports, API payloads, and validator behavior all share one staged policy instead of drifting independently.
+    links:
+      - src/moex_carry/governance/process_reports.py
+      - src/moex_carry/governance/process_report_text.py
+      - scripts/validate_process_regressions.py
+      - plans/PLANS.yaml
+      - docs/runbooks/governance-remediation.md
   - id: ADM-2026-03-09-094
     date: 2026-03-09
     title: Use Telegram follow-up confirmations as the H4A baseline guard instead of implicit ACK semantics

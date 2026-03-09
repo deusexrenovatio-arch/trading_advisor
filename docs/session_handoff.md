@@ -1,66 +1,58 @@
 # Session Handoff
-Updated: 2026-03-09 16:28 UTC
+Updated: 2026-03-09 16:33 UTC
 
 ## Goal
-- Finish integration of the H4A live/manual hardening slice into `codex/signals_engine` by restoring the legacy API compatibility needed for the repository pre-push gate and opening the PR.
+- Normalize the post-burn-in `process_regressions` gate so ordinary development is not blocked by acknowledged historical process debt while real new regressions still fail closed.
 
 ## Task Request Contract
-- Objective: complete the PR-ready integration of the H4A live/manual hardening slice by fixing the remaining repository-level compatibility blockers uncovered by the full pre-push suite.
-- In Scope: keep the completed H4A hardening changes intact; restore legacy `/api/signals/execute`, `/api/signals/executions`, and `/api/signals/active` compatibility where the old API still expects `ack`/`enter` semantics; narrow operator-event fallback so exact fingerprint intent consumption still works without leaking `signal_used` into current `hold_open` rows; remove the task-specific coupling from the news operational contract test; push the branch and open a PR into `codex/signals_engine`.
-- Out of Scope: changing the approved H4A lifecycle semantics in v2, rolling back Telegram post-fill follow-up behavior, reintroducing unsafe live-routing paths, or weakening repository pre-push gates.
-- Constraints: preserve non-destructive git flow and PR-only integration; keep v2/H4A canonical actions authoritative in runtime/audit paths; limit legacy compatibility shims to v1 endpoints and replay/projection logic that the full test suite still covers; keep `docs/session_handoff.md` task-specific rather than turning it into a permanent operational reference.
-- Done Evidence: full blocking test set for legacy signal API and news operational contract passes; branch pushes to origin; PR targeting `codex/signals_engine` is opened with verification evidence.
-- Priority Rule: do not trade away canonical H4A/v2 correctness to satisfy legacy expectations; restore compatibility only at explicit v1 or historical-replay boundaries.
+- Objective: convert the process-regression validator from a hard stop on the first full historical window into a staged policy that distinguishes acknowledged baseline debt from fresh or worsening regressions.
+- In Scope: introduce a machine-readable staged policy for process regression gating; attach current decision-quality/context-efficiency debt to an explicit active plan item; make `validate_process_regressions.py`, process reports, and human summaries reflect blocking vs remediation states consistently; add tests for acknowledged-debt and worsening-regression behavior; update governance docs.
+- Out of Scope: rewriting historical task outcomes to cosmetically improve metrics, disabling telemetry, or weakening repeat-error/environment blocker safeguards that already behave like real regressions.
+- Constraints: keep the gate fail-closed for unacknowledged regressions and for any worsening beyond the acknowledged baseline debt; preserve the existing rolling metrics and burn-in accounting; keep one clear source of truth for the staged policy rather than diverging script/report rules.
+- Done Evidence: a new diff can pass `python scripts/run_lean_gate.py` after burn-in when only acknowledged baseline debt remains; the validator still fails on unacknowledged or worsening regressions; reports and tests explain the staged state clearly.
+- Priority Rule: governance credibility beats convenience; only downgrade blocking when the debt is explicit, tracked, and mechanically bounded.
 
 ## Current Delta
-- live-routing blocks mini roots, mini/full duplicates, and correlated-cluster overfill before publication.
-- synthetic-history runtime adapter cannot promote legacy non-enter rows into actionable enters.
-- Telegram drives the post-fill H4A operator loop with stage-specific `Confirm` and `Manual override` actions.
-- contract/docs/acceptance traces keep `mark_viewed` canonical while preserving `ack` as a compatibility alias.
-- operator event projection was extracted from `src/moex_carry/ui/app.py` into a dedicated helper to reduce structural pressure.
-- the legacy compatibility patch now restores v1 execute/executions behavior without rolling back canonical v2/H4A actions.
-- legacy `ack` once again consumes old pending intent by exact fingerprint, while `hold_open` rows no longer inherit `signal_used=true` from pair fallback.
+- The staged process-regression policy now distinguishes `acknowledged_debt`, `regressed`, and ordinary `fail` states.
+- Current decision-quality/context-efficiency debt is tied to an explicit active remediation plan instead of silently weakening the validator.
+- Process reports, human summaries, and validator output now agree on blocking vs remediation semantics.
+- Focused tests cover no-plan hard fail, acknowledged-debt pass, worsening-after-ack fail, and API exposure of remediation state.
+- Governance docs, acceptance scenarios, and user-needs mapping are synced to the new staged behavior.
 
 ## First-Time-Right Report
-1. Confirmed coverage: the remaining work is limited to legacy v1 compatibility and test-contract hygiene; canonical H4A hardening remains in place.
-2. Missing or risky scenarios: a broad compatibility rollback could silently undo the new lifecycle semantics; pair-level operator fallback can over-apply `signal_used`; task-specific docs can create false blockers if operational tests depend on them.
-3. Resource/time risks and chosen controls: patch only the legacy API adapter and replay/projection boundary, keep canonical v2 action normalization untouched, and prove the fix with the exact failing tests before rerunning the full push gate.
-4. Highest-priority fixes or follow-ups: restore pushability first, open the PR second, and leave any further module decomposition as a separate follow-up.
+1. Confirmed coverage: validator behavior, rollup/report semantics, machine-readable remediation tracking, and regression tests are all in scope.
+2. Missing or risky scenarios: if the staged rule is too loose, the gate becomes decorative; if it is too strict, the repository stays permanently blocked by old history.
+3. Resource/time risks and chosen controls: centralize the staged decision in the process report layer, keep validator/report/API semantics aligned, and prove both pass and fail paths with focused tests before running lean gate.
+4. Highest-priority fixes or follow-ups: make the gate policy coherent first, then sync the explanatory docs and plan linkage that justify the downgrade.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
-- Stop Trigger: two consecutive compatibility patches still leave the same five signal API tests or the same news operational contract test failing.
-- Reset Action: stop editing the same normalization branch, inspect where exact fingerprint matching is lost versus where pair fallback is applied, and isolate the legacy/v1 display adapter from canonical runtime normalization.
-- New Search Space: (1) legacy action request normalization, (2) v1 executions endpoint serialization, (3) operator-event registration for nested/direct ack notes, (4) pair fallback in active-signal projection, (5) tests that incorrectly depend on task-specific docs.
-- Next Probe: first restore exact legacy storage/display semantics for v1 endpoints, then fix ack-driven intent consumption on exact fingerprints, then trim the news operational contract test to stable docs only.
+- Stop Trigger: two consecutive policy edits still either keep the same baseline-debt hard stop or incorrectly let an unacknowledged failing dimension pass.
+- Reset Action: stop patching the validator only, move the staged policy into the shared rollup layer, and replay both acknowledged-debt and worsening-regression cases with narrow fixtures.
+- New Search Space: (1) process rollup threshold state, (2) validator blocking criteria, (3) human summary/status mapping, (4) plan-linked remediation metadata, (5) focused governance/API tests.
+- Next Probe: encode a non-blocking acknowledged-debt state for current failing dimensions, then add one worsening-delta test that must still fail.
 
 ## Task Outcome
-- Outcome Status: completed
-- Decision Quality: correct_after_replan
-- Final Contexts: CTX-STRATEGY, CTX-API-UI, CTX-OPS
-- Route Match: matched
+- Outcome Status: in_progress
+- Decision Quality: pending
+- Final Contexts: CTX-OPS, CTX-API-UI
+- Route Match: pending
 - Primary Rework Cause: none
 - Incident Signature: none
-- Improvement Action: architecture
-- Improvement Artifact: src/moex_carry/ui/operator_execution_projection.py
-- Linked Plan ID: P1-H4A-LIVE-062
+- Improvement Action: pending
+- Improvement Artifact: pending
+- Linked Plan ID: P1-PROCESS-REG-GATE-063
 
 ## Blockers
-- None.
+- No code-level blocker remains for this slice.
 
 ## Next Step
-- Await review and merge of PR #39 into `codex/signals_engine`.
+- Run final closeout checks, then push this governance fix branch and open the PR into `codex/signals_engine`.
 
 ## Validation
 - `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
 - `python scripts/validate_task_request_contract.py`
-- `python scripts/validate_session_handoff.py`
-- `python scripts/validate_api_v2_contract_parity.py`
+- `python -m pytest tests/test_agent_process_telemetry.py tests/test_process_reports.py tests/test_api_v2.py -q`
 - `python scripts/validate_quality_scorecards.py`
+- `python scripts/validate_process_regressions.py`
 - `python scripts/run_lean_gate.py`
-- `pytest tests/test_signal_api.py -q -k "test_signals_execute_normalizes_hold_open_action_to_enter or test_signals_executions_endpoint_normalizes_hold_open_action or test_signals_active_marks_signal_used_from_nested_ack_note or test_signals_active_pending_enter_stops_after_explicit_use or test_signals_active_flat_pending_enter_stops_after_explicit_use"`
-- `pytest tests/test_news_operational_contract.py -q`
-- `pytest`
-- `cmd /c npm --prefix ui-web ci`
-- `cmd /c npm --prefix ui-web run lint`
-- `cmd /c npm --prefix ui-web run build`

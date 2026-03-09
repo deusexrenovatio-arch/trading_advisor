@@ -74,6 +74,10 @@ Use this guide when a governance gate fails.
   - `context_expansion_rate <= 0.25`
   - `repeat_error_rate <= 0.15`
   - `environment_blocker_rate <= 0.20`
+- If the failing dimensions are already acknowledged as baseline debt, keep one active remediation plan item and ensure the validator marks them as non-blocking `acknowledged_debt`, not silent pass.
+- Acknowledged debt must turn blocking again if:
+  - a new failing dimension appears outside the acknowledged scope, or
+  - an acknowledged metric worsens by at least one task-equivalent step in the next full window.
 - Use `python scripts/process_improvement_report.py` to inspect deltas, repeated signatures, blocker leaders, and missing follow-up links.
 
 ## `python scripts/validate_pr_only_policy.py`
