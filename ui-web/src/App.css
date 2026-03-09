@@ -45,3 +45,76 @@
   color: #7f1d1d;
   font-weight: 600;
 }
+
+.governance-page {
+  --governance-ink: #132238;
+  --governance-teal: #14746f;
+  --governance-amber: #bc6c25;
+  --governance-paper: rgba(255, 251, 245, 0.92);
+  --governance-line: rgba(19, 34, 56, 0.08);
+}
+
+.governance-hero {
+  padding: 24px;
+  border-radius: 24px;
+  border-color: rgba(19, 34, 56, 0.1);
+  background:
+    radial-gradient(circle at top right, rgba(20, 116, 111, 0.12), transparent 32%),
+    radial-gradient(circle at bottom left, rgba(188, 108, 37, 0.14), transparent 28%),
+    linear-gradient(135deg, rgba(255, 251, 245, 0.97), rgba(244, 247, 251, 0.92));
+  box-shadow: 0 18px 40px rgba(19, 34, 56, 0.08);
+}
+
+.governance-headline {
+  color: var(--governance-ink);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.governance-surface {
+  padding: 18px;
+  border-radius: 20px;
+  border-color: var(--governance-line);
+  background: var(--governance-paper);
+  backdrop-filter: blur(8px);
+}
+
+.governance-chart-card {
+  min-height: 100%;
+}
+
+.governance-stat-card {
+  padding: 18px;
+  min-height: 142px;
+  border-radius: 20px;
+  border-color: var(--governance-line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 249, 252, 0.96));
+}
+
+.governance-note-card {
+  padding: 14px;
+  border-radius: 16px;
+  border-color: rgba(19, 34, 56, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.governance-action-chip {
+  background: rgba(20, 116, 111, 0.08);
+  border-color: rgba(20, 116, 111, 0.18);
+}
+
+.governance-week-list {
+  min-height: 100%;
+}
+
+.governance-week-item {
+  border-radius: 14px;
+  margin-bottom: 8px;
+  border: 1px solid transparent;
+}
+
+.governance-week-item.Mui-selected {
+  background: rgba(20, 116, 111, 0.1);
+  border-color: rgba(20, 116, 111, 0.2);
+}

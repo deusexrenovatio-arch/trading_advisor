@@ -1,56 +1,58 @@
 # Session Handoff
-Updated: 2026-03-06 20:18 UTC
+Updated: 2026-03-09 10:30 UTC
 
 ## Goal
-- Make Telegram delivery root-first so the module sends root events as its primary user-facing output.
+- Close the remaining advisory tied to the Process Governance change-set, then push the branch and integrate it to `main` through a PR.
 
 ## Task Request Contract
-- Objective: add first-class Telegram root-event alerts sourced from `news_root_cycle` outputs and make the default runtime prioritize them over discovery chatter.
-- In Scope: Telegram config/runtime wiring, root-event DB reader/formatter/broadcaster, worker cycle integration, focused tests, and runtime docs for root-first delivery.
-- Out of Scope: changing root-detection scoring logic, changing backend signal APIs, or redesigning the research/verified feed contract.
-- Constraints: keep `news_root_cycle` as the single production producer; avoid duplicate Telegram sends across restarts; preserve discovery/shock paths as optional secondary channels; keep current backend on `http://127.0.0.1:8050` untouched.
-- Done Evidence: focused pytest for root broadcast path, `python scripts/validate_task_request_contract.py`, and `python scripts/run_lean_gate.py`; local runtime state must show at least one sent root fingerprint after a controlled smoke.
-- Priority Rule: root-event delivery correctness and deduplication beat backward-compatible discovery noise; secondary alerts can stay optional.
+- Objective: remove the remaining advisory from the checks that belongs to this branch, specifically the target line budget overrun in the process-governance reporting layer, then push the branch and open a PR to merge into `main`.
+- In Scope: small refactor of `src/moex_carry/governance/process_reports.py` and adjacent helpers/tests, final governance/frontend verification, git push, and PR creation.
+- Out of Scope: unrelated repo-wide advisories in other oversized modules, feature redesign, or new governance/report functionality.
+- Constraints: keep report/API behavior stable; preserve the existing `news_root_cycle` operational contract untouched; prefer extraction of cohesive helper logic over semantic rewrites; do not touch unrelated dirty files; do not merge directly to `main`.
+- Done Evidence: `python scripts/validate_task_request_contract.py`, `python scripts/run_lean_gate.py`, targeted report/API tests, and a pushed branch with an opened PR against `main`.
+- Priority Rule: preserve behavior and governance correctness first, then eliminate the advisory, then complete the PR flow.
 
 ## Current Delta
-- Added a dedicated `telegram_root_broadcast` path that reads root topics directly from `news_root_registry` in the live SQLite DB.
-- Worker state now persists `sent_root_fingerprints` and `root_last_processed_ts`, so root delivery survives reruns and restarts without duplicate sends.
-- Default config now treats root alerts as primary output and disables discovery by default; live runtime was restarted in a root-only Telegram mode to avoid secondary noise.
-- Controlled live smoke sent one real `ROOT EVENT` for `root:GOLD:topic:longer-safe-haven-during-crash-here` and stored the corresponding root fingerprint in state.
-- Focused tests now cover both one-time root delivery and cursor behavior when `root_max_alerts_per_cycle` limits a cycle.
+- The blocker-label bug is fixed and verified in the live API payload.
+- The target line budget overrun in `src/moex_carry/governance/process_reports.py` is removed by extracting governance text/summary helpers into a dedicated module.
+- The repository still has other oversized modules, but they are unrelated to this branch and out of scope for this PR.
 
 ## First-Time-Right Report
-1. Confirmed coverage: root registry source, Telegram worker cycle, config surface, state deduplication, and focused tests are in scope.
-2. Missing or risky scenarios: repeated root topics across restarts can cause duplicate sends if `root_last_processed_ts` and fingerprint state are inconsistent.
-3. Resource/time risks and chosen controls: reuse the existing Telegram worker/state model, load root rows directly from SQLite, and prove behavior with focused tests before runtime switching.
-4. Highest-priority fixes or follow-ups: add explicit root-alert config and DB reader first, then wire runtime defaults and docs once tests confirm deduplication.
+1. Confirmed coverage: process-governance advisory cleanup, regression verification, and PR preparation are included.
+2. Missing or risky scenarios: line-budget cleanup can accidentally spread logic across modules in a way that obscures ownership, so the extraction must stay cohesive and governance-local.
+3. Resource/time risks and chosen controls: move one coherent helper slice out of `process_reports.py`, preserve imports/contracts, and rerun lean gate plus focused tests before any git operations.
+4. Highest-priority fixes or follow-ups: if the file still exceeds budget after the first extraction, move only another clearly bounded helper group instead of broad reformatting.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
-- Stop Trigger: two failed root-alert broadcast implementations on the same state/dedup seam without improving focused test results.
-- Reset Action: stop patching, inspect the actual root registry plus state transitions, then redesign the source cursor/fingerprint contract instead of retrying the same broadcaster logic.
-- New Search Space: (1) registry-first root alerts, (2) link-table-first root alerts, (3) shock-primary reuse with root metadata, (4) runtime default reordering without new message type.
-- Next Probe: add one isolated broadcaster test from a temporary SQLite root registry before touching the worker loop.
+- Stop Trigger: two consecutive extractions that still leave `process_reports.py` above target budget or change report behavior.
+- Reset Action: stop moving code blindly, measure the file again, and extract the next smallest self-contained helper group under `src/moex_carry/governance/`.
+- New Search Space: (1) formatting helpers, (2) summary/localization helpers, (3) markdown rendering helpers, (4) PR-only cleanup after behavior is stable.
+- Next Probe: extract one cohesive helper slice from `process_reports.py`, rerun targeted tests, and check the line budget before doing anything broader.
 
 ## Task Outcome
 - Outcome Status: completed
-- Decision Quality: correct_after_replan
-- Final Contexts: CTX-NEWS, CTX-OPS
-- Route Match: expanded
+- Decision Quality: correct_first_time
+- Final Contexts: CTX-OPS
+- Route Match: matched
 - Primary Rework Cause: none
 - Incident Signature: none
 - Improvement Action: none
 - Improvement Artifact: none
-- Linked Plan ID: P2-NEWS-ROOT-TG-058
+- Linked Plan ID: P1-PROCESS-GOV-ADVISORY-053
+- Linked Memory ID:
 
 ## Blockers
 - None.
 
 ## Next Step
-- Monitor the next organic root topic in live runtime; re-enable shock as a secondary Telegram stream only when historical backlog handling is explicitly desired.
+- Push the branch and open the PR against `main`; no additional code changes are needed for the advisory cleanup itself.
 
 ## Validation
-- `pytest tests/test_news_root_maintenance.py tests/test_telegram_worker.py -q`
+- `powershell -ExecutionPolicy Bypass -File .\scripts\worktree_guard.ps1 -Action Check`
+- `python scripts/validate_session_handoff.py`
 - `python scripts/validate_task_request_contract.py`
+- `python -m pytest tests/test_process_reports.py tests/test_api_v2.py::test_v2_ops_process_improvement_report -q`
+- `cmd /c npm.cmd --prefix ui-web run lint`
+- `cmd /c npm.cmd --prefix ui-web run build`
 - `python scripts/run_lean_gate.py`
-- Live smoke: one real `ROOT EVENT` delivered for `root:GOLD:topic:longer-safe-haven-during-crash-here`

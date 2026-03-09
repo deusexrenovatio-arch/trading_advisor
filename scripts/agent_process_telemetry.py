@@ -1,4 +1,5 @@
 from __future__ import annotations
+# ruff: noqa: E402
 
 import argparse
 import hashlib
@@ -6,13 +7,17 @@ import json
 import os
 import re
 import subprocess
-from collections import Counter, defaultdict
+import sys
+from collections import defaultdict
 from datetime import date, datetime, timezone
 from pathlib import Path
-from statistics import median
 from typing import Any
 
 import yaml
+
+REPO_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(REPO_SRC) not in sys.path:
+    sys.path.insert(0, str(REPO_SRC))
 
 from context_router import route_files
 
@@ -512,6 +517,7 @@ def _base_active_task_payload(
     start_contexts: list[str],
     intent_sources: list[str],
     unmapped_files: list[str],
+    start_recommendations: list[str],
     baseline_changed_files: list[str],
     baseline_diff_hash: str,
 ) -> dict[str, Any]:
@@ -525,6 +531,7 @@ def _base_active_task_payload(
         "start_contexts": list(start_contexts),
         "intent_sources": list(intent_sources),
         "unmapped_files_count": len(unmapped_files),
+        "start_recommendations": list(start_recommendations),
         "baseline_changed_files": list(baseline_changed_files),
         "baseline_diff_hash": baseline_diff_hash,
         "last_seen_diff_hash": baseline_diff_hash,
@@ -574,6 +581,7 @@ def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tu
         start_contexts=list(route.get("contexts", [])),
         intent_sources=list(route.get("intent_sources", [])),
         unmapped_files=list(route.get("unmapped_files", [])),
+        start_recommendations=list(route.get("recommendations", [])),
         baseline_changed_files=changed_files,
         baseline_diff_hash=baseline_diff_hash,
     )
@@ -589,6 +597,7 @@ def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tu
             "start_contexts": active_task["start_contexts"],
             "intent_sources": active_task["intent_sources"],
             "unmapped_files_count": active_task["unmapped_files_count"],
+            "start_recommendations": active_task["start_recommendations"],
         },
     )
     state["active_task"] = active_task
@@ -731,10 +740,14 @@ def build_task_outcome_record(active_task: dict[str, Any], task_outcome: dict[st
         "outcome_status": task_outcome["outcome_status"],
         "unmapped_files_count": int(active_task.get("unmapped_files_count", 0) or 0),
         "intent_sources": list(active_task.get("intent_sources", [])),
+        "start_recommendations": list(active_task.get("start_recommendations", [])),
     }
 
 
 def _normalize_record(raw: dict[str, Any]) -> dict[str, Any]:
+    start_recommendations = raw.get("start_recommendations", [])
+    if not isinstance(start_recommendations, list):
+        start_recommendations = []
     return {
         "task_id": str(raw.get("task_id", "")).strip(),
         "closed_at": raw.get("closed_at"),
@@ -756,6 +769,7 @@ def _normalize_record(raw: dict[str, Any]) -> dict[str, Any]:
         "outcome_status": str(raw.get("outcome_status", "in_progress")).strip().lower() or "in_progress",
         "unmapped_files_count": int(raw.get("unmapped_files_count", 0) or 0),
         "intent_sources": [str(item).strip() for item in raw.get("intent_sources", []) if str(item).strip()],
+        "start_recommendations": [str(item).strip() for item in start_recommendations if str(item).strip()],
     }
 
 
@@ -813,252 +827,15 @@ def _enrich_repeat_markers(records: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 def compute_process_rollup(payload: dict[str, Any], window_size: int = ROLLING_WINDOW_SIZE) -> dict[str, Any]:
-    completed = _enrich_repeat_markers(completed_task_records(payload))
-    current_window = completed[-window_size:] if window_size > 0 else list(completed)
-    previous_window = completed[-2 * window_size : -window_size] if window_size > 0 else []
-    total = len(current_window)
-    same_path_values = [int(row.get("same_path_attempts", 1) or 1) for row in current_window]
-    timing_values = [
-        int(row.get("time_to_first_patch_sec", 0) or 0)
-        for row in current_window
-        if row.get("time_to_first_patch_sec") is not None
-    ]
-    current_metrics = {
-        "correct_first_time_pct": _safe_ratio(
-            sum(1 for row in current_window if row["decision_quality"] == "correct_first_time"),
-            total,
-        ),
-        "correct_after_replan_pct": _safe_ratio(
-            sum(1 for row in current_window if row["decision_quality"] == "correct_after_replan"),
-            total,
-        ),
-        "wrong_path_rate": _safe_ratio(
-            sum(1 for row in current_window if row["decision_quality"] == "wrong_path"),
-            total,
-        ),
-        "rework_rate": _safe_ratio(
-            sum(1 for row in current_window if row["decision_quality"] != "correct_first_time"),
-            total,
-        ),
-        "decision_quality_by_goal_class": _decision_quality_by_goal_class(current_window),
-        "start_resolution_pct": _safe_ratio(
-            sum(1 for row in current_window if row["start_primary_context"] not in {"", "unknown"}),
-            total,
-        ),
-        "start_match_pct": _safe_ratio(
-            sum(1 for row in current_window if row["route_match"] == "matched"),
-            total,
-        ),
-        "single_context_task_pct": _safe_ratio(
-            sum(1 for row in current_window if len(row["final_contexts"]) == 1),
-            total,
-        ),
-        "context_expansion_rate": _safe_ratio(
-            sum(
-                1
-                for row in current_window
-                if row["route_match"] == "expanded"
-                or len(row["final_contexts"]) > max(len(row["start_contexts"]), 1)
-            ),
-            total,
-        ),
-        "unmapped_significant_file_rate": _safe_ratio(
-            sum(1 for row in current_window if int(row.get("unmapped_files_count", 0) or 0) > 0),
-            total,
-        ),
-        "median_time_to_first_patch_sec": int(median(timing_values)) if timing_values else 0,
-        "repeat_error_rate": _safe_ratio(
-            sum(1 for row in current_window if row.get("is_repeat_error")),
-            total,
-        ),
-        "environment_blocker_rate": _safe_ratio(
-            sum(
-                1
-                for row in current_window
-                if row["decision_quality"] == "environment_blocked"
-                or row["primary_rework_cause"] == "environment"
-            ),
-            total,
-        ),
-        "same_path_attempts_p50": _percentile(same_path_values, 0.5),
-        "same_path_attempts_p90": _percentile(same_path_values, 0.9),
-    }
+    from moex_carry.governance.process_reports import compute_process_rollup as _compute_process_rollup
 
-    previous_numeric_metrics: dict[str, float | int] = {}
-    if previous_window:
-        previous_rollup = compute_process_rollup({"items": previous_window}, window_size=len(previous_window))
-        previous_numeric_metrics = previous_rollup["current_metrics"]
-
-    deltas: dict[str, float | int] = {}
-    for key, value in current_metrics.items():
-        if isinstance(value, (int, float)) and key in previous_numeric_metrics and isinstance(
-            previous_numeric_metrics[key], (int, float)
-        ):
-            deltas[key] = float(value) - float(previous_numeric_metrics[key])
-
-    repeated_signatures = Counter(
-        str(row["incident_signature"])
-        for row in current_window
-        if row.get("is_repeat_error") and row["incident_signature"] != "none"
-    )
-    signature_recurrence = Counter(
-        str(row["incident_signature"])
-        for row in current_window
-        if row["incident_signature"] != "none"
-    )
-    environment_blockers = Counter(
-        str(row["incident_signature"] or "environment/no-signature")
-        for row in current_window
-        if row["primary_rework_cause"] == "environment"
-    )
-    improvement_action_mix = Counter(
-        str(row["improvement_action"])
-        for row in current_window
-        if row["improvement_action"] not in {"pending", ""}
-    )
-    threshold_results: dict[str, dict[str, Any]] = {}
-    burn_in_complete = len(completed) >= window_size
-    for dimension, rules in ROLLING_THRESHOLDS.items():
-        dimension_status = {"ok": True, "checks": []}
-        for metric_name, (op_name, threshold) in rules.items():
-            actual = float(current_metrics.get(metric_name, 0.0))
-            passed = actual >= threshold if op_name == "ge" else actual <= threshold
-            if not passed:
-                dimension_status["ok"] = False
-            dimension_status["checks"].append(
-                {
-                    "metric": metric_name,
-                    "operator": op_name,
-                    "threshold": threshold,
-                    "actual": actual,
-                    "passed": passed,
-                }
-            )
-        threshold_results[dimension] = dimension_status
-
-    return {
-        "completed_tasks_count": len(completed),
-        "window_size": window_size,
-        "current_window_count": total,
-        "burn_in_complete": burn_in_complete,
-        "current_metrics": current_metrics,
-        "previous_metrics": previous_numeric_metrics,
-        "deltas": deltas,
-        "top_repeated_error_signatures": repeated_signatures.most_common(5),
-        "repeat_signature_recurrence": signature_recurrence.most_common(5),
-        "top_environment_blockers": environment_blockers.most_common(5),
-        "tasks_with_wrong_path_or_partial": [
-            row
-            for row in current_window
-            if row["decision_quality"] == "wrong_path"
-            or row["decision_quality"] == "partial_outcome"
-            or row["outcome_status"] == "partial"
-        ],
-        "improvement_actions_without_followup": [
-            row
-            for row in current_window
-            if row["improvement_action"] not in {"none", "pending"}
-            and not row.get("linked_plan_id")
-            and not row.get("linked_memory_id")
-        ],
-        "improvement_action_mix": dict(sorted(improvement_action_mix.items())),
-        "threshold_results": threshold_results,
-    }
+    return _compute_process_rollup(payload, window_size=window_size)
 
 
 def render_rollup_markdown(rollup: dict[str, Any]) -> str:
-    lines = [
-        "# Process Improvement Rollup",
-        "",
-        f"- completed_tasks_count: {rollup['completed_tasks_count']}",
-        f"- rolling_window_size: {rollup['window_size']}",
-        f"- burn_in_complete: {rollup['burn_in_complete']}",
-        "",
-        "## Current Metrics",
-        "",
-        "| Metric | Value | Delta |",
-        "| --- | --- | --- |",
-    ]
-    current_metrics = rollup["current_metrics"]
-    deltas = rollup.get("deltas", {})
-    for key, value in current_metrics.items():
-        if isinstance(value, dict):
-            continue
-        if isinstance(value, float):
-            value_text = f"{value:.2f}"
-        else:
-            value_text = str(value)
-        delta_value = deltas.get(key)
-        if isinstance(delta_value, float):
-            delta_text = f"{delta_value:+.2f}"
-        elif isinstance(delta_value, int):
-            delta_text = f"{delta_value:+d}"
-        else:
-            delta_text = "n/a"
-        lines.append(f"| `{key}` | {value_text} | {delta_text} |")
+    from moex_carry.governance.process_reports import render_rollup_markdown as _render_rollup_markdown
 
-    lines.extend(
-        [
-            "",
-            "## Thresholds",
-            "",
-            "| Dimension | Status | Checks |",
-            "| --- | --- | --- |",
-        ]
-    )
-    for dimension, payload in sorted(rollup["threshold_results"].items()):
-        checks = ", ".join(
-            f"{check['metric']} {check['operator']} {check['threshold']:.2f} (actual={check['actual']:.2f})"
-            for check in payload["checks"]
-        )
-        status = "pass" if payload["ok"] or not rollup["burn_in_complete"] else "fail"
-        if not rollup["burn_in_complete"]:
-            status = "burn-in"
-        lines.append(f"| `{dimension}` | {status} | {checks} |")
-
-    def _append_ranked(title: str, items: list[tuple[str, int]]) -> None:
-        lines.extend(["", f"## {title}", ""])
-        if items:
-            for name, count in items:
-                lines.append(f"- `{name}`: {count}")
-        else:
-            lines.append("- none")
-
-    _append_ranked("Top Repeated Error Signatures", list(rollup["top_repeated_error_signatures"]))
-    _append_ranked("Repeat Signature Recurrence", list(rollup["repeat_signature_recurrence"]))
-    _append_ranked("Top Environment Blockers", list(rollup["top_environment_blockers"]))
-
-    lines.extend(["", "## Wrong Path Or Partial Tasks", ""])
-    tasks = rollup["tasks_with_wrong_path_or_partial"]
-    if tasks:
-        for task in tasks:
-            lines.append(
-                "- "
-                f"{task['task_id']} ({task['decision_quality']}, outcome={task['outcome_status']}, "
-                f"route_match={task['route_match']})"
-            )
-    else:
-        lines.append("- none")
-
-    lines.extend(["", "## Improvement Actions Without Follow-Up", ""])
-    missing = rollup["improvement_actions_without_followup"]
-    if missing:
-        for task in missing:
-            lines.append(
-                f"- {task['task_id']} action={task['improvement_action']} artifact={task['improvement_artifact']}"
-            )
-    else:
-        lines.append("- none")
-
-    lines.extend(["", "## Improvement Action Mix", ""])
-    mix = rollup["improvement_action_mix"]
-    if mix:
-        for name, count in sorted(mix.items()):
-            lines.append(f"- `{name}`: {count}")
-    else:
-        lines.append("- none")
-
-    return "\n".join(lines) + "\n"
+    return _render_rollup_markdown(rollup)
 
 
 def build_parser() -> argparse.ArgumentParser:

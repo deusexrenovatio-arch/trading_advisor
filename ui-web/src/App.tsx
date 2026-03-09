@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Chip, Container, Paper, Stack, Tab, Tabs, Typography } from '@mui/material'
 import type { GridRowParams } from '@mui/x-data-grid'
 import BacktestV2Tab from './features/backtest-run/BacktestV2Tab'
@@ -41,7 +41,14 @@ import type {
 } from './entities/decision/types'
 import './App.css'
 
-type WorkspaceTab = 'trade_console' | 'research_lab' | 'news_intelligence' | 'portfolio_control'
+const ProcessGovernanceTab = lazy(() => import('./features/process-governance/ProcessGovernanceTab'))
+
+type WorkspaceTab =
+  | 'trade_console'
+  | 'research_lab'
+  | 'news_intelligence'
+  | 'portfolio_control'
+  | 'process_governance'
 type TradeConsoleTab = 'decisions' | 'top_pairs' | 'signals' | 'backtests'
 type ResearchTab = 'backtest_v2' | 'forward' | 'hpo'
 const BLOCKED_SIGNAL_ACTIONS = new Set(['hold_pretrade', 'check_pretrade'])
@@ -55,6 +62,20 @@ type UiRouteState = {
 }
 
 const DEFAULT_PATH = '/trade-console/signals'
+
+const renderLazyFallback = (
+  title: string,
+  description: string,
+) => (
+  <Paper variant="outlined" className="governance-surface">
+    <Stack spacing={0.75}>
+      <Typography variant="subtitle1">{title}</Typography>
+      <Typography variant="body2" color="text.secondary">
+        {description}
+      </Typography>
+    </Stack>
+  </Paper>
+)
 
 const tradeTabToPath = (tab: TradeConsoleTab) => {
   if (tab === 'decisions') return '/decision-audit'
@@ -77,6 +98,7 @@ const workspaceToPath = (
   if (workspace === 'research_lab') return researchTabToPath(researchTab)
   if (workspace === 'news_intelligence') return '/news-intelligence'
   if (workspace === 'portfolio_control') return '/portfolio-control'
+  if (workspace === 'process_governance') return '/process-governance'
   return tradeTabToPath(tradeTab)
 }
 
@@ -166,6 +188,15 @@ const parseRouteState = (pathname: string): UiRouteState => {
       tradeTab: 'signals',
       researchTab: 'backtest_v2',
       canonicalPath: '/portfolio-control',
+    }
+  }
+
+  if (normalized === '/process-governance') {
+    return {
+      workspace: 'process_governance',
+      tradeTab: 'signals',
+      researchTab: 'backtest_v2',
+      canonicalPath: '/process-governance',
     }
   }
 
@@ -455,6 +486,7 @@ function App() {
             <Tab label="Research Lab" value="research_lab" />
             <Tab label="News Intelligence" value="news_intelligence" />
             <Tab label="Portfolio Control" value="portfolio_control" />
+            <Tab label="Говернанс процесса" value="process_governance" />
           </Tabs>
           {workspace === 'trade_console' ? (
             <Tabs value={tradeTab} onChange={handleTradeTabChange}>
@@ -471,6 +503,7 @@ function App() {
               <Tab label="HPO" value="hpo" />
             </Tabs>
           ) : null}
+          {workspace !== 'process_governance' ? (
           <Paper variant="outlined" sx={{ p: 1.25 }}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
               <Chip label={`Переключений вкладок: ${tabSwitchCount}`} size="small" />
@@ -495,6 +528,7 @@ function App() {
               />
             </Stack>
           </Paper>
+          ) : null}
           {workspace === 'trade_console' && tradeTab === 'decisions' ? (
             <DecisionsTab
               quickFilter={quickFilter}
@@ -649,6 +683,16 @@ function App() {
           ) : null}
           {workspace === 'news_intelligence' ? <NewsIntelligenceTab /> : null}
           {workspace === 'portfolio_control' ? <PortfolioControlTab /> : null}
+          {workspace === 'process_governance' ? (
+            <Suspense
+              fallback={renderLazyFallback(
+                'Загрузка говернанса процесса',
+                'Подготавливаем weekly-отчёт по процессу и связанные графики.',
+              )}
+            >
+              <ProcessGovernanceTab />
+            </Suspense>
+          ) : null}
         </Stack>
       </Container>
     </Box>

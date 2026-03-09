@@ -264,6 +264,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OpsSloSnapshotV2'
+  /ops/process-improvement:
+    get:
+      summary: Weekly process-health report built from tracked task outcomes.
+      parameters:
+        - in: query
+          name: weeks
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 26
+            default: 8
+        - in: query
+          name: window_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 52
+            default: 20
+      responses:
+        '200':
+          description: Current rolling process-health snapshot plus weekly history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsProcessImprovementReportV2'
+        '503':
+          description: Process report unavailable due to task-outcomes source errors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsProcessImprovementUnavailableV2'
   /decisions/{decision_id}/actions:
     post:
       summary: Unified decision action endpoint.
@@ -2187,6 +2218,67 @@ components:
           items:
             type: object
             additionalProperties: true
+    OpsProcessImprovementReportV2:
+      type: object
+      additionalProperties: true
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        completed_tasks_count:
+          type: integer
+        rolling_window_size:
+          type: integer
+        burn_in_complete:
+          type: boolean
+        human_summary:
+          type: object
+          additionalProperties: true
+        current_rollup:
+          type: object
+          additionalProperties: true
+        weekly_reports:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        weekly_trend:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        query:
+          type: object
+          additionalProperties: false
+          properties:
+            weeks:
+              type: integer
+            window_size:
+              type: integer
+    OpsProcessImprovementUnavailableV2:
+      type: object
+      additionalProperties: false
+      required: [status, error, message, query, source_path]
+      properties:
+        status:
+          type: string
+          enum: [unavailable]
+        error:
+          type: string
+          enum: [process_report_unavailable]
+        message:
+          type: string
+        query:
+          type: object
+          additionalProperties: false
+          required: [weeks, window_size]
+          properties:
+            weeks:
+              type: integer
+            window_size:
+              type: integer
+        source_path:
+          type: string
     DecisionActionRequestV2:
       type: object
       required: [action, idempotency_key]
@@ -2236,4 +2328,5 @@ components:
           type: number
         participation_rate:
           type: number
+
 

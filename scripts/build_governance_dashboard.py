@@ -109,6 +109,7 @@ def run(
     quality_report = artifacts_dir / "quality-scorecard.md"
     autonomy_report = artifacts_dir / "autonomy-kpi-report.md"
     process_report = artifacts_dir / "process-improvement-report.md"
+    process_report_json = artifacts_dir / "process-improvement-report.json"
     entropy_report = artifacts_dir / "docs-gardening-report.md"
     findings_report = artifacts_dir / "agent-review-findings.md"
 
@@ -141,6 +142,22 @@ def run(
                 "scripts/process_improvement_report.py",
                 "--output",
                 str(process_report),
+                "--base-sha",
+                base_sha or "",
+                "--head-sha",
+                head_sha or "",
+            ],
+        ),
+        (
+            "process-improvement-json",
+            process_report_json,
+            [
+                sys.executable,
+                "scripts/process_improvement_report.py",
+                "--output",
+                str(process_report_json),
+                "--format",
+                "json",
                 "--base-sha",
                 base_sha or "",
                 "--head-sha",
