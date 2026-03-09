@@ -516,7 +516,7 @@ items:
   - CTX-API-UI
   route_match: pending
   time_to_first_patch_sec: 954
-  same_path_attempts: 1
+  same_path_attempts: 2
   decision_quality: pending
   primary_rework_cause: none
   incident_signature: none

@@ -17,6 +17,7 @@ Updated: 2026-03-09 11:15 UTC
 - Push is blocked by two gate classes.
 - The first is unmapped `signal_engine` files in `validate_agent_contexts.py`.
 - The second is hard size-limit failures in `config.py`, `telegram_worker.py`, and `ui/app_helpers_base.py`.
+- The repository production news route remains `news_root_cycle`; this push-unblock work does not change that operating contract.
 - Governance parity from the rebase recovery is already committed and must remain intact while fixing the push blockers.
 
 ## First-Time-Right Report

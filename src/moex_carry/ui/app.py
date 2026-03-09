@@ -3346,6 +3346,7 @@ def create_app(settings: AppSettings) -> Dash:
                 future: str,
                 signal_action: str,
                 signal_fingerprint: str | None = None,
+                strategy_stream: str | None = None,
             ) -> dict[str, object]:
                 fingerprint = str(signal_fingerprint or "").strip()
                 if not fingerprint:
@@ -3355,6 +3356,7 @@ def create_app(settings: AppSettings) -> Dash:
                         stock=stock,
                         future=future,
                         signal_action=signal_action,
+                        strategy_stream=strategy_stream,
                     )
                 usage_entry = usage_by_fingerprint.get(fingerprint)
                 if not isinstance(usage_entry, dict):
@@ -3376,6 +3378,29 @@ def create_app(settings: AppSettings) -> Dash:
                     "signal_used_by": usage_entry.get("used_by"),
                     "signal_details_pending": not has_trade_after_usage,
                 }
+
+            def _strategy_metadata_for_history_row(
+                row_obj: object,
+                *,
+                signal_metrics: dict[str, object] | None = None,
+            ) -> dict[str, str | None]:
+                metrics = (
+                    signal_metrics
+                    if isinstance(signal_metrics, dict)
+                    else (
+                        getattr(row_obj, "metrics", None)
+                        if isinstance(getattr(row_obj, "metrics", None), dict)
+                        else {}
+                    )
+                )
+                return _extract_strategy_metadata(
+                    {
+                        "strategy_type": getattr(row_obj, "strategy_type", None),
+                        "strategy_stream": getattr(row_obj, "strategy_stream", None),
+                        "strategy_id": getattr(row_obj, "strategy_id", None),
+                        "signal_metrics": metrics,
+                    }
+                )
 
             for state in position_state.values():
                 enter_orders = state.get("enter_orders")
@@ -3467,6 +3492,10 @@ def create_app(settings: AppSettings) -> Dash:
                 signal_score = row.score
                 signal_reasons = list(row.reasons) if isinstance(row.reasons, list) else []
                 current_metrics = row.metrics if isinstance(row.metrics, dict) else {}
+                row_strategy_meta = _strategy_metadata_for_history_row(row, signal_metrics=current_metrics)
+                row_strategy_stream = (
+                    str(row_strategy_meta.get("strategy_stream") or "").strip() or None
+                )
                 fallback_metrics: dict[str, object] | None = None
                 pending_intent_promoted = False
                 repriced_from_hold_flat = False
@@ -3477,6 +3506,7 @@ def create_app(settings: AppSettings) -> Dash:
                     stock=row.stock_secid,
                     future=row.future_secid,
                     signal_action=action,
+                    strategy_stream=row_strategy_stream,
                 )
                 usage_fields = _signal_usage_fields(
                     run_id=signal_run_id,
@@ -3485,6 +3515,7 @@ def create_app(settings: AppSettings) -> Dash:
                     future=row.future_secid,
                     signal_action=action,
                     signal_fingerprint=signal_fingerprint,
+                    strategy_stream=row_strategy_stream,
                 )
                 entry_intent_row = latest_entry_intent_by_pair.get(key)
                 if (
@@ -3494,12 +3525,17 @@ def create_app(settings: AppSettings) -> Dash:
                 ):
                     intent_run_id = str(entry_intent_row.run_id)
                     intent_timestamp = entry_intent_row.timestamp.isoformat()
+                    intent_strategy_meta = _strategy_metadata_for_history_row(entry_intent_row)
+                    intent_strategy_stream = (
+                        str(intent_strategy_meta.get("strategy_stream") or "").strip() or None
+                    )
                     intent_fingerprint = build_signal_fingerprint(
                         run_id=intent_run_id,
                         timestamp=intent_timestamp,
                         stock=row.stock_secid,
                         future=row.future_secid,
                         signal_action="enter",
+                        strategy_stream=intent_strategy_stream,
                     )
                     intent_usage = _signal_usage_fields(
                         run_id=intent_run_id,
@@ -3508,6 +3544,7 @@ def create_app(settings: AppSettings) -> Dash:
                         future=row.future_secid,
                         signal_action="enter",
                         signal_fingerprint=intent_fingerprint,
+                        strategy_stream=intent_strategy_stream,
                     )
                     if bool(intent_usage.get("signal_used")):
                         entry_intent_consumed = True
@@ -3516,6 +3553,8 @@ def create_app(settings: AppSettings) -> Dash:
                         action = "enter"
                         signal_fingerprint = intent_fingerprint
                         usage_fields = intent_usage
+                        row_strategy_meta = intent_strategy_meta
+                        row_strategy_stream = intent_strategy_stream
                         signal_score = float(entry_intent_row.score or signal_score or 0.0)
                         fallback_metrics = (
                             entry_intent_row.metrics if isinstance(entry_intent_row.metrics, dict) else None
@@ -3535,6 +3574,7 @@ def create_app(settings: AppSettings) -> Dash:
                         stock=row.stock_secid,
                         future=row.future_secid,
                         signal_action=action,
+                        strategy_stream=row_strategy_stream,
                     )
                     usage_fields = _signal_usage_fields(
                         run_id=signal_run_id,
@@ -3543,6 +3583,7 @@ def create_app(settings: AppSettings) -> Dash:
                         future=row.future_secid,
                         signal_action=action,
                         signal_fingerprint=signal_fingerprint,
+                        strategy_stream=row_strategy_stream,
                     )
                     if "repriced_from_hold_flat" not in signal_reasons:
                         signal_reasons.append("repriced_from_hold_flat")
@@ -3576,6 +3617,9 @@ def create_app(settings: AppSettings) -> Dash:
                     "signal_action": action,
                     "signal_direction": signal_direction,
                     "signal_score": signal_score,
+                    "strategy_type": row_strategy_meta.get("strategy_type"),
+                    "strategy_stream": row_strategy_meta.get("strategy_stream"),
+                    "strategy_id": row_strategy_meta.get("strategy_id"),
                     "signal_reasons": signal_reasons,
                     "signal_metrics": signal_metrics,
                     "position_open": is_open,
@@ -3624,12 +3668,17 @@ def create_app(settings: AppSettings) -> Dash:
                 signal_score = 0.0
                 signal_reasons: list[str] = ["position_open_no_active_signal"]
                 signal_metrics: dict[str, object] = {}
+                row_strategy_meta = _strategy_metadata_for_history_row(latest)
+                row_strategy_stream = (
+                    str(row_strategy_meta.get("strategy_stream") or "").strip() or None
+                )
                 signal_fingerprint = build_signal_fingerprint(
                     run_id=latest.run_id,
                     timestamp=timestamp_value,
                     stock=stock,
                     future=future,
                     signal_action=action,
+                    strategy_stream=row_strategy_stream,
                 )
                 usage_fields = _signal_usage_fields(
                     run_id=latest.run_id,
@@ -3638,6 +3687,7 @@ def create_app(settings: AppSettings) -> Dash:
                     future=future,
                     signal_action=action,
                     signal_fingerprint=signal_fingerprint,
+                    strategy_stream=row_strategy_stream,
                 )
                 entry_intent_row = latest_entry_intent_by_pair.get((stock, future))
                 pending_intent_promoted = False
@@ -3647,12 +3697,17 @@ def create_app(settings: AppSettings) -> Dash:
                 ):
                     intent_run_id = str(entry_intent_row.run_id)
                     intent_timestamp = entry_intent_row.timestamp.isoformat()
+                    intent_strategy_meta = _strategy_metadata_for_history_row(entry_intent_row)
+                    intent_strategy_stream = (
+                        str(intent_strategy_meta.get("strategy_stream") or "").strip() or None
+                    )
                     intent_fingerprint = build_signal_fingerprint(
                         run_id=intent_run_id,
                         timestamp=intent_timestamp,
                         stock=stock,
                         future=future,
                         signal_action="enter",
+                        strategy_stream=intent_strategy_stream,
                     )
                     intent_usage = _signal_usage_fields(
                         run_id=intent_run_id,
@@ -3661,12 +3716,15 @@ def create_app(settings: AppSettings) -> Dash:
                         future=future,
                         signal_action="enter",
                         signal_fingerprint=intent_fingerprint,
+                        strategy_stream=intent_strategy_stream,
                     )
                     if not bool(intent_usage.get("signal_used")):
                         pending_intent_promoted = True
                         action = "enter"
                         signal_fingerprint = intent_fingerprint
                         usage_fields = intent_usage
+                        row_strategy_meta = intent_strategy_meta
+                        row_strategy_stream = intent_strategy_stream
                         signal_score = float(entry_intent_row.score or 0.0)
                         signal_direction = entry_intent_row.direction or signal_direction
                         signal_reasons = (
@@ -3695,6 +3753,9 @@ def create_app(settings: AppSettings) -> Dash:
                     "signal_action": action,
                     "signal_direction": signal_direction,
                     "signal_score": signal_score,
+                    "strategy_type": row_strategy_meta.get("strategy_type"),
+                    "strategy_stream": row_strategy_meta.get("strategy_stream"),
+                    "strategy_id": row_strategy_meta.get("strategy_id"),
                     "signal_reasons": signal_reasons,
                     "signal_metrics": signal_metrics,
                     "position_open": True,
