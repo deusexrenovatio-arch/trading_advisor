@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pandas as pd
 import pytest
 import requests
 
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, TelegramConfig
 from moex_carry.integrations.telegram_worker import TelegramWorker, run_telegram_worker
+from moex_carry.news_root_maintenance import RootMaintenanceConfig, refresh_root_maintenance
+from moex_carry.news_shock_store import upsert_live_shock_rows
 from moex_carry.signals_ack import parse_ack_note
 
 
@@ -100,6 +103,10 @@ def _build_settings(
     enter_resend_cooldown_minutes: int = 60,
     daily_healthcheck_enabled: bool = True,
     daily_healthcheck_time_local: str = "00:00",
+    root_alerts_enabled: bool = False,
+    root_min_primary_count: int = 1,
+    root_max_alerts_per_cycle: int = 20,
+    root_sent_fingerprint_ttl_hours: int = 24 * 21,
     shock_alerts_enabled: bool = False,
     shock_feed_path: str | None = None,
     shock_primary_min_z: float = 2.5,
@@ -132,6 +139,10 @@ def _build_settings(
             daily_healthcheck_time_local=daily_healthcheck_time_local,
             state_path=str(tmp_path / "telegram-state.json"),
             ui_base_url=None,
+            root_alerts_enabled=root_alerts_enabled,
+            root_min_primary_count=root_min_primary_count,
+            root_max_alerts_per_cycle=root_max_alerts_per_cycle,
+            root_sent_fingerprint_ttl_hours=root_sent_fingerprint_ttl_hours,
             shock_alerts_enabled=shock_alerts_enabled,
             shock_feed_path=shock_feed_path,
             shock_primary_min_z=shock_primary_min_z,
@@ -941,10 +952,212 @@ def test_worker_broadcasts_shock_primary_and_aftershock(tmp_path):
     assert len(telegram_session.sent_messages) == 2
     text_1 = str(telegram_session.sent_messages[0]["text"])
     text_2 = str(telegram_session.sent_messages[1]["text"])
-    assert "SHOCK PRIMARY" in text_1
-    assert "SHOCK AFTERSHOCK" in text_2
-    assert "Topic: iran-attack" in text_1
-    assert "Topic age: 2d" in text_2
+    assert "ПЕРВИЧНЫЙ ШОК" in text_1
+    assert "ПОВТОРНЫЙ ШОК" in text_2
+    assert "🧩 Тема: iran-attack" in text_1
+    assert "⏳ Возраст темы: 2д" in text_2
+
+
+def test_worker_broadcasts_root_event_once(tmp_path):
+    frame = pd.DataFrame(
+        [
+            {
+                "symbol": "BRN",
+                "shock_ts": "2026-02-01T10:00:00Z",
+                "bar_minutes": 5,
+                "prev_price": 80.0,
+                "price": 81.2,
+                "logret": 0.0148,
+                "abs_move_pct": 1.5,
+                "shock_direction": "up",
+                "rolling_sigma": 0.003,
+                "z_score": 3.8,
+                "selected_event_source": "root",
+                "selected_event_id": "evt-1",
+                "selected_event_ts": "2026-02-01T09:55:00Z",
+                "selected_delay_min": 5.0,
+                "selected_match_mode": "root_strict",
+                "selected_title": "Shipping halted near Hormuz",
+                "selected_url": "https://example.com/root-1",
+                "selected_cause_event": "chokepoint_closure",
+                "selected_cause_route_key": "chokepoint:hormuz->seaborne_crude->BRN",
+                "selected_cause_claim_status": "confirmed",
+                "selected_cause_classification": "cause",
+                "selected_cause_confidence": 0.88,
+                "selected_fundamental_score": 0.91,
+                "selected_direction_alignment": 1.0,
+                "selected_is_primary_cause": 1,
+                "root_link_type": "primary",
+                "root_primary_shock_ts": "2026-02-01T10:00:00Z",
+                "root_episode_event_index": 1,
+                "root_topic_id": "root:BRN:mideast_geopolitics",
+            },
+            {
+                "symbol": "BRN",
+                "shock_ts": "2026-02-01T11:00:00Z",
+                "bar_minutes": 5,
+                "prev_price": 81.2,
+                "price": 81.8,
+                "logret": 0.0073,
+                "abs_move_pct": 0.74,
+                "shock_direction": "up",
+                "rolling_sigma": 0.0029,
+                "z_score": 2.5,
+                "selected_event_source": "root",
+                "selected_event_id": "evt-1",
+                "selected_event_ts": "2026-02-01T10:50:00Z",
+                "selected_delay_min": 10.0,
+                "selected_match_mode": "root_context",
+                "selected_title": "Insurers raise war-risk premiums",
+                "selected_url": "https://example.com/root-2",
+                "selected_cause_event": "chokepoint_closure",
+                "selected_cause_route_key": "chokepoint:hormuz->seaborne_crude->BRN",
+                "selected_cause_claim_status": "confirmed",
+                "selected_cause_classification": "mixed",
+                "selected_cause_confidence": 0.73,
+                "selected_fundamental_score": 0.77,
+                "selected_direction_alignment": 1.0,
+                "selected_is_primary_cause": 0,
+                "root_link_type": "aftershock",
+                "root_primary_shock_ts": "2026-02-01T10:00:00Z",
+                "root_episode_event_index": 2,
+                "root_topic_id": "root:BRN:mideast_geopolitics",
+            },
+        ]
+    )
+    live_db_url = f"sqlite:///{(tmp_path / 'news_root.db').as_posix()}"
+    upsert_live_shock_rows(frame=frame, database_url=live_db_url, data_dir=tmp_path)
+    refresh_root_maintenance(
+        database_url=live_db_url,
+        data_dir=tmp_path,
+        cfg=RootMaintenanceConfig(bar_minutes=5),
+    )
+
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        daily_healthcheck_enabled=False,
+        root_alerts_enabled=True,
+        news_alerts_enabled=False,
+        shock_alerts_enabled=False,
+    )
+    settings.news_filter.live_db_url = live_db_url
+
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[[]])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker.run_cycle()
+    worker._next_signal_fetch_at = 0.0
+    worker.run_cycle()
+
+    assert len(telegram_session.sent_messages) == 1
+    text = str(telegram_session.sent_messages[0]["text"])
+    assert "КОРНЕВОЕ СОБЫТИЕ" in text
+    assert "🧩 Тема: root:BRN:mideast_geopolitics" in text
+    assert "📊 Счетчики: всего=2 | первичных=1 | повторных=1" in text
+    assert "⏳ Возраст темы: 1ч 0м" in text
+    assert "📰 Shipping halted near Hormuz" in text
+    assert worker._state["root_last_processed_ts"] == "2026-02-01T10:00:00Z"
+    sent = worker._state["sent_root_fingerprints"]
+    assert isinstance(sent, dict)
+    assert len(sent) == 1
+
+
+def test_worker_root_cursor_respects_cycle_limit(tmp_path):
+    frame = pd.DataFrame(
+        [
+            {
+                "symbol": "BRN",
+                "shock_ts": "2026-02-01T10:00:00Z",
+                "bar_minutes": 5,
+                "abs_move_pct": 1.5,
+                "shock_direction": "up",
+                "z_score": 3.8,
+                "selected_event_source": "root",
+                "selected_event_id": "evt-1",
+                "selected_event_ts": "2026-02-01T09:55:00Z",
+                "selected_title": "Shipping halted near Hormuz",
+                "selected_url": "https://example.com/root-1",
+                "selected_cause_event": "chokepoint_closure",
+                "selected_cause_route_key": "chokepoint:hormuz->seaborne_crude->BRN",
+                "selected_cause_claim_status": "confirmed",
+                "selected_cause_classification": "cause",
+                "selected_cause_confidence": 0.88,
+                "selected_fundamental_score": 0.91,
+                "selected_is_primary_cause": 1,
+                "root_link_type": "primary",
+                "root_primary_shock_ts": "2026-02-01T10:00:00Z",
+                "root_episode_event_index": 1,
+                "root_topic_id": "root:BRN:mideast_geopolitics",
+            },
+            {
+                "symbol": "NG_US",
+                "shock_ts": "2026-02-01T11:00:00Z",
+                "bar_minutes": 5,
+                "abs_move_pct": 1.1,
+                "shock_direction": "up",
+                "z_score": 3.1,
+                "selected_event_source": "root",
+                "selected_event_id": "evt-2",
+                "selected_event_ts": "2026-02-01T10:50:00Z",
+                "selected_title": "Freeze risk hits US gas flows",
+                "selected_url": "https://example.com/root-2",
+                "selected_cause_event": "weather_disruption",
+                "selected_cause_route_key": "weather:gulf->lng->NG_US",
+                "selected_cause_claim_status": "confirmed",
+                "selected_cause_classification": "cause",
+                "selected_cause_confidence": 0.79,
+                "selected_fundamental_score": 0.84,
+                "selected_is_primary_cause": 1,
+                "root_link_type": "primary",
+                "root_primary_shock_ts": "2026-02-01T11:00:00Z",
+                "root_episode_event_index": 1,
+                "root_topic_id": "root:NG_US:us_weather",
+            },
+        ]
+    )
+    live_db_url = f"sqlite:///{(tmp_path / 'news_root_limit.db').as_posix()}"
+    upsert_live_shock_rows(frame=frame, database_url=live_db_url, data_dir=tmp_path)
+    refresh_root_maintenance(
+        database_url=live_db_url,
+        data_dir=tmp_path,
+        cfg=RootMaintenanceConfig(bar_minutes=5),
+    )
+
+    settings = _build_settings(
+        tmp_path,
+        allowed_user_ids=[111],
+        daily_healthcheck_enabled=False,
+        root_alerts_enabled=True,
+        root_max_alerts_per_cycle=1,
+        news_alerts_enabled=False,
+        shock_alerts_enabled=False,
+    )
+    settings.news_filter.live_db_url = live_db_url
+
+    telegram_session = _FakeTelegramSession()
+    backend_session = _FakeBackendSession(active_batches=[[], []])
+    worker = TelegramWorker(
+        settings,
+        telegram_session=telegram_session,
+        backend_session=backend_session,
+    )
+    worker._state["registered_chats"] = {"111": 111}
+
+    worker.run_cycle()
+    worker._next_signal_fetch_at = 0.0
+    worker.run_cycle()
+
+    assert len(telegram_session.sent_messages) == 2
+    assert "root:BRN:mideast_geopolitics" in str(telegram_session.sent_messages[0]["text"])
+    assert "root:NG_US:us_weather" in str(telegram_session.sent_messages[1]["text"])
+    assert worker._state["root_last_processed_ts"] == "2026-02-01T11:00:00Z"
 
 
 def test_worker_broadcasts_live_news_alert_once(tmp_path):
@@ -983,6 +1196,6 @@ def test_worker_broadcasts_live_news_alert_once(tmp_path):
 
     assert len(telegram_session.sent_messages) == 1
     text = str(telegram_session.sent_messages[0]["text"])
-    assert "NEWS DISCOVERY ALERT" in text
-    assert "Commodities: BRN (0.93), GOLD (0.71)" in text
+    assert "НОВОСТНЫЙ АЛЕРТ" in text
+    assert "🧺 Инструменты: BRN (0.93), GOLD (0.71)" in text
     assert "Oil jumps after Iran escalation" in text

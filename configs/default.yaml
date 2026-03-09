@@ -173,6 +173,10 @@ telegram:
   daily_healthcheck_time_local: "09:00"
   state_path: "./data/telegram/bot_state.json"
   ui_base_url: null
+  root_alerts_enabled: true
+  root_min_primary_count: 1
+  root_max_alerts_per_cycle: 20
+  root_sent_fingerprint_ttl_hours: 504
   shock_alerts_enabled: true
   shock_feed_path: "./data/output/shock_alerts/live_shocks.csv"
   shock_primary_min_z: 2.5
@@ -182,7 +186,7 @@ telegram:
   shock_aftershock_cooldown_minutes: 60
   shock_max_alerts_per_cycle: 20
   shock_sent_fingerprint_ttl_hours: 504
-  news_alerts_enabled: true
+  news_alerts_enabled: false
   news_feed_path: "./data/output/news_live/live_news_discovery.csv"
   news_min_impact_score: 0.35
   news_min_confidence: 0.9
