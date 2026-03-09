@@ -1,5 +1,5 @@
 # Session Handoff
-Updated: 2026-03-09 11:15 UTC
+Updated: 2026-03-09 11:52 UTC
 
 ## Goal
 - Unblock the protected push for `codex/signals_engine` by fixing the remaining pre-push governance blockers.
@@ -13,12 +13,13 @@ Updated: 2026-03-09 11:15 UTC
 - Priority Rule: make the branch pushable with the smallest defensible code movement; correctness and gate compliance beat cosmetic cleanup.
 
 ## Current Delta
-- The branch is already rebased onto current `origin/main`.
-- Push is blocked by two gate classes.
-- The first is unmapped `signal_engine` files in `validate_agent_contexts.py`.
-- The second is hard size-limit failures in `config.py`, `telegram_worker.py`, and `ui/app_helpers_base.py`.
-- The repository production news route remains `news_root_cycle`; this push-unblock work does not change that operating contract.
-- Governance parity from the rebase recovery is already committed and must remain intact while fixing the push blockers.
+- The branch is rebased onto current `origin/main` and the protected push completed successfully.
+- `signal_engine` ownership is now mapped in the context router and matching agent-context docs.
+- The hard-limit file blockers were cleared via cohesive extractions and the active-signal fingerprint path now matches the strategy-aware contract.
+- The legacy shock-label automation artifacts were retired while preserving `news_root_cycle` as the production news route.
+- The context and taste validators, lean gate, and quality scorecards all passed.
+- Full `pytest` passed and the branch was pushed with `--force-with-lease`.
+- Governance parity from the rebase recovery remains intact.
 
 ## First-Time-Right Report
 1. Confirmed coverage: context routing, matching docs, hard-limit file size fixes, and the retry push are in scope.
@@ -34,21 +35,21 @@ Updated: 2026-03-09 11:15 UTC
 - Next Probe: add `signal_engine` context coverage first and rerun `validate_agent_contexts.py` before touching the oversized files.
 
 ## Task Outcome
-- Outcome Status: in_progress
-- Decision Quality: pending
-- Final Contexts: CTX-OPS, CTX-ORCHESTRATION, CTX-STRATEGY, CTX-API-UI
-- Route Match: pending
-- Primary Rework Cause: none
+- Outcome Status: completed
+- Decision Quality: correct_after_replan
+- Final Contexts: CTX-OPS, CTX-ORCHESTRATION, CTX-STRATEGY, CTX-API-UI, CTX-NEWS
+- Route Match: matched
+- Primary Rework Cause: workflow_gap
 - Incident Signature: none
-- Improvement Action: pending
-- Improvement Artifact: pending
+- Improvement Action: none
+- Improvement Artifact: none
 - Linked Plan ID: P1-PUSH-GATE-060
 
 ## Blockers
 - None.
 
 ## Next Step
-- Add `signal_engine` routing coverage and shrink the three hard-limit files, then rerun gates and retry the protected push.
+- None.
 
 ## Validation
 - `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
@@ -56,5 +57,7 @@ Updated: 2026-03-09 11:15 UTC
 - `python scripts/validate_session_handoff.py`
 - `python scripts/validate_agent_contexts.py`
 - `python scripts/validate_taste_invariants.py`
+- `python scripts/validate_quality_scorecards.py`
 - `python scripts/run_lean_gate.py`
+- `pytest`
 - `git push --force-with-lease origin codex/signals_engine`

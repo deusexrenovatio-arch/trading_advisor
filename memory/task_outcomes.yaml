@@ -503,7 +503,7 @@ items:
   start_recommendations:
   - Patch is scoped to one context.
 - task_id: APT-20260309T111717Z-dd0144f2
-  closed_at: null
+  closed_at: '2026-03-09T11:52:37Z'
   branch: codex/signals_engine
   goal_class: ops
   start_primary_context: CTX-OPS
@@ -514,17 +514,18 @@ items:
   - CTX-ORCHESTRATION
   - CTX-STRATEGY
   - CTX-API-UI
-  route_match: pending
+  - CTX-NEWS
+  route_match: matched
   time_to_first_patch_sec: 954
   same_path_attempts: 2
-  decision_quality: pending
-  primary_rework_cause: none
+  decision_quality: correct_after_replan
+  primary_rework_cause: workflow_gap
   incident_signature: none
-  improvement_action: pending
-  improvement_artifact: pending
+  improvement_action: none
+  improvement_artifact: none
   linked_plan_id: P1-PUSH-GATE-060
   linked_memory_id: null
-  outcome_status: in_progress
+  outcome_status: completed
   unmapped_files_count: 0
   intent_sources:
   - session_handoff

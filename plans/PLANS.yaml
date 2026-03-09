@@ -2066,9 +2066,10 @@ items:
   - id: P1-PUSH-GATE-060
     title: Unblock protected push by fixing signal-engine context coverage and hard size-limit files
     lane: governance
-    status: active
+    status: completed
     execution_mode: autonomous
     owner: engineering-platform
+    completed_at: 2026-03-09
     acceptance:
       - "scripts/validate_agent_contexts.py covers the src/moex_carry/signal_engine/ tree and matching agent-context docs stay aligned"
       - "src/moex_carry/config.py, src/moex_carry/integrations/telegram_worker.py, and src/moex_carry/ui/app_helpers_base.py are back under hard taste-invariant size limits"
