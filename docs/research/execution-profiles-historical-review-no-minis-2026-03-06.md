@@ -110,6 +110,34 @@ Interpretation:
 - these are too sparse to justify a hard exclusion purely from aggregate PnL
 - but they are appropriate watchlist roots for future universe-pruning or late-launch audits
 
+### `2025-2026` Thin-Root Slice
+The late-period slice clarifies that "thin" is not one problem:
+
+- `late-launch but active`:
+  - `FF (TTF Gas)`: `2 planned / 2 filled`, `1` active month, `+67.5`
+  - `CE (Copper)`: `15 planned / 15 filled`, `4` active months, `+351.0`
+  - `NC (Nickel)`: `2 planned / 2 filled`, `1` active month, `-6.0`
+  - `AN (Aluminum)`: `4 planned / 4 filled`, `1` active month, `-28.5`
+  - `KC (Coffee)`: `5 planned / 5 filled`, `2` active months, `-13.0`
+- `sparse-trigger but active`:
+  - `DJ (Dow Jones)`: `3 planned / 3 filled`, `1` active month, `+129.0`
+  - `SU (Sugar)`: `4 planned / 4 filled`, `2` active months, `+101.5`
+- `current-regime silent`:
+  - `N2 (Nikkei 225)`
+  - `SF (S&P 500)`
+  - `DX (DAX)`
+  - `SX (Euro Stoxx 50)`
+
+Interpretation:
+- the active late-launch roots are not failing because of execution; `filled ~= planned` for all of them
+- the active sparse roots are not data failures either; the strategy simply sees very few valid opportunities
+- the `current-regime silent` group on `2025-2026` is entirely index-root driven, which is a family-level regime-fit observation rather than four unrelated instrument failures
+
+### Monthly Histogram Artifact
+- `H4A_CAP_OFF` no-mini monthly histogram:
+  - `artifacts/research/h4_no_minis_monthly_revenue_histogram_20260306.svg`
+  - `artifacts/research/h4_no_minis_monthly_revenue_histogram_20260306.png`
+
 ## Breadth After Mini Exclusion
 - `H4A_CAP_OFF` still improves the whole universe strongly after removing duplicated exposure.
 - Full-window delta `H4` vs `O1`: `+47,314.5` net ticks.

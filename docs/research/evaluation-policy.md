@@ -40,6 +40,10 @@ Applies to Backtest v2, HPO, and forward readiness decisions.
 8. Calendar diagnostics:
    - Month-level reporting must distinguish active trading months from the full calendar inside the requested window.
    - Months with no filled trades count as flat months and must be disclosed explicitly.
+9. Thin-root diagnostics:
+   - `thin-sample` is a confidence flag, not a diagnosis.
+   - Sparse roots must be classified by cause before any pruning decision: `immature history`, `sparse-trigger`, `current-regime silent`, or `strategy-fit review`.
+   - When current-regime silent roots cluster in one family, record the family-level hypothesis explicitly instead of treating them as isolated root failures.
 
 ## Promotion decision
 - `pass`: OOS gain, constraints respected, dispersion acceptable, stress stable, forward sane.
