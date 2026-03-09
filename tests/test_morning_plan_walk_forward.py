@@ -1098,24 +1098,87 @@ def test_summarize_includes_by_instrument_attribution():
             exit_ticks=193,
         ),
     ]
-    summary = mod._summarize(rows, setups_total=4)
+    summary = mod._summarize(
+        rows,
+        setups_total=4,
+        tick_values={"BRH6": 10.0, "NGH6": 40.0},
+        account_equity=1_000.0,
+    )
     assert summary["filled_trades"] == 3
     assert summary["fill_rate"] == pytest.approx(0.75)
+    assert summary["net_money_sum"] == pytest.approx(130.0)
+    assert summary["return_on_equity_pct"] == pytest.approx(13.0)
     assert summary["by_instrument"]["BRH6"]["count"] == 2
+    assert summary["by_instrument"]["BRH6"]["tick_value"] == pytest.approx(10.0)
     assert summary["by_instrument"]["BRH6"]["tp_rate"] == pytest.approx(0.5)
     assert summary["by_instrument"]["BRH6"]["sl_rate"] == pytest.approx(0.5)
     assert summary["by_instrument"]["BRH6"]["expectancy_net_ticks"] == pytest.approx(2.5)
+    assert summary["by_instrument"]["BRH6"]["expectancy_net_money"] == pytest.approx(25.0)
+    assert summary["by_instrument"]["BRH6"]["net_money_sum"] == pytest.approx(50.0)
     assert summary["by_instrument"]["NGH6"]["count"] == 1
     assert summary["by_instrument"]["NGH6"]["exit_rate"] == pytest.approx(1.0)
+    assert summary["by_instrument"]["NGH6"]["net_money_sum"] == pytest.approx(80.0)
+
+
+def test_summarize_scales_money_metrics_by_qty_lots():
+    mod = _load_module()
+    rows = [
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-02-20",
+            setup_id="S1",
+            setup_kind="BOX_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-02-20T12:00:00+03:00",
+            entry_ts="2026-02-20T12:05:00+03:00",
+            exit_ts="2026-02-20T12:30:00+03:00",
+            filled=True,
+            outcome="TP",
+            gross_ticks=15.0,
+            net_ticks=10.0,
+            cost_ticks=5.0,
+            entry_ticks=100,
+            exit_ticks=115,
+            qty_lots=3,
+        ),
+        mod.SetupResult(
+            instrument_id="NGH6",
+            trade_date="2026-02-21",
+            setup_id="S2",
+            setup_kind="PULLBACK_LIMIT",
+            side="SELL",
+            as_of_ts="2026-02-21T12:00:00+03:00",
+            entry_ts="2026-02-21T12:10:00+03:00",
+            exit_ts="2026-02-21T13:00:00+03:00",
+            filled=True,
+            outcome="EXIT",
+            gross_ticks=7.0,
+            net_ticks=2.0,
+            cost_ticks=5.0,
+            entry_ticks=200,
+            exit_ticks=193,
+            qty_lots=1,
+        ),
+    ]
+    summary = mod._summarize(
+        rows,
+        setups_total=2,
+        tick_values={"BRH6": 10.0, "NGH6": 40.0},
+        account_equity=1_000.0,
+    )
+    assert summary["net_money_sum"] == pytest.approx(380.0)
+    assert summary["return_on_equity_pct"] == pytest.approx(38.0)
+    assert summary["by_instrument"]["BRH6"]["net_money_sum"] == pytest.approx(300.0)
+    assert summary["by_instrument"]["NGH6"]["net_money_sum"] == pytest.approx(80.0)
 
 
 def test_train_selection_metrics_uses_median_minus_mad_penalty():
     mod = _load_module()
     summary = {
         "by_instrument": {
-            "A": {"count": 5, "expectancy_net_ticks": 4.0},
-            "B": {"count": 4, "expectancy_net_ticks": 2.0},
-            "C": {"count": 1, "expectancy_net_ticks": 100.0},
+            "A": {"count": 5, "expectancy_net_ticks": 4.0, "expectancy_net_money": 40.0},
+            "B": {"count": 4, "expectancy_net_ticks": 2.0, "expectancy_net_money": 10.0},
+            "C": {"count": 1, "expectancy_net_ticks": 100.0, "expectancy_net_money": 1_000.0},
         }
     }
     metrics = mod._train_selection_metrics(
@@ -1125,9 +1188,9 @@ def test_train_selection_metrics_uses_median_minus_mad_penalty():
     )
     assert metrics.instruments_with_trades == 3
     assert metrics.robust_instruments == 2
-    assert metrics.median_expectancy == pytest.approx(3.0)
-    assert metrics.mad_expectancy == pytest.approx(1.0)
-    assert metrics.robust_score == pytest.approx(2.5)
+    assert metrics.median_expectancy == pytest.approx(25.0)
+    assert metrics.mad_expectancy == pytest.approx(15.0)
+    assert metrics.robust_score == pytest.approx(17.5)
 
 
 def test_resolve_tuning_grid_profiles():
@@ -1159,6 +1222,27 @@ def test_resolve_tick_sizes_falls_back_to_group_step_for_expired_contract():
     assert tick_sizes["BRZ5"] == pytest.approx(0.01)
     assert tick_sizes["NGH6"] == pytest.approx(0.1)
     assert tick_sizes["UNKNOWN1"] == pytest.approx(0.01)
+
+
+def test_resolve_tick_values_uses_spec_value_group_and_overall_fallbacks():
+    mod = _load_module()
+    client = _FakeSpecClient(
+        [
+            {"SECID": "BRH6", "MINSTEP": 0.01, "STEPPRICE": 10.0},
+            {"SECID": "NGH6", "MINSTEP": 0.1, "MULTIPLIER": 100.0},
+            {"SECID": "GDH6", "MINSTEP": 1.0, "STEPPRICE": 25.0},
+        ]
+    )
+    tick_values = mod._resolve_tick_values(
+        client=client,
+        board="RFUD",
+        instruments=["BRH6", "BRZ5", "NGH6", "UNKNOWN1"],
+        tick_sizes={"BRH6": 0.01, "BRZ5": 0.01, "NGH6": 0.1, "UNKNOWN1": 0.01},
+    )
+    assert tick_values["BRH6"] == pytest.approx(10.0)
+    assert tick_values["BRZ5"] == pytest.approx(10.0)
+    assert tick_values["NGH6"] == pytest.approx(10.0)
+    assert tick_values["UNKNOWN1"] == pytest.approx(10.0)
 
 
 def test_resolve_search_space_profile_and_algorithm():
@@ -1525,6 +1609,41 @@ def test_tail_risk_metrics_and_acceptance_summary():
     assert acceptance["passed"] is True
 
 
+def test_subfold_bucket_metrics_scale_money_by_qty_lots():
+    mod = _load_module()
+    rows = [
+        mod.SetupResult(
+            instrument_id="BRH6",
+            trade_date="2026-01-02",
+            setup_id="A",
+            setup_kind="BOX_BREAKOUT",
+            side="BUY",
+            as_of_ts="2026-01-02T12:00:00+03:00",
+            entry_ts="2026-01-02T12:05:00+03:00",
+            exit_ts="2026-01-02T12:20:00+03:00",
+            filled=True,
+            outcome="TP",
+            gross_ticks=8.0,
+            net_ticks=5.0,
+            cost_ticks=3.0,
+            entry_ticks=100,
+            exit_ticks=108,
+            qty_lots=3,
+        ),
+    ]
+    buckets = mod._subfold_bucket_metrics(
+        results=rows,
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 1, 7),
+        subfold_days=7,
+        tick_values={"BRH6": 10.0},
+    )
+    assert len(buckets) == 1
+    assert buckets[0]["net_ticks_sum"] == pytest.approx(5.0)
+    assert buckets[0]["net_money_sum"] == pytest.approx(150.0)
+    assert buckets[0]["expectancy_money"] == pytest.approx(150.0)
+
+
 def test_acceptance_summary_applies_hard_goal_constraints():
     mod = _load_module()
     acceptance = mod._acceptance_summary(
@@ -1600,9 +1719,33 @@ def test_normalized_selection_components_penalize_concentration():
     mod = _load_module()
     summary = {
         "by_instrument": {
-            "A": {"count": 6, "expectancy_net_ticks": 8.0, "abs_gross_ticks_sum": 60.0, "net_ticks_sum": 48.0},
-            "B": {"count": 6, "expectancy_net_ticks": 2.0, "abs_gross_ticks_sum": 60.0, "net_ticks_sum": 12.0},
-            "C": {"count": 6, "expectancy_net_ticks": -1.0, "abs_gross_ticks_sum": 60.0, "net_ticks_sum": -6.0},
+            "A": {
+                "count": 6,
+                "expectancy_net_ticks": 8.0,
+                "abs_gross_ticks_sum": 60.0,
+                "net_ticks_sum": 48.0,
+                "expectancy_net_money": 4.0,
+                "abs_gross_money_sum": 120.0,
+                "net_money_sum": 24.0,
+            },
+            "B": {
+                "count": 6,
+                "expectancy_net_ticks": 2.0,
+                "abs_gross_ticks_sum": 60.0,
+                "net_ticks_sum": 12.0,
+                "expectancy_net_money": 6.0,
+                "abs_gross_money_sum": 120.0,
+                "net_money_sum": 36.0,
+            },
+            "C": {
+                "count": 6,
+                "expectancy_net_ticks": -1.0,
+                "abs_gross_ticks_sum": 60.0,
+                "net_ticks_sum": -6.0,
+                "expectancy_net_money": -1.0,
+                "abs_gross_money_sum": 120.0,
+                "net_money_sum": -6.0,
+            },
         }
     }
     scoring = mod.ObjectiveScoringConfig(
@@ -1618,8 +1761,8 @@ def test_normalized_selection_components_penalize_concentration():
     )
     assert components["normalized_instruments"] == 3
     assert components["normalized_robust_score"] > 0.0
-    assert components["concentration_top_share"] == pytest.approx(0.8)
-    assert components["concentration_penalty"] == pytest.approx(0.6)
+    assert components["concentration_top_share"] == pytest.approx(0.6)
+    assert components["concentration_penalty"] == pytest.approx(0.2)
 
 
 def test_probability_context_key_modes():
@@ -1679,18 +1822,179 @@ def test_build_planned_signal_contains_entry_range_and_levels():
         rationale=[],
         risk_ticks=5,
     )
+    simulated = mod.SetupResult(
+        instrument_id="BRH6",
+        trade_date="2026-02-21",
+        setup_id="S-PLAN",
+        setup_kind="PULLBACK_LIMIT",
+        side="BUY",
+        as_of_ts=as_of.isoformat(),
+        entry_ts=(as_of + timedelta(minutes=5)).isoformat(),
+        exit_ts=(as_of + timedelta(minutes=30)).isoformat(),
+        filled=True,
+        outcome="TP",
+        gross_ticks=15.0,
+        net_ticks=10.0,
+        cost_ticks=5.0,
+        entry_ticks=100,
+        exit_ticks=115,
+    )
     planned = mod._build_planned_signal(
         instrument_id="BR",
         as_of_ts=as_of,
         setup=setup,
         gate_status="DISABLED",
-        simulated=None,
+        simulated=simulated,
+        tick_values={"BRH6": 10.0},
+        account_equity=1_000.0,
     )
     assert planned.entry_range_low_ticks == 99
     assert planned.entry_range_high_ticks == 101
     assert planned.sl_ticks == 95
     assert planned.tp_ticks == 110
     assert planned.stop_model == "volatility"
+    assert planned.tick_value == pytest.approx(10.0)
+    assert planned.simulated_cost_money == pytest.approx(50.0)
+    assert planned.simulated_gross_money == pytest.approx(150.0)
+    assert planned.simulated_net_money == pytest.approx(100.0)
+    assert planned.simulated_net_return_on_equity_pct == pytest.approx(10.0)
+
+
+def test_apply_position_sizing_target_risk_pct_uses_tick_value_and_caps_contracts():
+    mod = _load_module()
+    setup = Setup(
+        setup_id="S-SIZE",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=1,
+            tif="DAY",
+            meta={"setup_kind": "BOX_BREAKOUT"},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=98,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=108,
+            qty_lots=1,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=2,
+    )
+    sized_setup, details = mod._apply_position_sizing(
+        setup=setup,
+        instrument_id="BRH6",
+        tick_values={"BRH6": 10.0},
+        costs=mod.CostAssumptions(
+            commission_ticks_per_side=0.0,
+            slippage_ticks_per_side=0.0,
+            spread_half_ticks=0.0,
+        ),
+        position_sizing=mod.PositionSizingConfig(
+            mode="target_risk_pct",
+            account_equity=1_000.0,
+            target_risk_pct=10.0,
+            max_contracts_per_instrument=4,
+        ),
+    )
+    assert sized_setup.entry_order.qty_lots == 4
+    assert sized_setup.sl_order.qty_lots == 4
+    assert sized_setup.tp_order.qty_lots == 4
+    assert details["risk_money_per_lot"] == pytest.approx(20.0)
+    assert details["position_risk_money"] == pytest.approx(80.0)
+
+
+def test_build_planned_signal_scales_money_by_simulated_qty_and_exposes_sizing():
+    mod = _load_module()
+    tz = ZoneInfo("Europe/Moscow")
+    as_of = datetime(2026, 2, 21, 12, 0, tzinfo=tz)
+    setup = Setup(
+        setup_id="S-PLAN-SIZED",
+        side=Side.BUY,
+        entry_level=Level(tf=TF.H1, kind="BOX_H", price_ticks=100, score=1.0, meta={}),
+        entry_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.BUY,
+            price_ticks=100,
+            qty_lots=2,
+            tif="DAY",
+            meta={"setup_kind": "PULLBACK_LIMIT", "target_return_pct": 0.7},
+        ),
+        sl_order=OrderIntent(
+            order_type=OrderType.STOP,
+            side=Side.SELL,
+            price_ticks=95,
+            qty_lots=2,
+            tif="GTC",
+            meta={"stop_model": "volatility"},
+        ),
+        tp_order=OrderIntent(
+            order_type=OrderType.LIMIT,
+            side=Side.SELL,
+            price_ticks=110,
+            qty_lots=2,
+            tif="GTC",
+            meta={},
+        ),
+        horizon="EOD",
+        rationale=[],
+        risk_ticks=5,
+    )
+    simulated = mod.SetupResult(
+        instrument_id="BRH6",
+        trade_date="2026-02-21",
+        setup_id="S-PLAN-SIZED",
+        setup_kind="PULLBACK_LIMIT",
+        side="BUY",
+        as_of_ts=as_of.isoformat(),
+        entry_ts=(as_of + timedelta(minutes=5)).isoformat(),
+        exit_ts=(as_of + timedelta(minutes=30)).isoformat(),
+        filled=True,
+        outcome="TP",
+        gross_ticks=15.0,
+        net_ticks=10.0,
+        cost_ticks=5.0,
+        entry_ticks=100,
+        exit_ticks=115,
+        qty_lots=2,
+    )
+    planned = mod._build_planned_signal(
+        instrument_id="BR",
+        as_of_ts=as_of,
+        setup=setup,
+        gate_status="DISABLED",
+        simulated=simulated,
+        tick_values={"BRH6": 10.0},
+        account_equity=1_000.0,
+        sizing_info={
+            "mode": "target_risk_pct",
+            "qty_lots": 2,
+            "tick_value": 10.0,
+            "risk_money_per_lot": 70.0,
+            "position_risk_money": 140.0,
+        },
+    )
+    assert planned.qty_lots == 2
+    assert planned.sizing_mode == "target_risk_pct"
+    assert planned.estimated_risk_money_per_lot == pytest.approx(70.0)
+    assert planned.estimated_position_risk_money == pytest.approx(140.0)
+    assert planned.simulated_cost_money == pytest.approx(100.0)
+    assert planned.simulated_gross_money == pytest.approx(300.0)
+    assert planned.simulated_net_money == pytest.approx(200.0)
+    assert planned.simulated_net_return_on_equity_pct == pytest.approx(20.0)
 
 
 def test_precision_filter_reason_blocks_by_side_and_risk():

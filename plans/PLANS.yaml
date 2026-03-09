@@ -1,6 +1,116 @@
-version: 1
-updated_at: 2026-03-06
+﻿version: 1
+updated_at: 2026-03-09
 items:
+  - id: P2-SIGNALS-H4A-OPS-051
+    title: Publish the H4A manual execution contract and align baseline-status docs with the active runtime baseline
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - operator-facing docs explicitly state the dynamic H4A execution rules that were previously hidden in the simulator
+      - stale O1-baseline wording is marked historical or superseded where H4A is already the active runtime baseline
+      - governance records state that the real execution baseline is H4A and link to the operator contract
+    checks:
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/research/evaluation-policy.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-H4A-MONEY-050
+      - P2-SIGNALS-BASELINE-046
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P2-SIGNALS-H4A-MONEY-050
+    title: Replay H4A execution logic on the money-sizing path and compare it deeply against baseline risk
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - frozen H4A is rerun as an execution-only override over the same O1 reference while using current money-based sizing
+      - a comparison artifact explains H4A risk versus baseline risk by execution quality, monthly results, and concentration
+      - governance gates remain green after any supporting code or script changes
+    checks:
+      - python scripts/run_lean_gate.py
+      - targeted research tests if analysis code changes
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_o1_execution_hypothesis_program.py
+      - scripts/run_h4a_vs_baseline_risk.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-SIZING-049
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P2-SIGNALS-SIZING-049
+    title: Add money-based futures position sizing to walk-forward research and rerun baseline versus scenario 2/3 on the frozen window
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - walk-forward supports an explicit economic sizing mode while preserving the legacy one-lot path
+      - baseline and scenario 2/3 reruns are compared on the same frozen window in money and return-on-equity terms
+      - a research artifact records weak-month floor and concentration metrics for the compared scenarios
+    checks:
+      - python scripts/run_lean_gate.py
+      - targeted walk-forward tests
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_signals_sizing_scenarios.py
+      - scripts/run_o1_execution_hypothesis_program.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-METRICS-048
+    started_at: 2026-03-07
+    completed_at: 2026-03-07
+
+  - id: P2-SIGNALS-METRICS-048
+    title: Normalize walk-forward futures results to money/equity units and record year concentration of the current baseline
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - the current one-year baseline is recorded with month-level and root-level concentration evidence
+      - walk-forward output includes per-instrument tick-value-derived money metrics and aggregate return-on-equity fields
+      - regression tests cover spec-based tick-value resolution and money summary attribution
+    checks:
+      - python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+      - python scripts/run_lean_gate.py
+      - pytest tests/test_morning_plan_walk_forward.py -q
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-RESEARCH-047
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
   - id: P2-SIGNALS-RESEARCH-047
     title: Classify thin roots by cause on 2025-2026 and publish renderable monthly histogram artifacts
     lane: research

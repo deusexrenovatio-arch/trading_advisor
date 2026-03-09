@@ -16,11 +16,13 @@ Date: 2026-03-06
 
 ## Baseline Decision
 - `H4A_CAP_OFF` remains the strongest execution profile after mini exclusion.
+- Runtime meaning of `H4A_CAP_OFF`: the inherited `O1` trade-management package plus `max_profit_rr=0.0`, not a "cap off only" shortcut.
 - Promotion of `H4A_CAP_OFF` to runtime baseline is now supported by:
   - old-regime slice `2020-2024`
   - full whole-universe review `2020-2026`
   - no-mini universe hygiene
   - broad per-root uplift rather than a single-root-only effect
+- Manual execution of this baseline must follow [H4A Manual Execution Baseline](../runbooks/h4a-manual-execution-baseline.md).
 
 ## Summary After Mini Exclusion
 

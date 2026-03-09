@@ -1,7 +1,74 @@
 version: 1
-updated_at: 2026-03-06
+updated_at: 2026-03-09
 
 decisions:
+  - id: ADM-2026-03-09-099
+    date: 2026-03-09
+    title: H4A baseline must be documented as an operator contract, not only as a research label
+    context: User pointed out that trailing stop behavior inside H4A was not explicitly known from the operator side and asked to review subtle human-execution assumptions, then requested that H4A be fixed in documentation as the real baseline.
+    decision: >-
+      Added `docs/runbooks/h4a-manual-execution-baseline.md` and aligned the
+      operator/business-process and research baseline documents so that `H4A` is
+      stated as the active execution baseline with explicit rules for LIMIT
+      fallback, fill-dependent bracket recalculation, break-even lifting,
+      trailing stop movement, time stop, and simulator-only same-bar handling.
+    impact: >-
+      Future human execution and baseline reviews should treat `H4A` as a full
+      operator contract rather than as a short "cap off" nickname. Any promoted
+      baseline with hidden dynamic management now requires explicit operator
+      documentation.
+    links:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/research/evaluation-policy.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-09-098
+    date: 2026-03-09
+    title: H4A remains an execution-only winner after money-based risk sizing, and its uplift comes entirely from post-fill exits
+    context: User asked to recheck the stronger old execution profile (`H4A_CAP_OFF`) without changing its logic, but now on the corrected money-sizing path, and to compare it directly with the current `baseline risk`.
+    decision: >-
+      Added `scripts/run_h4a_vs_baseline_risk.py` and reran both `baseline risk`
+      and `H4A risk` on the same frozen `O1` reference with `target_risk_pct`
+      sizing. The only execution delta was `max_profit_rr` changing from `0.3`
+      to `0.0`. Results improved from `12.97%` to `20.55%` ROE and from
+      `5.08%` to `8.66%` ROE outside top-3 months, while fill count (`222`),
+      fill rate (`0.8571`), gate mix, and quantity distribution stayed unchanged.
+    impact: Future comparisons should treat `H4A` as the stronger execution reference than `baseline risk` unless concentration controls or stricter stress assumptions reverse the result. The uplift should be interpreted as an exit-path effect after fill, not as a fill-quality or position-sizing effect.
+    links:
+      - scripts/run_h4a_vs_baseline_risk.py
+      - tests/test_h4a_vs_baseline_risk.py
+      - artifacts/research/wf_goal_v6_baseline_risk_recheck_20260309.json
+      - artifacts/research/wf_goal_v6_h4a_risk_20260309.json
+      - artifacts/research/wf_goal_v6_h4a_vs_baseline_risk_20260309.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-07-097
+    date: 2026-03-07
+    title: Use economic lot sizing as the baseline comparison frame, and treat scenario 2 as the strongest tested weak-month improver
+    context: User asked to use lot volume as an active lever because futures contribute unevenly in cash terms, then requested full reruns of the corrected baseline plus scenario 2 and scenario 3 on the same frozen window.
+    decision: Extended `run_morning_plan_walk_forward.py` with explicit `fixed_lots` and `target_risk_pct` sizing modes, propagated `qty_lots` and sizing metadata through simulation/reporting, and added `run_signals_sizing_scenarios.py` to rerun the frozen comparison set in corrected money/ROE units. The completed rerun showed `O1 fixed` at `3.83%` ROE, `O1 risk-sized` at `12.97%`, scenario 2 at `30.89%`, and scenario 3 at `26.81%`; scenario 2 had the strongest weak-month improvement (`median monthly ROE 1.12%`, `ROE ex top3 9.78%`) while scenario 3 mainly improved concentration versus the risk-sized baseline (`top share 0.262` vs `0.283`) but weakened weak-month floor metrics.
+    impact: Future strategy loops should compare variants on economic sizing first, not raw one-lot results. The next stabilizing loop should start from the broader scenario 2 family and pair it with concentration or notional caps, because none of the tested variants comes close to the requested `25%` weak-month floor.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_signals_sizing_scenarios.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_sizing_scenarios_20260307.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+  - id: ADM-2026-03-06-096
+    date: 2026-03-06
+    title: Walk-forward futures economics must default to money/equity metrics instead of raw cross-instrument ticks
+    context: User asked to revisit the current futures baseline because annual profitability depends too much on a few bright trades or months and explicitly noted that raw ticks are not economically comparable across futures with different cash tick values.
+    decision: Extended `run_morning_plan_walk_forward.py` to resolve per-instrument cash tick value from MOEX futures specs, emit additive money and return-on-equity fields in planned-signal and summary outputs, and make concentration plus train-selection logic prefer money metrics whenever they are available while retaining legacy tick fields for compatibility.
+    impact: Future strategy comparisons, concentration checks, and weak-month diagnostics can be judged on economically comparable units instead of raw point totals, which reduces cross-instrument distortion without forcing an immediate baseline re-optimization.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
   - id: ADM-2026-03-06-095
     date: 2026-03-06
     title: Treat thin roots as cause-based diagnostics and record index-heavy silent cluster on 2025-2026

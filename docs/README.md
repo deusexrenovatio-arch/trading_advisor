@@ -35,6 +35,7 @@ This directory is the repository knowledge system for agent-first engineering.
 - `docs/workflows/skill-governance-sync.md`
 - `docs/workflows/worktree-governance.md`
 - `docs/runbooks/governance-remediation.md`
+- `docs/runbooks/h4a-manual-execution-baseline.md`
 - `docs/runbooks/signal-agent-continuity.md`
 - `docs/runbooks/self-heal-escalation.md`
 - `docs/runbooks/flaky-tests-policy.md`

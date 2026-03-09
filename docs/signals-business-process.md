@@ -87,6 +87,18 @@ Decision rule:
 | 8. Exit Execution | Close both legs manually | Persist exit action and update actionable view | `signal_executions` rows with action `exit` |
 | 9. Audit | Review full lifecycle for pair | Provide history of signals + executions for replay | `signal_history` + `signal_executions` |
 
+## H4A Baseline Addendum
+- Current morning futures manual execution baseline: `H4A_CAP_OFF`.
+- The generic flow above is not sufficient by itself for `H4A`.
+- Operators must follow [H4A Manual Execution Baseline](runbooks/h4a-manual-execution-baseline.md) whenever the signal is executed as the active morning futures baseline.
+- Additional mandatory actions for `H4A`:
+  - start a `10`-minute timer on every LIMIT entry and replace the order if it is still not filled,
+  - recalculate effective TP and stop from the realized fill,
+  - manage break-even and trailing stop updates after fill,
+  - force a `180`-minute time exit if the position is still open,
+  - record whether stop-based exit was `initial_loss_sl` or `protective_sl`.
+- If the operator intentionally skips any of these rules, the trade must be logged as a manual override rather than a baseline `H4A` execution.
+
 ## Target Entity-Centric Lifecycle (Planned)
 This lifecycle is the target contract model for `/api/v2/signals/actionability` and Telegram worker unification.
 

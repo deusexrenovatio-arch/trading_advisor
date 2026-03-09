@@ -1,5 +1,11 @@
 # O1-Relative Execution Hypothesis Results (2026-03-06)
 
+## Status Note (2026-03-09)
+- This page is historical evidence for the O1-relative ladder, not the current runtime baseline contract.
+- The old recommendation to keep `O1` as the active baseline was superseded after no-mini historical validation and subsequent runtime alignment.
+- Current execution baseline: `H4A_CAP_OFF` as documented in [H4A Manual Execution Baseline](../runbooks/h4a-manual-execution-baseline.md).
+- `H4A` should be read as the inherited `O1` management package with `max_profit_rr=0.0`, not as a standalone "cap off only" label.
+
 ## Experiment scope
 - Hypothesis: complete the `H0`-`H5` execution ladder relative to frozen `O1` and keep only candidates that improve `net_ticks_sum` without violating the same hard constraints.
 - Data window: `2025-03-01` to `2026-03-02`
