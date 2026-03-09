@@ -227,12 +227,12 @@ def _episode_id(topic_key: str, ordinal: int) -> str:
 def _format_age(delta: timedelta) -> str:
     minutes = int(delta.total_seconds() // 60)
     if minutes < 60:
-        return f"{minutes}m"
+        return f"{minutes}м"
     hours = minutes // 60
     if hours < 24:
-        return f"{hours}h {minutes % 60}m"
+        return f"{hours}ч {minutes % 60}м"
     days = hours // 24
-    return f"{days}d {hours % 24}h"
+    return f"{days}д {hours % 24}ч"
 
 
 def _fmt_msk(ts: datetime) -> str:
@@ -241,16 +241,36 @@ def _fmt_msk(ts: datetime) -> str:
     return msk.strftime("%d.%m.%Y %H:%M MSK")
 
 
+def _direction_label(value: object) -> str:
+    direction_raw = _normalize_text(value).lower()
+    if direction_raw in {"up", "long", "bullish", "increase"}:
+        return "рост"
+    if direction_raw in {"down", "short", "bearish", "decrease"}:
+        return "падение"
+    return "н/д"
+
+
+def _impact_tier_label(value: object) -> str:
+    tier_raw = _normalize_text(value).lower()
+    labels = {
+        "minor": "слабый",
+        "moderate": "умеренный",
+        "strong": "сильный",
+        "severe": "экстремальный",
+    }
+    return labels.get(tier_raw, tier_raw or "н/д")
+
+
 def format_shock_message(alert: dict[str, Any]) -> str:
     role = str(alert.get("role") or "").strip().lower()
-    role_header = "SHOCK PRIMARY" if role == "primary" else "SHOCK AFTERSHOCK"
+    role_header = "ПЕРВИЧНЫЙ ШОК" if role == "primary" else "ПОВТОРНЫЙ ШОК"
     symbol = str(alert.get("symbol") or "").strip().upper() or "N/A"
-    direction = str(alert.get("shock_direction") or "").strip().upper() or "N/A"
+    direction = _direction_label(alert.get("shock_direction"))
     z_abs = float(alert.get("z_score_abs") or 0.0)
-    impact_tier = str(alert.get("impact_tier") or "minor").strip().lower()
+    impact_tier = _impact_tier_label(alert.get("impact_tier") or "minor")
     abs_move = alert.get("abs_move_pct")
     abs_move_numeric = pd.to_numeric(abs_move, errors="coerce")
-    abs_move_str = "n/a" if pd.isna(abs_move_numeric) else f"{float(abs_move_numeric):.3f}%"
+    abs_move_str = "н/д" if pd.isna(abs_move_numeric) else f"{float(abs_move_numeric):.3f}%"
     shock_ts = alert.get("shock_ts")
     root_ts = alert.get("root_ts")
     shock_dt = _parse_iso_utc(shock_ts)
@@ -266,19 +286,19 @@ def format_shock_message(alert: dict[str, Any]) -> str:
 
     lines = [
         role_header,
-        f"Topic: {topic_key}",
-        f"Symbol: {symbol}",
-        f"Direction: {direction}",
-        f"|z|={z_abs:.2f} | move={abs_move_str} | tier={impact_tier}",
-        f"Root: {root_label}",
-        f"Now:  {now_label}",
-        f"Topic age: {age}",
-        f"Episode: {episode_id} #{episode_idx}",
+        f"🧩 Тема: {topic_key}",
+        f"📈 Инструмент: {symbol}",
+        f"🧭 Направление: {direction}",
+        f"📊 |z|={z_abs:.2f} | ход={abs_move_str} | уровень={impact_tier}",
+        f"🕒 Корень: {root_label}",
+        f"🕒 Сейчас: {now_label}",
+        f"⏳ Возраст темы: {age}",
+        f"🆔 Эпизод: {episode_id} #{episode_idx}",
     ]
     if headline:
-        lines.append(f"Headline: {headline}")
+        lines.append(f"📰 {headline}")
     if url:
-        lines.append(f"URL: {url}")
+        lines.append(f"🔗 {url}")
     return "\n".join(lines)
 
 def apply_shock_alert_policy(

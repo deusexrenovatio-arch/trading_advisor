@@ -80,9 +80,9 @@ def test_format_news_message_uses_discovery_contract() -> None:
 
     message = format_news_message(alert)
 
-    assert "NEWS DISCOVERY ALERT" in message
-    assert "Commodities: BRN (0.93), GOLD (0.71)" in message
-    assert "Lead link: BRN (0.93)" in message
+    assert "НОВОСТНЫЙ АЛЕРТ" in message
+    assert "🧺 Инструменты: BRN (0.93), GOLD (0.71)" in message
+    assert "🔗 Ведущая связь: BRN (0.93)" in message
     assert "Move verification" not in message
     assert "Oil jumps after Iran escalation" in message
 
@@ -101,7 +101,7 @@ def test_format_news_message_truncates_long_headline() -> None:
     }
 
     message = format_news_message(alert)
-    headline_lines = [line for line in message.splitlines() if line.startswith("Headline: ")]
+    headline_lines = [line for line in message.splitlines() if line.startswith("🗞 ")]
     assert len(headline_lines) == 1
     assert headline_lines[0].endswith("...")
     assert len(headline_lines[0]) <= 220

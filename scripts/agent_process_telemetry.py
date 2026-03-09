@@ -272,12 +272,21 @@ def write_yaml(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
+def _git_env() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GIT_")
+    }
+
+
 def get_repo_root() -> Path:
     completed = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         check=False,
         capture_output=True,
         text=True,
+        env=_git_env(),
     )
     if completed.returncode != 0 or not completed.stdout.strip():
         raise RuntimeError("not inside a git repository")
@@ -291,6 +300,7 @@ def _run_git(repo_root: Path, *args: str) -> str:
         check=False,
         capture_output=True,
         text=True,
+        env=_git_env(),
     )
     if completed.returncode != 0:
         return ""
@@ -324,6 +334,7 @@ def collect_working_tree_changes(repo_root: Path) -> list[str]:
         check=False,
         capture_output=True,
         text=True,
+        env=_git_env(),
     )
     if completed.returncode != 0:
         return []
@@ -347,6 +358,7 @@ def collect_diff_between_refs(repo_root: Path, base_sha: str, head_sha: str) -> 
         check=False,
         capture_output=True,
         text=True,
+        env=_git_env(),
     )
     if completed.returncode != 0:
         return []

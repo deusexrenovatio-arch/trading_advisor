@@ -196,21 +196,59 @@ def _format_msk(ts: datetime) -> str:
     return msk.strftime("%d.%m.%Y %H:%M MSK")
 
 
+def _direction_label(value: object) -> str:
+    direction_raw = _normalize_text(value).lower()
+    if direction_raw in {"up", "long", "bullish", "increase"}:
+        return "рост"
+    if direction_raw in {"down", "short", "bearish", "decrease"}:
+        return "падение"
+    return "нейтрально"
+
+
+def _severity_label(value: object) -> str:
+    severity_raw = _normalize_text(value).lower()
+    labels = {
+        "critical": "критично",
+        "high": "высокая",
+        "medium": "средняя",
+        "low": "низкая",
+    }
+    return labels.get(severity_raw, severity_raw or "н/д")
+
+
+def _cause_classification_label(value: object) -> str:
+    classification_raw = _normalize_text(value).lower()
+    labels = {
+        "cause": "причина",
+        "effect": "эффект",
+        "mixed": "смешанное",
+        "unknown": "неизвестно",
+    }
+    return labels.get(classification_raw, classification_raw or "неизвестно")
+
+
+def _claim_status_label(value: object) -> str:
+    claim_raw = _normalize_text(value).lower()
+    labels = {
+        "confirmed": "подтверждено",
+        "unverified": "не подтверждено",
+        "pending": "в ожидании",
+        "rumor": "слух",
+        "disputed": "оспаривается",
+        "unknown": "неизвестно",
+    }
+    return labels.get(claim_raw, claim_raw or "неизвестно")
+
+
 def format_news_message(alert: dict[str, Any]) -> str:
     published_dt = _parse_iso_utc(alert.get("published_at_utc"))
     published_label = _format_msk(published_dt) if published_dt is not None else "n/a"
     lead_commodity = _normalize_text(alert.get("lead_commodity") or alert.get("commodity")).upper() or "N/A"
-    direction = _normalize_text(alert.get("direction")).lower()
-    if direction in {"up", "long", "bullish", "increase"}:
-        direction_label = "UP"
-    elif direction in {"down", "short", "bearish", "decrease"}:
-        direction_label = "DOWN"
-    else:
-        direction_label = "NEUTRAL"
-    severity = _normalize_text(alert.get("severity")).lower() or "n/a"
+    direction_label = _direction_label(alert.get("direction"))
+    severity = _severity_label(alert.get("severity"))
     impact = _to_float(alert.get("impact_score"))
     confidence = _to_float(alert.get("confidence"))
-    source_name = _normalize_text(alert.get("source_name")) or "n/a"
+    source_name = _normalize_text(alert.get("source_name")) or "н/д"
     provider = _normalize_text(alert.get("provider"))
     source_label = f"{source_name} ({provider})" if provider else source_name
     headline = _truncate_with_ellipsis(
@@ -220,10 +258,10 @@ def format_news_message(alert: dict[str, Any]) -> str:
     story_id = _normalize_text(alert.get("story_id") or alert.get("story_key"))
     reason_terms_up = _coerce_reason_terms(alert.get("reason_terms_up"))
     reason_terms_down = _coerce_reason_terms(alert.get("reason_terms_down"))
-    cause_classification = _normalize_text(alert.get("cause_classification")).lower() or "unknown"
+    cause_classification = _cause_classification_label(alert.get("cause_classification"))
     cause_event = _normalize_text(alert.get("cause_event")).lower()
     cause_route_key = _normalize_text(alert.get("cause_route_key"))
-    cause_claim_status = _normalize_text(alert.get("cause_claim_status")).lower() or "unknown"
+    cause_claim_status = _claim_status_label(alert.get("cause_claim_status"))
     cause_entities = _coerce_reason_terms(alert.get("cause_entities_json"))
     fundamental_score = _to_float(alert.get("fundamental_score"))
     cause_confidence = _to_float(alert.get("cause_confidence"))
@@ -255,27 +293,27 @@ def format_news_message(alert: dict[str, Any]) -> str:
     url = _normalize_text(alert.get("url"))
 
     lines = [
-        "NEWS DISCOVERY ALERT",
-        f"Published: {published_label}",
-        f"Commodities: {commodities_label}",
-        f"Lead link: {lead_commodity} ({lead_link_score:.2f})",
-        f"Direction: {direction_label} | Impact: {impact:.3f} | Confidence: {confidence:.3f} | Severity: {severity}",
-        f"Source: {source_label}",
+        "НОВОСТНЫЙ АЛЕРТ",
+        f"🕒 Опубликовано: {published_label}",
+        f"🧺 Инструменты: {commodities_label}",
+        f"🔗 Ведущая связь: {lead_commodity} ({lead_link_score:.2f})",
+        f"🧭 Направление: {direction_label} | импакт={impact:.3f} | доверие={confidence:.3f} | важность={severity}",
+        f"📰 Источник: {source_label}",
     ]
     if story_id:
-        lines.append(f"Story: {story_id}")
+        lines.append(f"🆔 Сюжет: {story_id}")
     if headline:
-        lines.append(f"Headline: {headline}")
+        lines.append(f"🗞 {headline}")
     lines.append(
-        "Cause: "
-        f"{cause_classification.upper()} | event={cause_event or 'n/a'} | route={cause_route_key or 'n/a'} "
-        f"| fundamental={fundamental_score:.2f} | cause_conf={cause_confidence:.2f} "
-        f"| primary={'yes' if is_primary_cause else 'no'} | claim={cause_claim_status}"
+        "🧬 Причина: "
+        f"{cause_classification} | event={cause_event or 'н/д'} | route={cause_route_key or 'н/д'} "
+        f"| фундаментал={fundamental_score:.2f} | conf={cause_confidence:.2f} "
+        f"| primary={'да' if is_primary_cause else 'нет'} | claim={cause_claim_status}"
     )
     if evidence:
-        lines.append(f"Evidence: {evidence}")
+        lines.append(f"🧾 Основания: {evidence}")
     if url:
-        lines.append(f"URL: {url}")
+        lines.append(f"🔗 {url}")
     return "\n".join(lines)
 
 

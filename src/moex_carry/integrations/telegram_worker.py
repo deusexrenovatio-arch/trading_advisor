@@ -17,6 +17,7 @@ from moex_carry.integrations.telegram_runtime_utils import (
     resolve_display_timezone,
 )
 from moex_carry.integrations.telegram_news_broadcast import broadcast_news_alerts
+from moex_carry.integrations.telegram_root_broadcast import broadcast_root_alerts
 from moex_carry.integrations.telegram_shock_broadcast import broadcast_shock_alerts
 from moex_carry.signals_ack import build_ack_note, build_signal_fingerprint
 from moex_carry.signals_delivery import (
@@ -111,6 +112,7 @@ class TelegramWorker:
             "last_update_id": 0,
             "registered_chats": {},
             "sent_fingerprints": {},
+            "sent_root_fingerprints": {},
             "sent_shock_fingerprints": {},
             "sent_news_fingerprints": {},
             "hold_open_last_sent_date_by_pair": {},
@@ -119,6 +121,7 @@ class TelegramWorker:
             "daily_healthcheck_last_sent_date_by_chat": {},
             "pending_callbacks": {},
             "shock_topics": {},
+            "root_last_processed_ts": None,
             "shock_last_processed_ts": None,
             "news_last_processed_ts": None,
             "shock_episode_counter": 0,
@@ -146,7 +149,7 @@ class TelegramWorker:
             for key, value in (payload.get("sent_fingerprints") or {}).items()
             if isinstance(key, str) and isinstance(value, str)
         }
-        for map_key in ("sent_shock_fingerprints", "sent_news_fingerprints"):
+        for map_key in ("sent_root_fingerprints", "sent_shock_fingerprints", "sent_news_fingerprints"):
             state[map_key] = {
                 str(key): str(value)
                 for key, value in (payload.get(map_key) or {}).items()
@@ -191,7 +194,7 @@ class TelegramWorker:
                     continue
                 normalized_topics[key] = dict(value)
             state["shock_topics"] = normalized_topics
-        for key in ("shock_last_processed_ts", "news_last_processed_ts"):
+        for key in ("root_last_processed_ts", "shock_last_processed_ts", "news_last_processed_ts"):
             processed_ts = payload.get(key)
             if isinstance(processed_ts, str) and processed_ts.strip():
                 state[key] = processed_ts
@@ -1350,25 +1353,22 @@ class TelegramWorker:
         now = self._monotonic_fn()
         if now >= self._next_signal_fetch_at:
             self._broadcast_signals()
+            registered_chats = self._registered_chats()
+            broadcast_root_alerts(
+                cfg=self.cfg, state=self._state, registered_chats=registered_chats,
+                send_text=self._send_text, save_state=self._save_state, logger=logger,
+                shock_database_url=self.settings.news_filter.live_db_url, data_dir=self.settings.data.data_dir,
+            )
             broadcast_shock_alerts(
-                cfg=self.cfg,
-                state=self._state,
-                registered_chats=self._registered_chats(),
+                cfg=self.cfg, state=self._state, registered_chats=registered_chats,
                 shock_feed_path=self._shock_feed_path,
-                send_text=self._send_text,
-                save_state=self._save_state,
-                logger=logger,
-                shock_database_url=self.settings.news_filter.live_db_url,
-                data_dir=self.settings.data.data_dir,
+                send_text=self._send_text, save_state=self._save_state, logger=logger,
+                shock_database_url=self.settings.news_filter.live_db_url, data_dir=self.settings.data.data_dir,
             )
             broadcast_news_alerts(
-                cfg=self.cfg,
-                state=self._state,
-                registered_chats=self._registered_chats(),
+                cfg=self.cfg, state=self._state, registered_chats=registered_chats,
                 news_feed_path=self._news_feed_path,
-                send_text=self._send_text,
-                save_state=self._save_state,
-                logger=logger,
+                send_text=self._send_text, save_state=self._save_state, logger=logger,
             )
             interval = max(int(self.cfg.signal_fetch_interval_sec), 1)
             self._next_signal_fetch_at = now + interval

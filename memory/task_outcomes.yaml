@@ -1,5 +1,5 @@
 version: 1
-updated_at: '2026-03-06'
+updated_at: '2026-03-09'
 items:
 - task_id: APT-20260306T163854Z-c3d3f52f
   closed_at: '2026-03-06T16:53:22Z'
@@ -45,5 +45,133 @@ items:
   linked_memory_id: null
   outcome_status: completed
   unmapped_files_count: 11
+  intent_sources:
+  - session_handoff
+- task_id: APT-20260306T193238Z-afb2829e
+  closed_at: null
+  branch: main
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-NEWS
+  - CTX-OPS
+  route_match: pending
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P2-NEWS-ROOT-TG-058
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+- task_id: APT-20260306T200554Z-2b5a71f8
+  closed_at: '2026-03-06T20:18:46Z'
+  branch: main
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-NEWS
+  - CTX-OPS
+  route_match: expanded
+  time_to_first_patch_sec: 772
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P2-NEWS-ROOT-TG-058
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+- task_id: APT-20260306T202343Z-2b5a71f8
+  closed_at: '2026-03-06T20:26:14Z'
+  branch: main
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-NEWS
+  - CTX-OPS
+  route_match: expanded
+  time_to_first_patch_sec: 151
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P2-NEWS-ROOT-TG-058
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 4
+  intent_sources:
+  - session_handoff
+- task_id: APT-20260309T075320Z-2b5a71f8
+  closed_at: '2026-03-09T07:55:28Z'
+  branch: main
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-NEWS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-NEWS
+  - CTX-OPS
+  route_match: expanded
+  time_to_first_patch_sec: 128
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P2-NEWS-ROOT-TG-058
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 5
+  intent_sources:
+  - session_handoff
+- task_id: APT-20260309T075759Z-0707f856
+  closed_at: '2026-03-09T07:58:58Z'
+  branch: codex/telegram-root-russian-alerts
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-NEWS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-NEWS
+  - CTX-OPS
+  route_match: expanded
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P2-NEWS-ROOT-TG-058
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 5
   intent_sources:
   - session_handoff

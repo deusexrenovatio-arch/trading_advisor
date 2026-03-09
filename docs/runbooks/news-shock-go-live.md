@@ -118,6 +118,7 @@ Task names:
 
 ## Telegram
 - Ensure `telegram.enabled=true`, bot token, and `telegram.allowed_user_ids` are configured.
+- `telegram.root_alerts_enabled=true` is the primary production path.
 - `telegram.news_feed_path` should point to `data/output/news_live/live_news_discovery.csv`.
 - `telegram.shock_feed_path` should point to `data/output/shock_alerts/live_shocks.csv`.
 
@@ -128,15 +129,23 @@ $env:PYTHONPATH='src'
 python -m moex_carry.cli telegram_bot --config configs/default.yaml
 ```
 
-Discovery Telegram contract:
-- header `NEWS DISCOVERY ALERT`
+Root Telegram contract is primary:
+- header `КОРНЕВОЕ СОБЫТИЕ`
+- source is `news_root_registry` in the live SQLite DB
+- one message per new `(root_topic_id, symbol, first_shock_ts)`
+- counts include `total`, `primary`, and `aftershock`
+- presentation follows the compact Telegram style already used for shock alerts:
+  `Тема`, `Инструмент`, `Направление`, `Корень`, `Сейчас`, `Возраст темы`, headline, URL
+
+Shock Telegram contract stays separate:
+- `ПЕРВИЧНЫЙ ШОК`
+- `ПОВТОРНЫЙ ШОК`
+
+Discovery Telegram contract remains optional and secondary:
+- header `НОВОСТНЫЙ АЛЕРТ`
 - one message per `story_id`
 - all linked commodities listed in one message
 - no `verified_move_*` or move-verification fields
-
-Shock Telegram contract stays separate:
-- `SHOCK PRIMARY`
-- `SHOCK AFTERSHOCK`
 
 ## Strategy Gate
 - `news_live_bridge` reads per-commodity rows from `data/output/news_live/live_news_discovery.csv`.

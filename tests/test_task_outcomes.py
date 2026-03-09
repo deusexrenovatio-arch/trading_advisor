@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -17,7 +18,12 @@ import validate_task_outcomes  # noqa: E402
 
 
 def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GIT_")
+    }
+    return subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True, env=env)
 
 
 def _write_handoff(

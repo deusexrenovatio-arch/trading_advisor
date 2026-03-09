@@ -1,0 +1,1 @@
+Telegram delivery is now root-first: the worker sends dedicated root-event alerts from the live root registry, localizes root/shock/news alert copy to Russian, and hardens governance git checks against inherited hook environment in linked worktrees.
