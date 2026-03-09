@@ -531,3 +531,66 @@ items:
   - session_handoff
   start_recommendations:
   - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260309T121555Z-8f66d731
+  closed_at: null
+  branch: codex/signals_engine
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-OPS
+  route_match: pending
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-H4A-LIVE-062
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260309T140129Z-00900cb9
+  closed_at: '2026-03-09T15:35:11Z'
+  branch: codex/h4a-live-hardening
+  goal_class: api-ui
+  start_primary_context: CTX-API-UI
+  start_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 44
+  same_path_attempts: 2
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: architecture
+  improvement_artifact: src/moex_carry/ui/operator_execution_projection.py
+  linked_plan_id: P1-H4A-LIVE-062
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - CTX-API-UI imports span multiple neighboring contexts. Treat as cross-cutting
+    and keep adapters thin.
+  - Some files are unmapped. Classify manually before implementation.

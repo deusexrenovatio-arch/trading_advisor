@@ -2,6 +2,30 @@ version: 1
 updated_at: 2026-03-09
 
 decisions:
+  - id: ADM-2026-03-09-094
+    date: 2026-03-09
+    title: Use Telegram follow-up confirmations as the H4A baseline guard instead of implicit ACK semantics
+    context: H4A execution had already moved to explicit fill-driven lifecycle states, but documentation and operator-loop coverage still left a gap between post-fill recalculation, Telegram prompts, and auditable confirmation of each required manual step.
+    decision: Treat `mark_viewed` as the canonical Telegram review action, add explicit `confirm_followup` and `manual_override` stage actions for H4A fallback or post-fill monitoring, and isolate operator-event projection logic in a dedicated UI helper so lifecycle reconstruction stays deterministic without keeping more H4A state machinery inside `ui/app.py`.
+    impact: Telegram now covers fallback timeout, recalculated post-fill packet, break-even or trailing triggers, and time-stop monitoring with auditable stage confirmations, while governance artifacts and acceptance catalogs describe the same lifecycle and `ui/app.py` is back under the blocking size limit.
+    links:
+      - src/moex_carry/ui/operator_execution_projection.py
+      - src/moex_carry/integrations/telegram_h4a_followup.py
+      - docs/signals-business-process.md
+      - docs/test-cases.md
+      - configs/acceptance_scenarios.yaml
+      - configs/user_needs_catalog.yaml
+  - id: ADM-2026-03-09-093
+    date: 2026-03-09
+    title: Treat H4A runbook as the normative live execution contract and move operator lifecycle to execution-fact states
+    context: Research and runbook work already promoted `H4A_CAP_OFF` as the preferred execution profile, but runtime signal delivery and UI/API lifecycle still behaved like a coarse `ack`-driven intent model with callback-TTL expiry and no fill-driven recalculation contract.
+    decision: Promote `H4A_CAP_OFF` as the only active baseline in runtime-facing metadata, use `docs/runbooks/h4a-manual-execution-baseline.md` as the execution source of truth, keep `O1` only as a regression reference, replace `ack` semantics with explicit viewed/submitted/filled/cancelled/manual-override states, and treat concentration control as a separate live-routing layer rather than a reason to reintroduce winner caps into the baseline.
+    impact: Manual execution, runtime actionability, and audit trails can now converge on one H4A contract, while legacy `ack` remains only as a compatibility alias and concentration remains controlled by routing/exposure logic instead of baseline distortion.
+    links:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
   - id: ADM-2026-03-09-092
     date: 2026-03-09
     title: Serve weekly process-improvement reports from the tracked outcome ledger and surface them in a dedicated governance workspace

@@ -276,6 +276,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
         summary="API handlers, UI behavior, operator actions, and delivery surfaces.",
         owned_paths=(
             "src/moex_carry/integrations/",
+            "src/moex_carry/signal_execution_contract.py",
             "src/moex_carry/signals_ack.py",
             "src/moex_carry/signals_delivery.py",
             "src/moex_carry/ui/",
