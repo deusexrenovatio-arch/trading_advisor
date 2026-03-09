@@ -8,6 +8,7 @@ import yaml
 
 from agent_process_telemetry import (
     TASK_OUTCOMES_REMEDIATION_DOC,
+    apply_task_outcome_status_policy,
     build_task_outcome_record,
     default_events_path,
     default_session_handoff_path,
@@ -63,7 +64,18 @@ def run(
         return 0
 
     handoff = parse_session_handoff(session_handoff_path)
-    task_outcome = normalize_task_outcome(handoff.get("task_outcome", {}))
+    task_outcome, policy_evaluation = apply_task_outcome_status_policy(
+        normalize_task_outcome(handoff.get("task_outcome", {})),
+        blocker_lines=handoff.get("blockers_lines", []),
+    )
+    if policy_evaluation["issues"]:
+        print("task outcome sync failed: task outcome policy rejected current closeout")
+        for issue in policy_evaluation["issues"]:
+            print(f"- {issue}")
+        print(f"policy: {policy_evaluation['policy_path']}")
+        print(f"remediation: see {TASK_OUTCOMES_REMEDIATION_DOC}")
+        return 1
+
     if is_terminal_outcome_status(task_outcome["outcome_status"]):
         record_task_end(
             events_path=events_path,
@@ -92,6 +104,12 @@ def run(
         "task outcomes sync: OK "
         f"(task_id={record['task_id']} outcome_status={record['outcome_status']})"
     )
+    if not policy_evaluation["matches_declared_status"]:
+        print(
+            "task outcomes sync: status_policy_override "
+            f"{policy_evaluation['declared_outcome_status']} -> "
+            f"{policy_evaluation['derived_outcome_status']}"
+        )
     return 0
 
 

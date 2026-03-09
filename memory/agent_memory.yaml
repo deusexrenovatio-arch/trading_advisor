@@ -2,6 +2,19 @@ version: 1
 updated_at: 2026-03-09
 
 decisions:
+  - id: ADM-2026-03-09-094
+    date: 2026-03-09
+    title: Derive task outcome status from explicit repository policy instead of agent choice
+    context: "Outcome Status was tracked in handoff and the outcome ledger, but the repository only validated allowed values and did not own the classification rule, so subjective closeout choices could distort governance reports and UI counts."
+    decision: "Add configs/task_outcome_policy.yaml as the explicit status matrix, derive status from Decision Quality, require a real unresolved blocker for environment_blocked -> blocked, make sync and telemetry closeout write the derived status, and make validation fail when handoff status disagrees with the policy."
+    impact: "Task closeout semantics are now deterministic and reviewable, blocked tasks require explicit blocker evidence, and the tracked process-governance history no longer depends on ad hoc status wording."
+    links:
+      - configs/task_outcome_policy.yaml
+      - scripts/agent_process_telemetry.py
+      - scripts/sync_task_outcomes.py
+      - scripts/validate_task_outcomes.py
+      - tests/test_task_outcomes.py
+      - docs/DEV_WORKFLOW.md
   - id: ADM-2026-03-09-093
     date: 2026-03-09
     title: Unify local agent-process telemetry at the repository root and add explicit history reconciliation

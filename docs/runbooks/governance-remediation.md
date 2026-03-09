@@ -63,6 +63,15 @@ Use this guide when a governance gate fails.
   - `Improvement Artifact`
 - For active tasks, ensure `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check` has created the repo-shared `.runlogs/agent-process/state.json`.
 - Sync ledger with `python scripts/sync_task_outcomes.py` so `memory/task_outcomes.yaml` contains the current task record.
+- Treat `Outcome Status` as a derived field, not a free-form choice. Policy source: `configs/task_outcome_policy.yaml`.
+- Status matrix:
+  - `pending -> in_progress`
+  - `correct_first_time -> completed`
+  - `correct_after_replan -> completed`
+  - `wrong_path -> partial`
+  - `partial_outcome -> partial`
+  - `environment_blocked -> blocked` and `## Blockers` must contain an explicit unresolved blocker.
+- If validator reports a status-policy mismatch, fix `Decision Quality` or `## Blockers` to match reality; do not force only `Outcome Status`.
 - If `decision_quality` is not `correct_first_time` or `correct_after_replan`, set a non-`none` improvement action.
 - If an incident signature repeats, use a new improvement artifact and link a plan or memory item.
 

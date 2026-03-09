@@ -32,6 +32,7 @@
 - Keep first-time-right report in `docs/session_handoff.md` under `## First-Time-Right Report`.
 - Keep loop-breaker policy in `docs/session_handoff.md` under `## Repetition Control`.
 - Keep task closeout fields in `docs/session_handoff.md` under `## Task Outcome`.
+- Keep `## Blockers` accurate because `Outcome Status` is derived from `Decision Quality` plus unresolved blockers via `configs/task_outcome_policy.yaml`.
 - Sync ledger with `python scripts/sync_task_outcomes.py` or `python scripts/run_lean_gate.py`.
 - Validation command:
   - `python scripts/validate_task_request_contract.py`

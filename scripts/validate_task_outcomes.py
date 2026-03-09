@@ -20,10 +20,12 @@ from agent_process_telemetry import (
     default_session_handoff_path,
     default_state_path,
     default_task_outcomes_path,
+    evaluate_task_outcome_status_policy,
     get_active_task,
     get_repo_root,
     is_non_trivial_diff,
     is_terminal_outcome_status,
+    load_task_outcome_status_policy,
     load_task_outcomes,
     normalize_task_outcome,
     parse_session_handoff,
@@ -63,7 +65,12 @@ def _load_incident_policy_max_attempts(path: Path) -> int | None:
     return value if value > 0 else None
 
 
-def _validate_ledger_shape(payload: dict[str, Any], errors: list[str]) -> None:
+def _validate_ledger_shape(
+    payload: dict[str, Any],
+    errors: list[str],
+    *,
+    status_policy: dict[str, Any] | None = None,
+) -> None:
     if payload.get("version") != 1:
         errors.append(f"task outcomes ledger unsupported version: {payload.get('version')!r}")
     items = payload.get("items")
@@ -91,6 +98,13 @@ def _validate_ledger_shape(payload: dict[str, Any], errors: list[str]) -> None:
             errors.append(f"{label}.decision_quality invalid: {raw.get('decision_quality')!r}")
         if raw.get("outcome_status") not in ALLOWED_OUTCOME_STATUSES:
             errors.append(f"{label}.outcome_status invalid: {raw.get('outcome_status')!r}")
+        if status_policy and raw.get("decision_quality") in ALLOWED_DECISION_QUALITY:
+            expected_status = status_policy["status_by_decision_quality"].get(raw.get("decision_quality"))
+            if expected_status and raw.get("outcome_status") != expected_status:
+                errors.append(
+                    f"{label}.outcome_status must be {expected_status!r} for decision_quality="
+                    f"{raw.get('decision_quality')!r}"
+                )
         if raw.get("primary_rework_cause") not in ALLOWED_PRIMARY_REWORK_CAUSES:
             errors.append(
                 f"{label}.primary_rework_cause invalid: {raw.get('primary_rework_cause')!r}"
@@ -151,12 +165,22 @@ def run(
     state = reconcile_legacy_process_storage(repo_root, events_path=events_path, state_path=state_path)
     active = get_active_task(state, repo_root)
     max_same_path_attempts = _load_incident_policy_max_attempts(incident_policy_path)
+    try:
+        status_policy = load_task_outcome_status_policy()
+    except ValueError as exc:
+        status_policy = None
+        policy_load_error = str(exc)
+    else:
+        policy_load_error = None
 
     errors_by_focus: dict[str, list[str]] = {
         "decision-quality": [],
         "context-efficiency": [],
         "self-learning": [],
     }
+    if policy_load_error:
+        for bucket in errors_by_focus.values():
+            bucket.append(policy_load_error)
 
     missing_fields = [field for field in REQUIRED_TASK_OUTCOME_FIELDS if field not in task_outcome_section]
     if missing_fields:
@@ -186,10 +210,28 @@ def run(
         )
 
     ledger_shape_errors: list[str] = []
-    _validate_ledger_shape(ledger, ledger_shape_errors)
+    _validate_ledger_shape(ledger, ledger_shape_errors, status_policy=status_policy)
     for message in ledger_shape_errors:
         for bucket in errors_by_focus.values():
             bucket.append(message)
+
+    effective_task_outcome = dict(task_outcome)
+    if status_policy is not None:
+        policy_evaluation = evaluate_task_outcome_status_policy(
+            task_outcome,
+            blocker_lines=handoff.get("blockers_lines", []),
+            policy=status_policy,
+        )
+        for issue in policy_evaluation["issues"]:
+            errors_by_focus["decision-quality"].append(issue)
+        if not policy_evaluation["matches_declared_status"]:
+            errors_by_focus["decision-quality"].append(
+                "Task Outcome outcome_status must be "
+                f"{policy_evaluation['derived_outcome_status']!r} for decision_quality="
+                f"{policy_evaluation['decision_quality']!r} "
+                f"(got {policy_evaluation['declared_outcome_status']!r})"
+            )
+        effective_task_outcome["outcome_status"] = policy_evaluation["derived_outcome_status"]
 
     current_record = None
     if isinstance(active, dict):
@@ -210,7 +252,7 @@ def run(
             if "memory/task_outcomes.yaml" not in changed_files:
                 for bucket in errors_by_focus.values():
                     bucket.append("non-trivial PR diff requires memory/task_outcomes.yaml update")
-            if task_outcome["outcome_status"] == "in_progress":
+            if effective_task_outcome["outcome_status"] == "in_progress":
                 errors_by_focus["decision-quality"].append(
                     "non-trivial PR diff requires terminal Task Outcome status"
                 )
@@ -286,7 +328,7 @@ def run(
                 )
 
     if current_record is not None and isinstance(active, dict):
-        expected_record = build_task_outcome_record(active, task_outcome)
+        expected_record = build_task_outcome_record(active, effective_task_outcome)
         if expected_record["outcome_status"] != current_record.get("outcome_status"):
             errors_by_focus["decision-quality"].append(
                 "current task outcome is out of sync with memory/task_outcomes.yaml"
@@ -299,7 +341,7 @@ def run(
             errors_by_focus["self-learning"].append(
                 "current improvement_action is out of sync with memory/task_outcomes.yaml"
             )
-        if is_terminal_outcome_status(task_outcome["outcome_status"]) and not current_record.get("closed_at"):
+        if is_terminal_outcome_status(effective_task_outcome["outcome_status"]) and not current_record.get("closed_at"):
             errors_by_focus["decision-quality"].append(
                 "terminal task outcome requires closed_at in memory/task_outcomes.yaml"
             )
@@ -314,11 +356,11 @@ def run(
                 "non-trivial PR diff requires at least one terminal task outcome record"
             )
 
-    if task_outcome["outcome_status"] == "in_progress" and task_outcome["decision_quality"] != "pending":
+    if effective_task_outcome["outcome_status"] == "in_progress" and task_outcome["decision_quality"] != "pending":
         errors_by_focus["decision-quality"].append(
             "in_progress Task Outcome must keep decision_quality=pending"
         )
-    if task_outcome["outcome_status"] == "in_progress" and task_outcome["route_match"] != "pending":
+    if effective_task_outcome["outcome_status"] == "in_progress" and task_outcome["route_match"] != "pending":
         errors_by_focus["context-efficiency"].append(
             "in_progress Task Outcome must keep route_match=pending"
         )

@@ -103,6 +103,11 @@ def _init_repo(tmp_path: Path) -> Path:
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     (repo_root / "scripts").mkdir()
+    (repo_root / "configs").mkdir()
+    (repo_root / "configs/task_outcome_policy.yaml").write_text(
+        (ROOT / "configs/task_outcome_policy.yaml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     (repo_root / "scripts/sample.py").write_text("print('baseline')\n", encoding="utf-8")
     _write_handoff(repo_root)
     assert _run(["git", "init"], repo_root).returncode == 0

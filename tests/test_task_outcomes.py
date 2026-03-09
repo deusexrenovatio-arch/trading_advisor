@@ -38,6 +38,7 @@ def _write_handoff(
     improvement_action: str = "pending",
     improvement_artifact: str = "pending",
     linked_plan_id: str | None = None,
+    blockers: str = "None.",
 ) -> None:
     lines = [
         "# Session Handoff",
@@ -86,7 +87,7 @@ def _write_handoff(
         [
             "",
             "## Blockers",
-            "- None.",
+            f"- {blockers}",
             "",
             "## Next Step",
             "- Continue validation.",
@@ -107,6 +108,10 @@ def _init_repo(tmp_path: Path) -> Path:
     (repo_root / "scripts").mkdir()
     (repo_root / "memory").mkdir()
     (repo_root / "configs").mkdir()
+    (repo_root / "configs/task_outcome_policy.yaml").write_text(
+        (ROOT / "configs/task_outcome_policy.yaml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     (repo_root / "scripts/sample.py").write_text("print('baseline')\n", encoding="utf-8")
     (repo_root / "plans/PLANS.yaml").parent.mkdir(parents=True, exist_ok=True)
     (repo_root / "plans/PLANS.yaml").write_text(
@@ -251,6 +256,170 @@ def test_validate_task_outcomes_blocks_repeated_signature_without_new_artifact(t
             head_sha=None,
         )
         == 1
+    )
+
+
+def test_sync_task_outcomes_derives_status_from_policy(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _init_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+    events_path = repo_root / ".runlogs/agent-process/task-events.jsonl"
+    state_path = repo_root / ".runlogs/agent-process/state.json"
+    handoff_path = repo_root / "docs/session_handoff.md"
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    telemetry.start_task(events_path=events_path, state_path=state_path, handoff_path=handoff_path)
+    (repo_root / "scripts/sample.py").write_text("print('changed')\n", encoding="utf-8")
+    telemetry.record_first_patch(events_path=events_path, state_path=state_path, handoff_path=handoff_path)
+    _write_handoff(
+        repo_root,
+        outcome_status="completed",
+        decision_quality="wrong_path",
+        final_contexts="CTX-OPS",
+        route_match="mismatched",
+        primary_rework_cause="workflow_gap",
+        improvement_action="workflow",
+        improvement_artifact="docs/runbooks/new.md",
+        linked_plan_id="P1-TEMP-001",
+    )
+
+    assert (
+        sync_task_outcomes.run(
+            session_handoff_path=handoff_path,
+            state_path=state_path,
+            events_path=events_path,
+            task_outcomes_path=task_outcomes_path,
+        )
+        == 0
+    )
+
+    payload = yaml.safe_load(task_outcomes_path.read_text(encoding="utf-8")) or {}
+    item = payload["items"][0]
+    assert item["decision_quality"] == "wrong_path"
+    assert item["outcome_status"] == "partial"
+    assert item["closed_at"] is not None
+
+
+def test_validate_task_outcomes_blocks_status_mismatch_against_policy(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _init_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+    events_path = repo_root / ".runlogs/agent-process/task-events.jsonl"
+    state_path = repo_root / ".runlogs/agent-process/state.json"
+    handoff_path = repo_root / "docs/session_handoff.md"
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    telemetry.start_task(events_path=events_path, state_path=state_path, handoff_path=handoff_path)
+    (repo_root / "scripts/sample.py").write_text("print('changed')\n", encoding="utf-8")
+    telemetry.record_first_patch(events_path=events_path, state_path=state_path, handoff_path=handoff_path)
+    _write_handoff(
+        repo_root,
+        outcome_status="completed",
+        decision_quality="wrong_path",
+        final_contexts="CTX-OPS",
+        route_match="mismatched",
+        primary_rework_cause="workflow_gap",
+        improvement_action="workflow",
+        improvement_artifact="docs/runbooks/new.md",
+        linked_plan_id="P1-TEMP-001",
+    )
+    assert (
+        sync_task_outcomes.run(
+            session_handoff_path=handoff_path,
+            state_path=state_path,
+            events_path=events_path,
+            task_outcomes_path=task_outcomes_path,
+        )
+        == 0
+    )
+
+    assert (
+        validate_task_outcomes.run(
+            session_handoff_path=handoff_path,
+            state_path=state_path,
+            task_outcomes_path=task_outcomes_path,
+            incident_policy_path=repo_root / "configs/agent_incident_policy.yaml",
+            focus=None,
+            base_sha=None,
+            head_sha=None,
+        )
+        == 1
+    )
+
+
+def test_sync_task_outcomes_blocks_environment_blocked_without_blockers(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _init_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+    events_path = repo_root / ".runlogs/agent-process/task-events.jsonl"
+    state_path = repo_root / ".runlogs/agent-process/state.json"
+    handoff_path = repo_root / "docs/session_handoff.md"
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    telemetry.start_task(events_path=events_path, state_path=state_path, handoff_path=handoff_path)
+    (repo_root / "scripts/sample.py").write_text("print('changed')\n", encoding="utf-8")
+    telemetry.record_first_patch(events_path=events_path, state_path=state_path, handoff_path=handoff_path)
+    _write_handoff(
+        repo_root,
+        outcome_status="blocked",
+        decision_quality="environment_blocked",
+        final_contexts="CTX-OPS",
+        route_match="matched",
+        primary_rework_cause="environment",
+        improvement_action="env",
+        improvement_artifact="docs/runbooks/env.md",
+        linked_plan_id="P1-TEMP-001",
+        blockers="None.",
+    )
+
+    assert (
+        sync_task_outcomes.run(
+            session_handoff_path=handoff_path,
+            state_path=state_path,
+            events_path=events_path,
+            task_outcomes_path=task_outcomes_path,
+        )
+        == 1
+    )
+
+
+def test_validate_task_outcomes_accepts_blocked_status_with_explicit_blocker(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _init_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+    events_path = repo_root / ".runlogs/agent-process/task-events.jsonl"
+    state_path = repo_root / ".runlogs/agent-process/state.json"
+    handoff_path = repo_root / "docs/session_handoff.md"
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    telemetry.start_task(events_path=events_path, state_path=state_path, handoff_path=handoff_path)
+    (repo_root / "scripts/sample.py").write_text("print('changed')\n", encoding="utf-8")
+    telemetry.record_first_patch(events_path=events_path, state_path=state_path, handoff_path=handoff_path)
+    _write_handoff(
+        repo_root,
+        outcome_status="blocked",
+        decision_quality="environment_blocked",
+        final_contexts="CTX-OPS",
+        route_match="matched",
+        primary_rework_cause="environment",
+        improvement_action="env",
+        improvement_artifact="docs/runbooks/env.md",
+        linked_plan_id="P1-TEMP-001",
+        blockers="CI runner credential is unavailable.",
+    )
+
+    assert (
+        sync_task_outcomes.run(
+            session_handoff_path=handoff_path,
+            state_path=state_path,
+            events_path=events_path,
+            task_outcomes_path=task_outcomes_path,
+        )
+        == 0
+    )
+    assert (
+        validate_task_outcomes.run(
+            session_handoff_path=handoff_path,
+            state_path=state_path,
+            task_outcomes_path=task_outcomes_path,
+            incident_policy_path=repo_root / "configs/agent_incident_policy.yaml",
+            focus=None,
+            base_sha=None,
+            head_sha=None,
+        )
+        == 0
     )
 
 

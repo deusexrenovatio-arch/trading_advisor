@@ -110,6 +110,7 @@ Required report block for implementation and reviews:
   - `## First-Time-Right Report` using the required 4-part report block.
   - `## Repetition Control` with max same-path attempts, stop trigger, reset action, new search space, and next probe.
   - `## Task Outcome` with outcome status, decision quality, final contexts, route match, rework cause, incident signature, and improvement artifact/action.
+  - `Outcome Status` is policy-derived, not free-form: the repo derives it from `Decision Quality` and unresolved `## Blockers` using `configs/task_outcome_policy.yaml`.
 - Use checklist:
   - `docs/checklists/task-request-contract.md`
 - Validation command:
@@ -168,6 +169,7 @@ Blockers:
   - keep task request contract and first-time-right report sections current.
 - Keep task outcome ledger fresh:
   - run `python scripts/sync_task_outcomes.py` after updating `## Task Outcome` or let `python scripts/run_lean_gate.py` sync it automatically.
+  - if `Outcome Status` disagrees with the policy-derived status, sync writes the derived status and `python scripts/validate_task_outcomes.py` fails until handoff is corrected.
   - `memory/task_outcomes.yaml` is the canonical tracked ledger for PR/weekly process rollups.
 - Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
 - Before push/PR, always run the full blocker gate below.

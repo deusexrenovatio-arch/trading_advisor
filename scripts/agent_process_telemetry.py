@@ -57,6 +57,7 @@ ALLOWED_IMPROVEMENT_ACTIONS = {
 }
 ROLLING_WINDOW_SIZE = 20
 TASK_OUTCOMES_REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
+TASK_OUTCOME_POLICY_PATH = "configs/task_outcome_policy.yaml"
 MARKDOWN_KEY_RE = re.compile(r"[^a-z0-9]+")
 WINDOWS_ABS_PATH_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
@@ -123,6 +124,10 @@ def default_session_handoff_path() -> Path:
 
 def default_task_outcomes_path() -> Path:
     return Path(os.getenv("MOEX_CARRY_TASK_OUTCOMES_PATH", "memory/task_outcomes.yaml"))
+
+
+def default_task_outcome_policy_path() -> Path:
+    return Path(os.getenv("MOEX_CARRY_TASK_OUTCOME_POLICY_PATH", TASK_OUTCOME_POLICY_PATH))
 
 
 def now_utc() -> datetime:
@@ -215,6 +220,19 @@ def _section_text(lines: list[str], heading: str) -> str:
     return " ".join(flattened).strip()
 
 
+def _section_items(lines: list[str]) -> list[str]:
+    items: list[str] = []
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("- "):
+            items.append(stripped[2:].strip())
+        else:
+            items.append(stripped)
+    return items
+
+
 def parse_session_handoff(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {
@@ -222,13 +240,18 @@ def parse_session_handoff(path: Path) -> dict[str, Any]:
             "goal_lines": [],
             "contract": {},
             "task_outcome": {},
+            "blockers_text": "",
+            "blockers_lines": [],
         }
     lines = path.read_text(encoding="utf-8").splitlines()
+    blockers_lines = _section_lines(lines, "## Blockers")
     return {
         "goal_text": _section_text(lines, "## Goal"),
         "goal_lines": _section_lines(lines, "## Goal"),
         "contract": _parse_bullet_fields(_section_lines(lines, "## Task Request Contract")),
         "task_outcome": _parse_bullet_fields(_section_lines(lines, "## Task Outcome")),
+        "blockers_text": _section_text(lines, "## Blockers"),
+        "blockers_lines": blockers_lines,
     }
 
 
@@ -269,6 +292,136 @@ def normalize_task_outcome(fields: dict[str, str]) -> dict[str, Any]:
         "linked_plan_id": linked_plan_id or None,
         "linked_memory_id": linked_memory_id or None,
     }
+
+
+def _normalize_policy_phrase(value: str | None) -> str:
+    collapsed = " ".join(str(value or "").strip().lower().split())
+    return collapsed.rstrip(".!;:?").strip()
+
+
+def load_task_outcome_status_policy(path: Path | None = None) -> dict[str, Any]:
+    policy_path = path or default_task_outcome_policy_path()
+    if not policy_path.is_absolute():
+        try:
+            repo_root = get_repo_root()
+        except RuntimeError:
+            repo_root = Path.cwd().resolve()
+        policy_path = _resolve_path_from_repo(repo_root, policy_path)
+    payload = load_yaml(policy_path)
+    if not payload:
+        raise ValueError(f"task outcome policy is missing or empty: {policy_path.as_posix()}")
+    if payload.get("version") != 1:
+        raise ValueError(f"task outcome policy unsupported version: {payload.get('version')!r}")
+
+    raw_mapping = payload.get("status_by_decision_quality")
+    if not isinstance(raw_mapping, dict):
+        raise ValueError("task outcome policy must define status_by_decision_quality mapping")
+    status_by_decision_quality = {
+        str(key).strip().lower(): str(value).strip().lower()
+        for key, value in raw_mapping.items()
+        if str(key).strip()
+    }
+    missing_decisions = sorted(ALLOWED_DECISION_QUALITY - set(status_by_decision_quality))
+    extra_decisions = sorted(set(status_by_decision_quality) - ALLOWED_DECISION_QUALITY)
+    invalid_statuses = {
+        key: value
+        for key, value in status_by_decision_quality.items()
+        if value not in ALLOWED_OUTCOME_STATUSES
+    }
+    if missing_decisions:
+        raise ValueError(
+            "task outcome policy missing decision_quality mapping for: "
+            + ", ".join(missing_decisions)
+        )
+    if extra_decisions:
+        raise ValueError(
+            "task outcome policy has unsupported decision_quality keys: "
+            + ", ".join(extra_decisions)
+        )
+    if invalid_statuses:
+        rendered = ", ".join(f"{key}->{value}" for key, value in sorted(invalid_statuses.items()))
+        raise ValueError(f"task outcome policy has invalid mapped statuses: {rendered}")
+
+    raw_no_blocker_markers = payload.get("no_blocker_markers")
+    if not isinstance(raw_no_blocker_markers, list):
+        raise ValueError("task outcome policy must define no_blocker_markers list")
+    no_blocker_markers = {
+        normalized
+        for normalized in (_normalize_policy_phrase(str(item)) for item in raw_no_blocker_markers)
+        if normalized
+    }
+    if not no_blocker_markers:
+        raise ValueError("task outcome policy no_blocker_markers list must not be empty")
+
+    return {
+        "path": str(policy_path),
+        "status_by_decision_quality": status_by_decision_quality,
+        "blocked_requires_blockers": bool(payload.get("blocked_requires_blockers", True)),
+        "no_blocker_markers": no_blocker_markers,
+    }
+
+
+def blockers_present(
+    blocker_lines: list[str] | None,
+    no_blocker_markers: set[str] | None = None,
+) -> bool:
+    markers = {_normalize_policy_phrase(item) for item in (no_blocker_markers or set())}
+    for item in _section_items(list(blocker_lines or [])):
+        normalized = _normalize_policy_phrase(item)
+        if not normalized:
+            continue
+        if normalized not in markers:
+            return True
+    return False
+
+
+def evaluate_task_outcome_status_policy(
+    task_outcome: dict[str, Any],
+    *,
+    blocker_lines: list[str] | None = None,
+    policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    active_policy = policy or load_task_outcome_status_policy()
+    decision_quality = str(task_outcome.get("decision_quality", "pending")).strip().lower() or "pending"
+    declared_status = str(task_outcome.get("outcome_status", "in_progress")).strip().lower() or "in_progress"
+    derived_status = active_policy["status_by_decision_quality"].get(decision_quality, declared_status)
+    has_blockers = blockers_present(blocker_lines, active_policy["no_blocker_markers"])
+    issues: list[str] = []
+    if decision_quality not in ALLOWED_DECISION_QUALITY:
+        issues.append(f"unsupported decision_quality for status policy: {decision_quality!r}")
+    if (
+        derived_status == "blocked"
+        and active_policy["blocked_requires_blockers"]
+        and not has_blockers
+    ):
+        issues.append(
+            "decision_quality=environment_blocked requires an explicit unresolved blocker in ## Blockers"
+        )
+    return {
+        "policy_path": active_policy["path"],
+        "decision_quality": decision_quality,
+        "declared_outcome_status": declared_status,
+        "derived_outcome_status": derived_status,
+        "blockers_present": has_blockers,
+        "matches_declared_status": declared_status == derived_status,
+        "issues": issues,
+    }
+
+
+def apply_task_outcome_status_policy(
+    task_outcome: dict[str, Any],
+    *,
+    blocker_lines: list[str] | None = None,
+    policy: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    evaluation = evaluate_task_outcome_status_policy(
+        task_outcome,
+        blocker_lines=blocker_lines,
+        policy=policy,
+    )
+    canonical = dict(task_outcome)
+    canonical["outcome_status"] = evaluation["derived_outcome_status"]
+    return canonical, evaluation
 
 
 def load_json(path: Path, default: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1312,10 +1465,22 @@ def main() -> int:
 
     if args.command == "end":
         state_path = Path(args.state_path)
+        handoff = parse_session_handoff(Path(args.session_handoff_path))
+        task_outcome, policy_evaluation = apply_task_outcome_status_policy(
+            normalize_task_outcome(handoff.get("task_outcome", {})),
+            blocker_lines=handoff.get("blockers_lines", []),
+        )
+        if policy_evaluation["issues"]:
+            print("agent process telemetry: end blocked by task outcome policy")
+            for issue in policy_evaluation["issues"]:
+                print(f"  {issue}")
+            print(f"  policy={policy_evaluation['policy_path']}")
+            return 1
         recorded, active = record_task_end(
             events_path=Path(args.events_path),
             state_path=state_path,
             handoff_path=Path(args.session_handoff_path),
+            task_outcome=task_outcome,
         )
         if active is None:
             print("agent process telemetry: no active task")
@@ -1326,6 +1491,12 @@ def main() -> int:
                 f"ended task_id={active['task_id']} outcome={active['outcome_status']} "
                 f"root={state_path.parent.resolve()} worktree={active['worktree_path']}"
             )
+            if not policy_evaluation["matches_declared_status"]:
+                print(
+                    "  status_policy_override: "
+                    f"{policy_evaluation['declared_outcome_status']} -> "
+                    f"{policy_evaluation['derived_outcome_status']}"
+                )
         else:
             print("agent process telemetry: end no-op")
         return 0
