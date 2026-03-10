@@ -1,0 +1,54 @@
+version: 1
+
+profiles:
+  loop:
+    description: "Local hot-loop timing for day-to-day coding."
+    commands:
+      - name: worktree_guard
+        cmd:
+          - powershell
+          - -ExecutionPolicy
+          - Bypass
+          - -File
+          - scripts/worktree_guard.ps1
+          - -Action
+          - Check
+      - name: lean_gate
+        cmd:
+          - "{python}"
+          - scripts/run_lean_gate.py
+          - --skip-metrics
+
+  pre_push:
+    description: "Pre-push deterministic baseline for local quality gate."
+    commands:
+      - name: quality_scorecards
+        cmd:
+          - "{python}"
+          - scripts/validate_quality_scorecards.py
+      - name: architecture_smoke
+        cmd:
+          - pytest
+          - tests/architecture
+          - -q
+      - name: frontend_contract
+        cmd:
+          - "{python}"
+          - scripts/validate_frontend_gate_contract.py
+
+  ci:
+    description: "CI-required jobs median baseline."
+    commands:
+      - name: governance_contract
+        cmd:
+          - "{python}"
+          - scripts/validate_task_request_contract.py
+      - name: backend_smoke
+        cmd:
+          - pytest
+          - tests/architecture
+          - -q
+      - name: frontend_contract
+        cmd:
+          - "{python}"
+          - scripts/validate_frontend_gate_contract.py

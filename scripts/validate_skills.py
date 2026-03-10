@@ -10,6 +10,7 @@ import yaml
 
 SKILLS_ROOT = Path(".cursor/skills")
 AGENTS_FILE = Path("AGENTS.md")
+SKILL_CATALOG_FILE = Path("docs/agent/skills-catalog.md")
 
 AGENTS_SKILL_PATTERN = re.compile(
     r"^- (?P<name>[a-z0-9-]+): .*?\(file:\s*(?P<path>[^)]+)\)\s*$"
@@ -50,7 +51,7 @@ def _load_yaml_frontmatter(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _load_agents_skill_refs(path: Path, repo_root: Path) -> dict[str, Path]:
+def _load_skill_refs(path: Path, repo_root: Path) -> dict[str, Path]:
     refs: dict[str, Path] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         match = AGENTS_SKILL_PATTERN.match(line.strip())
@@ -107,7 +108,7 @@ def _validate_skill_file(skill_dir: Path, errors: list[str]) -> None:
         )
 
 
-def run(skills_root: Path, agents_file: Path) -> int:
+def run(skills_root: Path, agents_file: Path, skill_catalog_file: Path) -> int:
     errors: list[str] = []
 
     if not skills_root.exists():
@@ -123,21 +124,22 @@ def run(skills_root: Path, agents_file: Path) -> int:
     for skill_dir in skill_dirs:
         _validate_skill_file(skill_dir, errors)
 
-    repo_root = agents_file.resolve().parent
-    agents_refs = _load_agents_skill_refs(agents_file, repo_root)
+    source_file = skill_catalog_file if skill_catalog_file.exists() else agents_file
+    repo_root = source_file.resolve().parent
+    agents_refs = _load_skill_refs(source_file, repo_root)
     if not agents_refs:
-        errors.append(f"no skills parsed from {agents_file.as_posix()}")
+        errors.append(f"no skills parsed from {source_file.as_posix()}")
     else:
         for name, path in sorted(agents_refs.items()):
             if name not in skill_names:
-                errors.append(f"AGENTS skill not found in .cursor/skills: {name}")
+                errors.append(f"skill entry not found in .cursor/skills: {name}")
             if not path.exists():
-                errors.append(f"AGENTS path does not exist: {path.as_posix()}")
+                errors.append(f"skill catalog path does not exist: {path.as_posix()}")
 
         extra_skills = sorted(skill_names.difference(set(agents_refs.keys())))
         if extra_skills:
             errors.append(
-                "skills present in .cursor/skills but missing in AGENTS.md: "
+                f"skills present in .cursor/skills but missing in {source_file.as_posix()}: "
                 + ", ".join(extra_skills)
             )
 
@@ -156,9 +158,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Validate local skill files and AGENTS mapping")
     parser.add_argument("--skills-root", default=str(SKILLS_ROOT))
     parser.add_argument("--agents-file", default=str(AGENTS_FILE))
+    parser.add_argument("--skill-catalog-file", default=str(SKILL_CATALOG_FILE))
     args = parser.parse_args()
 
-    sys.exit(run(Path(args.skills_root), Path(args.agents_file)))
+    sys.exit(
+        run(
+            Path(args.skills_root),
+            Path(args.agents_file),
+            Path(args.skill_catalog_file),
+        )
+    )
 
 
 if __name__ == "__main__":

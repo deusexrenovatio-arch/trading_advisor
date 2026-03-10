@@ -9,6 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from handoff_resolver import read_task_note_lines
 
 TOKEN_RE = re.compile(r"[0-9]+|[^\W\d_]+", re.UNICODE)
 PY_FROM_IMPORT_RE = re.compile(
@@ -61,6 +62,16 @@ STOP_WORDS = {
     "with",
 }
 
+COLD_CONTEXT_PREFIXES: tuple[str, ...] = (
+    "plans/",
+    "memory/",
+    "artifacts/",
+    "docs/releases/",
+    "docs/releases.d/",
+    ".cursor/skills/",
+    "docs/tasks/archive/",
+)
+
 
 @dataclass(frozen=True)
 class ContextSpec:
@@ -87,7 +98,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
         ),
         guarded_paths=("contracts/", "docs/contracts/", "src/moex_carry/storage/", "ui-web/"),
         source_of_truth=(
-            "AGENTS.md",
+            "docs/agent/entrypoint.md",
             "docs/architecture/modules/backend-core.md",
             "docs/architecture/modules/compute-stack-policy.md",
         ),
@@ -122,7 +133,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
         ),
         guarded_paths=("contracts/", "docs/contracts/", "src/moex_carry/storage/", "ui-web/"),
         source_of_truth=(
-            "AGENTS.md",
+            "docs/agent/entrypoint.md",
             "docs/architecture/modules/strategy-signal-interface.md",
             "contracts/decision-log.schema.json",
         ),
@@ -159,7 +170,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
         ),
         guarded_paths=("contracts/", "src/moex_carry/storage/", "src/moex_carry/ui/", "ui-web/"),
         source_of_truth=(
-            "AGENTS.md",
+            "docs/agent/entrypoint.md",
             "docs/architecture/modules/minute-replay-canon-v1.md",
             "docs/architecture/modules/compute-stack-policy.md",
         ),
@@ -216,7 +227,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
         ),
         guarded_paths=("src/moex_carry/storage/", "ui-web/", "contracts/"),
         source_of_truth=(
-            "AGENTS.md",
+            "docs/agent/entrypoint.md",
             "docs/architecture/layers-v2.md",
             "docs/contracts/api-v2.yaml",
         ),
@@ -250,11 +261,12 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "src/moex_carry/pipeline.py",
             "src/moex_carry/pipeline_helpers.py",
             "src/moex_carry/parameter_specs.py",
+            "src/moex_carry/server/",
             "src/moex_carry/unified_runtime.py",
         ),
         guarded_paths=("src/moex_carry/storage/", "contracts/", "ui-web/"),
         source_of_truth=(
-            "AGENTS.md",
+            "docs/agent/entrypoint.md",
             "docs/architecture/trading-advisor.md",
             "docs/architecture/layers-v2.md",
         ),
@@ -288,7 +300,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "src/moex_carry/storage/",
         ),
         source_of_truth=(
-            "AGENTS.md",
+            "docs/agent/entrypoint.md",
             "docs/architecture/modules/ui-web.md",
             "docs/contracts/api-v2.yaml",
         ),
@@ -323,7 +335,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
         ),
         guarded_paths=("src/moex_carry/strategy/", "src/moex_carry/backtest_v2/", "ui-web/"),
         source_of_truth=(
-            "AGENTS.md",
+            "docs/agent/entrypoint.md",
             "docs/architecture/modules/contracts-configs.md",
             "docs/contracts/api-v2.yaml",
         ),
@@ -372,7 +384,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "ui-web/",
         ),
         source_of_truth=(
-            "AGENTS.md",
+            "docs/agent/entrypoint.md",
             "docs/DEV_WORKFLOW.md",
             "docs/workflows/context-budget.md",
         ),
@@ -425,7 +437,8 @@ def _load_session_handoff_text(path_value: str | None) -> str:
     path = Path(path_value)
     if not path.exists():
         return ""
-    return _read_text(path)
+    _resolved_path, lines, _is_pointer = read_task_note_lines(path)
+    return "\n".join(lines)
 
 
 def _prefix_match(path: str, owned: str) -> bool:
@@ -616,10 +629,14 @@ def route_files(
 
     matched: dict[str, list[str]] = defaultdict(list)
     context_dependency_hints: dict[str, set[str]] = defaultdict(set)
+    cold_context_files: list[str] = []
     unmapped: list[str] = []
     unmapped_dependency_hints: dict[str, list[str]] = {}
 
     for normalized_path, original_path in normalized:
+        if any(_prefix_match(normalized_path, prefix) for prefix in COLD_CONTEXT_PREFIXES):
+            cold_context_files.append(original_path)
+            continue
         owners = [
             spec.context_id
             for spec in CONTEXTS
@@ -653,6 +670,7 @@ def route_files(
             "primary_context": None,
             "contexts": [],
             "intent_sources": intent_sources,
+            "cold_context_files": [],
             "unmapped_dependency_hints": {},
             "unmapped_files": [],
             "recommendations": ["No files provided. Use --from-git, --stdin, or --changed-files."],
@@ -720,6 +738,10 @@ def route_files(
 
     if unmapped:
         recommendations.append("Some files are unmapped. Classify manually before implementation.")
+    if cold_context_files:
+        recommendations.append(
+            "Cold-context files are present. Keep them out of hot retrieval unless the task explicitly needs them."
+        )
 
     if not recommendations:
         recommendations.append("Patch is scoped to one context.")
@@ -728,6 +750,7 @@ def route_files(
         "primary_context": primary,
         "contexts": context_entries,
         "intent_sources": intent_sources,
+        "cold_context_files": sorted(cold_context_files),
         "unmapped_dependency_hints": unmapped_dependency_hints,
         "unmapped_files": sorted(unmapped),
         "recommendations": recommendations,
@@ -765,6 +788,12 @@ def _render_text(result: dict[str, object]) -> str:
     if isinstance(unmapped, list) and unmapped:
         lines.append("unmapped_files:")
         for path in unmapped:
+            lines.append(f"- {path}")
+
+    cold_files = result.get("cold_context_files", [])
+    if isinstance(cold_files, list) and cold_files:
+        lines.append("cold_context_files:")
+        for path in cold_files:
             lines.append(f"- {path}")
 
     unmapped_dependency_hints = result.get("unmapped_dependency_hints", {})

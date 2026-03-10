@@ -10,9 +10,10 @@
    - final summary: compact change/result block.
 2. Do not paste large instruction blocks or skill catalogs into status updates.
 3. Use repository state for continuity:
-   - `plans/PLANS.yaml` for execution status,
-   - `memory/agent_memory.yaml` for durable decisions/incidents/patterns,
-   - `docs/session_handoff.md` for short task delta.
+   - `plans/items/` (+ compatibility output `plans/PLANS.yaml`) for execution status,
+   - `memory/{decisions,incidents,patterns}/` (+ compatibility output `memory/agent_memory.yaml`) for durable memory,
+   - `docs/tasks/active/*.md` for per-task continuity notes,
+   - `docs/session_handoff.md` as pointer-shim + short task delta.
 4. Keep `docs/session_handoff.md` lean:
    - `## Current Delta` maximum 8 bullets,
    - no high-context instruction dumps.
@@ -21,7 +22,8 @@
 - Validation command:
   - `python scripts/validate_session_handoff.py`
 - The command is part of:
-  - `python scripts/run_lean_gate.py`
+  - `python scripts/run_loop_gate.py`
+  - `python scripts/run_lean_gate.py` (compatibility wrapper)
 
 ## Failure Remediation
 - Follow `docs/runbooks/governance-remediation.md`.

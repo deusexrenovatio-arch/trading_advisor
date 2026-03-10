@@ -1,0 +1,100 @@
+{
+  "generated_at_utc": "2026-03-10T17:29:44+00:00",
+  "iterations": 1,
+  "config_path": "configs/dev_loop_timing_profiles.yaml",
+  "profiles": [
+    {
+      "name": "loop",
+      "description": "Local hot-loop timing for day-to-day coding.",
+      "command_stats": [
+        {
+          "name": "lean_gate",
+          "median_sec": 6.513,
+          "mean_sec": 6.513,
+          "min_sec": 6.513,
+          "max_sec": 6.513
+        },
+        {
+          "name": "worktree_guard",
+          "median_sec": 0.782,
+          "mean_sec": 0.782,
+          "min_sec": 0.782,
+          "max_sec": 0.782
+        }
+      ],
+      "profile_total": {
+        "median_sec": 7.295,
+        "mean_sec": 7.295,
+        "min_sec": 7.295,
+        "max_sec": 7.295
+      }
+    },
+    {
+      "name": "pre_push",
+      "description": "Pre-push deterministic baseline for local quality gate.",
+      "command_stats": [
+        {
+          "name": "architecture_smoke",
+          "median_sec": 3.339,
+          "mean_sec": 3.339,
+          "min_sec": 3.339,
+          "max_sec": 3.339
+        },
+        {
+          "name": "frontend_contract",
+          "median_sec": 0.06,
+          "mean_sec": 0.06,
+          "min_sec": 0.06,
+          "max_sec": 0.06
+        },
+        {
+          "name": "quality_scorecards",
+          "median_sec": 25.549,
+          "mean_sec": 25.549,
+          "min_sec": 25.549,
+          "max_sec": 25.549
+        }
+      ],
+      "profile_total": {
+        "median_sec": 28.948,
+        "mean_sec": 28.948,
+        "min_sec": 28.948,
+        "max_sec": 28.948
+      }
+    },
+    {
+      "name": "ci",
+      "description": "CI-required jobs median baseline.",
+      "command_stats": [
+        {
+          "name": "backend_smoke",
+          "median_sec": 3.312,
+          "mean_sec": 3.312,
+          "min_sec": 3.312,
+          "max_sec": 3.312
+        },
+        {
+          "name": "frontend_contract",
+          "median_sec": 0.057,
+          "mean_sec": 0.057,
+          "min_sec": 0.057,
+          "max_sec": 0.057
+        },
+        {
+          "name": "governance_contract",
+          "median_sec": 0.047,
+          "mean_sec": 0.047,
+          "min_sec": 0.047,
+          "max_sec": 0.047
+        }
+      ],
+      "profile_total": {
+        "median_sec": 3.416,
+        "mean_sec": 3.416,
+        "min_sec": 3.416,
+        "max_sec": 3.416
+      }
+    }
+  ],
+  "failures": []
+}
