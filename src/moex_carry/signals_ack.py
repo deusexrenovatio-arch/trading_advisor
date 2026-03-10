@@ -20,16 +20,19 @@ def build_signal_fingerprint(
     stock: object,
     future: object,
     signal_action: object,
+    strategy_stream: object | None = None,
 ) -> str:
-    raw = "|".join(
-        [
-            _normalize_part(run_id),
-            _normalize_part(timestamp),
-            _normalize_part(stock),
-            _normalize_part(future),
-            _normalize_part(signal_action),
-        ]
-    )
+    parts = [
+        _normalize_part(run_id),
+        _normalize_part(timestamp),
+        _normalize_part(stock),
+        _normalize_part(future),
+        _normalize_part(signal_action),
+    ]
+    strategy_part = _normalize_part(strategy_stream)
+    if strategy_part:
+        parts.append(strategy_part)
+    raw = "|".join(parts)
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 

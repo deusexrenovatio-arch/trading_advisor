@@ -1,0 +1,3463 @@
+{
+  "generated_at_utc": "2026-03-05T15:59:47.233588+00:00",
+  "reports": [
+    "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+    "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+    "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json"
+  ],
+  "gate": "final_go",
+  "candidates_total": 124040,
+  "feasible_pass2_total": 0,
+  "feasible_pass3_total": 0,
+  "top": [
+    {
+      "passes": 0,
+      "score": 162.61506738345975,
+      "min_win": 0.5675675675675675,
+      "min_tpw": 2.11716621253406,
+      "max_top": 0.2577639751552795,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6060606060606061,
+          "tpw": 2.517711171662125,
+          "top": 0.2577639751552795,
+          "filled": 132,
+          "net": 992.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5675675675675675,
+          "tpw": 2.11716621253406,
+          "top": 0.23837371205792257,
+          "filled": 111,
+          "net": 1582.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6442953020134228,
+          "tpw": 2.8419618528610355,
+          "top": 0.1760552570990023,
+          "filled": 149,
+          "net": 2778.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 162.61506738345975,
+      "min_win": 0.5675675675675675,
+      "min_tpw": 2.11716621253406,
+      "max_top": 0.2577639751552795,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6060606060606061,
+          "tpw": 2.517711171662125,
+          "top": 0.2577639751552795,
+          "filled": 132,
+          "net": 992.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5675675675675675,
+          "tpw": 2.11716621253406,
+          "top": 0.23837371205792257,
+          "filled": 111,
+          "net": 1582.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6442953020134228,
+          "tpw": 2.8419618528610355,
+          "top": 0.1760552570990023,
+          "filled": 149,
+          "net": 2778.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 155.51043623184572,
+      "min_win": 0.5728155339805825,
+      "min_tpw": 1.9645776566757494,
+      "max_top": 0.25908923980903414,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6147540983606558,
+          "tpw": 2.326975476839237,
+          "top": 0.25908923980903414,
+          "filled": 122,
+          "net": 978.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5728155339805825,
+          "tpw": 1.9645776566757494,
+          "top": 0.24214992927864215,
+          "filled": 103,
+          "net": 1554.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.647887323943662,
+          "tpw": 2.7084468664850134,
+          "top": 0.18393200769724183,
+          "filled": 142,
+          "net": 2639.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 155.51043623184572,
+      "min_win": 0.5728155339805825,
+      "min_tpw": 1.9645776566757494,
+      "max_top": 0.25908923980903414,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6147540983606558,
+          "tpw": 2.326975476839237,
+          "top": 0.25908923980903414,
+          "filled": 122,
+          "net": 978.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5728155339805825,
+          "tpw": 1.9645776566757494,
+          "top": 0.24214992927864215,
+          "filled": 103,
+          "net": 1554.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.647887323943662,
+          "tpw": 2.7084468664850134,
+          "top": 0.18393200769724183,
+          "filled": 142,
+          "net": 2639.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 154.36784741144413,
+      "min_win": 0.59,
+      "min_tpw": 1.9073569482288828,
+      "max_top": 0.26329539093114385,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6147540983606558,
+          "tpw": 2.326975476839237,
+          "top": 0.26329539093114385,
+          "filled": 122,
+          "net": 942.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.59,
+          "tpw": 1.9073569482288828,
+          "top": 0.23172712506767731,
+          "filled": 100,
+          "net": 1634.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.21192561856462272,
+          "filled": 125,
+          "net": 2936.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 154.36784741144413,
+      "min_win": 0.59,
+      "min_tpw": 1.9073569482288828,
+      "max_top": 0.26329539093114385,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6147540983606558,
+          "tpw": 2.326975476839237,
+          "top": 0.26329539093114385,
+          "filled": 122,
+          "net": 942.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.59,
+          "tpw": 1.9073569482288828,
+          "top": 0.23172712506767731,
+          "filled": 100,
+          "net": 1634.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.21192561856462272,
+          "filled": 125,
+          "net": 2936.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 148.4941918829772,
+      "min_win": 0.5789473684210527,
+      "min_tpw": 1.8119891008174387,
+      "max_top": 0.2551415797317437,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6153846153846154,
+          "tpw": 2.231607629427793,
+          "top": 0.2494807292868682,
+          "filled": 117,
+          "net": 1123.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5789473684210527,
+          "tpw": 1.8119891008174387,
+          "top": 0.2551415797317437,
+          "filled": 95,
+          "net": 1530.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6691729323308271,
+          "tpw": 2.536784741144414,
+          "top": 0.18327483595299862,
+          "filled": 133,
+          "net": 2797.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 148.4941918829772,
+      "min_win": 0.5789473684210527,
+      "min_tpw": 1.8119891008174387,
+      "max_top": 0.2551415797317437,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6153846153846154,
+          "tpw": 2.231607629427793,
+          "top": 0.2494807292868682,
+          "filled": 117,
+          "net": 1123.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5789473684210527,
+          "tpw": 1.8119891008174387,
+          "top": 0.2551415797317437,
+          "filled": 95,
+          "net": 1530.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6691729323308271,
+          "tpw": 2.536784741144414,
+          "top": 0.18327483595299862,
+          "filled": 133,
+          "net": 2797.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 148.4941918829772,
+      "min_win": 0.5789473684210527,
+      "min_tpw": 1.8119891008174387,
+      "max_top": 0.26217019695280563,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6260869565217392,
+          "tpw": 2.1934604904632153,
+          "top": 0.26217019695280563,
+          "filled": 115,
+          "net": 1038.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5789473684210527,
+          "tpw": 1.8119891008174387,
+          "top": 0.2448512585812357,
+          "filled": 95,
+          "net": 1535.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6666666666666666,
+          "tpw": 2.517711171662125,
+          "top": 0.18464262717321314,
+          "filled": 132,
+          "net": 2930.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 148.4941918829772,
+      "min_win": 0.5789473684210527,
+      "min_tpw": 1.8119891008174387,
+      "max_top": 0.26217019695280563,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6260869565217392,
+          "tpw": 2.1934604904632153,
+          "top": 0.26217019695280563,
+          "filled": 115,
+          "net": 1038.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5789473684210527,
+          "tpw": 1.8119891008174387,
+          "top": 0.2448512585812357,
+          "filled": 95,
+          "net": 1535.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6666666666666666,
+          "tpw": 2.517711171662125,
+          "top": 0.18464262717321314,
+          "filled": 132,
+          "net": 2930.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 148.15641486462982,
+      "min_win": 0.5851063829787234,
+      "min_tpw": 1.79291553133515,
+      "max_top": 0.2599005341683551,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "BM",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SV",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6320754716981132,
+          "tpw": 2.0217983651226157,
+          "top": 0.2599005341683551,
+          "filled": 106,
+          "net": 986.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5851063829787234,
+          "tpw": 1.79291553133515,
+          "top": 0.23484224965706446,
+          "filled": 94,
+          "net": 1609.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6615384615384615,
+          "tpw": 2.4795640326975477,
+          "top": 0.19059488202060484,
+          "filled": 130,
+          "net": 2748.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 148.15641486462982,
+      "min_win": 0.5851063829787234,
+      "min_tpw": 1.79291553133515,
+      "max_top": 0.2599005341683551,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "BM",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6320754716981132,
+          "tpw": 2.0217983651226157,
+          "top": 0.2599005341683551,
+          "filled": 106,
+          "net": 986.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5851063829787234,
+          "tpw": 1.79291553133515,
+          "top": 0.23484224965706446,
+          "filled": 94,
+          "net": 1609.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6615384615384615,
+          "tpw": 2.4795640326975477,
+          "top": 0.19059488202060484,
+          "filled": 130,
+          "net": 2748.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 148.15641486462982,
+      "min_win": 0.5851063829787234,
+      "min_tpw": 1.79291553133515,
+      "max_top": 0.2599005341683551,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "BM",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6320754716981132,
+          "tpw": 2.0217983651226157,
+          "top": 0.2599005341683551,
+          "filled": 106,
+          "net": 986.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5851063829787234,
+          "tpw": 1.79291553133515,
+          "top": 0.23484224965706446,
+          "filled": 94,
+          "net": 1609.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6615384615384615,
+          "tpw": 2.4795640326975477,
+          "top": 0.19059488202060484,
+          "filled": 130,
+          "net": 2748.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 148.15641486462982,
+      "min_win": 0.5851063829787234,
+      "min_tpw": 1.79291553133515,
+      "max_top": 0.2599005341683551,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "BM",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SV",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6320754716981132,
+          "tpw": 2.0217983651226157,
+          "top": 0.2599005341683551,
+          "filled": 106,
+          "net": 986.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5851063829787234,
+          "tpw": 1.79291553133515,
+          "top": 0.23484224965706446,
+          "filled": 94,
+          "net": 1609.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6615384615384615,
+          "tpw": 2.4795640326975477,
+          "top": 0.19059488202060484,
+          "filled": 130,
+          "net": 2748.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 147.8318830388796,
+      "min_win": 0.5913978494623656,
+      "min_tpw": 1.7738419618528611,
+      "max_top": 0.26467829675483023,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.625,
+          "tpw": 2.136239782016349,
+          "top": 0.26467829675483023,
+          "filled": 112,
+          "net": 928.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5913978494623656,
+          "tpw": 1.7738419618528611,
+          "top": 0.2370534477983938,
+          "filled": 93,
+          "net": 1592.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6779661016949152,
+          "tpw": 2.250681198910082,
+          "top": 0.2214193962748876,
+          "filled": 118,
+          "net": 2797.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 147.8318830388796,
+      "min_win": 0.5913978494623656,
+      "min_tpw": 1.7738419618528611,
+      "max_top": 0.26467829675483023,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.625,
+          "tpw": 2.136239782016349,
+          "top": 0.26467829675483023,
+          "filled": 112,
+          "net": 928.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5913978494623656,
+          "tpw": 1.7738419618528611,
+          "top": 0.2370534477983938,
+          "filled": 93,
+          "net": 1592.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6779661016949152,
+          "tpw": 2.250681198910082,
+          "top": 0.2214193962748876,
+          "filled": 118,
+          "net": 2797.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 147.0925850773958,
+      "min_win": 0.574468085106383,
+      "min_tpw": 1.79291553133515,
+      "max_top": 0.25469314079422384,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "BR",
+          "CC",
+          "DX",
+          "FF",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6371681415929203,
+          "tpw": 2.155313351498638,
+          "top": 0.25469314079422384,
+          "filled": 113,
+          "net": 1117.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.574468085106383,
+          "tpw": 1.79291553133515,
+          "top": 0.223907925712791,
+          "filled": 94,
+          "net": 1627.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6771653543307087,
+          "tpw": 2.422343324250681,
+          "top": 0.1839615076182839,
+          "filled": 127,
+          "net": 2941.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 146.7566142216753,
+      "min_win": 0.5806451612903226,
+      "min_tpw": 1.7738419618528611,
+      "max_top": 0.25469314079422384,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "BR",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6371681415929203,
+          "tpw": 2.155313351498638,
+          "top": 0.25469314079422384,
+          "filled": 113,
+          "net": 1117.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5806451612903226,
+          "tpw": 1.7738419618528611,
+          "top": 0.2281449893390192,
+          "filled": 93,
+          "net": 1663.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6771653543307087,
+          "tpw": 2.422343324250681,
+          "top": 0.1839615076182839,
+          "filled": 127,
+          "net": 2941.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 146.38892872508245,
+      "min_win": 0.5578947368421052,
+      "min_tpw": 1.8119891008174387,
+      "max_top": 0.2610551997560232,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@12:00"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.5981308411214953,
+          "tpw": 2.0408719346049047,
+          "top": 0.22206130823075065,
+          "filled": 107,
+          "net": 516.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5578947368421052,
+          "tpw": 1.8119891008174387,
+          "top": 0.2610551997560232,
+          "filled": 95,
+          "net": 1426.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6328125,
+          "tpw": 2.44141689373297,
+          "top": 0.19588182632050136,
+          "filled": 128,
+          "net": 2313.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 146.38892872508245,
+      "min_win": 0.5578947368421052,
+      "min_tpw": 1.8119891008174387,
+      "max_top": 0.2787365678931944,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@12:00"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6037735849056604,
+          "tpw": 2.0217983651226157,
+          "top": 0.259470393527032,
+          "filled": 106,
+          "net": 1081.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5578947368421052,
+          "tpw": 1.8119891008174387,
+          "top": 0.2787365678931944,
+          "filled": 95,
+          "net": 1412.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.664,
+          "tpw": 2.3841961852861036,
+          "top": 0.20496783416726233,
+          "filled": 125,
+          "net": 2651.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 146.38892872508245,
+      "min_win": 0.5578947368421052,
+      "min_tpw": 1.8119891008174387,
+      "max_top": 0.2610551997560232,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@12:00"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.5981308411214953,
+          "tpw": 2.0408719346049047,
+          "top": 0.22206130823075065,
+          "filled": 107,
+          "net": 516.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5578947368421052,
+          "tpw": 1.8119891008174387,
+          "top": 0.2610551997560232,
+          "filled": 95,
+          "net": 1426.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6328125,
+          "tpw": 2.44141689373297,
+          "top": 0.19588182632050136,
+          "filled": 128,
+          "net": 2313.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 146.38892872508245,
+      "min_win": 0.5578947368421052,
+      "min_tpw": 1.8119891008174387,
+      "max_top": 0.2787365678931944,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@12:00"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6037735849056604,
+          "tpw": 2.0217983651226157,
+          "top": 0.259470393527032,
+          "filled": 106,
+          "net": 1081.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5578947368421052,
+          "tpw": 1.8119891008174387,
+          "top": 0.2787365678931944,
+          "filled": 95,
+          "net": 1412.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.664,
+          "tpw": 2.3841961852861036,
+          "top": 0.20496783416726233,
+          "filled": 125,
+          "net": 2651.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 143.30435048832013,
+      "min_win": 0.5842696629213483,
+      "min_tpw": 1.6975476839237058,
+      "max_top": 0.26537521158548055,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6296296296296297,
+          "tpw": 2.0599455040871937,
+          "top": 0.26537521158548055,
+          "filled": 108,
+          "net": 963.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5842696629213483,
+          "tpw": 1.6975476839237058,
+          "top": 0.25,
+          "filled": 89,
+          "net": 1499.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6964285714285714,
+          "tpw": 2.136239782016349,
+          "top": 0.21895839949190218,
+          "filled": 112,
+          "net": 3041.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 143.30435048832013,
+      "min_win": 0.5842696629213483,
+      "min_tpw": 1.6975476839237058,
+      "max_top": 0.26537521158548055,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6296296296296297,
+          "tpw": 2.0599455040871937,
+          "top": 0.26537521158548055,
+          "filled": 108,
+          "net": 963.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5842696629213483,
+          "tpw": 1.6975476839237058,
+          "top": 0.25,
+          "filled": 89,
+          "net": 1499.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6964285714285714,
+          "tpw": 2.136239782016349,
+          "top": 0.21895839949190218,
+          "filled": 112,
+          "net": 3041.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 143.01461481297991,
+      "min_win": 0.5909090909090909,
+      "min_tpw": 1.6784741144414168,
+      "max_top": 0.25923682616596,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6181818181818182,
+          "tpw": 2.0980926430517712,
+          "top": 0.2538750587130108,
+          "filled": 110,
+          "net": 1086.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5909090909090909,
+          "tpw": 1.6784741144414168,
+          "top": 0.25923682616596,
+          "filled": 88,
+          "net": 1504.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6771653543307087,
+          "tpw": 2.422343324250681,
+          "top": 0.18651964590774964,
+          "filled": 127,
+          "net": 2740.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 143.01461481297991,
+      "min_win": 0.5909090909090909,
+      "min_tpw": 1.6784741144414168,
+      "max_top": 0.25923682616596,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6181818181818182,
+          "tpw": 2.0980926430517712,
+          "top": 0.2538750587130108,
+          "filled": 110,
+          "net": 1086.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5909090909090909,
+          "tpw": 1.6784741144414168,
+          "top": 0.25923682616596,
+          "filled": 88,
+          "net": 1504.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6771653543307087,
+          "tpw": 2.422343324250681,
+          "top": 0.18651964590774964,
+          "filled": 127,
+          "net": 2740.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 142.86463707820508,
+      "min_win": 0.6153846153846154,
+      "min_tpw": 1.7166212534059946,
+      "max_top": 0.38003258087037467,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6666666666666666,
+          "tpw": 1.7166212534059946,
+          "top": 0.38003258087037467,
+          "filled": 90,
+          "net": 1568.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.6153846153846154,
+          "tpw": 1.7356948228882834,
+          "top": 0.2585321655089097,
+          "filled": 91,
+          "net": 1385.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6462585034013606,
+          "tpw": 2.803814713896458,
+          "top": 0.17423667021114994,
+          "filled": 147,
+          "net": 2793.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 142.86463707820508,
+      "min_win": 0.6153846153846154,
+      "min_tpw": 1.7166212534059946,
+      "max_top": 0.38003258087037467,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6666666666666666,
+          "tpw": 1.7166212534059946,
+          "top": 0.38003258087037467,
+          "filled": 90,
+          "net": 1568.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.6153846153846154,
+          "tpw": 1.7356948228882834,
+          "top": 0.2585321655089097,
+          "filled": 91,
+          "net": 1385.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6462585034013606,
+          "tpw": 2.803814713896458,
+          "top": 0.17423667021114994,
+          "filled": 147,
+          "net": 2793.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.8782511766163,
+      "min_win": 0.5795454545454546,
+      "min_tpw": 1.6784741144414168,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "BR",
+          "CC",
+          "DX",
+          "FF",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5795454545454546,
+          "tpw": 1.6784741144414168,
+          "top": 0.2438051837083452,
+          "filled": 88,
+          "net": 1471.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.8782511766163,
+      "min_win": 0.5795454545454546,
+      "min_tpw": 1.6784741144414168,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DJ",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5795454545454546,
+          "tpw": 1.6784741144414168,
+          "top": 0.24790037648421662,
+          "filled": 88,
+          "net": 1500.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.8782511766163,
+      "min_win": 0.5795454545454546,
+      "min_tpw": 1.6784741144414168,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DJ",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5795454545454546,
+          "tpw": 1.6784741144414168,
+          "top": 0.24790037648421662,
+          "filled": 88,
+          "net": 1500.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "BR",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.26304996271439224,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "BM",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SV",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6363636363636364,
+          "tpw": 1.888283378746594,
+          "top": 0.26304996271439224,
+          "filled": 99,
+          "net": 912.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24927198602213163,
+          "filled": 87,
+          "net": 1504.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6972477064220184,
+          "tpw": 2.0790190735694822,
+          "top": 0.227670463926036,
+          "filled": 109,
+          "net": 2920.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.26304996271439224,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "BM",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SV",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6363636363636364,
+          "tpw": 1.888283378746594,
+          "top": 0.26304996271439224,
+          "filled": 99,
+          "net": 912.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24927198602213163,
+          "filled": 87,
+          "net": 1504.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6972477064220184,
+          "tpw": 2.0790190735694822,
+          "top": 0.227670463926036,
+          "filled": 109,
+          "net": 2920.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.26304996271439224,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "BM",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6363636363636364,
+          "tpw": 1.888283378746594,
+          "top": 0.26304996271439224,
+          "filled": 99,
+          "net": 912.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24927198602213163,
+          "filled": 87,
+          "net": 1504.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6972477064220184,
+          "tpw": 2.0790190735694822,
+          "top": 0.227670463926036,
+          "filled": 109,
+          "net": 2920.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.26304996271439224,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ],
+        "roots": [
+          "AN",
+          "BM",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6363636363636364,
+          "tpw": 1.888283378746594,
+          "top": 0.26304996271439224,
+          "filled": 99,
+          "net": 912.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24927198602213163,
+          "filled": 87,
+          "net": 1504.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6972477064220184,
+          "tpw": 2.0790190735694822,
+          "top": 0.227670463926036,
+          "filled": 109,
+          "net": 2920.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "PT",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "PT",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2622676579925651,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SU",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6261682242990654,
+          "tpw": 2.0408719346049047,
+          "top": 0.2622676579925651,
+          "filled": 107,
+          "net": 1011.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "PT",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "PT",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "W4",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2622676579925651,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SU",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6261682242990654,
+          "tpw": 2.0408719346049047,
+          "top": 0.2622676579925651,
+          "filled": 107,
+          "net": 1011.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.5907169031288,
+      "min_win": 0.5862068965517241,
+      "min_tpw": 1.659400544959128,
+      "max_top": 0.2635412775494957,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [],
+        "roots": [
+          "AN",
+          "CC",
+          "DX",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.638095238095238,
+          "tpw": 2.002724795640327,
+          "top": 0.2635412775494957,
+          "filled": 105,
+          "net": 1024.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5862068965517241,
+          "tpw": 1.659400544959128,
+          "top": 0.24883720930232558,
+          "filled": 87,
+          "net": 1507.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.672,
+          "tpw": 2.3841961852861036,
+          "top": 0.1933254677229058,
+          "filled": 125,
+          "net": 2790.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.05715947708416,
+      "min_win": 0.5617977528089888,
+      "min_tpw": 1.6975476839237058,
+      "max_top": 0.2660864159154492,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@12:00"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.61,
+          "tpw": 1.9073569482288828,
+          "top": 0.22504892367906065,
+          "filled": 100,
+          "net": 489.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5617977528089888,
+          "tpw": 1.6975476839237058,
+          "top": 0.2660864159154492,
+          "filled": 89,
+          "net": 1395.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6370967741935484,
+          "tpw": 2.3651226158038146,
+          "top": 0.20128794848206072,
+          "filled": 124,
+          "net": 2238.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.05715947708416,
+      "min_win": 0.5617977528089888,
+      "min_tpw": 1.6975476839237058,
+      "max_top": 0.33348115299334813,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@14:15"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6037735849056604,
+          "tpw": 2.0217983651226157,
+          "top": 0.2524485798237023,
+          "filled": 106,
+          "net": 796.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5617977528089888,
+          "tpw": 1.6975476839237058,
+          "top": 0.33348115299334813,
+          "filled": 89,
+          "net": 789.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.5932203389830508,
+          "tpw": 2.250681198910082,
+          "top": 0.24001755155770074,
+          "filled": 118,
+          "net": 1705.0
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.05715947708416,
+      "min_win": 0.5617977528089888,
+      "min_tpw": 1.6975476839237058,
+      "max_top": 0.2660864159154492,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@12:00"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.61,
+          "tpw": 1.9073569482288828,
+          "top": 0.22504892367906065,
+          "filled": 100,
+          "net": 489.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5617977528089888,
+          "tpw": 1.6975476839237058,
+          "top": 0.2660864159154492,
+          "filled": 89,
+          "net": 1395.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.6370967741935484,
+          "tpw": 2.3651226158038146,
+          "top": 0.20128794848206072,
+          "filled": 124,
+          "net": 2238.5
+        }
+      ]
+    },
+    {
+      "passes": 0,
+      "score": 141.05715947708416,
+      "min_win": 0.5617977528089888,
+      "min_tpw": 1.6975476839237058,
+      "max_top": 0.33348115299334813,
+      "candidate": {
+        "setup_kinds": [
+          "ORB_BREAKOUT",
+          "EMA_PULLBACK_LIMIT"
+        ],
+        "slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "clusters": [
+          "energy",
+          "other"
+        ],
+        "exclude_side_slots": [
+          "SELL@14:15"
+        ],
+        "roots": [
+          "AN",
+          "CC",
+          "CE",
+          "DX",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NR",
+          "RI",
+          "S1",
+          "SF",
+          "SX",
+          "ZC"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "win": 0.6037735849056604,
+          "tpw": 2.0217983651226157,
+          "top": 0.2524485798237023,
+          "filled": 106,
+          "net": 796.0
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "win": 0.5617977528089888,
+          "tpw": 1.6975476839237058,
+          "top": 0.33348115299334813,
+          "filled": 89,
+          "net": 789.5
+        },
+        {
+          "path": "wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "win": 0.5932203389830508,
+          "tpw": 2.250681198910082,
+          "top": 0.24001755155770074,
+          "filled": 118,
+          "net": 1705.0
+        }
+      ]
+    }
+  ]
+}

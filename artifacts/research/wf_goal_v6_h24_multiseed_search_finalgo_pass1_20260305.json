@@ -1,0 +1,3292 @@
+{
+  "generated_at_utc": "2026-03-05T16:01:26.899199+00:00",
+  "engine": "tape",
+  "gate_profile": "final_go",
+  "require_passes": 1,
+  "reports": [
+    "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+    "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+    "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json"
+  ],
+  "candidates_total": 80000,
+  "evaluated_total": 80000,
+  "pruned_early_total": 80000,
+  "feasible_total": 0,
+  "elapsed_seconds": 22.981126400001813,
+  "throughput_candidates_per_sec": 3481.117444269124,
+  "top": [
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "CC",
+          "CE",
+          "DX",
+          "GD",
+          "HS",
+          "MM",
+          "NA",
+          "NC",
+          "NG",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "RI",
+          "S1",
+          "SF",
+          "SU",
+          "SV",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 614,
+          "filled_trades": 334,
+          "win_rate_net": 0.5538922155688623,
+          "trades_per_week": 6.370572207084469,
+          "net_ticks_sum": 7188.5,
+          "concentration_top_share": 0.31453727061383985
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 728,
+          "filled_trades": 393,
+          "win_rate_net": 0.46564885496183206,
+          "trades_per_week": 7.4959128065395095,
+          "net_ticks_sum": 7921.5,
+          "concentration_top_share": 0.5305020694619399
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 607,
+          "filled_trades": 351,
+          "win_rate_net": 0.5356125356125356,
+          "trades_per_week": 6.694822888283379,
+          "net_ticks_sum": 12618.0,
+          "concentration_top_share": 0.5041530054644808
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.46564885496183206,
+      "min_trades_per_week": 6.370572207084469,
+      "min_net_ticks_sum": 7188.5,
+      "max_concentration_top_share": 0.5305020694619399,
+      "win_rate_std": 0.03802916132642559,
+      "trades_per_week_std": 0.4729664101499765,
+      "score": 373.5052085736812,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BR",
+          "CC",
+          "CE",
+          "FF",
+          "HS",
+          "MM",
+          "MX",
+          "NA",
+          "NC",
+          "NG",
+          "OJ",
+          "PD",
+          "PT",
+          "S1",
+          "SA",
+          "SF",
+          "SV",
+          "SX",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 512,
+          "filled_trades": 279,
+          "win_rate_net": 0.5555555555555556,
+          "trades_per_week": 5.321525885558583,
+          "net_ticks_sum": 5853.0,
+          "concentration_top_share": 0.36483075157773953
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 618,
+          "filled_trades": 344,
+          "win_rate_net": 0.49127906976744184,
+          "trades_per_week": 6.561307901907357,
+          "net_ticks_sum": 8310.5,
+          "concentration_top_share": 0.5541561712846348
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 525,
+          "filled_trades": 299,
+          "win_rate_net": 0.5418060200668896,
+          "trades_per_week": 5.70299727520436,
+          "net_ticks_sum": 12008.5,
+          "concentration_top_share": 0.5373325567850903
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.49127906976744184,
+      "min_trades_per_week": 5.321525885558583,
+      "min_net_ticks_sum": 5853.0,
+      "max_concentration_top_share": 0.5541561712846348,
+      "win_rate_std": 0.02763550264502074,
+      "trades_per_week_std": 0.518467506866942,
+      "score": 313.956720552497,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CC",
+          "DJ",
+          "FF",
+          "GD",
+          "HS",
+          "MM",
+          "MX",
+          "NA",
+          "NR",
+          "PD",
+          "PT",
+          "SA",
+          "SV",
+          "SX",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 531,
+          "filled_trades": 275,
+          "win_rate_net": 0.5745454545454546,
+          "trades_per_week": 5.245231607629428,
+          "net_ticks_sum": 7056.5,
+          "concentration_top_share": 0.3369006622516556
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 641,
+          "filled_trades": 347,
+          "win_rate_net": 0.4899135446685879,
+          "trades_per_week": 6.618528610354224,
+          "net_ticks_sum": 8670.5,
+          "concentration_top_share": 0.5747260888213046
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 539,
+          "filled_trades": 298,
+          "win_rate_net": 0.5302013422818792,
+          "trades_per_week": 5.683923705722071,
+          "net_ticks_sum": 11954.0,
+          "concentration_top_share": 0.5399953176213517
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4899135446685879,
+      "min_trades_per_week": 5.245231607629428,
+      "min_net_ticks_sum": 7056.5,
+      "max_concentration_top_share": 0.5747260888213046,
+      "win_rate_std": 0.034564058240349076,
+      "trades_per_week_std": 0.5727013709298442,
+      "score": 312.80436873326465,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CE",
+          "DJ",
+          "DX",
+          "FF",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "NA",
+          "OJ",
+          "PD",
+          "PT",
+          "S1",
+          "SA",
+          "SV",
+          "SX",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 533,
+          "filled_trades": 276,
+          "win_rate_net": 0.5615942028985508,
+          "trades_per_week": 5.264305177111717,
+          "net_ticks_sum": 7032.5,
+          "concentration_top_share": 0.3360105680317041
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 607,
+          "filled_trades": 320,
+          "win_rate_net": 0.453125,
+          "trades_per_week": 6.1035422343324255,
+          "net_ticks_sum": 7846.0,
+          "concentration_top_share": 0.5699922660479505
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 506,
+          "filled_trades": 280,
+          "win_rate_net": 0.5035714285714286,
+          "trades_per_week": 5.340599455040872,
+          "net_ticks_sum": 11826.5,
+          "concentration_top_share": 0.5359175928435891
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.453125,
+      "min_trades_per_week": 5.264305177111717,
+      "min_net_ticks_sum": 7032.5,
+      "max_concentration_top_share": 0.5699922660479505,
+      "win_rate_std": 0.04431835896690542,
+      "trades_per_week_std": 0.3789197129164739,
+      "score": 312.1724390316599,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "DX",
+          "FF",
+          "GD",
+          "HS",
+          "N2",
+          "NC",
+          "NG",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SA",
+          "SF",
+          "SX",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 507,
+          "filled_trades": 270,
+          "win_rate_net": 0.5518518518518518,
+          "trades_per_week": 5.1498637602179835,
+          "net_ticks_sum": 5986.0,
+          "concentration_top_share": 0.3268736506631027
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 670,
+          "filled_trades": 334,
+          "win_rate_net": 0.4880239520958084,
+          "trades_per_week": 6.370572207084469,
+          "net_ticks_sum": 7839.5,
+          "concentration_top_share": 0.5364486661571496
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 552,
+          "filled_trades": 312,
+          "win_rate_net": 0.5641025641025641,
+          "trades_per_week": 5.950953678474114,
+          "net_ticks_sum": 13437.0,
+          "concentration_top_share": 0.4790902167139791
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4880239520958084,
+      "min_trades_per_week": 5.1498637602179835,
+      "min_net_ticks_sum": 5986.0,
+      "max_concentration_top_share": 0.5364486661571496,
+      "win_rate_std": 0.033353387205619346,
+      "trades_per_week_std": 0.5063983806073721,
+      "score": 307.78715785937976,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "CC",
+          "DX",
+          "FF",
+          "GD",
+          "KC",
+          "MX",
+          "NA",
+          "NC",
+          "PD",
+          "PT",
+          "SV",
+          "SX",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 444,
+          "filled_trades": 267,
+          "win_rate_net": 0.5767790262172284,
+          "trades_per_week": 5.092643051771117,
+          "net_ticks_sum": 7398.5,
+          "concentration_top_share": 0.3773215451254969
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 519,
+          "filled_trades": 306,
+          "win_rate_net": 0.5,
+          "trades_per_week": 5.836512261580381,
+          "net_ticks_sum": 9556.0,
+          "concentration_top_share": 0.6276613864758985
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 434,
+          "filled_trades": 273,
+          "win_rate_net": 0.5604395604395604,
+          "trades_per_week": 5.20708446866485,
+          "net_ticks_sum": 11397.0,
+          "concentration_top_share": 0.5736135289728923
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5,
+      "min_trades_per_week": 5.092643051771117,
+      "min_net_ticks_sum": 7398.5,
+      "max_concentration_top_share": 0.6276613864758985,
+      "win_rate_std": 0.03302345542673287,
+      "trades_per_week_std": 0.32704358963590113,
+      "score": 304.04414665228705,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "CC",
+          "CE",
+          "DX",
+          "FF",
+          "KC",
+          "MX",
+          "N2",
+          "NA",
+          "NC",
+          "NG",
+          "NR",
+          "OJ",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SA",
+          "SF",
+          "SV",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 495,
+          "filled_trades": 272,
+          "win_rate_net": 0.5477941176470589,
+          "trades_per_week": 5.1880108991825615,
+          "net_ticks_sum": 2121.5,
+          "concentration_top_share": 0.39540755937820565
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 679,
+          "filled_trades": 351,
+          "win_rate_net": 0.5014245014245015,
+          "trades_per_week": 6.694822888283379,
+          "net_ticks_sum": 1191.5,
+          "concentration_top_share": 0.3778622865927664
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 566,
+          "filled_trades": 314,
+          "win_rate_net": 0.5445859872611465,
+          "trades_per_week": 5.989100817438692,
+          "net_ticks_sum": 6971.0,
+          "concentration_top_share": 0.31769436997319034
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5014245014245015,
+      "min_trades_per_week": 5.1880108991825615,
+      "min_net_ticks_sum": 1191.5,
+      "max_concentration_top_share": 0.39540755937820565,
+      "win_rate_std": 0.021143287006169183,
+      "trades_per_week_std": 0.6155639752749675,
+      "score": 303.2616496132588,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BM",
+          "BR",
+          "CC",
+          "DJ",
+          "DX",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "N2",
+          "NG",
+          "NR",
+          "PD",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SF",
+          "SU",
+          "SX",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 524,
+          "filled_trades": 264,
+          "win_rate_net": 0.5606060606060606,
+          "trades_per_week": 5.03542234332425,
+          "net_ticks_sum": 5232.5,
+          "concentration_top_share": 0.3003069657615112
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 679,
+          "filled_trades": 333,
+          "win_rate_net": 0.4864864864864865,
+          "trades_per_week": 6.35149863760218,
+          "net_ticks_sum": 6696.0,
+          "concentration_top_share": 0.4990182138262577
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 563,
+          "filled_trades": 295,
+          "win_rate_net": 0.559322033898305,
+          "trades_per_week": 5.6267029972752045,
+          "net_ticks_sum": 14369.0,
+          "concentration_top_share": 0.4611462845718094
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4864864864864865,
+      "min_trades_per_week": 5.03542234332425,
+      "min_net_ticks_sum": 5232.5,
+      "max_concentration_top_share": 0.4990182138262577,
+      "win_rate_std": 0.03464162069443269,
+      "trades_per_week_std": 0.5382067285939264,
+      "score": 302.278764248938,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "DX",
+          "FF",
+          "GD",
+          "HS",
+          "MM",
+          "NA",
+          "NC",
+          "NG",
+          "OJ",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SU",
+          "SV",
+          "SX",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 527,
+          "filled_trades": 279,
+          "win_rate_net": 0.5376344086021505,
+          "trades_per_week": 5.321525885558583,
+          "net_ticks_sum": 3850.0,
+          "concentration_top_share": 0.3983306836248013
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 668,
+          "filled_trades": 348,
+          "win_rate_net": 0.4454022988505747,
+          "trades_per_week": 6.637602179836512,
+          "net_ticks_sum": 721.5,
+          "concentration_top_share": 0.38822844791753264
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 553,
+          "filled_trades": 315,
+          "win_rate_net": 0.5492063492063493,
+          "trades_per_week": 6.008174386920981,
+          "net_ticks_sum": 5566.5,
+          "concentration_top_share": 0.29706299977580153
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4454022988505747,
+      "min_trades_per_week": 5.321525885558583,
+      "min_net_ticks_sum": 721.5,
+      "max_concentration_top_share": 0.3983306836248013,
+      "win_rate_std": 0.04644704601160577,
+      "trades_per_week_std": 0.5374551478214582,
+      "score": 301.65637926944765,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "DJ",
+          "DX",
+          "GD",
+          "HS",
+          "MX",
+          "NA",
+          "NC",
+          "NG",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "RI",
+          "S1",
+          "SA",
+          "SV",
+          "SX",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@12:00"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 485,
+          "filled_trades": 267,
+          "win_rate_net": 0.5767790262172284,
+          "trades_per_week": 5.092643051771117,
+          "net_ticks_sum": 7367.5,
+          "concentration_top_share": 0.34822846503477356
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 564,
+          "filled_trades": 305,
+          "win_rate_net": 0.4524590163934426,
+          "trades_per_week": 5.817438692098093,
+          "net_ticks_sum": 8449.5,
+          "concentration_top_share": 0.6101751045245685
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 492,
+          "filled_trades": 273,
+          "win_rate_net": 0.5201465201465202,
+          "trades_per_week": 5.20708446866485,
+          "net_ticks_sum": 11419.5,
+          "concentration_top_share": 0.5625838448717427
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4524590163934426,
+      "min_trades_per_week": 5.092643051771117,
+      "min_net_ticks_sum": 7367.5,
+      "max_concentration_top_share": 0.6101751045245685,
+      "win_rate_std": 0.05082027564615208,
+      "trades_per_week_std": 0.31814703732017313,
+      "score": 300.7884630423656,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CE",
+          "DJ",
+          "GD",
+          "KC",
+          "MM",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SA",
+          "SF",
+          "SU",
+          "SV",
+          "SX"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 480,
+          "filled_trades": 268,
+          "win_rate_net": 0.5671641791044776,
+          "trades_per_week": 5.111716621253406,
+          "net_ticks_sum": 7031.5,
+          "concentration_top_share": 0.33597506208062555
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 638,
+          "filled_trades": 314,
+          "win_rate_net": 0.44904458598726116,
+          "trades_per_week": 5.989100817438692,
+          "net_ticks_sum": 8324.0,
+          "concentration_top_share": 0.5967611336032389
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 505,
+          "filled_trades": 266,
+          "win_rate_net": 0.5037593984962406,
+          "trades_per_week": 5.073569482288828,
+          "net_ticks_sum": 11492.5,
+          "concentration_top_share": 0.5572826480892361
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.44904458598726116,
+      "min_trades_per_week": 5.073569482288828,
+      "min_net_ticks_sum": 7031.5,
+      "max_concentration_top_share": 0.5967611336032389,
+      "win_rate_std": 0.04826560218675201,
+      "trades_per_week_std": 0.4228811045893233,
+      "score": 298.45231756928314,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BM",
+          "CE",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "N2",
+          "NA",
+          "NC",
+          "NG",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SF",
+          "SU",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 513,
+          "filled_trades": 267,
+          "win_rate_net": 0.5468164794007491,
+          "trades_per_week": 5.092643051771117,
+          "net_ticks_sum": 4878.5,
+          "concentration_top_share": 0.31317409505048016
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 646,
+          "filled_trades": 325,
+          "win_rate_net": 0.47692307692307695,
+          "trades_per_week": 6.198910081743869,
+          "net_ticks_sum": 7051.0,
+          "concentration_top_share": 0.5384671586176664
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 517,
+          "filled_trades": 275,
+          "win_rate_net": 0.5272727272727272,
+          "trades_per_week": 5.245231607629428,
+          "net_ticks_sum": 13240.0,
+          "concentration_top_share": 0.4829692189572137
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.47692307692307695,
+      "min_trades_per_week": 5.092643051771117,
+      "min_net_ticks_sum": 4878.5,
+      "max_concentration_top_share": 0.5384671586176664,
+      "win_rate_std": 0.029443228324427747,
+      "trades_per_week_std": 0.4895136635220385,
+      "score": 298.3224677617903,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BM",
+          "CC",
+          "CE",
+          "DX",
+          "GD",
+          "N2",
+          "NG",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "SF",
+          "SU",
+          "SV",
+          "SX",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 476,
+          "filled_trades": 256,
+          "win_rate_net": 0.5546875,
+          "trades_per_week": 4.88283378746594,
+          "net_ticks_sum": 8129.5,
+          "concentration_top_share": 0.4155492347284302
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 544,
+          "filled_trades": 293,
+          "win_rate_net": 0.45051194539249145,
+          "trades_per_week": 5.5885558583106265,
+          "net_ticks_sum": 7737.0,
+          "concentration_top_share": 0.5837084487534626
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 452,
+          "filled_trades": 269,
+          "win_rate_net": 0.5539033457249071,
+          "trades_per_week": 5.130790190735695,
+          "net_ticks_sum": 13302.5,
+          "concentration_top_share": 0.448202131071594
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.45051194539249145,
+      "min_trades_per_week": 4.88283378746594,
+      "min_net_ticks_sum": 7737.0,
+      "max_concentration_top_share": 0.5837084487534626,
+      "win_rate_std": 0.04892504782079872,
+      "trades_per_week_std": 0.2923231517820472,
+      "score": 295.44188710968626,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BR",
+          "CC",
+          "CE",
+          "DJ",
+          "DX",
+          "FF",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "NC",
+          "NG",
+          "OJ",
+          "PD",
+          "S1",
+          "SF",
+          "SU",
+          "SV",
+          "SX",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 485,
+          "filled_trades": 272,
+          "win_rate_net": 0.5514705882352942,
+          "trades_per_week": 5.1880108991825615,
+          "net_ticks_sum": 4558.0,
+          "concentration_top_share": 0.41094739563138166
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 661,
+          "filled_trades": 354,
+          "win_rate_net": 0.4519774011299435,
+          "trades_per_week": 6.752043596730245,
+          "net_ticks_sum": 5104.5,
+          "concentration_top_share": 0.625928914178946
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 553,
+          "filled_trades": 322,
+          "win_rate_net": 0.5372670807453416,
+          "trades_per_week": 6.141689373297003,
+          "net_ticks_sum": 10816.0,
+          "concentration_top_share": 0.5969202898550725
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4519774011299435,
+      "min_trades_per_week": 5.1880108991825615,
+      "min_net_ticks_sum": 4558.0,
+      "max_concentration_top_share": 0.625928914178946,
+      "win_rate_std": 0.04393804141982802,
+      "trades_per_week_std": 0.6436211091292013,
+      "score": 286.522463036762,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "CC",
+          "DJ",
+          "DX",
+          "FF",
+          "GD",
+          "MX",
+          "N2",
+          "NC",
+          "NG",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SF",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 434,
+          "filled_trades": 237,
+          "win_rate_net": 0.6075949367088608,
+          "trades_per_week": 4.520435967302452,
+          "net_ticks_sum": 8221.0,
+          "concentration_top_share": 0.4020267318948196
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 520,
+          "filled_trades": 272,
+          "win_rate_net": 0.5073529411764706,
+          "trades_per_week": 5.1880108991825615,
+          "net_ticks_sum": 8658.0,
+          "concentration_top_share": 0.5885998603351955
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 444,
+          "filled_trades": 248,
+          "win_rate_net": 0.5766129032258065,
+          "trades_per_week": 4.730245231607629,
+          "net_ticks_sum": 12976.5,
+          "concentration_top_share": 0.4685741961923922
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5073529411764706,
+      "min_trades_per_week": 4.520435967302452,
+      "min_net_ticks_sum": 8221.0,
+      "max_concentration_top_share": 0.5885998603351955,
+      "win_rate_std": 0.04190635911719828,
+      "trades_per_week_std": 0.2787323733287573,
+      "score": 285.1855947357427,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "DJ",
+          "DX",
+          "FF",
+          "GD",
+          "HS",
+          "KC",
+          "NA",
+          "NC",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SF",
+          "SV",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "BUY@10:30"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 409,
+          "filled_trades": 240,
+          "win_rate_net": 0.6041666666666666,
+          "trades_per_week": 4.577656675749319,
+          "net_ticks_sum": 9790.0,
+          "concentration_top_share": 0.43982671617633057
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 473,
+          "filled_trades": 253,
+          "win_rate_net": 0.5059288537549407,
+          "trades_per_week": 4.825613079019074,
+          "net_ticks_sum": 8629.0,
+          "concentration_top_share": 0.6473749880026874
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 408,
+          "filled_trades": 246,
+          "win_rate_net": 0.556910569105691,
+          "trades_per_week": 4.692098092643052,
+          "net_ticks_sum": 11814.0,
+          "concentration_top_share": 0.6346615458473356
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5059288537549407,
+      "min_trades_per_week": 4.577656675749319,
+      "min_net_ticks_sum": 8629.0,
+      "max_concentration_top_share": 0.6473749880026874,
+      "win_rate_std": 0.0401150317385677,
+      "trades_per_week_std": 0.10132755872258364,
+      "score": 284.7189940632546,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BR",
+          "CC",
+          "DX",
+          "FF",
+          "HS",
+          "MM",
+          "NA",
+          "NC",
+          "NG",
+          "OJ",
+          "PD",
+          "PT",
+          "RI",
+          "S1",
+          "SA",
+          "SF",
+          "SV",
+          "SX",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 447,
+          "filled_trades": 234,
+          "win_rate_net": 0.5811965811965812,
+          "trades_per_week": 4.463215258855586,
+          "net_ticks_sum": 7867.0,
+          "concentration_top_share": 0.4506462984723854
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 491,
+          "filled_trades": 266,
+          "win_rate_net": 0.49624060150375937,
+          "trades_per_week": 5.073569482288828,
+          "net_ticks_sum": 8252.0,
+          "concentration_top_share": 0.5624791458124792
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 438,
+          "filled_trades": 247,
+          "win_rate_net": 0.562753036437247,
+          "trades_per_week": 4.7111716621253406,
+          "net_ticks_sum": 11846.0,
+          "concentration_top_share": 0.4971932321315623
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.49624060150375937,
+      "min_trades_per_week": 4.463215258855586,
+      "min_net_ticks_sum": 7867.0,
+      "max_concentration_top_share": 0.5624791458124792,
+      "win_rate_std": 0.03648681166552306,
+      "trades_per_week_std": 0.2506318318092447,
+      "score": 283.02140292759964,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "EMA_PULLBACK_LIMIT",
+          "ORB_BREAKOUT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "DX",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "N2",
+          "NC",
+          "NR",
+          "PD",
+          "PT",
+          "RI",
+          "S1",
+          "SF",
+          "SU",
+          "SV",
+          "SX"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 487,
+          "filled_trades": 273,
+          "win_rate_net": 0.6227106227106227,
+          "trades_per_week": 5.20708446866485,
+          "net_ticks_sum": 13382.0,
+          "concentration_top_share": 0.5162406304055353
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 447,
+          "filled_trades": 230,
+          "win_rate_net": 0.5434782608695652,
+          "trades_per_week": 4.386920980926431,
+          "net_ticks_sum": 6521.0,
+          "concentration_top_share": 0.37888755980861244
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 402,
+          "filled_trades": 279,
+          "win_rate_net": 0.5878136200716846,
+          "trades_per_week": 5.321525885558583,
+          "net_ticks_sum": 10481.5,
+          "concentration_top_share": 0.29627450092797974
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5434782608695652,
+      "min_trades_per_week": 4.386920980926431,
+      "min_net_ticks_sum": 6521.0,
+      "max_concentration_top_share": 0.5162406304055353,
+      "win_rate_std": 0.0324228863470702,
+      "trades_per_week_std": 0.41623328291854805,
+      "score": 281.2149800650163,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "DX",
+          "FF",
+          "GD",
+          "KC",
+          "MM",
+          "N2",
+          "NA",
+          "NC",
+          "NR",
+          "PD",
+          "PT",
+          "SA",
+          "SF",
+          "SV",
+          "SX"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 388,
+          "filled_trades": 236,
+          "win_rate_net": 0.597457627118644,
+          "trades_per_week": 4.501362397820164,
+          "net_ticks_sum": 8106.5,
+          "concentration_top_share": 0.39766711143631905
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 451,
+          "filled_trades": 254,
+          "win_rate_net": 0.5078740157480315,
+          "trades_per_week": 4.844686648501362,
+          "net_ticks_sum": 7886.5,
+          "concentration_top_share": 0.6131539475478387
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 388,
+          "filled_trades": 249,
+          "win_rate_net": 0.5582329317269076,
+          "trades_per_week": 4.7493188010899186,
+          "net_ticks_sum": 13564.0,
+          "concentration_top_share": 0.5363445804314018
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5078740157480315,
+      "min_trades_per_week": 4.501362397820164,
+      "min_net_ticks_sum": 7886.5,
+      "max_concentration_top_share": 0.6131539475478387,
+      "win_rate_std": 0.036666394807087554,
+      "trades_per_week_std": 0.14470235556255623,
+      "score": 281.16253236023255,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "CC",
+          "CE",
+          "DJ",
+          "GD",
+          "MM",
+          "NC",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "SA",
+          "SV",
+          "SX",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@14:15"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 424,
+          "filled_trades": 247,
+          "win_rate_net": 0.5587044534412956,
+          "trades_per_week": 4.7111716621253406,
+          "net_ticks_sum": 7409.0,
+          "concentration_top_share": 0.4052899936265137
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 530,
+          "filled_trades": 288,
+          "win_rate_net": 0.4756944444444444,
+          "trades_per_week": 5.493188010899183,
+          "net_ticks_sum": 9395.0,
+          "concentration_top_share": 0.6497972138952566
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 436,
+          "filled_trades": 258,
+          "win_rate_net": 0.5155038759689923,
+          "trades_per_week": 4.920980926430517,
+          "net_ticks_sum": 10798.0,
+          "concentration_top_share": 0.6041121005762179
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4756944444444444,
+      "min_trades_per_week": 4.7111716621253406,
+      "min_net_ticks_sum": 7409.0,
+      "max_concentration_top_share": 0.6497972138952566,
+      "win_rate_std": 0.03389811913154124,
+      "trades_per_week_std": 0.3304862486051562,
+      "score": 279.87555582328287,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "CC",
+          "CE",
+          "DJ",
+          "DX",
+          "KC",
+          "MM",
+          "MX",
+          "N2",
+          "NC",
+          "NR",
+          "OJ",
+          "PT",
+          "R2",
+          "RI",
+          "SA",
+          "SU",
+          "SV",
+          "SX",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 487,
+          "filled_trades": 252,
+          "win_rate_net": 0.5317460317460317,
+          "trades_per_week": 4.806539509536785,
+          "net_ticks_sum": 1294.5,
+          "concentration_top_share": 0.39255777516647083
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 710,
+          "filled_trades": 350,
+          "win_rate_net": 0.4857142857142857,
+          "trades_per_week": 6.67574931880109,
+          "net_ticks_sum": 285.0,
+          "concentration_top_share": 0.3554033485540335
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 569,
+          "filled_trades": 299,
+          "win_rate_net": 0.5418060200668896,
+          "trades_per_week": 5.70299727520436,
+          "net_ticks_sum": 7029.5,
+          "concentration_top_share": 0.31594255589892745
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4857142857142857,
+      "min_trades_per_week": 4.806539509536785,
+      "min_net_ticks_sum": 285.0,
+      "max_concentration_top_share": 0.39255777516647083,
+      "win_rate_std": 0.024418589618089574,
+      "trades_per_week_std": 0.7633135641542818,
+      "score": 276.85077769820583,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "CC",
+          "CE",
+          "DX",
+          "MM",
+          "N2",
+          "NA",
+          "NC",
+          "NG",
+          "OJ",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SA",
+          "SF",
+          "SU",
+          "SV",
+          "SX",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 474,
+          "filled_trades": 250,
+          "win_rate_net": 0.528,
+          "trades_per_week": 4.768392370572207,
+          "net_ticks_sum": 1451.5,
+          "concentration_top_share": 0.3707732149463559
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 655,
+          "filled_trades": 325,
+          "win_rate_net": 0.46153846153846156,
+          "trades_per_week": 6.198910081743869,
+          "net_ticks_sum": 161.5,
+          "concentration_top_share": 0.3388723604963355
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 539,
+          "filled_trades": 290,
+          "win_rate_net": 0.5551724137931034,
+          "trades_per_week": 5.53133514986376,
+          "net_ticks_sum": 7481.5,
+          "concentration_top_share": 0.29782372765179643
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.46153846153846156,
+      "min_trades_per_week": 4.768392370572207,
+      "min_net_ticks_sum": 161.5,
+      "max_concentration_top_share": 0.3707732149463559,
+      "win_rate_std": 0.03933162874956539,
+      "trades_per_week_std": 0.5844388473022327,
+      "score": 275.86384155338453,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BR",
+          "CC",
+          "DJ",
+          "FF",
+          "GD",
+          "KC",
+          "MM",
+          "MX",
+          "NA",
+          "NR",
+          "PD",
+          "PT",
+          "S1",
+          "SA",
+          "SF",
+          "SU",
+          "SV",
+          "SX",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "BUY@12:00"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 394,
+          "filled_trades": 220,
+          "win_rate_net": 0.5636363636363636,
+          "trades_per_week": 4.1961852861035425,
+          "net_ticks_sum": 4616.0,
+          "concentration_top_share": 0.2577383408997111
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 571,
+          "filled_trades": 299,
+          "win_rate_net": 0.49498327759197325,
+          "trades_per_week": 5.70299727520436,
+          "net_ticks_sum": 3527.0,
+          "concentration_top_share": 0.31514084507042256
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 451,
+          "filled_trades": 248,
+          "win_rate_net": 0.5524193548387096,
+          "trades_per_week": 4.730245231607629,
+          "net_ticks_sum": 6501.5,
+          "concentration_top_share": 0.18530823181985973
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.49498327759197325,
+      "min_trades_per_week": 4.1961852861035425,
+      "min_net_ticks_sum": 3527.0,
+      "max_concentration_top_share": 0.31514084507042256,
+      "win_rate_std": 0.03007023348998175,
+      "trades_per_week_std": 0.6237831651580543,
+      "score": 269.8026534080944,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "FF",
+          "GD",
+          "KC",
+          "MM",
+          "NA",
+          "NG",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SF",
+          "SV",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 441,
+          "filled_trades": 245,
+          "win_rate_net": 0.5918367346938775,
+          "trades_per_week": 4.6730245231607626,
+          "net_ticks_sum": 7147.5,
+          "concentration_top_share": 0.3409468661197791
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 495,
+          "filled_trades": 266,
+          "win_rate_net": 0.47368421052631576,
+          "trades_per_week": 5.073569482288828,
+          "net_ticks_sum": 8969.0,
+          "concentration_top_share": 0.6230977341900575
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 411,
+          "filled_trades": 228,
+          "win_rate_net": 0.5087719298245614,
+          "trades_per_week": 4.348773841961853,
+          "net_ticks_sum": 11774.5,
+          "concentration_top_share": 0.5702336313815979
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.47368421052631576,
+      "min_trades_per_week": 4.348773841961853,
+      "min_net_ticks_sum": 7147.5,
+      "max_concentration_top_share": 0.6230977341900575,
+      "win_rate_std": 0.04954339155471731,
+      "trades_per_week_std": 0.2964425162147989,
+      "score": 263.32215813912785,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "FF",
+          "MX",
+          "N2",
+          "NG",
+          "PD",
+          "PT",
+          "SA",
+          "SF",
+          "SV",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 397,
+          "filled_trades": 228,
+          "win_rate_net": 0.5570175438596491,
+          "trades_per_week": 4.348773841961853,
+          "net_ticks_sum": 5216.5,
+          "concentration_top_share": 0.3709818563677732
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 510,
+          "filled_trades": 284,
+          "win_rate_net": 0.5105633802816901,
+          "trades_per_week": 5.416893732970027,
+          "net_ticks_sum": 8641.5,
+          "concentration_top_share": 0.5939476971430874
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 402,
+          "filled_trades": 242,
+          "win_rate_net": 0.5495867768595041,
+          "trades_per_week": 4.615803814713897,
+          "net_ticks_sum": 13287.0,
+          "concentration_top_share": 0.4953468394301668
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5105633802816901,
+      "min_trades_per_week": 4.348773841961853,
+      "min_net_ticks_sum": 5216.5,
+      "max_concentration_top_share": 0.5939476971430874,
+      "win_rate_std": 0.02037436050095957,
+      "trades_per_week_std": 0.4538636805922731,
+      "score": 260.15393884813966,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "CE",
+          "DJ",
+          "FF",
+          "GD",
+          "HS",
+          "NA",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "SV",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 476,
+          "filled_trades": 246,
+          "win_rate_net": 0.5609756097560976,
+          "trades_per_week": 4.692098092643052,
+          "net_ticks_sum": 7457.5,
+          "concentration_top_share": 0.3855107608366172
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 533,
+          "filled_trades": 267,
+          "win_rate_net": 0.4606741573033708,
+          "trades_per_week": 5.092643051771117,
+          "net_ticks_sum": 8989.5,
+          "concentration_top_share": 0.6584766584766585
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 420,
+          "filled_trades": 228,
+          "win_rate_net": 0.4868421052631579,
+          "trades_per_week": 4.348773841961853,
+          "net_ticks_sum": 10484.5,
+          "concentration_top_share": 0.6112902513361897
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4606741573033708,
+      "min_trades_per_week": 4.348773841961853,
+      "min_net_ticks_sum": 7457.5,
+      "max_concentration_top_share": 0.6584766584766585,
+      "win_rate_std": 0.0424799552115236,
+      "trades_per_week_std": 0.30398267616775093,
+      "score": 259.46218339320757,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "DX",
+          "FF",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "N2",
+          "NA",
+          "NC",
+          "NG",
+          "NR",
+          "PT",
+          "R2",
+          "RI",
+          "SF",
+          "SV"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@14:15"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 422,
+          "filled_trades": 235,
+          "win_rate_net": 0.574468085106383,
+          "trades_per_week": 4.482288828337874,
+          "net_ticks_sum": 2790.5,
+          "concentration_top_share": 0.3758907808866552
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 501,
+          "filled_trades": 271,
+          "win_rate_net": 0.4575645756457565,
+          "trades_per_week": 5.168937329700272,
+          "net_ticks_sum": -707.0,
+          "concentration_top_share": 0.36128732786631595
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 398,
+          "filled_trades": 234,
+          "win_rate_net": 0.5128205128205128,
+          "trades_per_week": 4.463215258855586,
+          "net_ticks_sum": 6885.5,
+          "concentration_top_share": 0.33203846398777304
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4575645756457565,
+      "min_trades_per_week": 4.463215258855586,
+      "min_net_ticks_sum": -707.0,
+      "max_concentration_top_share": 0.3758907808866552,
+      "win_rate_std": 0.04774942964873218,
+      "trades_per_week_std": 0.3282772552369812,
+      "score": 257.56007135912455,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "DX",
+          "GD",
+          "KC",
+          "N2",
+          "NC",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "RI",
+          "S1",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 413,
+          "filled_trades": 218,
+          "win_rate_net": 0.5963302752293578,
+          "trades_per_week": 4.1580381471389645,
+          "net_ticks_sum": 6288.5,
+          "concentration_top_share": 0.3382986646805341
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 448,
+          "filled_trades": 242,
+          "win_rate_net": 0.512396694214876,
+          "trades_per_week": 4.615803814713897,
+          "net_ticks_sum": 8825.5,
+          "concentration_top_share": 0.6152176635084937
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 406,
+          "filled_trades": 226,
+          "win_rate_net": 0.5353982300884956,
+          "trades_per_week": 4.310626702997276,
+          "net_ticks_sum": 12524.0,
+          "concentration_top_share": 0.515457389749702
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.512396694214876,
+      "min_trades_per_week": 4.1580381471389645,
+      "min_net_ticks_sum": 6288.5,
+      "max_concentration_top_share": 0.6152176635084937,
+      "win_rate_std": 0.03541285202909006,
+      "trades_per_week_std": 0.19031136572147225,
+      "score": 255.79245793932913,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BR",
+          "CC",
+          "DX",
+          "FF",
+          "GD",
+          "KC",
+          "N2",
+          "NA",
+          "NC",
+          "NG",
+          "PT",
+          "SF",
+          "SU",
+          "SV",
+          "SX",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 408,
+          "filled_trades": 230,
+          "win_rate_net": 0.5695652173913044,
+          "trades_per_week": 4.386920980926431,
+          "net_ticks_sum": 3529.0,
+          "concentration_top_share": 0.38528371520836535
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 448,
+          "filled_trades": 249,
+          "win_rate_net": 0.46586345381526106,
+          "trades_per_week": 4.7493188010899186,
+          "net_ticks_sum": 1457.0,
+          "concentration_top_share": 0.47887612797374896
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 392,
+          "filled_trades": 230,
+          "win_rate_net": 0.5826086956521739,
+          "trades_per_week": 4.386920980926431,
+          "net_ticks_sum": 7115.0,
+          "concentration_top_share": 0.33874740124740127
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.46586345381526106,
+      "min_trades_per_week": 4.386920980926431,
+      "min_net_ticks_sum": 1457.0,
+      "max_concentration_top_share": 0.47887612797374896,
+      "win_rate_std": 0.052232003371158714,
+      "trades_per_week_std": 0.1708359707498835,
+      "score": 254.47693926236414,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "DJ",
+          "DX",
+          "GD",
+          "HS",
+          "N2",
+          "NC",
+          "NR",
+          "OJ",
+          "PD",
+          "RI",
+          "S1",
+          "SA",
+          "SU",
+          "SV",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@10:30"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 421,
+          "filled_trades": 234,
+          "win_rate_net": 0.5555555555555556,
+          "trades_per_week": 4.463215258855586,
+          "net_ticks_sum": 5952.0,
+          "concentration_top_share": 0.49345914647222816
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 599,
+          "filled_trades": 304,
+          "win_rate_net": 0.45394736842105265,
+          "trades_per_week": 5.798365122615804,
+          "net_ticks_sum": 5488.0,
+          "concentration_top_share": 0.6739630184907546
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 509,
+          "filled_trades": 304,
+          "win_rate_net": 0.5427631578947368,
+          "trades_per_week": 5.798365122615804,
+          "net_ticks_sum": 11928.0,
+          "concentration_top_share": 0.4832846603135567
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.45394736842105265,
+      "min_trades_per_week": 4.463215258855586,
+      "min_net_ticks_sum": 5488.0,
+      "max_concentration_top_share": 0.6739630184907546,
+      "win_rate_std": 0.04518617486516384,
+      "trades_per_week_std": 0.629395681710097,
+      "score": 249.47039550293812,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BR",
+          "CC",
+          "CE",
+          "DJ",
+          "DX",
+          "FF",
+          "GD",
+          "HS",
+          "KC",
+          "MX",
+          "N2",
+          "NA",
+          "NC",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "RI",
+          "S1",
+          "SV",
+          "SX",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 301,
+          "filled_trades": 205,
+          "win_rate_net": 0.6390243902439025,
+          "trades_per_week": 3.9100817438692097,
+          "net_ticks_sum": 10689.0,
+          "concentration_top_share": 0.5056755612028802
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 364,
+          "filled_trades": 204,
+          "win_rate_net": 0.5294117647058824,
+          "trades_per_week": 3.891008174386921,
+          "net_ticks_sum": 5380.5,
+          "concentration_top_share": 0.4083898827884022
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 358,
+          "filled_trades": 267,
+          "win_rate_net": 0.5955056179775281,
+          "trades_per_week": 5.092643051771117,
+          "net_ticks_sum": 10283.0,
+          "concentration_top_share": 0.30144620486366985
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5294117647058824,
+      "min_trades_per_week": 3.891008174386921,
+      "min_net_ticks_sum": 5380.5,
+      "max_concentration_top_share": 0.5056755612028802,
+      "win_rate_std": 0.045064409037638815,
+      "trades_per_week_std": 0.562014375710325,
+      "score": 248.74094181735626,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BM",
+          "CE",
+          "DX",
+          "FF",
+          "GD",
+          "KC",
+          "NA",
+          "NG",
+          "NR",
+          "PT",
+          "R2",
+          "RI",
+          "S1",
+          "SF",
+          "SU",
+          "SV",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 454,
+          "filled_trades": 244,
+          "win_rate_net": 0.5491803278688525,
+          "trades_per_week": 4.653950953678474,
+          "net_ticks_sum": 4121.5,
+          "concentration_top_share": 0.45917712819572987
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 521,
+          "filled_trades": 259,
+          "win_rate_net": 0.444015444015444,
+          "trades_per_week": 4.940054495912807,
+          "net_ticks_sum": 1370.0,
+          "concentration_top_share": 0.5173941945490804
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 430,
+          "filled_trades": 230,
+          "win_rate_net": 0.5130434782608696,
+          "trades_per_week": 4.386920980926431,
+          "net_ticks_sum": 4312.5,
+          "concentration_top_share": 0.390279823269514
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.444015444015444,
+      "min_trades_per_week": 4.386920980926431,
+      "min_net_ticks_sum": 1370.0,
+      "max_concentration_top_share": 0.5173941945490804,
+      "win_rate_std": 0.043627710622287506,
+      "trades_per_week_std": 0.22586055890703233,
+      "score": 246.94285319423733,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "EMA_PULLBACK_LIMIT",
+          "ORB_BREAKOUT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "CC",
+          "CE",
+          "DJ",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "NC",
+          "NG",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "RI",
+          "S1",
+          "SU",
+          "SV",
+          "SX",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@14:15"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 417,
+          "filled_trades": 234,
+          "win_rate_net": 0.6153846153846154,
+          "trades_per_week": 4.463215258855586,
+          "net_ticks_sum": 12716.5,
+          "concentration_top_share": 0.5727689519138501
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 411,
+          "filled_trades": 209,
+          "win_rate_net": 0.5119617224880383,
+          "trades_per_week": 3.9863760217983653,
+          "net_ticks_sum": 5316.5,
+          "concentration_top_share": 0.4385221078134464
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 339,
+          "filled_trades": 237,
+          "win_rate_net": 0.5358649789029536,
+          "trades_per_week": 4.520435967302452,
+          "net_ticks_sum": 5915.5,
+          "concentration_top_share": 0.21853658536585366
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5119617224880383,
+      "min_trades_per_week": 3.9863760217983653,
+      "min_net_ticks_sum": 5316.5,
+      "max_concentration_top_share": 0.5727689519138501,
+      "win_rate_std": 0.04421039725437859,
+      "trades_per_week_std": 0.23941361069271402,
+      "score": 246.64475108450156,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "EMA_PULLBACK_LIMIT",
+          "ORB_BREAKOUT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BR",
+          "CC",
+          "CE",
+          "DJ",
+          "FF",
+          "GD",
+          "HS",
+          "N2",
+          "NA",
+          "NC",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "S1",
+          "SA",
+          "SU",
+          "SV",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 404,
+          "filled_trades": 229,
+          "win_rate_net": 0.6244541484716157,
+          "trades_per_week": 4.367847411444142,
+          "net_ticks_sum": 12935.0,
+          "concentration_top_share": 0.5699533173008912
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 409,
+          "filled_trades": 208,
+          "win_rate_net": 0.5096153846153846,
+          "trades_per_week": 3.9673024523160763,
+          "net_ticks_sum": 5417.0,
+          "concentration_top_share": 0.43051308188922865
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 344,
+          "filled_trades": 246,
+          "win_rate_net": 0.5650406504065041,
+          "trades_per_week": 4.692098092643052,
+          "net_ticks_sum": 8804.5,
+          "concentration_top_share": 0.3496821071752952
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5096153846153846,
+      "min_trades_per_week": 3.9673024523160763,
+      "min_net_ticks_sum": 5417.0,
+      "max_concentration_top_share": 0.5699533173008912,
+      "win_rate_std": 0.046892152298150525,
+      "trades_per_week_std": 0.2964425162147989,
+      "score": 245.64607327014284,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BR",
+          "DX",
+          "FF",
+          "GD",
+          "HS",
+          "MM",
+          "MX",
+          "OJ",
+          "PD",
+          "PT",
+          "R2",
+          "SA",
+          "SF",
+          "SU",
+          "SV",
+          "SX",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 436,
+          "filled_trades": 229,
+          "win_rate_net": 0.5502183406113537,
+          "trades_per_week": 4.367847411444142,
+          "net_ticks_sum": 6083.5,
+          "concentration_top_share": 0.36124524228824634
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 555,
+          "filled_trades": 281,
+          "win_rate_net": 0.4234875444839858,
+          "trades_per_week": 5.359673024523161,
+          "net_ticks_sum": 6696.5,
+          "concentration_top_share": 0.5627887442251155
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 403,
+          "filled_trades": 216,
+          "win_rate_net": 0.5277777777777778,
+          "trades_per_week": 4.119891008174387,
+          "net_ticks_sum": 11952.0,
+          "concentration_top_share": 0.5706333498268185
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4234875444839858,
+      "min_trades_per_week": 4.119891008174387,
+      "min_net_ticks_sum": 6083.5,
+      "max_concentration_top_share": 0.5706333498268185,
+      "win_rate_std": 0.05521747540190284,
+      "trades_per_week_std": 0.5356470513670438,
+      "score": 245.2718081021722,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BR",
+          "CE",
+          "DJ",
+          "FF",
+          "GD",
+          "HS",
+          "MM",
+          "N2",
+          "NC",
+          "NG",
+          "NR",
+          "OJ",
+          "PD",
+          "PT",
+          "S1",
+          "SA",
+          "SF",
+          "SV",
+          "W4",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 371,
+          "filled_trades": 208,
+          "win_rate_net": 0.5961538461538461,
+          "trades_per_week": 3.9673024523160763,
+          "net_ticks_sum": 8017.0,
+          "concentration_top_share": 0.4030273948700052
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 404,
+          "filled_trades": 219,
+          "win_rate_net": 0.4840182648401826,
+          "trades_per_week": 4.177111716621253,
+          "net_ticks_sum": 7768.0,
+          "concentration_top_share": 0.6672932330827067
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 361,
+          "filled_trades": 218,
+          "win_rate_net": 0.518348623853211,
+          "trades_per_week": 4.1580381471389645,
+          "net_ticks_sum": 14008.5,
+          "concentration_top_share": 0.5516569878638244
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4840182648401826,
+      "min_trades_per_week": 3.9673024523160763,
+      "min_net_ticks_sum": 7768.0,
+      "max_concentration_top_share": 0.6672932330827067,
+      "win_rate_std": 0.04691199179050055,
+      "trades_per_week_std": 0.09472992822911831,
+      "score": 245.1771020938911,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "CC",
+          "CE",
+          "FF",
+          "GD",
+          "HS",
+          "MX",
+          "N2",
+          "NA",
+          "NR",
+          "PD",
+          "R2",
+          "S1",
+          "SA",
+          "SV",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 412,
+          "filled_trades": 234,
+          "win_rate_net": 0.5769230769230769,
+          "trades_per_week": 4.463215258855586,
+          "net_ticks_sum": 4668.0,
+          "concentration_top_share": 0.4173667629299029
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 627,
+          "filled_trades": 314,
+          "win_rate_net": 0.4840764331210191,
+          "trades_per_week": 5.989100817438692,
+          "net_ticks_sum": 6596.5,
+          "concentration_top_share": 0.703076556165037
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 513,
+          "filled_trades": 307,
+          "win_rate_net": 0.5342019543973942,
+          "trades_per_week": 5.855585831062671,
+          "net_ticks_sum": 12654.0,
+          "concentration_top_share": 0.5284481441881778
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.4840764331210191,
+      "min_trades_per_week": 4.463215258855586,
+      "min_net_ticks_sum": 4668.0,
+      "max_concentration_top_share": 0.703076556165037,
+      "win_rate_std": 0.03794464016957821,
+      "trades_per_week_std": 0.689995877590564,
+      "score": 244.50092153408377,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "ORB_BREAKOUT",
+          "PULLBACK_LIMIT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "DJ",
+          "DX",
+          "GD",
+          "HS",
+          "MX",
+          "NC",
+          "NG",
+          "S1",
+          "SF",
+          "SV"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 358,
+          "filled_trades": 223,
+          "win_rate_net": 0.5560538116591929,
+          "trades_per_week": 4.253405994550409,
+          "net_ticks_sum": 2043.5,
+          "concentration_top_share": 0.3466188388468181
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 495,
+          "filled_trades": 278,
+          "win_rate_net": 0.43884892086330934,
+          "trades_per_week": 5.302452316076295,
+          "net_ticks_sum": -1391.0,
+          "concentration_top_share": 0.20224892174984596
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 431,
+          "filled_trades": 272,
+          "win_rate_net": 0.5404411764705882,
+          "trades_per_week": 5.1880108991825615,
+          "net_ticks_sum": 3142.0,
+          "concentration_top_share": 0.29610231425091355
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.43884892086330934,
+      "min_trades_per_week": 4.253405994550409,
+      "min_net_ticks_sum": -1391.0,
+      "max_concentration_top_share": 0.3466188388468181,
+      "win_rate_std": 0.051963370863396675,
+      "trades_per_week_std": 0.4698795768149433,
+      "score": 243.3424949198,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "EMA_PULLBACK_LIMIT",
+          "ORB_BREAKOUT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "BM",
+          "BR",
+          "CC",
+          "CE",
+          "DJ",
+          "FF",
+          "GD",
+          "KC",
+          "MM",
+          "MX",
+          "N2",
+          "NA",
+          "NC",
+          "NG",
+          "NR",
+          "PT",
+          "RI",
+          "SA",
+          "SU",
+          "SV",
+          "SX",
+          "ZC"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": []
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 383,
+          "filled_trades": 227,
+          "win_rate_net": 0.6035242290748899,
+          "trades_per_week": 4.329700272479564,
+          "net_ticks_sum": 4296.5,
+          "concentration_top_share": 0.4222737819025522
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 412,
+          "filled_trades": 205,
+          "win_rate_net": 0.526829268292683,
+          "trades_per_week": 3.9100817438692097,
+          "net_ticks_sum": 4460.0,
+          "concentration_top_share": 0.5463561880120742
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 332,
+          "filled_trades": 235,
+          "win_rate_net": 0.6042553191489362,
+          "trades_per_week": 4.482288828337874,
+          "net_ticks_sum": 8620.0,
+          "concentration_top_share": 0.3563262195121951
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.526829268292683,
+      "min_trades_per_week": 3.9100817438692097,
+      "min_net_ticks_sum": 4296.5,
+      "max_concentration_top_share": 0.5463561880120742,
+      "win_rate_std": 0.03632789692245362,
+      "trades_per_week_std": 0.24193293938798022,
+      "score": 242.59760515972647,
+      "pruned": true
+    },
+    {
+      "candidate": {
+        "include_setup_kinds": [
+          "BOX_BREAKOUT",
+          "ORB_BREAKOUT"
+        ],
+        "include_slots": [
+          "10:30",
+          "12:00",
+          "14:15"
+        ],
+        "include_clusters": [
+          "metals",
+          "other"
+        ],
+        "include_roots": [
+          "AN",
+          "BM",
+          "CC",
+          "CE",
+          "FF",
+          "GD",
+          "HS",
+          "KC",
+          "MM",
+          "MX",
+          "N2",
+          "NC",
+          "OJ",
+          "PT",
+          "RI",
+          "S1",
+          "SF",
+          "SU",
+          "SV",
+          "SX",
+          "W4"
+        ],
+        "include_instrument_ids": [],
+        "exclude_side_slots": [
+          "SELL@12:00"
+        ]
+      },
+      "per_report": [
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json",
+          "passed": false,
+          "selected_rows": 291,
+          "filled_trades": 188,
+          "win_rate_net": 0.648936170212766,
+          "trades_per_week": 3.5858310626703,
+          "net_ticks_sum": 5340.5,
+          "concentration_top_share": 0.40373349996094665
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json",
+          "passed": false,
+          "selected_rows": 349,
+          "filled_trades": 199,
+          "win_rate_net": 0.5175879396984925,
+          "trades_per_week": 3.795640326975477,
+          "net_ticks_sum": 5040.0,
+          "concentration_top_share": 0.42396907216494845
+        },
+        {
+          "path": "artifacts\\research\\wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json",
+          "passed": false,
+          "selected_rows": 363,
+          "filled_trades": 248,
+          "win_rate_net": 0.5967741935483871,
+          "trades_per_week": 4.730245231607629,
+          "net_ticks_sum": 9269.5,
+          "concentration_top_share": 0.3348339898705684
+        }
+      ],
+      "passes": 0,
+      "min_win_rate_net": 0.5175879396984925,
+      "min_trades_per_week": 3.5858310626703,
+      "min_net_ticks_sum": 5040.0,
+      "max_concentration_top_share": 0.42396907216494845,
+      "win_rate_std": 0.05399968340189688,
+      "trades_per_week_std": 0.4974591044291728,
+      "score": 240.77947689722174,
+      "pruned": true
+    }
+  ]
+}

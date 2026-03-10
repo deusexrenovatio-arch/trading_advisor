@@ -130,6 +130,26 @@ scenarios:
       - "Burn-in status stays non-blocking before 20 completed tasks."
       - "Threshold failures become blocking after the 20-task rolling window exists."
 
+  - id: process-regression-acknowledged-debt
+    type: manual
+    scope: process
+    test_cases: [TC-PROC-TELE-005]
+    title: Process regression acknowledged baseline debt gate
+    user_story: Known baseline process debt can stay non-blocking only when an explicit remediation item is active.
+    expectations:
+      - "Decision-quality and context-efficiency debt is marked as acknowledged, not silently ignored."
+      - "Validator stays green only while the acknowledged debt does not worsen."
+
+  - id: process-regression-worsening-after-ack
+    type: manual
+    scope: process
+    test_cases: [TC-PROC-TELE-006]
+    title: Process regression worsening after acknowledgement gate
+    user_story: Once baseline debt is acknowledged, any further degradation must still fail closed.
+    expectations:
+      - "Worsening beyond the acknowledged baseline changes status to regressed."
+      - "Validator blocks push again on fresh degradation."
+
   - id: decision-view
     type: api_list
     scope: backend
@@ -277,7 +297,7 @@ scenarios:
     allow_empty: true
     expected_http_statuses: [200]
     payload:
-      action: ack
+      action: mark_viewed
       source: ui
       actor_id: acceptance
       idempotency_key: acceptance-signals-action-v2
@@ -285,20 +305,29 @@ scenarios:
     allowed_response_status: [ok, duplicate]
     test_cases: [TC-SIG-ACT-API-003]
     title: Signal actions v2 from active feed
-    user_story: Operator acknowledges an active signal through the v2 action API.
+    user_story: Operator marks an active signal as reviewed through the v2 action API.
     expectations:
       - Scenario resolves signal_id from active feed and sends an action.
       - Response contains status and action/audit references.
-      - Telegram usage flags are present for each row.
+      - Telegram review flags are present for each row.
   - id: signals-actionability-stale-intent
     type: manual
     scope: backend
     test_cases: [TC-TG-WRK-009]
     title: Telegram stale-intent callback handling
-    user_story: Operator receives explicit stale-intent guidance when ACK callback token is outdated.
+    user_story: Operator receives explicit stale-intent guidance when a Telegram review callback token is outdated.
     expectations:
-      - Pending callback token is removed after stale ACK response.
+      - Pending callback token is removed after stale review response.
       - Worker sends stale-intent hint instead of generic failure.
+  - id: signals-actionability-h4a-followup
+    type: manual
+    scope: backend
+    test_cases: [TC-TG-WRK-010, TC-TG-WRK-011]
+    title: Telegram H4A follow-up lifecycle
+    user_story: Operator receives post-fill H4A follow-up prompts in Telegram and can confirm each stage without mutating execution state.
+    expectations:
+      - Post-fill H4A rows trigger Telegram follow-up packets for bracket recalculation, break-even or trailing triggers, and time-stop monitoring.
+      - Telegram confirmation persists `confirm_followup` with stage metadata and keeps the current execution lifecycle intact.
   - id: signals-execute
     type: signal_action
     scope: backend
@@ -353,11 +382,12 @@ scenarios:
       note: "{}"
     required_keys: [status]
     test_cases: [TC-SIG-ACK-API-001, TC-SIG-ACK-UI-001, TC-TG-UI-001, TC-TG-WRK-001, TC-TG-WRK-004]
-    title: Signal ACK via Telegram payload
-    user_story: Operator confirms signal usage in Telegram and backend records ACK.
+    title: Signal review compatibility payload
+    user_story: Operator uses the legacy Telegram review alias and backend stores the canonical review action.
     expectations:
       - API accepts action=ack and returns status ok.
-      - ACK defaults to `status=acknowledged` when status is omitted.
+      - Canonical stored action becomes `mark_viewed`.
+      - Review defaults to `status=viewed` when status is omitted.
   - id: pretrade-check
     type: api_object
     scope: backend

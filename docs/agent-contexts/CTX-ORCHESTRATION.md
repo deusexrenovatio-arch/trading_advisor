@@ -10,6 +10,7 @@ Entrypoints, runtime wiring, configuration, and cross-context orchestration.
 - `src/moex_carry/cli_news_parsers.py`
 - `src/moex_carry/cli_news_runtime_handlers.py`
 - `src/moex_carry/config.py`
+- `src/moex_carry/config_news.py`
 - `src/moex_carry/config_resolver.py`
 - `src/moex_carry/pipeline.py`
 - `src/moex_carry/pipeline_helpers.py`

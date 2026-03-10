@@ -1,6 +1,86 @@
 version: 1
-updated_at: 2026-03-06
+updated_at: 2026-03-09
 items:
+  - id: P1-PROCESS-REG-GATE-063
+    title: Stage post-burn-in process regression gating around acknowledged baseline debt
+    lane: governance
+    status: active
+    execution_mode: autonomous
+    owner: engineering-platform
+    acceptance:
+      - process regression validation distinguishes acknowledged baseline debt from fresh or worsening regressions
+      - current decision-quality and context-efficiency debt is tied to an explicit active remediation item instead of silently downgrading the gate
+      - validator, process reports, and human-readable summaries agree on which dimensions are blocking, remediating, or healthy
+      - focused governance tests cover both acknowledged-debt pass and worsening-regression fail paths
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python -m pytest tests/test_agent_process_telemetry.py tests/test_api_v2.py -q
+      - python scripts/validate_process_regressions.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - docs/DEV_WORKFLOW.md
+      - docs/runbooks/governance-remediation.md
+      - plans/PLANS.yaml
+      - src/moex_carry/governance/process_reports.py
+      - scripts/validate_process_regressions.py
+    dependencies:
+      - P1-PROCESS-TELEMETRY-047
+      - P1-PROCESS-GOV-ADVISORY-053
+    started_at: 2026-03-09
+
+  - id: P1-H4A-LIVE-061
+    title: Align live/manual futures execution with H4A baseline contract
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - active runtime baseline is H4A_CAP_OFF everywhere user-visible and runtime-visible
+      - signal lifecycle distinguishes viewed, submitted, filled, cancelled, and manual override states
+      - actionable signal payload includes H4A execution contract fields and real signal expiry
+      - execution audit stores fill-driven recalculation and same-bar resolution metadata
+      - no-mini and concentration guardrails stay outside baseline semantics and are enforced in live routing
+    checks:
+      - python scripts/run_lean_gate.py
+      - pytest tests/test_api_v2.py tests/test_telegram_worker.py
+    docs:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+    dependencies:
+      - P1-PUSH-GATE-060
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P1-H4A-LIVE-062
+    title: Finish H4A live-routing guards and Telegram post-fill operator loop
+    lane: operations
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - mini-contract roots are excluded from new H4A live enter publication and mini/full duplicates are not broadcast to Telegram
+      - live pair actionability enforces deterministic pre-publication routing caps using max_positions and correlated-exposure limits
+      - synthetic-history runtime adapter output cannot promote a non-enter legacy row into an actionable enter
+      - H4A fill state exposes operator-ready post-fill thresholds and time-stop deadlines for Telegram/manual execution
+      - Telegram worker sends dedicated post-fill recalculation messages and time-stop reminders and allows explicit operator deviation logging
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - pytest tests/test_api_v2.py tests/test_signal_cycle.py tests/test_telegram_worker.py -q
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/session_handoff.md
+    dependencies:
+      - P1-H4A-LIVE-061
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
   - id: P0-AGENT-PLANS-001
     title: Machine-readable plans registry and schema validation
     lane: governance
@@ -1637,54 +1717,546 @@ items:
     started_at: 2026-03-09
     completed_at: 2026-03-09
 
-  - id: P1-PROCESS-TELEMETRY-UNIFIED-054
-    title: Unify local agent-process telemetry across worktrees and migrate legacy local history
+  - id: P2-SIGNALS-H4A-OPS-051
+    title: Publish the H4A manual execution contract and align baseline-status docs with the active runtime baseline
     lane: governance
     status: completed
     execution_mode: autonomous
-    owner: engineering-platform
+    owner: strategy-engineering
     acceptance:
-      - every worktree resolves one shared local agent-process telemetry root for task events and state
-      - legacy per-worktree telemetry shards can be merged or discovered without losing task continuity
-      - worktree start-path telemetry failures are visible enough to diagnose missing writes from new windows
-      - focused telemetry and task-outcome tests cover root resolution and migration behavior
+      - operator-facing docs explicitly state the dynamic H4A execution rules that were previously hidden in the simulator
+      - stale O1-baseline wording is marked historical or superseded where H4A is already the active runtime baseline
+      - governance records state that the real execution baseline is H4A and link to the operator contract
     checks:
-      - python scripts/validate_task_request_contract.py
       - python scripts/run_lean_gate.py
-      - python -m pytest tests/test_agent_process_telemetry.py tests/test_task_outcomes.py -q
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
     docs:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/research/evaluation-policy.md
       - docs/session_handoff.md
-      - scripts/agent_process_telemetry.py
-      - scripts/worktree_guard.ps1
-      - memory/task_outcomes.yaml
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
     dependencies:
-      - P1-PROCESS-TELEMETRY-047
+      - P2-SIGNALS-H4A-MONEY-050
+      - P2-SIGNALS-BASELINE-046
     started_at: 2026-03-09
     completed_at: 2026-03-09
 
-  - id: P1-PROCESS-OUTCOME-POLICY-055
-    title: Make task outcome status policy explicit and machine-derived
+  - id: P2-SIGNALS-H4A-MONEY-050
+    title: Replay H4A execution logic on the money-sizing path and compare it deeply against baseline risk
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - frozen H4A is rerun as an execution-only override over the same O1 reference while using current money-based sizing
+      - a comparison artifact explains H4A risk versus baseline risk by execution quality, monthly results, and concentration
+      - governance gates remain green after any supporting code or script changes
+    checks:
+      - python scripts/run_lean_gate.py
+      - targeted research tests if analysis code changes
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_o1_execution_hypothesis_program.py
+      - scripts/run_h4a_vs_baseline_risk.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-SIZING-049
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P2-SIGNALS-SIZING-049
+    title: Add money-based futures position sizing to walk-forward research and rerun baseline versus scenario 2/3 on the frozen window
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - walk-forward supports an explicit economic sizing mode while preserving the legacy one-lot path
+      - baseline and scenario 2/3 reruns are compared on the same frozen window in money and return-on-equity terms
+      - a research artifact records weak-month floor and concentration metrics for the compared scenarios
+    checks:
+      - python scripts/run_lean_gate.py
+      - targeted walk-forward tests
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_signals_sizing_scenarios.py
+      - scripts/run_o1_execution_hypothesis_program.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-METRICS-048
+    started_at: 2026-03-07
+    completed_at: 2026-03-07
+
+  - id: P2-SIGNALS-METRICS-048
+    title: Normalize walk-forward futures results to money/equity units and record year concentration of the current baseline
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - the current one-year baseline is recorded with month-level and root-level concentration evidence
+      - walk-forward output includes per-instrument tick-value-derived money metrics and aggregate return-on-equity fields
+      - regression tests cover spec-based tick-value resolution and money summary attribution
+    checks:
+      - python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+      - python scripts/run_lean_gate.py
+      - pytest tests/test_morning_plan_walk_forward.py -q
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-RESEARCH-047
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-RESEARCH-047
+    title: Classify thin roots by cause on 2025-2026 and publish renderable monthly histogram artifacts
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - thin roots are classified by cause rather than by aggregate sparse PnL label
+      - "2025-2026 slice explicitly separates active late-launch roots from current-regime silent roots"
+      - the current-regime silent cluster is recorded as an index-family observation
+      - monthly revenue histogram is published in a renderable format for the app
+    checks:
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_session_handoff.py
+    docs:
+      - docs/research/evaluation-policy.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-BASELINE-046
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-BASELINE-046
+    title: Promote H4 baseline after no-mini historical validation and record root-level month diagnostics
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - full and mini contract duplicates are removed from whole-universe historical evaluation
+      - H4 remains stronger than O1 on the cleaned historical universe
+      - negative months and thin-sample roots are recorded before baseline promotion
+      - runtime config and regression test defaults are updated to the accepted H4 profile
+    checks:
+      - python scripts/run_lean_gate.py
+      - python scripts/analyze_execution_profiles_historical_review.py --exclude-mini --out-json artifacts/research/wf_goal_v6_execution_profiles_historical_review_no_minis_2020_2026_20260306.json
+      - pytest tests/test_config_loading.py tests/test_morning_plan_walk_forward.py -q
+    docs:
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/research/evaluation-policy.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-RESEARCH-045
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-RESEARCH-045
+    title: Validate execution profiles on 2020-2024 history and record per-root/calendar diagnostics
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - historical 2020-2022 data is prefetched with correct fixed-contract coverage
+      - execution profiles are rerun on valid 2020-2026 coverage with a 2020-2024 robustness slice
+      - research artifacts state whole-universe result, per-root quality, and active-vs-full-calendar month diagnostics
+    checks:
+      - python scripts/run_lean_gate.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/validate_task_request_contract.py
+    docs:
+      - docs/research/execution-profiles-historical-review-2026-03-06.md
+      - docs/research/evaluation-policy.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-RESEARCH-044
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-RESEARCH-044
+    title: Record dominant-top and per-root diagnostics as mandatory execution research views
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - future execution reviews state the whole-universe result first
+      - concentration-sensitive candidates are additionally checked without dominant tops
+      - per-root or per-instrument quality is reported before claiming a structural uplift
+    checks:
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/research/evaluation-policy.md
+      - docs/research/o1-execution-hypothesis-program-2026-03-06.md
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-RESEARCH-043
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-RESEARCH-043
+    title: Execute O1-relative sequential hypothesis ladder for execution uplift
+    lane: research
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - O1 reference artifact is reproduced on the active code path before any new hypothesis is promoted
+      - execution levers are tested sequentially one family at a time with explicit deltas versus O1
+      - each tested lever is classified as useful, noisy, or disallowed with a short mechanism note
+      - any proposed baseline change beats O1 on the same constraints and is recorded in plans, memory, and session handoff
+    checks:
+      - python scripts/run_lean_gate.py
+      - pytest tests/test_morning_plan_walk_forward.py -q
+    docs:
+      - docs/research/o1-execution-hypothesis-program-2026-03-06.md
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-BASELINE-042
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-BASELINE-042
+    title: Fix O1 as primary execution baseline and require O1-relative drift analysis
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - default morning execution policy matches the accepted O1 profile
+      - any alternative execution profile is compared and explained relative to O1 before baseline promotion
+      - plans, memory, and session handoff record mandatory write-up and branch-goal decision for future rebase baseline drift
+    checks:
+      - python scripts/run_lean_gate.py
+      - pytest tests/test_config_loading.py tests/test_morning_plan_walk_forward.py -q
+    docs:
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-FWD-LIVE-040
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-STRATEGY-STREAM-041
+    title: Separate live signal flow by strategy stream in actionability APIs and Telegram worker
+    lane: operations
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - actionability APIs expose and filter `strategy_type` and `strategy_stream` for pair signals
+      - signal fingerprint/cooldown logic does not collide between arbitrage and commodity-futures streams
+      - Telegram signal message contains strategy label while preserving existing command/ACK UX
+      - regression tests cover API filtering, runtime metrics propagation, and worker stream cooldown split
+    checks:
+      - pytest tests/test_api_v2.py tests/test_telegram_worker.py tests/test_signal_cycle.py -q
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-FWD-LIVE-040
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-SIGNALS-FWD-LIVE-040
+    title: Align O1 execution baseline and launch live paper-forward operator contour
+    lane: operations
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - default morning execution policy matches O1 profile (no hard absolute TP cap)
+      - operator launch script starts backend, refreshes live signals, and initializes forward run for today
+      - Telegram worker format remains unchanged and is reused by launch flow
+    checks:
+      - python scripts/run_lean_gate.py
+      - powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -CheckOnly
+      - powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -ForceFullRefresh
+    docs:
+      - README.md
+      - docs/session_handoff.md
+    dependencies:
+      - P0-AGENT-PLANS-001
+    started_at: 2026-03-06
+    completed_at: 2026-03-06
+
+  - id: P2-WF-PRECISION-HYP-039
+    title: Integrate precision-filter hypothesis loop with deterministic impact artifacts for morning-plan WF
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: product-engineering
+    acceptance:
+      - walk-forward runner supports optional precision filter rules without changing default baseline behavior
+      - precision filter supports setup-id dedup and rule-based gating by side/setup kind/stop model/decision time/risk and target return
+      - impact of each integrated hypothesis is written to a versioned artifact under artifacts/research
+      - docs and operational memory capture accepted/rejected hypotheses to avoid repeated loops
+      - hypothesis verifier supports precompiled signal-tape batch checks with measured >=10x speedup and parity against legacy path
+      - multi-seed causal search loop is executable with early-pruning and proves whether filter-space still contains final-go candidates
+      - execution-only causal tuning path can satisfy hard-go acceptance on seed124 without probability gate
+    checks:
+      - python -m pytest tests/test_morning_plan_walk_forward.py -q
+      - python -m ruff check scripts/run_morning_plan_walk_forward.py tests/test_morning_plan_walk_forward.py
+      - python -m pytest tests/test_verify_wf_hypothesis.py -q
+      - python -m pytest tests/test_search_wf_hypothesis_multi_seed.py -q
+      - python -m ruff check scripts/verify_wf_hypothesis.py tests/test_verify_wf_hypothesis.py
+      - python -m ruff check scripts/search_wf_hypothesis_multi_seed.py tests/test_search_wf_hypothesis_multi_seed.py
+      - python scripts/benchmark_wf_hypothesis_engines.py --in-json artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json --candidates 8192 --seed 42 --out-json artifacts/research/wf_goal_v6_verify_engine_benchmark_20260305.json
+      - python scripts/search_wf_hypothesis_multi_seed.py --in-json artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json --in-json artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json --in-json artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json --gate-profile final_go --candidates 200000 --seed 43 --require-passes 2 --out-json artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass2_20260305.json
+      - python scripts/run_lean_gate.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/verify_wf_hypothesis.py
+      - scripts/evaluate_wf_hypothesis_batch.py
+      - scripts/benchmark_wf_hypothesis_engines.py
+      - scripts/search_wf_hypothesis_multi_seed.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/signal_engine/setups/extended_families.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_verify_wf_hypothesis.py
+      - tests/test_search_wf_hypothesis_multi_seed.py
+      - tests/test_signal_engine_setups.py
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_eval_20260304.json
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp2_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp3_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp4_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp5_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_h18_recall_families_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h23_orb_sell_prob_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h25_vwap_only_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26b_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26c_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h18_h26_iteration_summary_20260304.json
+      - artifacts/research/wf_goal_v6_precision_hypothesis_compare_20260304.json
+      - artifacts/research/wf_goal_v6_methodology_probe_20260304.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_stagego_20260305.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_slot_sweep_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_iterative_autosearch_focus_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_orb_energy_other_roots17_finalgo_pass_20260305.json
+      - artifacts/research/wf_goal_v6_h24_candidate_crosscheck_20260305.json
+      - artifacts/research/wf_goal_v6_multireport_config_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_orb_energy_other_roots17_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_seed_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_filtered_finalgo_check_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_posthoc_autosearch_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_local_neighborhood_search_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed111_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_111_posthoc_compare_20260305.json
+      - artifacts/research/wf_goal_v6_verify_engine_benchmark_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass3_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_stagego_pass2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_targeted_search_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_expert_policy_v1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_causalfirst_expert_v1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_expert_v1_seed124_filter_search_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_noprob_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_executionsem_v3_entryimprove_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_L_kplus_improve1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_M3_cap03_seed124_20260305.json
+      - docs/session_handoff.md
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-NEWS-CAUSAL-GATE-038
+    started_at: 2026-03-04
+    completed_at: 2026-03-05
+
+  - id: P1-REBASE-GUARD-059
+    title: Rebase `codex/signals_engine` onto `main` without dropping governance history
     lane: governance
     status: completed
     execution_mode: autonomous
     owner: engineering-platform
     acceptance:
-      - repository defines one explicit status policy for `in_progress`, `completed`, `partial`, and `blocked`
-      - sync and validation derive or enforce status from machine-checkable closeout fields instead of free-form choice
-      - inconsistent status selections fail deterministically in local governance checks
-      - focused tests cover positive and negative status-policy cases
+      - local `codex/signals_engine` is rebased onto `origin/main`
+      - backup refs preserve both the pre-cleanup local tip and the original remote tip
+      - missing governance entries from `origin/codex/signals_engine` are retained in final `plans` and `memory`
+      - session handoff reflects the completed rebase flow and validation set
     checks:
       - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/validate_agent_memory.py
+      - python scripts/validate_plans.py
       - python scripts/run_lean_gate.py
-      - python -m pytest tests/test_task_outcomes.py tests/architecture/test_governance_policies.py -q
     docs:
-      - configs/task_outcome_policy.yaml
       - docs/session_handoff.md
-      - docs/DEV_WORKFLOW.md
-      - docs/runbooks/governance-remediation.md
-      - scripts/validate_task_outcomes.py
-      - scripts/sync_task_outcomes.py
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
     dependencies:
-      - P1-PROCESS-TELEMETRY-UNIFIED-054
+      - P1-PROCESS-GOV-ADVISORY-053
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P1-PUSH-GATE-060
+    title: Unblock protected push by fixing signal-engine context coverage and hard size-limit files
+    lane: governance
+    status: completed
+    execution_mode: autonomous
+    owner: engineering-platform
+    completed_at: 2026-03-09
+    acceptance:
+      - "scripts/validate_agent_contexts.py covers the src/moex_carry/signal_engine/ tree and matching agent-context docs stay aligned"
+      - "src/moex_carry/config.py, src/moex_carry/integrations/telegram_worker.py, and src/moex_carry/ui/app_helpers_base.py are back under hard taste-invariant size limits"
+      - "python scripts/run_lean_gate.py passes on the rebased branch"
+      - "git push --force-with-lease origin codex/signals_engine succeeds"
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - python scripts/validate_agent_contexts.py
+      - python scripts/validate_taste_invariants.py
+      - python scripts/run_lean_gate.py
+    docs:
+      - docs/session_handoff.md
+      - docs/agent-contexts/README.md
+      - docs/agent-contexts/CTX-STRATEGY.md
+      - docs/agent-contexts/CTX-ORCHESTRATION.md
+      - plans/PLANS.yaml
+    dependencies:
+      - P1-REBASE-GUARD-059
+    started_at: 2026-03-09
+
+  - id: P2-SIGNALS-H4A-SIZING-061
+    title: Add absolute-RUB multi-contract sizing for H4A without changing trade frequency or win-rate behavior
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - walk-forward sizing supports an absolute `20_000 RUB` per-trade risk budget while keeping legacy fixed-lot and percent-risk modes intact
+      - H4A sizing analysis produces a deterministic artifact that shows unchanged filled-trade count and win-rate semantics with higher money output from larger quantity where risk allows
+      - risk/config/docs/governance artifacts are updated and lean gate stays green
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - pytest tests/test_morning_plan_walk_forward.py tests/test_h4a_contract_sizing_review.py tests/test_h4a_vs_baseline_risk.py tests/test_risk_gate.py -q
+      - python scripts/run_h4a_contract_sizing_review.py --position-sizing-risk-money 20000 --out-json artifacts/research/wf_goal_v6_h4a_contract_sizing_20000_20260309.json
+      - python scripts/run_lean_gate.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_h4a_contract_sizing_review.py
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - artifacts/research/wf_goal_v6_h4a_contract_sizing_20000_20260309.json
+      - docs/session_handoff.md
+      - memory/agent_memory.yaml
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-SIZING-049
+      - P2-SIGNALS-H4A-MONEY-050
+      - P2-SIGNALS-H4A-OPS-051
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P2-SIGNALS-H4A-SIZING-062
+    title: Remove H4A contract-count cap so risk-based sizing is limited only by the `20_000 RUB` budget
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - risk-based H4A sizing no longer binds quantity by `max_contracts_per_instrument`
+      - capped and uncapped H4A review outputs are compared on the same frozen source artifact with unchanged trade-count and win-rate semantics
+      - operator docs and regression tests reflect the risk-only sizing rule
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - pytest tests/test_morning_plan_walk_forward.py tests/test_h4a_contract_sizing_review.py tests/test_h4a_vs_baseline_risk.py tests/test_risk_gate.py -q
+      - python scripts/run_h4a_contract_sizing_review.py --position-sizing-risk-money 20000 --out-json artifacts/research/wf_goal_v6_h4a_contract_sizing_20000_20260309.json
+      - python scripts/run_lean_gate.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_h4a_contract_sizing_review.py
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+    dependencies:
+      - P2-SIGNALS-H4A-SIZING-061
+    started_at: 2026-03-09
+    completed_at: 2026-03-09
+
+  - id: P2-SIGNALS-H4A-COSTS-063
+    title: Apply real broker plus maker-taker MOEX commissions to H4A revenue and enforce no-mini review hygiene
+    lane: strategy
+    status: completed
+    execution_mode: autonomous
+    owner: strategy-engineering
+    acceptance:
+      - H4A walk-forward net-money accounting uses `0.45 RUB` broker fee per executed order per contract plus a table-driven MOEX exchange fee applied only to taker executions
+      - H4A risk and contract-sizing review artifacts are recomputed from the updated fee model and exclude `BM`, `GN`, `NR`, `RM`, and `S1` by default
+      - regression tests and governance/docs are aligned with the new commission contract and no-mini policy
+    checks:
+      - python scripts/validate_task_request_contract.py
+      - python scripts/validate_session_handoff.py
+      - pytest tests/test_morning_plan_walk_forward.py tests/test_h4a_contract_sizing_review.py tests/test_h4a_vs_baseline_risk.py tests/test_risk_gate.py -q
+      - python scripts/run_h4a_vs_baseline_risk.py
+      - python scripts/run_h4a_contract_sizing_review.py --position-sizing-risk-money 20000
+      - python scripts/run_lean_gate.py
+    docs:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_h4a_vs_baseline_risk.py
+      - scripts/run_h4a_contract_sizing_review.py
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+      - memory/agent_memory.yaml
+    dependencies:
+      - P2-SIGNALS-H4A-SIZING-062
     started_at: 2026-03-09
     completed_at: 2026-03-09

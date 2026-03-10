@@ -1,0 +1,2692 @@
+{
+  "generated_at": "2026-03-04T09:30:23.240522+00:00",
+  "mode": "causal_walk_forward",
+  "instruments": [
+    "BRH6",
+    "BRZ5",
+    "GDH6",
+    "GDM6",
+    "GDZ5",
+    "NGH6",
+    "NGU5"
+  ],
+  "reporting_instruments": [
+    "BR",
+    "GD",
+    "NG"
+  ],
+  "instrument_mode": "front_nearest",
+  "tick_sizes": {
+    "BRH6": 0.01,
+    "BRZ5": 0.01,
+    "GDH6": 0.1,
+    "GDM6": 0.1,
+    "GDZ5": 0.1,
+    "NGH6": 0.001,
+    "NGU5": 0.001
+  },
+  "cache": {
+    "enabled": true,
+    "cache_db": "data\\cache\\morning_plan_candles.sqlite",
+    "offline_only": true,
+    "refresh_cache": false,
+    "stats": {
+      "network_fetch_calls": 0,
+      "network_rows": 0,
+      "cache_rows_loaded": 418006,
+      "cache_rows_written": 0
+    }
+  },
+  "period": {
+    "start_date": "2025-08-01",
+    "end_date": "2026-02-20",
+    "decision_time": "10:30",
+    "decision_times": [
+      "10:30",
+      "12:00",
+      "14:00"
+    ],
+    "timezone": "Europe/Moscow"
+  },
+  "cost_assumptions_ticks": {
+    "commission_ticks_per_side": 0.5,
+    "slippage_ticks_per_side": 1.0,
+    "spread_half_ticks": 1.0
+  },
+  "tuning_points": {
+    "objective": "robust_median_mad",
+    "search_algorithm": "RANDOM",
+    "profile": "baseline_v1",
+    "search_space_profile": "intraday_goal_v2",
+    "combinations": 12,
+    "hpo_trials": 8,
+    "hpo_startup_trials": 3,
+    "hpo_seed": 77,
+    "retune_every_folds": 1,
+    "cost_model_profile": "fixed_v1",
+    "probability_gate": {
+      "enabled": false,
+      "apply_on_test_only": true,
+      "min_n_effective": 50.0,
+      "min_expected_return_ticks": 2.0,
+      "half_life_days": 30.0,
+      "dirichlet_alpha": 1.0,
+      "context_mode": "setup_kind",
+      "min_filled_trades_per_fold": 0
+    },
+    "grid": {
+      "execution.buffer_atr_mult": [
+        0.08,
+        0.1,
+        0.12
+      ],
+      "setups.rr_default": [
+        1.4,
+        1.6
+      ],
+      "setups.pullback_max_dist_atr_mult": [
+        0.8,
+        1.0
+      ]
+    },
+    "search_space": {
+      "execution.buffer_atr_mult": {
+        "type": "float",
+        "min": 0.08,
+        "max": 0.16,
+        "step": 0.01
+      },
+      "setups.rr_default": {
+        "type": "float",
+        "min": 1.4,
+        "max": 2.2,
+        "step": 0.1
+      },
+      "setups.pullback_max_dist_atr_mult": {
+        "type": "float",
+        "min": 0.6,
+        "max": 1.0,
+        "step": 0.1
+      },
+      "setups.max_risk_atr_mult": {
+        "type": "float",
+        "min": 0.9,
+        "max": 1.3,
+        "step": 0.1
+      },
+      "setups.sl_atr_mult": {
+        "type": "float",
+        "min": 0.7,
+        "max": 0.9,
+        "step": 0.1
+      },
+      "setups.min_rr_net": {
+        "type": "float",
+        "min": 1.1,
+        "max": 1.5,
+        "step": 0.1
+      },
+      "setups.min_reward_net_ticks": {
+        "type": "float",
+        "min": 2.0,
+        "max": 4.0,
+        "step": 1.0
+      },
+      "setups.min_reward_gross_ticks": {
+        "type": "float",
+        "min": 12.0,
+        "max": 24.0,
+        "step": 2.0
+      },
+      "setups.min_target_return_pct": {
+        "type": "float",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.1
+      },
+      "setups.min_atr_h1_cost_mult": {
+        "type": "float",
+        "min": 5.0,
+        "max": 8.0,
+        "step": 1.0
+      },
+      "setups.min_atr_d1_cost_mult": {
+        "type": "float",
+        "min": 10.0,
+        "max": 16.0,
+        "step": 2.0
+      }
+    },
+    "goal": {
+      "min_target_return_pct": 0.5,
+      "min_trades_per_week": 2.0,
+      "max_trades_per_week": 12.0,
+      "trade_freq_penalty": 3.0
+    },
+    "objective_scoring": {
+      "concentration_penalty_weight": 0.0,
+      "concentration_top_share_soft_cap": 0.35,
+      "normalization_floor_ticks": 1.0,
+      "negative_fold_penalty": 0.0,
+      "subfold_days": 7
+    },
+    "effective_min_target_return_pct": 0.5,
+    "news_gate": {
+      "enabled": true,
+      "db_url": "sqlite:///./data/news_livecheck_ng.db",
+      "lookback_minutes": 180,
+      "block_severity_threshold": "high",
+      "reduce_severity_threshold": "medium",
+      "min_impact_score": 0.35,
+      "min_confidence": 0.9,
+      "max_items": 200,
+      "reduce_max_setups": 1,
+      "sources": [],
+      "commodity_map": {
+        "BR": "BRN",
+        "NG": "NG_US",
+        "GD": "GOLD"
+      }
+    },
+    "front_roll_avoid_expiry_days": 3,
+    "min_train_trades": 12,
+    "min_train_instruments_with_trades": 3,
+    "min_trades_per_instrument": 1,
+    "robust_mad_penalty": 0.5,
+    "train_days": 60,
+    "test_days": 20,
+    "step_days": 20
+  },
+  "comparison_points": [
+    "setups_total",
+    "filled_trades",
+    "fill_rate",
+    "tp_rate",
+    "sl_rate",
+    "exit_rate",
+    "win_rate_net",
+    "expectancy_net_ticks",
+    "net_ticks_sum"
+  ],
+  "folds": [
+    {
+      "fold_id": 1,
+      "train_start": "2025-06-02",
+      "train_end": "2025-07-31",
+      "test_start": "2025-08-01",
+      "test_end": "2025-08-20",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.09,
+        "setups.rr_default": 1.7999999999999998,
+        "setups.pullback_max_dist_atr_mult": 0.7,
+        "setups.max_risk_atr_mult": 1.2000000000000002,
+        "setups.sl_atr_mult": 0.7,
+        "setups.min_rr_net": 1.2000000000000002,
+        "setups.min_reward_net_ticks": 3.0,
+        "setups.min_reward_gross_ticks": 14.0,
+        "setups.min_target_return_pct": 0.5,
+        "setups.min_atr_h1_cost_mult": 7.0,
+        "setups.min_atr_d1_cost_mult": 12.0
+      },
+      "train_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "train_selection_metrics": {
+        "robust_score": -Infinity,
+        "median_expectancy": 0.0,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 0,
+        "robust_instruments": 0,
+        "normalized_robust_score": -Infinity,
+        "normalized_median_expectancy": 0.0,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 0,
+        "concentration_top_share": 0.0,
+        "concentration_hhi": 0.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 0.0,
+        "train_negative_subfolds": 0.0,
+        "train_positive_subfolds": 0.0,
+        "train_negative_subfold_ratio": 0.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": -Infinity,
+        "trades_per_week": 0.0
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 2,
+        "gated_out": 0,
+        "filled_trades": 2,
+        "fill_rate": 1.0,
+        "tp_rate": 0.5,
+        "sl_rate": 0.5,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.5,
+        "expectancy_net_ticks": 8.0,
+        "gross_ticks_sum": 26.0,
+        "abs_gross_ticks_sum": 64.0,
+        "net_ticks_sum": 16.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 2,
+            "net_ticks_sum": 16.0,
+            "expectancy_net_ticks": 8.0
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 2,
+            "net_ticks_sum": 16.0,
+            "gross_ticks_sum": 26.0,
+            "abs_gross_ticks_sum": 64.0,
+            "tp_count": 1,
+            "sl_count": 1,
+            "exit_count": 0,
+            "win_count": 1,
+            "expectancy_net_ticks": 8.0,
+            "tp_rate": 0.5,
+            "sl_rate": 0.5,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.5
+          }
+        }
+      },
+      "planned_signals_count": 2
+    },
+    {
+      "fold_id": 2,
+      "train_start": "2025-06-22",
+      "train_end": "2025-08-20",
+      "test_start": "2025-08-21",
+      "test_end": "2025-09-09",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.08,
+        "setups.rr_default": 1.5999999999999999,
+        "setups.pullback_max_dist_atr_mult": 0.8,
+        "setups.max_risk_atr_mult": 1.0,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.5,
+        "setups.min_reward_net_ticks": 3.0,
+        "setups.min_reward_gross_ticks": 16.0,
+        "setups.min_target_return_pct": 0.7,
+        "setups.min_atr_h1_cost_mult": 5.0,
+        "setups.min_atr_d1_cost_mult": 16.0
+      },
+      "train_summary": {
+        "setups_total": 2,
+        "gated_out": 0,
+        "filled_trades": 1,
+        "fill_rate": 0.5,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 1.0,
+        "expectancy_net_ticks": 40.0,
+        "gross_ticks_sum": 45.0,
+        "abs_gross_ticks_sum": 45.0,
+        "net_ticks_sum": 40.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 1,
+            "net_ticks_sum": 40.0,
+            "expectancy_net_ticks": 40.0
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 1,
+            "net_ticks_sum": 40.0,
+            "gross_ticks_sum": 45.0,
+            "abs_gross_ticks_sum": 45.0,
+            "tp_count": 1,
+            "sl_count": 0,
+            "exit_count": 0,
+            "win_count": 1,
+            "expectancy_net_ticks": 40.0,
+            "tp_rate": 1.0,
+            "sl_rate": 0.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 1.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": 40.0,
+        "median_expectancy": 40.0,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": 0.8888888888888888,
+        "normalized_median_expectancy": 0.8888888888888888,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 1.0,
+        "concentration_hhi": 1.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 1.0,
+        "train_negative_subfolds": 0.0,
+        "train_positive_subfolds": 1.0,
+        "train_negative_subfold_ratio": 0.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": 34.35,
+        "trades_per_week": 0.11666666666666667
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 2,
+        "gated_out": 0,
+        "filled_trades": 2,
+        "fill_rate": 1.0,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -8.5,
+        "gross_ticks_sum": -7.0,
+        "abs_gross_ticks_sum": 7.0,
+        "net_ticks_sum": -17.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 2,
+            "net_ticks_sum": -17.0,
+            "expectancy_net_ticks": -8.5
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 2,
+            "net_ticks_sum": -17.0,
+            "gross_ticks_sum": -7.0,
+            "abs_gross_ticks_sum": 7.0,
+            "tp_count": 0,
+            "sl_count": 2,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -8.5,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "planned_signals_count": 2
+    },
+    {
+      "fold_id": 3,
+      "train_start": "2025-07-12",
+      "train_end": "2025-09-09",
+      "test_start": "2025-09-10",
+      "test_end": "2025-09-29",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.14,
+        "setups.rr_default": 1.9,
+        "setups.pullback_max_dist_atr_mult": 0.9,
+        "setups.max_risk_atr_mult": 1.1,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.3,
+        "setups.min_reward_net_ticks": 4.0,
+        "setups.min_reward_gross_ticks": 22.0,
+        "setups.min_target_return_pct": 0.6,
+        "setups.min_atr_h1_cost_mult": 6.0,
+        "setups.min_atr_d1_cost_mult": 14.0
+      },
+      "train_summary": {
+        "setups_total": 5,
+        "gated_out": 0,
+        "filled_trades": 4,
+        "fill_rate": 0.8,
+        "tp_rate": 0.5,
+        "sl_rate": 0.5,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.5,
+        "expectancy_net_ticks": 13.25,
+        "gross_ticks_sum": 73.0,
+        "abs_gross_ticks_sum": 87.0,
+        "net_ticks_sum": 53.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 4,
+            "net_ticks_sum": 53.0,
+            "expectancy_net_ticks": 13.25
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 4,
+            "net_ticks_sum": 53.0,
+            "gross_ticks_sum": 73.0,
+            "abs_gross_ticks_sum": 87.0,
+            "tp_count": 2,
+            "sl_count": 2,
+            "exit_count": 0,
+            "win_count": 2,
+            "expectancy_net_ticks": 13.25,
+            "tp_rate": 0.5,
+            "sl_rate": 0.5,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.5
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": 13.25,
+        "median_expectancy": 13.25,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": 0.6091954022988506,
+        "normalized_median_expectancy": 0.6091954022988506,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 1.0,
+        "concentration_hhi": 1.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 3.0,
+        "train_negative_subfolds": 1.0,
+        "train_positive_subfolds": 2.0,
+        "train_negative_subfold_ratio": 0.3333333333333333,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": 8.65,
+        "trades_per_week": 0.4666666666666667
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 0
+    },
+    {
+      "fold_id": 4,
+      "train_start": "2025-08-01",
+      "train_end": "2025-09-29",
+      "test_start": "2025-09-30",
+      "test_end": "2025-10-19",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.15000000000000002,
+        "setups.rr_default": 1.9,
+        "setups.pullback_max_dist_atr_mult": 0.7,
+        "setups.max_risk_atr_mult": 1.0,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.3,
+        "setups.min_reward_net_ticks": 3.0,
+        "setups.min_reward_gross_ticks": 12.0,
+        "setups.min_target_return_pct": 1.0,
+        "setups.min_atr_h1_cost_mult": 6.0,
+        "setups.min_atr_d1_cost_mult": 10.0
+      },
+      "train_summary": {
+        "setups_total": 4,
+        "gated_out": 0,
+        "filled_trades": 4,
+        "fill_rate": 1.0,
+        "tp_rate": 0.5,
+        "sl_rate": 0.5,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.5,
+        "expectancy_net_ticks": 13.25,
+        "gross_ticks_sum": 73.0,
+        "abs_gross_ticks_sum": 87.0,
+        "net_ticks_sum": 53.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 4,
+            "net_ticks_sum": 53.0,
+            "expectancy_net_ticks": 13.25
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 4,
+            "net_ticks_sum": 53.0,
+            "gross_ticks_sum": 73.0,
+            "abs_gross_ticks_sum": 87.0,
+            "tp_count": 2,
+            "sl_count": 2,
+            "exit_count": 0,
+            "win_count": 2,
+            "expectancy_net_ticks": 13.25,
+            "tp_rate": 0.5,
+            "sl_rate": 0.5,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.5
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": 13.25,
+        "median_expectancy": 13.25,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": 0.6091954022988506,
+        "normalized_median_expectancy": 0.6091954022988506,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 1.0,
+        "concentration_hhi": 1.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 2.0,
+        "train_negative_subfolds": 0.0,
+        "train_positive_subfolds": 2.0,
+        "train_negative_subfold_ratio": 0.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": 8.65,
+        "trades_per_week": 0.4666666666666667
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 0
+    },
+    {
+      "fold_id": 5,
+      "train_start": "2025-08-21",
+      "train_end": "2025-10-19",
+      "test_start": "2025-10-20",
+      "test_end": "2025-11-08",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.09,
+        "setups.rr_default": 2.2,
+        "setups.pullback_max_dist_atr_mult": 0.9,
+        "setups.max_risk_atr_mult": 1.1,
+        "setups.sl_atr_mult": 0.7,
+        "setups.min_rr_net": 1.2000000000000002,
+        "setups.min_reward_net_ticks": 4.0,
+        "setups.min_reward_gross_ticks": 20.0,
+        "setups.min_target_return_pct": 0.8,
+        "setups.min_atr_h1_cost_mult": 8.0,
+        "setups.min_atr_d1_cost_mult": 12.0
+      },
+      "train_summary": {
+        "setups_total": 4,
+        "gated_out": 0,
+        "filled_trades": 3,
+        "fill_rate": 0.75,
+        "tp_rate": 0.3333333333333333,
+        "sl_rate": 0.6666666666666666,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.3333333333333333,
+        "expectancy_net_ticks": 4.333333333333333,
+        "gross_ticks_sum": 28.0,
+        "abs_gross_ticks_sum": 42.0,
+        "net_ticks_sum": 13.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 3,
+            "net_ticks_sum": 13.0,
+            "expectancy_net_ticks": 4.333333333333333
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 3,
+            "net_ticks_sum": 13.0,
+            "gross_ticks_sum": 28.0,
+            "abs_gross_ticks_sum": 42.0,
+            "tp_count": 1,
+            "sl_count": 2,
+            "exit_count": 0,
+            "win_count": 1,
+            "expectancy_net_ticks": 4.333333333333333,
+            "tp_rate": 0.3333333333333333,
+            "sl_rate": 0.6666666666666666,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.3333333333333333
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": 4.333333333333333,
+        "median_expectancy": 4.333333333333333,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": 0.3095238095238095,
+        "normalized_median_expectancy": 0.3095238095238095,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 1.0,
+        "concentration_hhi": 1.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 1.0,
+        "train_negative_subfolds": 0.0,
+        "train_positive_subfolds": 1.0,
+        "train_negative_subfold_ratio": 0.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": -0.6166666666666663,
+        "trades_per_week": 0.35
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 1,
+        "gated_out": 0,
+        "filled_trades": 1,
+        "fill_rate": 1.0,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -207.0,
+        "gross_ticks_sum": -202.0,
+        "abs_gross_ticks_sum": 202.0,
+        "net_ticks_sum": -207.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 1,
+            "net_ticks_sum": -207.0,
+            "expectancy_net_ticks": -207.0
+          }
+        },
+        "by_instrument": {
+          "GD": {
+            "count": 1,
+            "net_ticks_sum": -207.0,
+            "gross_ticks_sum": -202.0,
+            "abs_gross_ticks_sum": 202.0,
+            "tp_count": 0,
+            "sl_count": 1,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -207.0,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "planned_signals_count": 1
+    },
+    {
+      "fold_id": 6,
+      "train_start": "2025-09-10",
+      "train_end": "2025-11-08",
+      "test_start": "2025-11-09",
+      "test_end": "2025-11-28",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.1,
+        "setups.rr_default": 1.7,
+        "setups.pullback_max_dist_atr_mult": 0.9,
+        "setups.max_risk_atr_mult": 1.2000000000000002,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.2000000000000002,
+        "setups.min_reward_net_ticks": 3.0,
+        "setups.min_reward_gross_ticks": 12.0,
+        "setups.min_target_return_pct": 0.6,
+        "setups.min_atr_h1_cost_mult": 7.0,
+        "setups.min_atr_d1_cost_mult": 16.0
+      },
+      "train_summary": {
+        "setups_total": 5,
+        "gated_out": 0,
+        "filled_trades": 3,
+        "fill_rate": 0.6,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -142.66666666666666,
+        "gross_ticks_sum": -413.0,
+        "abs_gross_ticks_sum": 413.0,
+        "net_ticks_sum": -428.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 3,
+            "net_ticks_sum": -428.0,
+            "expectancy_net_ticks": -142.66666666666666
+          }
+        },
+        "by_instrument": {
+          "GD": {
+            "count": 3,
+            "net_ticks_sum": -428.0,
+            "gross_ticks_sum": -413.0,
+            "abs_gross_ticks_sum": 413.0,
+            "tp_count": 0,
+            "sl_count": 3,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -142.66666666666666,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": -142.66666666666666,
+        "median_expectancy": -142.66666666666666,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": -1.036319612590799,
+        "normalized_median_expectancy": -1.036319612590799,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 0.0,
+        "concentration_hhi": 0.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 3.0,
+        "train_negative_subfolds": 3.0,
+        "train_positive_subfolds": 0.0,
+        "train_negative_subfold_ratio": 1.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": -147.61666666666665,
+        "trades_per_week": 0.35
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 0
+    },
+    {
+      "fold_id": 7,
+      "train_start": "2025-09-30",
+      "train_end": "2025-11-28",
+      "test_start": "2025-11-29",
+      "test_end": "2025-12-18",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.11,
+        "setups.rr_default": 1.5999999999999999,
+        "setups.pullback_max_dist_atr_mult": 1.0,
+        "setups.max_risk_atr_mult": 1.2000000000000002,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.3,
+        "setups.min_reward_net_ticks": 3.0,
+        "setups.min_reward_gross_ticks": 18.0,
+        "setups.min_target_return_pct": 0.6,
+        "setups.min_atr_h1_cost_mult": 6.0,
+        "setups.min_atr_d1_cost_mult": 14.0
+      },
+      "train_summary": {
+        "setups_total": 7,
+        "gated_out": 0,
+        "filled_trades": 3,
+        "fill_rate": 0.42857142857142855,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -143.0,
+        "gross_ticks_sum": -414.0,
+        "abs_gross_ticks_sum": 414.0,
+        "net_ticks_sum": -429.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 3,
+            "net_ticks_sum": -429.0,
+            "expectancy_net_ticks": -143.0
+          }
+        },
+        "by_instrument": {
+          "GD": {
+            "count": 3,
+            "net_ticks_sum": -429.0,
+            "gross_ticks_sum": -414.0,
+            "abs_gross_ticks_sum": 414.0,
+            "tp_count": 0,
+            "sl_count": 3,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -143.0,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": -143.0,
+        "median_expectancy": -143.0,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": -1.036231884057971,
+        "normalized_median_expectancy": -1.036231884057971,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 0.0,
+        "concentration_hhi": 0.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 3.0,
+        "train_negative_subfolds": 3.0,
+        "train_positive_subfolds": 0.0,
+        "train_negative_subfold_ratio": 1.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": -147.95,
+        "trades_per_week": 0.35
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 0
+    },
+    {
+      "fold_id": 8,
+      "train_start": "2025-10-20",
+      "train_end": "2025-12-18",
+      "test_start": "2025-12-19",
+      "test_end": "2026-01-07",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.14,
+        "setups.rr_default": 1.7,
+        "setups.pullback_max_dist_atr_mult": 0.9,
+        "setups.max_risk_atr_mult": 1.3,
+        "setups.sl_atr_mult": 0.7,
+        "setups.min_rr_net": 1.2000000000000002,
+        "setups.min_reward_net_ticks": 4.0,
+        "setups.min_reward_gross_ticks": 18.0,
+        "setups.min_target_return_pct": 0.8,
+        "setups.min_atr_h1_cost_mult": 8.0,
+        "setups.min_atr_d1_cost_mult": 10.0
+      },
+      "train_summary": {
+        "setups_total": 1,
+        "gated_out": 0,
+        "filled_trades": 1,
+        "fill_rate": 1.0,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -207.0,
+        "gross_ticks_sum": -202.0,
+        "abs_gross_ticks_sum": 202.0,
+        "net_ticks_sum": -207.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 1,
+            "net_ticks_sum": -207.0,
+            "expectancy_net_ticks": -207.0
+          }
+        },
+        "by_instrument": {
+          "GD": {
+            "count": 1,
+            "net_ticks_sum": -207.0,
+            "gross_ticks_sum": -202.0,
+            "abs_gross_ticks_sum": 202.0,
+            "tp_count": 0,
+            "sl_count": 1,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -207.0,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": -207.0,
+        "median_expectancy": -207.0,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": -1.0247524752475248,
+        "normalized_median_expectancy": -1.0247524752475248,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 0.0,
+        "concentration_hhi": 0.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 1.0,
+        "train_negative_subfolds": 1.0,
+        "train_positive_subfolds": 0.0,
+        "train_negative_subfold_ratio": 1.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": -212.65,
+        "trades_per_week": 0.11666666666666667
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 4,
+        "gated_out": 0,
+        "filled_trades": 2,
+        "fill_rate": 0.5,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -8.5,
+        "gross_ticks_sum": -7.0,
+        "abs_gross_ticks_sum": 7.0,
+        "net_ticks_sum": -17.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 2,
+            "net_ticks_sum": -17.0,
+            "expectancy_net_ticks": -8.5
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 2,
+            "net_ticks_sum": -17.0,
+            "gross_ticks_sum": -7.0,
+            "abs_gross_ticks_sum": 7.0,
+            "tp_count": 0,
+            "sl_count": 2,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -8.5,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "planned_signals_count": 4
+    },
+    {
+      "fold_id": 9,
+      "train_start": "2025-11-09",
+      "train_end": "2026-01-07",
+      "test_start": "2026-01-08",
+      "test_end": "2026-01-27",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.15000000000000002,
+        "setups.rr_default": 1.5,
+        "setups.pullback_max_dist_atr_mult": 1.0,
+        "setups.max_risk_atr_mult": 1.0,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.1,
+        "setups.min_reward_net_ticks": 2.0,
+        "setups.min_reward_gross_ticks": 16.0,
+        "setups.min_target_return_pct": 1.0,
+        "setups.min_atr_h1_cost_mult": 7.0,
+        "setups.min_atr_d1_cost_mult": 10.0
+      },
+      "train_summary": {
+        "setups_total": 4,
+        "gated_out": 0,
+        "filled_trades": 2,
+        "fill_rate": 0.5,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -8.5,
+        "gross_ticks_sum": -7.0,
+        "abs_gross_ticks_sum": 7.0,
+        "net_ticks_sum": -17.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 2,
+            "net_ticks_sum": -17.0,
+            "expectancy_net_ticks": -8.5
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 2,
+            "net_ticks_sum": -17.0,
+            "gross_ticks_sum": -7.0,
+            "abs_gross_ticks_sum": 7.0,
+            "tp_count": 0,
+            "sl_count": 2,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -8.5,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": -8.5,
+        "median_expectancy": -8.5,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": -2.4285714285714284,
+        "normalized_median_expectancy": -2.4285714285714284,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 0.0,
+        "concentration_hhi": 0.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 1.0,
+        "train_negative_subfolds": 1.0,
+        "train_positive_subfolds": 0.0,
+        "train_negative_subfold_ratio": 1.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": -13.8,
+        "trades_per_week": 0.23333333333333334
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 0
+    },
+    {
+      "fold_id": 10,
+      "train_start": "2025-11-29",
+      "train_end": "2026-01-27",
+      "test_start": "2026-01-28",
+      "test_end": "2026-02-16",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.15000000000000002,
+        "setups.rr_default": 2.1,
+        "setups.pullback_max_dist_atr_mult": 0.8,
+        "setups.max_risk_atr_mult": 1.1,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.2000000000000002,
+        "setups.min_reward_net_ticks": 3.0,
+        "setups.min_reward_gross_ticks": 14.0,
+        "setups.min_target_return_pct": 0.5,
+        "setups.min_atr_h1_cost_mult": 8.0,
+        "setups.min_atr_d1_cost_mult": 10.0
+      },
+      "train_summary": {
+        "setups_total": 6,
+        "gated_out": 0,
+        "filled_trades": 3,
+        "fill_rate": 0.5,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -10.0,
+        "gross_ticks_sum": -15.0,
+        "abs_gross_ticks_sum": 15.0,
+        "net_ticks_sum": -30.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 2,
+            "net_ticks_sum": -17.0,
+            "expectancy_net_ticks": -8.5
+          },
+          "BOX_BREAKOUT": {
+            "count": 1,
+            "net_ticks_sum": -13.0,
+            "expectancy_net_ticks": -13.0
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 3,
+            "net_ticks_sum": -30.0,
+            "gross_ticks_sum": -15.0,
+            "abs_gross_ticks_sum": 15.0,
+            "tp_count": 0,
+            "sl_count": 3,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -10.0,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": -10.0,
+        "median_expectancy": -10.0,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": -2.0,
+        "normalized_median_expectancy": -2.0,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 0.0,
+        "concentration_hhi": 0.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 1.0,
+        "train_negative_subfolds": 1.0,
+        "train_positive_subfolds": 0.0,
+        "train_negative_subfold_ratio": 1.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": -14.95,
+        "trades_per_week": 0.35
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 0
+    },
+    {
+      "fold_id": 11,
+      "train_start": "2025-12-19",
+      "train_end": "2026-02-16",
+      "test_start": "2026-02-17",
+      "test_end": "2026-02-20",
+      "search_algorithm": "RANDOM",
+      "retuned_this_fold": true,
+      "train_candidates": 8,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.1,
+        "setups.rr_default": 1.5,
+        "setups.pullback_max_dist_atr_mult": 0.7,
+        "setups.max_risk_atr_mult": 1.2000000000000002,
+        "setups.sl_atr_mult": 0.7,
+        "setups.min_rr_net": 1.1,
+        "setups.min_reward_net_ticks": 3.0,
+        "setups.min_reward_gross_ticks": 14.0,
+        "setups.min_target_return_pct": 0.8,
+        "setups.min_atr_h1_cost_mult": 6.0,
+        "setups.min_atr_d1_cost_mult": 14.0
+      },
+      "train_summary": {
+        "setups_total": 6,
+        "gated_out": 0,
+        "filled_trades": 3,
+        "fill_rate": 0.5,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": -10.0,
+        "gross_ticks_sum": -15.0,
+        "abs_gross_ticks_sum": 15.0,
+        "net_ticks_sum": -30.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 2,
+            "net_ticks_sum": -17.0,
+            "expectancy_net_ticks": -8.5
+          },
+          "BOX_BREAKOUT": {
+            "count": 1,
+            "net_ticks_sum": -13.0,
+            "expectancy_net_ticks": -13.0
+          }
+        },
+        "by_instrument": {
+          "NG": {
+            "count": 3,
+            "net_ticks_sum": -30.0,
+            "gross_ticks_sum": -15.0,
+            "abs_gross_ticks_sum": 15.0,
+            "tp_count": 0,
+            "sl_count": 3,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -10.0,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": -10.0,
+        "median_expectancy": -10.0,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": -2.0,
+        "normalized_median_expectancy": -2.0,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 0.0,
+        "concentration_hhi": 0.0,
+        "concentration_penalty": 0.0,
+        "train_subfold_days": 7.0,
+        "train_subfolds_with_trades": 2.0,
+        "train_negative_subfolds": 2.0,
+        "train_positive_subfolds": 0.0,
+        "train_negative_subfold_ratio": 1.0,
+        "negative_subfold_penalty": 0.0,
+        "selection_score": -14.95,
+        "trades_per_week": 0.35
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "BRZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDM6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "GDZ5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGU5": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 0
+    }
+  ],
+  "overall_test_summary": {
+    "setups_total": 9,
+    "gated_out": 0,
+    "filled_trades": 7,
+    "fill_rate": 0.7777777777777778,
+    "tp_rate": 0.14285714285714285,
+    "sl_rate": 0.8571428571428571,
+    "exit_rate": 0.0,
+    "win_rate_net": 0.14285714285714285,
+    "expectancy_net_ticks": -32.142857142857146,
+    "gross_ticks_sum": -190.0,
+    "abs_gross_ticks_sum": 280.0,
+    "net_ticks_sum": -225.0,
+    "by_setup_kind": {
+      "PULLBACK_LIMIT": {
+        "count": 7,
+        "net_ticks_sum": -225.0,
+        "expectancy_net_ticks": -32.142857142857146
+      }
+    },
+    "by_instrument": {
+      "NG": {
+        "count": 6,
+        "net_ticks_sum": -18.0,
+        "gross_ticks_sum": 12.0,
+        "abs_gross_ticks_sum": 78.0,
+        "tp_count": 1,
+        "sl_count": 5,
+        "exit_count": 0,
+        "win_count": 1,
+        "expectancy_net_ticks": -3.0,
+        "tp_rate": 0.16666666666666666,
+        "sl_rate": 0.8333333333333334,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.16666666666666666
+      },
+      "GD": {
+        "count": 1,
+        "net_ticks_sum": -207.0,
+        "gross_ticks_sum": -202.0,
+        "abs_gross_ticks_sum": 202.0,
+        "tp_count": 0,
+        "sl_count": 1,
+        "exit_count": 0,
+        "win_count": 0,
+        "expectancy_net_ticks": -207.0,
+        "tp_rate": 0.0,
+        "sl_rate": 1.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0
+      }
+    }
+  },
+  "planned_signals_total": 9,
+  "planned_signals": [
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-12",
+      "as_of_ts": "2025-08-12T12:00:00+03:00",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:3082",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 3082,
+      "entry_range_low_ticks": 3082,
+      "entry_range_high_ticks": 3082,
+      "sl_ticks": 3101,
+      "tp_ticks": 3037,
+      "horizon": "EOD",
+      "risk_ticks": 19,
+      "entry_expire_ts": "2025-08-12T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.4600908500973393,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "TP",
+      "simulated_entry_ts": "2025-08-12T12:05:00+03:00",
+      "simulated_exit_ts": "2025-08-12T15:20:00+03:00",
+      "simulated_gross_ticks": 45.0,
+      "simulated_net_ticks": 40.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-14",
+      "as_of_ts": "2025-08-14T12:00:00+03:00",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2938",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2938,
+      "entry_range_low_ticks": 2938,
+      "entry_range_high_ticks": 2938,
+      "sl_ticks": 2957,
+      "tp_ticks": 2903,
+      "horizon": "EOD",
+      "risk_ticks": 19,
+      "entry_expire_ts": "2025-08-14T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.191286589516678,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2025-08-14T13:30:00+03:00",
+      "simulated_exit_ts": "2025-08-14T15:10:00+03:00",
+      "simulated_gross_ticks": -19.0,
+      "simulated_net_ticks": -24.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-22",
+      "as_of_ts": "2025-08-22T12:00:00+03:00",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2915",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2915,
+      "entry_range_low_ticks": 2915,
+      "entry_range_high_ticks": 2915,
+      "sl_ticks": 2918,
+      "tp_ticks": 2880,
+      "horizon": "EOD",
+      "risk_ticks": 3,
+      "entry_expire_ts": "2025-08-22T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.2006861063464838,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2025-08-22T14:25:00+03:00",
+      "simulated_exit_ts": "2025-08-22T14:30:00+03:00",
+      "simulated_gross_ticks": -3.0,
+      "simulated_net_ticks": -8.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-26",
+      "as_of_ts": "2025-08-26T12:00:00+03:00",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2819",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2819,
+      "entry_range_low_ticks": 2819,
+      "entry_range_high_ticks": 2819,
+      "sl_ticks": 2823,
+      "tp_ticks": 2790,
+      "horizon": "EOD",
+      "risk_ticks": 4,
+      "entry_expire_ts": "2025-08-26T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.0287335934728628,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2025-08-26T12:15:00+03:00",
+      "simulated_exit_ts": "2025-08-26T13:00:00+03:00",
+      "simulated_gross_ticks": -4.0,
+      "simulated_net_ticks": -9.0
+    },
+    {
+      "instrument_id": "GD",
+      "trade_date": "2025-10-21",
+      "as_of_ts": "2025-10-21T10:30:00+03:00",
+      "setup_id": "GDZ5:PULLBACK_LIMIT:BUY:42981",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "BUY",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 42981,
+      "entry_range_low_ticks": 42981,
+      "entry_range_high_ticks": 42981,
+      "sl_ticks": 42779,
+      "tp_ticks": 43500,
+      "horizon": "EOD",
+      "risk_ticks": 202,
+      "entry_expire_ts": "2025-10-21T18:49:59+03:00",
+      "stop_model": "volatility_fallback",
+      "target_return_pct": 1.207510295246737,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2025-10-21T11:00:00+03:00",
+      "simulated_exit_ts": "2025-10-21T11:05:00+03:00",
+      "simulated_gross_ticks": -202.0,
+      "simulated_net_ticks": -207.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-06",
+      "as_of_ts": "2026-01-06T10:30:00+03:00",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2911,
+      "entry_range_low_ticks": 2911,
+      "entry_range_high_ticks": 2911,
+      "sl_ticks": 2917,
+      "tp_ticks": 2872,
+      "horizon": "EOD",
+      "risk_ticks": 6,
+      "entry_expire_ts": "2026-01-06T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.3397457918241154,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-01-06T12:25:00+03:00",
+      "simulated_exit_ts": "2026-01-06T12:55:00+03:00",
+      "simulated_gross_ticks": -6.0,
+      "simulated_net_ticks": -11.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-06",
+      "as_of_ts": "2026-01-06T12:00:00+03:00",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2911,
+      "entry_range_low_ticks": 2911,
+      "entry_range_high_ticks": 2911,
+      "sl_ticks": 2912,
+      "tp_ticks": 2872,
+      "horizon": "EOD",
+      "risk_ticks": 1,
+      "entry_expire_ts": "2026-01-06T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.3397457918241154,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-01-06T12:25:00+03:00",
+      "simulated_exit_ts": "2026-01-06T12:30:00+03:00",
+      "simulated_gross_ticks": -1.0,
+      "simulated_net_ticks": -6.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-07",
+      "as_of_ts": "2026-01-07T10:30:00+03:00",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2911,
+      "entry_range_low_ticks": 2911,
+      "entry_range_high_ticks": 2911,
+      "sl_ticks": 2927,
+      "tp_ticks": 2872,
+      "horizon": "EOD",
+      "risk_ticks": 16,
+      "entry_expire_ts": "2026-01-07T18:49:59+03:00",
+      "stop_model": "volatility_fallback",
+      "target_return_pct": 1.3397457918241154,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": false,
+      "simulated_outcome": "NO_FILL",
+      "simulated_entry_ts": "None",
+      "simulated_exit_ts": "None",
+      "simulated_gross_ticks": 0.0,
+      "simulated_net_ticks": 0.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-07",
+      "as_of_ts": "2026-01-07T12:00:00+03:00",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2911,
+      "entry_range_low_ticks": 2911,
+      "entry_range_high_ticks": 2911,
+      "sl_ticks": 2927,
+      "tp_ticks": 2872,
+      "horizon": "EOD",
+      "risk_ticks": 16,
+      "entry_expire_ts": "2026-01-07T18:49:59+03:00",
+      "stop_model": "volatility_fallback",
+      "target_return_pct": 1.3397457918241154,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": false,
+      "simulated_outcome": "NO_FILL",
+      "simulated_entry_ts": "None",
+      "simulated_exit_ts": "None",
+      "simulated_gross_ticks": 0.0,
+      "simulated_net_ticks": 0.0
+    }
+  ],
+  "sample_planned_signals": [
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-12",
+      "as_of_ts": "2025-08-12T12:00:00+03:00",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:3082",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 3082,
+      "entry_range_low_ticks": 3082,
+      "entry_range_high_ticks": 3082,
+      "sl_ticks": 3101,
+      "tp_ticks": 3037,
+      "horizon": "EOD",
+      "risk_ticks": 19,
+      "entry_expire_ts": "2025-08-12T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.4600908500973393,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "TP",
+      "simulated_entry_ts": "2025-08-12T12:05:00+03:00",
+      "simulated_exit_ts": "2025-08-12T15:20:00+03:00",
+      "simulated_gross_ticks": 45.0,
+      "simulated_net_ticks": 40.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-14",
+      "as_of_ts": "2025-08-14T12:00:00+03:00",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2938",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2938,
+      "entry_range_low_ticks": 2938,
+      "entry_range_high_ticks": 2938,
+      "sl_ticks": 2957,
+      "tp_ticks": 2903,
+      "horizon": "EOD",
+      "risk_ticks": 19,
+      "entry_expire_ts": "2025-08-14T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.191286589516678,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2025-08-14T13:30:00+03:00",
+      "simulated_exit_ts": "2025-08-14T15:10:00+03:00",
+      "simulated_gross_ticks": -19.0,
+      "simulated_net_ticks": -24.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-22",
+      "as_of_ts": "2025-08-22T12:00:00+03:00",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2915",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2915,
+      "entry_range_low_ticks": 2915,
+      "entry_range_high_ticks": 2915,
+      "sl_ticks": 2918,
+      "tp_ticks": 2880,
+      "horizon": "EOD",
+      "risk_ticks": 3,
+      "entry_expire_ts": "2025-08-22T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.2006861063464838,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2025-08-22T14:25:00+03:00",
+      "simulated_exit_ts": "2025-08-22T14:30:00+03:00",
+      "simulated_gross_ticks": -3.0,
+      "simulated_net_ticks": -8.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-26",
+      "as_of_ts": "2025-08-26T12:00:00+03:00",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2819",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2819,
+      "entry_range_low_ticks": 2819,
+      "entry_range_high_ticks": 2819,
+      "sl_ticks": 2823,
+      "tp_ticks": 2790,
+      "horizon": "EOD",
+      "risk_ticks": 4,
+      "entry_expire_ts": "2025-08-26T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.0287335934728628,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2025-08-26T12:15:00+03:00",
+      "simulated_exit_ts": "2025-08-26T13:00:00+03:00",
+      "simulated_gross_ticks": -4.0,
+      "simulated_net_ticks": -9.0
+    },
+    {
+      "instrument_id": "GD",
+      "trade_date": "2025-10-21",
+      "as_of_ts": "2025-10-21T10:30:00+03:00",
+      "setup_id": "GDZ5:PULLBACK_LIMIT:BUY:42981",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "BUY",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 42981,
+      "entry_range_low_ticks": 42981,
+      "entry_range_high_ticks": 42981,
+      "sl_ticks": 42779,
+      "tp_ticks": 43500,
+      "horizon": "EOD",
+      "risk_ticks": 202,
+      "entry_expire_ts": "2025-10-21T18:49:59+03:00",
+      "stop_model": "volatility_fallback",
+      "target_return_pct": 1.207510295246737,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2025-10-21T11:00:00+03:00",
+      "simulated_exit_ts": "2025-10-21T11:05:00+03:00",
+      "simulated_gross_ticks": -202.0,
+      "simulated_net_ticks": -207.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-06",
+      "as_of_ts": "2026-01-06T10:30:00+03:00",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2911,
+      "entry_range_low_ticks": 2911,
+      "entry_range_high_ticks": 2911,
+      "sl_ticks": 2917,
+      "tp_ticks": 2872,
+      "horizon": "EOD",
+      "risk_ticks": 6,
+      "entry_expire_ts": "2026-01-06T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.3397457918241154,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-01-06T12:25:00+03:00",
+      "simulated_exit_ts": "2026-01-06T12:55:00+03:00",
+      "simulated_gross_ticks": -6.0,
+      "simulated_net_ticks": -11.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-06",
+      "as_of_ts": "2026-01-06T12:00:00+03:00",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2911,
+      "entry_range_low_ticks": 2911,
+      "entry_range_high_ticks": 2911,
+      "sl_ticks": 2912,
+      "tp_ticks": 2872,
+      "horizon": "EOD",
+      "risk_ticks": 1,
+      "entry_expire_ts": "2026-01-06T18:49:59+03:00",
+      "stop_model": "structure",
+      "target_return_pct": 1.3397457918241154,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-01-06T12:25:00+03:00",
+      "simulated_exit_ts": "2026-01-06T12:30:00+03:00",
+      "simulated_gross_ticks": -1.0,
+      "simulated_net_ticks": -6.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-07",
+      "as_of_ts": "2026-01-07T10:30:00+03:00",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2911,
+      "entry_range_low_ticks": 2911,
+      "entry_range_high_ticks": 2911,
+      "sl_ticks": 2927,
+      "tp_ticks": 2872,
+      "horizon": "EOD",
+      "risk_ticks": 16,
+      "entry_expire_ts": "2026-01-07T18:49:59+03:00",
+      "stop_model": "volatility_fallback",
+      "target_return_pct": 1.3397457918241154,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": false,
+      "simulated_outcome": "NO_FILL",
+      "simulated_entry_ts": "None",
+      "simulated_exit_ts": "None",
+      "simulated_gross_ticks": 0.0,
+      "simulated_net_ticks": 0.0
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-07",
+      "as_of_ts": "2026-01-07T12:00:00+03:00",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 2911,
+      "entry_range_low_ticks": 2911,
+      "entry_range_high_ticks": 2911,
+      "sl_ticks": 2927,
+      "tp_ticks": 2872,
+      "horizon": "EOD",
+      "risk_ticks": 16,
+      "entry_expire_ts": "2026-01-07T18:49:59+03:00",
+      "stop_model": "volatility_fallback",
+      "target_return_pct": 1.3397457918241154,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": false,
+      "simulated_outcome": "NO_FILL",
+      "simulated_entry_ts": "None",
+      "simulated_exit_ts": "None",
+      "simulated_gross_ticks": 0.0,
+      "simulated_net_ticks": 0.0
+    }
+  ],
+  "sample_test_results": [
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-12",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:3082",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2025-08-12T12:00:00+03:00",
+      "entry_ts": "2025-08-12T12:05:00+03:00",
+      "exit_ts": "2025-08-12T15:20:00+03:00",
+      "filled": true,
+      "outcome": "TP",
+      "gross_ticks": 45.0,
+      "net_ticks": 40.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 3082,
+      "exit_ticks": 3037,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-14",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2938",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2025-08-14T12:00:00+03:00",
+      "entry_ts": "2025-08-14T13:30:00+03:00",
+      "exit_ts": "2025-08-14T15:10:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -19.0,
+      "net_ticks": -24.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 2938,
+      "exit_ticks": 2957,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-22",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2915",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2025-08-22T12:00:00+03:00",
+      "entry_ts": "2025-08-22T14:25:00+03:00",
+      "exit_ts": "2025-08-22T14:30:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -3.0,
+      "net_ticks": -8.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 2915,
+      "exit_ticks": 2918,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2025-08-26",
+      "setup_id": "NGU5:PULLBACK_LIMIT:SELL:2819",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2025-08-26T12:00:00+03:00",
+      "entry_ts": "2025-08-26T12:15:00+03:00",
+      "exit_ts": "2025-08-26T13:00:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -4.0,
+      "net_ticks": -9.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 2819,
+      "exit_ticks": 2823,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "GD",
+      "trade_date": "2025-10-21",
+      "setup_id": "GDZ5:PULLBACK_LIMIT:BUY:42981",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "BUY",
+      "as_of_ts": "2025-10-21T10:30:00+03:00",
+      "entry_ts": "2025-10-21T11:00:00+03:00",
+      "exit_ts": "2025-10-21T11:05:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -202.0,
+      "net_ticks": -207.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 42981,
+      "exit_ticks": 42779,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-06",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2026-01-06T10:30:00+03:00",
+      "entry_ts": "2026-01-06T12:25:00+03:00",
+      "exit_ts": "2026-01-06T12:55:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -6.0,
+      "net_ticks": -11.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 2911,
+      "exit_ticks": 2917,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-06",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2026-01-06T12:00:00+03:00",
+      "entry_ts": "2026-01-06T12:25:00+03:00",
+      "exit_ts": "2026-01-06T12:30:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -1.0,
+      "net_ticks": -6.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 2911,
+      "exit_ticks": 2912,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-07",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2026-01-07T10:30:00+03:00",
+      "entry_ts": null,
+      "exit_ts": null,
+      "filled": false,
+      "outcome": "NO_FILL",
+      "gross_ticks": 0.0,
+      "net_ticks": 0.0,
+      "cost_ticks": 0.0,
+      "entry_ticks": null,
+      "exit_ticks": null,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "NG",
+      "trade_date": "2026-01-07",
+      "setup_id": "NGH6:PULLBACK_LIMIT:SELL:2911",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2026-01-07T12:00:00+03:00",
+      "entry_ts": null,
+      "exit_ts": null,
+      "filled": false,
+      "outcome": "NO_FILL",
+      "gross_ticks": 0.0,
+      "net_ticks": 0.0,
+      "cost_ticks": 0.0,
+      "entry_ticks": null,
+      "exit_ticks": null,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    }
+  ]
+}

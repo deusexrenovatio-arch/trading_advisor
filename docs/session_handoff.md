@@ -1,57 +1,52 @@
 # Session Handoff
-Updated: 2026-03-09 14:44 UTC
+Updated: 2026-03-10 09:40 UTC
 
 ## Goal
-- Make task outcome status machine-derived from explicit repo policy instead of a free-form agent choice.
+- Integrate the full `codex/signals_engine` branch into `main` in one deterministic merge, preserving signal-engine behavior and keeping governance validation green.
 
 ## Task Request Contract
-- Objective: define explicit repository rules for `in_progress/completed/partial/blocked`, derive expected status from machine-checkable fields, and enforce that policy in task-outcome sync plus validation.
-- In Scope: task outcome policy source, `session_handoff` parsing needed for policy inputs, sync/validation enforcement, telemetry/task-outcome tests, and governance docs updates.
-- Out of Scope: redesigning process metrics, changing weekly report UI semantics, changing `memory/task_outcomes.yaml` shape beyond status derivation, or touching the existing `news_root_cycle` operational contract.
-- Constraints: use stable inputs already present in closeout flow; keep policy understandable from repo docs/config rather than hidden heuristics; preserve compatibility for existing completed records; prefer deterministic failure over silent auto-misclassification.
-- Done Evidence: repo has one explicit status policy, current sync/validator derive or verify status from that policy, ambiguous/manual-only combinations are rejected, and `python scripts/validate_task_request_contract.py`, `python scripts/run_lean_gate.py`, and focused task-outcome tests pass.
-- Priority Rule: deterministic and reviewable closeout semantics beat convenience; prefer a stricter policy that fails loudly over a permissive one that keeps status subjective.
+- Objective: merge `origin/codex/signals_engine` into `origin/main` and resolve any conflicts so branch history is reproducible and complete.
+- In Scope: branch alignment, conflict resolution, branch safety checks, and validation commands required by the project gating pipeline.
+- Out of Scope: changing signal semantics, adding new feature work, or merging any branch besides `origin/main` and `origin/codex/signals_engine`.
+- Constraints: keep PR-only flow discipline, preserve commit lineage where possible, and finish only with clean working tree + passing lean gate.
+- Done Evidence: a clean merge into `main`, `python scripts/run_lean_gate.py` pass, and updated task contract/notes that reflect the completed integration.
+- Priority Rule: reproducibility > speed; any conflicting behavior-critical change is resolved with explicit validation.
 
 ## Current Delta
-- Repository now defines one explicit status matrix in `configs/task_outcome_policy.yaml`.
-- The matrix maps `Decision Quality` to `Outcome Status` and requires an explicit unresolved blocker for `blocked`.
-- Sync and telemetry closeout now write the policy-derived status, so the tracked ledger and task-end events no longer depend on a free-form status choice.
-- Validator now rejects handoff status mismatches and `environment_blocked` closeouts without a real blocker, and focused tests cover both positive and negative policy cases.
+- `codex/signals_engine` contains 56 commits ahead of `main` and `main` has 4 commits not yet present on the branch.
+- Target outcome is a reconciled `main` state that includes both sets of changes without losing branch-specific signal-engine work.
 
 ## First-Time-Right Report
-1. Confirmed coverage: explicit status policy, derived-status enforcement, ambiguous closeout rejection, and regression tests are included.
-2. Missing or risky scenarios: stale `Blockers` text can force false `blocked`, and policy that is too weak just relocates subjectivity from one field to another.
-3. Resource/time risks and chosen controls: keep the rule small and auditable, reuse existing handoff fields instead of inventing many new ones, and prove behavior with focused positive/negative fixtures.
-4. Highest-priority fixes or follow-ups: define the policy source first, enforce it in validator and sync second, then update docs so operators know which field really drives status.
+1. Confirmed coverage: branch delta analysis, merge, contract update, and all baseline checks.
+2. Missing or risky scenarios: merge conflicts in signal-engine paths and any unnoticed behavior drift from main-only commits.
+3. Resource/time risks and chosen controls: perform one full merge run, then run lean and targeted validation before finalization.
+4. Highest-priority fixes or follow-ups: resolve conflicts in behavior-critical modules only, then rerun full governance validation.
 
 ## Repetition Control
-- Max Same-Path Attempts: 2
-- Stop Trigger: two consecutive policy drafts still allow subjective `completed/partial/blocked` choices for the same decision-quality case or break existing closeout tests.
-- Reset Action: stop patching validators ad hoc, inventory every closeout input field and encode one minimal status matrix before more code edits.
-- New Search Space: (1) policy in docs only, (2) policy in config + validator, (3) policy in sync + validator, (4) full derived status with explicit blocker parsing.
-- Next Probe: derive one falsifiable status matrix from current fields and write a failing validator test for an inconsistent status selection.
+- Max Same-Path Attempts: 1
+- Stop Trigger: conflicts that reproduce in the same file sequence after one retry.
+- Reset Action: stop and re-run from a fresh main checkout with conflict report attached before attempting again.
+- New Search Space: (1) conflict surface, (2) signal-engine runtime behavior, (3) API/architecture parity checks, (4) task contract and session handoff consistency.
+- Next Probe: merge `origin/main` and `origin/codex/signals_engine` once and validate with `python scripts/run_lean_gate.py`.
 
 ## Task Outcome
-- Outcome Status: completed
-- Decision Quality: correct_first_time
-- Final Contexts: CTX-OPS
-- Route Match: matched
+- Outcome Status: in_progress
+- Decision Quality: pending
+- Final Contexts: CTX-OPS, CTX-API-UI
+- Route Match: pending
 - Primary Rework Cause: none
 - Incident Signature: none
-- Improvement Action: none
-- Improvement Artifact: none
-- Linked Plan ID: P1-PROCESS-OUTCOME-POLICY-055
-- Linked Memory ID:
+- Improvement Action: pending
+- Improvement Artifact: pending
+- Linked Plan ID: P1-SIGS-MAIN-MERGE
 
 ## Blockers
-- None.
+- No current blocker; merge is pending.
 
 ## Next Step
-- Run the final governance gates, sync the closed task outcome, and keep the policy as the single rule source for future closeouts.
+- Checkout `main`, merge `origin/codex/signals_engine`, fix conflicts if any, run required validations, and return result.
 
 ## Validation
+- `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
 - `python scripts/validate_task_request_contract.py`
-- `python -m pytest tests/test_task_outcomes.py tests/architecture/test_governance_policies.py -q`
-- `python -m pytest tests/test_agent_process_telemetry.py tests/test_task_outcomes.py -q`
-- `python scripts/validate_task_outcomes.py`
 - `python scripts/run_lean_gate.py`

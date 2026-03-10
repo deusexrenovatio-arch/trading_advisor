@@ -7,6 +7,7 @@ def _profile(**overrides):
         account_equity=1_000_000.0,
         account_currency="RUB",
         max_risk_per_trade_pct=0.5,
+        max_risk_per_trade_money=20_000.0,
         max_daily_loss_pct=2.0,
         max_open_risk_pct=1.5,
         max_leverage=3.0,
@@ -35,6 +36,13 @@ def test_risk_gate_blocks_too_many_positions():
     result = evaluate_risk_profile(profile, allocations=allocations)
     assert result.passed is False
     assert any(check.check_id == "positions_count" and not check.passed for check in result.checks)
+
+
+def test_risk_gate_blocks_non_positive_trade_risk_money():
+    profile = _profile(max_risk_per_trade_money=0.0)
+    result = evaluate_risk_profile(profile, allocations=[])
+    assert result.passed is False
+    assert any(check.check_id == "trade_risk_money_positive" and not check.passed for check in result.checks)
 
 
 def test_risk_gate_passes_valid_profile():

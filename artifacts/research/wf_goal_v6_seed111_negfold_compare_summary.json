@@ -1,0 +1,93 @@
+[
+  {
+    "filled": 113,
+    "exp": 76.72123893805309,
+    "net": 8669.5,
+    "all_pos": 15,
+    "all_neg": 12,
+    "all_zero": 26,
+    "tr_pos": 15,
+    "tr_neg": 12,
+    "tr_zero": 0,
+    "traded": 27,
+    "name": "neg8_prob10"
+  },
+  {
+    "filled": 113,
+    "exp": 76.72123893805309,
+    "net": 8669.5,
+    "all_pos": 15,
+    "all_neg": 12,
+    "all_zero": 26,
+    "tr_pos": 15,
+    "tr_neg": 12,
+    "tr_zero": 0,
+    "traded": 27,
+    "name": "neg8_prob15_er10"
+  },
+  {
+    "filled": 122,
+    "exp": 67.99180327868852,
+    "net": 8295.0,
+    "all_pos": 14,
+    "all_neg": 13,
+    "all_zero": 26,
+    "tr_pos": 14,
+    "tr_neg": 13,
+    "tr_zero": 0,
+    "traded": 27,
+    "name": "neg8_norm"
+  },
+  {
+    "filled": 122,
+    "exp": 67.99180327868852,
+    "net": 8295.0,
+    "all_pos": 14,
+    "all_neg": 13,
+    "all_zero": 26,
+    "tr_pos": 14,
+    "tr_neg": 13,
+    "tr_zero": 0,
+    "traded": 27,
+    "name": "neg8_prob20_er15"
+  },
+  {
+    "filled": 103,
+    "exp": 59.01456310679612,
+    "net": 6078.5,
+    "all_pos": 13,
+    "all_neg": 13,
+    "all_zero": 27,
+    "tr_pos": 13,
+    "tr_neg": 13,
+    "tr_zero": 0,
+    "traded": 26,
+    "name": "neg8_strictcov"
+  },
+  {
+    "filled": 117,
+    "exp": 50.74786324786325,
+    "net": 5937.5,
+    "all_pos": 12,
+    "all_neg": 13,
+    "all_zero": 28,
+    "tr_pos": 12,
+    "tr_neg": 13,
+    "tr_zero": 0,
+    "traded": 25,
+    "name": "neg0_norm"
+  },
+  {
+    "filled": 120,
+    "exp": 50.666666666666664,
+    "net": 6080.0,
+    "all_pos": 12,
+    "all_neg": 14,
+    "all_zero": 27,
+    "tr_pos": 12,
+    "tr_neg": 14,
+    "tr_zero": 0,
+    "traded": 26,
+    "name": "neg12_sub14"
+  }
+]

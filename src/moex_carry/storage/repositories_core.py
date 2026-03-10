@@ -125,6 +125,22 @@ def store_signal_history(
     records: list[dict[str, object]],
 ) -> None:
     for record in records:
+        raw_metrics = record.get("signal_metrics")
+        metrics = dict(raw_metrics) if isinstance(raw_metrics, dict) else {}
+        for key in (
+            "strategy_id",
+            "strategy_type",
+            "strategy_stream",
+            "spread_mid",
+            "spread_pct",
+            "spot_mid",
+            "future_mid",
+            "price_now",
+            "execution_price_now",
+            "current_execution_price",
+        ):
+            if key not in metrics and record.get(key) is not None:
+                metrics[key] = record.get(key)
         session.add(
             db.SignalHistoryModel(
                 run_id=run_id,
@@ -135,7 +151,7 @@ def store_signal_history(
                 direction=record.get("signal_direction"),
                 score=float(record.get("signal_score", 0.0)),
                 reasons=record.get("signal_reasons") or [],
-                metrics=record.get("signal_metrics") or {},
+                metrics=metrics,
             )
         )
     session.commit()

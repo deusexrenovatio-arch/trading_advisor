@@ -25,7 +25,7 @@ News intelligence, shock pipelines, and event-driven alerting flows.
 - `src/moex_carry/news_shock_live_input.py`
 - `src/moex_carry/news_shock_live_input_helpers.py`
 - `src/moex_carry/news_shock_schema.py`
-- `src/moex_carry/news_shock_automation.py`
+- `src/moex_carry/news_shock_automation.py` (legacy removal ownership)
 - `src/moex_carry/news_shock_pipeline.py`
 - `src/moex_carry/news_shock_readiness.py`
 - `src/moex_carry/news_shock_store.py`

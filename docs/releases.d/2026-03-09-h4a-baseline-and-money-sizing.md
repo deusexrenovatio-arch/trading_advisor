@@ -1,0 +1,2 @@
+- formalized `H4A_CAP_OFF` as the documented manual execution baseline with an explicit operator contract for fallback, dynamic stop management, and time-stop behavior
+- added money-based sizing research artifacts and comparison tooling for `baseline risk`, `H4A risk`, and scenario reruns

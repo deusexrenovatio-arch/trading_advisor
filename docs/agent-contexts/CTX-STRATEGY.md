@@ -5,6 +5,7 @@ Signal generation, gating, portfolio intent, and decision semantics.
 
 ## Owned Paths
 - `src/moex_carry/strategy/`
+- `src/moex_carry/signal_engine/`
 - `src/moex_carry/selection/`
 - `src/moex_carry/portfolio/`
 - `src/moex_carry/pretrade/`

@@ -1,5 +1,5 @@
 version: 1
-updated_at: '2026-03-09'
+updated_at: '2026-03-10'
 items:
 - task_id: APT-20260306T163854Z-c3d3f52f
   closed_at: '2026-03-06T16:53:22Z'
@@ -476,74 +476,54 @@ items:
   - session_handoff
   start_recommendations:
   - No diff yet. Using request/session intent fallback.
-- task_id: APT-20260309T135814Z-b6d3f31d
-  closed_at: '2026-03-09T14:09:54Z'
-  branch: codex/agent-process-unified-root
+- task_id: APT-20260309T110232Z-dd0144f2
+  closed_at: '2026-03-09T11:02:59Z'
+  branch: codex/signals_engine
   goal_class: ops
   start_primary_context: CTX-OPS
   start_contexts:
   - CTX-OPS
   final_contexts:
   - CTX-OPS
+  - CTX-ORCHESTRATION
   route_match: matched
-  time_to_first_patch_sec: 196
-  same_path_attempts: 2
-  decision_quality: correct_after_replan
-  primary_rework_cause: test_gap
-  incident_signature: none
-  improvement_action: test
-  improvement_artifact: tests/test_agent_process_telemetry.py
-  linked_plan_id: P1-PROCESS-TELEMETRY-UNIFIED-054
-  linked_memory_id: ADM-2026-03-09-093
-  outcome_status: completed
-  unmapped_files_count: 1
-  intent_sources:
-  - session_handoff
-  start_recommendations:
-  - Some files are unmapped. Classify manually before implementation.
-- task_id: APT-20260309T141231Z-b6d3f31d
-  closed_at: '2026-03-09T14:15:03Z'
-  branch: codex/agent-process-unified-root
-  goal_class: ops
-  start_primary_context: CTX-OPS
-  start_contexts:
-  - CTX-OPS
-  final_contexts:
-  - CTX-OPS
-  route_match: matched
-  time_to_first_patch_sec: null
+  time_to_first_patch_sec: 26
   same_path_attempts: 1
   decision_quality: correct_after_replan
-  primary_rework_cause: test_gap
-  incident_signature: none
-  improvement_action: test
-  improvement_artifact: tests/test_agent_process_telemetry.py
-  linked_plan_id: P1-PROCESS-TELEMETRY-UNIFIED-054
-  linked_memory_id: ADM-2026-03-09-093
-  outcome_status: completed
-  unmapped_files_count: 3
-  intent_sources:
-  - session_handoff
-  start_recommendations:
-  - Some files are unmapped. Classify manually before implementation.
-- task_id: APT-20260309T143259Z-b6d3f31d
-  closed_at: '2026-03-09T14:46:03Z'
-  branch: codex/agent-process-unified-root
-  goal_class: ops
-  start_primary_context: CTX-OPS
-  start_contexts:
-  - CTX-OPS
-  final_contexts:
-  - CTX-OPS
-  route_match: matched
-  time_to_first_patch_sec: 124
-  same_path_attempts: 1
-  decision_quality: correct_first_time
-  primary_rework_cause: none
+  primary_rework_cause: workflow_gap
   incident_signature: none
   improvement_action: none
   improvement_artifact: none
-  linked_plan_id: P1-PROCESS-OUTCOME-POLICY-055
+  linked_plan_id: P1-REBASE-GUARD-059
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch is scoped to one context.
+- task_id: APT-20260309T111717Z-dd0144f2
+  closed_at: '2026-03-09T11:54:39Z'
+  branch: codex/signals_engine
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-NEWS
+  route_match: matched
+  time_to_first_patch_sec: 954
+  same_path_attempts: 2
+  decision_quality: correct_after_replan
+  primary_rework_cause: workflow_gap
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-PUSH-GATE-060
   linked_memory_id: null
   outcome_status: completed
   unmapped_files_count: 0
@@ -551,28 +531,184 @@ items:
   - session_handoff
   start_recommendations:
   - No diff yet. Using request/session intent fallback.
-- task_id: APT-20260309T145500Z-b9f1dfef
-  closed_at: '2026-03-09T14:57:27Z'
-  branch: codex/agent-process-unified-root
+- task_id: APT-20260309T121555Z-8f66d731
+  closed_at: null
+  branch: codex/signals_engine
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-OPS
+  route_match: pending
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-H4A-LIVE-062
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260309T140129Z-00900cb9
+  closed_at: '2026-03-09T15:35:11Z'
+  branch: codex/h4a-live-hardening
+  goal_class: api-ui
+  start_primary_context: CTX-API-UI
+  start_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 44
+  same_path_attempts: 2
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: architecture
+  improvement_artifact: src/moex_carry/ui/operator_execution_projection.py
+  linked_plan_id: P1-H4A-LIVE-062
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - CTX-API-UI imports span multiple neighboring contexts. Treat as cross-cutting
+    and keep adapters thin.
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T153851Z-00900cb9
+  closed_at: '2026-03-09T15:40:47Z'
+  branch: codex/h4a-live-hardening
+  goal_class: api-ui
+  start_primary_context: CTX-API-UI
+  start_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  - CTX-OPS
+  final_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: architecture
+  improvement_artifact: src/moex_carry/ui/operator_execution_projection.py
+  linked_plan_id: P1-H4A-LIVE-062
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 12
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - 'CTX-CONTRACTS is combined with other contexts. Use ordered patch series: contracts
+    -> code -> docs.'
+  - CTX-API-UI imports span multiple neighboring contexts. Treat as cross-cutting
+    and keep adapters thin.
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260309T154838Z-00900cb9
+  closed_at: '2026-03-09T15:49:45Z'
+  branch: codex/h4a-live-hardening
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: architecture
+  improvement_artifact: src/moex_carry/ui/operator_execution_projection.py
+  linked_plan_id: P1-H4A-LIVE-062
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch is scoped to one context.
+- task_id: APT-20260309T163108Z-b444b69e
+  closed_at: null
+  branch: codex/h4a-live-hardening
+  goal_class: strategy
+  start_primary_context: CTX-STRATEGY
+  start_contexts:
+  - CTX-STRATEGY
+  - CTX-API-UI
+  - CTX-CONTRACTS
+  final_contexts:
+  - CTX-OPS
+  - CTX-API-UI
+  route_match: pending
+  time_to_first_patch_sec: 772
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-PROCESS-REG-GATE-063
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+  - Intent spans multiple contexts. Set an explicit target module before implementation.
+- task_id: APT-20260310T053413Z-87c636a8
+  closed_at: null
+  branch: codex/signals_engine
   goal_class: ops
   start_primary_context: CTX-OPS
   start_contexts:
   - CTX-OPS
   final_contexts:
   - CTX-OPS
-  route_match: matched
-  time_to_first_patch_sec: null
-  same_path_attempts: 1
-  decision_quality: correct_first_time
+  - CTX-API-UI
+  route_match: pending
+  time_to_first_patch_sec: 59
+  same_path_attempts: 2
+  decision_quality: pending
   primary_rework_cause: none
   incident_signature: none
-  improvement_action: none
-  improvement_artifact: none
-  linked_plan_id: P1-PROCESS-OUTCOME-POLICY-055
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-SIGS-MAIN-MERGE
   linked_memory_id: null
-  outcome_status: completed
-  unmapped_files_count: 4
+  outcome_status: in_progress
+  unmapped_files_count: 0
   intent_sources:
   - session_handoff
   start_recommendations:
-  - Some files are unmapped. Classify manually before implementation.
+  - Patch is scoped to one context.

@@ -2,31 +2,54 @@ version: 1
 updated_at: 2026-03-09
 
 decisions:
+  - id: ADM-2026-03-09-095
+    date: 2026-03-09
+    title: Stage post-burn-in process regression gating around acknowledged baseline debt
+    context: Process telemetry burn-in completed, and the repository started hard-blocking every new task on historical decision-quality and context-efficiency debt even when no fresh regression had been introduced by the current diff.
+    decision: Keep rolling metrics and thresholds intact, but distinguish acknowledged baseline debt from fresh or worsening regressions; allow only explicitly tracked decision-quality and context-efficiency debt to remain non-blocking under an active remediation plan, and return to hard blocking as soon as a new dimension fails or the acknowledged debt worsens by at least one task-equivalent step.
+    impact: Ordinary development can continue without admin bypass while the baseline process debt is being remediated, and governance reports, API payloads, and validator behavior all share one staged policy instead of drifting independently.
+    links:
+      - src/moex_carry/governance/process_reports.py
+      - src/moex_carry/governance/process_report_text.py
+      - scripts/validate_process_regressions.py
+      - plans/PLANS.yaml
+      - docs/runbooks/governance-remediation.md
+  - id: ADM-2026-03-09-096
+    date: 2026-03-09
+    title: "Reprice frozen H4A review artifacts with real maker-taker commissions when local full replay is blocked"
+    context: "User asked to replace abstract H4A commissions with the real broker contract (`0.45 RUB` per executed order per lot) plus MOEX maker-taker exchange fees by futures type, and to stop leaking mini roots into H4A review outputs. The walk-forward runtime was updated for a real fee mode, but a local full `run_h4a_vs_baseline_risk.py` replay still hit the existing `front_selector_empty` environment blocker."
+    decision: "Keep the real commission model in walk-forward for future exact reruns, add the official MOEX taker-fee table and no-mini policy to operator/docs, and make `run_h4a_contract_sizing_review.py` reprice the frozen H4A source artifact with real commissions plus default mini exclusion before resizing quantity. Treat filled `LIMIT` entries as maker unless the frozen artifact timing implies the documented market fallback, and treat filled `STOP_LIMIT` entries as maker at planned entry ticks when the source artifact lacks fallback detail."
+    impact: "The no-mini H4A comparison now preserves trade count while lowering net revenue under real fees: fixed-lot H4A moves from `51.7k RUB` to `48.4k RUB`, risk-only `20_000 RUB` sizing moves from `1.366m RUB` to `1.120m RUB`, fill rate stays `0.8426`, and net win rate moves from `0.9444` to `0.9293`. The review path is now explicit about both the maker-taker tariff contract and the frozen-artifact inference boundary."
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_h4a_contract_sizing_review.py
+      - scripts/run_h4a_vs_baseline_risk.py
+      - artifacts/research/wf_goal_v6_h4a_contract_sizing_20000_risk_only_20260309.json
+      - docs/runbooks/h4a-manual-execution-baseline.md
   - id: ADM-2026-03-09-094
     date: 2026-03-09
-    title: Derive task outcome status from explicit repository policy instead of agent choice
-    context: "Outcome Status was tracked in handoff and the outcome ledger, but the repository only validated allowed values and did not own the classification rule, so subjective closeout choices could distort governance reports and UI counts."
-    decision: "Add configs/task_outcome_policy.yaml as the explicit status matrix, derive status from Decision Quality, require a real unresolved blocker for environment_blocked -> blocked, make sync and telemetry closeout write the derived status, and make validation fail when handoff status disagrees with the policy."
-    impact: "Task closeout semantics are now deterministic and reviewable, blocked tasks require explicit blocker evidence, and the tracked process-governance history no longer depends on ad hoc status wording."
+    title: Use Telegram follow-up confirmations as the H4A baseline guard instead of implicit ACK semantics
+    context: H4A execution had already moved to explicit fill-driven lifecycle states, but documentation and operator-loop coverage still left a gap between post-fill recalculation, Telegram prompts, and auditable confirmation of each required manual step.
+    decision: Treat `mark_viewed` as the canonical Telegram review action, add explicit `confirm_followup` and `manual_override` stage actions for H4A fallback or post-fill monitoring, and isolate operator-event projection logic in a dedicated UI helper so lifecycle reconstruction stays deterministic without keeping more H4A state machinery inside `ui/app.py`.
+    impact: Telegram now covers fallback timeout, recalculated post-fill packet, break-even or trailing triggers, and time-stop monitoring with auditable stage confirmations, while governance artifacts and acceptance catalogs describe the same lifecycle and `ui/app.py` is back under the blocking size limit.
     links:
-      - configs/task_outcome_policy.yaml
-      - scripts/agent_process_telemetry.py
-      - scripts/sync_task_outcomes.py
-      - scripts/validate_task_outcomes.py
-      - tests/test_task_outcomes.py
-      - docs/DEV_WORKFLOW.md
+      - src/moex_carry/ui/operator_execution_projection.py
+      - src/moex_carry/integrations/telegram_h4a_followup.py
+      - docs/signals-business-process.md
+      - docs/test-cases.md
+      - configs/acceptance_scenarios.yaml
+      - configs/user_needs_catalog.yaml
   - id: ADM-2026-03-09-093
     date: 2026-03-09
-    title: Unify local agent-process telemetry at the repository root and add explicit history reconciliation
-    context: Agent-process telemetry had already become an operational governance signal, but hidden worktrees still carried legacy per-worktree `.runlogs/agent-process` shards and prior migration logic could mis-key canonical state to `.runlogs` instead of the owning worktree.
-    decision: Resolve the canonical local telemetry root from the repository's shared git directory, normalize every task scope to the owning worktree path, expose root and `task_id` in `worktree_guard` start output, and add an explicit `agent_process_telemetry.py reconcile` command that merges legacy shards into the canonical store without deleting source logs.
-    impact: All worktrees for the repository now write to one local telemetry store, historical task continuity survives window/worktree changes, and operators can diagnose missing writes or run one deterministic repair pass when old shards are discovered.
+    title: Treat H4A runbook as the normative live execution contract and move operator lifecycle to execution-fact states
+    context: Research and runbook work already promoted `H4A_CAP_OFF` as the preferred execution profile, but runtime signal delivery and UI/API lifecycle still behaved like a coarse `ack`-driven intent model with callback-TTL expiry and no fill-driven recalculation contract.
+    decision: Promote `H4A_CAP_OFF` as the only active baseline in runtime-facing metadata, use `docs/runbooks/h4a-manual-execution-baseline.md` as the execution source of truth, keep `O1` only as a regression reference, replace `ack` semantics with explicit viewed/submitted/filled/cancelled/manual-override states, and treat concentration control as a separate live-routing layer rather than a reason to reintroduce winner caps into the baseline.
+    impact: Manual execution, runtime actionability, and audit trails can now converge on one H4A contract, while legacy `ack` remains only as a compatibility alias and concentration remains controlled by routing/exposure logic instead of baseline distortion.
     links:
-      - scripts/agent_process_telemetry.py
-      - scripts/worktree_guard.ps1
-      - tests/test_agent_process_telemetry.py
-      - tests/test_task_outcomes.py
-      - docs/DEV_WORKFLOW.md
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
   - id: ADM-2026-03-09-092
     date: 2026-03-09
     title: Serve weekly process-improvement reports from the tracked outcome ledger and surface them in a dedicated governance workspace
@@ -831,6 +854,470 @@ decisions:
       - src/moex_carry/pipeline.py
       - docs/session_handoff.md
       - plans/PLANS.yaml
+  - id: ADM-2026-03-09-099
+    date: 2026-03-09
+    title: H4A baseline must be documented as an operator contract, not only as a research label
+    context: User pointed out that trailing stop behavior inside H4A was not explicitly known from the operator side and asked to review subtle human-execution assumptions, then requested that H4A be fixed in documentation as the real baseline.
+    decision: >-
+      Added `docs/runbooks/h4a-manual-execution-baseline.md` and aligned the
+      operator/business-process and research baseline documents so that `H4A` is
+      stated as the active execution baseline with explicit rules for LIMIT
+      fallback, fill-dependent bracket recalculation, break-even lifting,
+      trailing stop movement, time stop, and simulator-only same-bar handling.
+    impact: >-
+      Future human execution and baseline reviews should treat `H4A` as a full
+      operator contract rather than as a short "cap off" nickname. Any promoted
+      baseline with hidden dynamic management now requires explicit operator
+      documentation.
+    links:
+      - docs/runbooks/h4a-manual-execution-baseline.md
+      - docs/signals-business-process.md
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/research/evaluation-policy.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-09-098
+    date: 2026-03-09
+    title: H4A remains an execution-only winner after money-based risk sizing, and its uplift comes entirely from post-fill exits
+    context: User asked to recheck the stronger old execution profile (`H4A_CAP_OFF`) without changing its logic, but now on the corrected money-sizing path, and to compare it directly with the current `baseline risk`.
+    decision: >-
+      Added `scripts/run_h4a_vs_baseline_risk.py` and reran both `baseline risk`
+      and `H4A risk` on the same frozen `O1` reference with `target_risk_pct`
+      sizing. The only execution delta was `max_profit_rr` changing from `0.3`
+      to `0.0`. Results improved from `12.97%` to `20.55%` ROE and from
+      `5.08%` to `8.66%` ROE outside top-3 months, while fill count (`222`),
+      fill rate (`0.8571`), gate mix, and quantity distribution stayed unchanged.
+    impact: Future comparisons should treat `H4A` as the stronger execution reference than `baseline risk` unless concentration controls or stricter stress assumptions reverse the result. The uplift should be interpreted as an exit-path effect after fill, not as a fill-quality or position-sizing effect.
+    links:
+      - scripts/run_h4a_vs_baseline_risk.py
+      - tests/test_h4a_vs_baseline_risk.py
+      - artifacts/research/wf_goal_v6_baseline_risk_recheck_20260309.json
+      - artifacts/research/wf_goal_v6_h4a_risk_20260309.json
+      - artifacts/research/wf_goal_v6_h4a_vs_baseline_risk_20260309.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-07-097
+    date: 2026-03-07
+    title: Use economic lot sizing as the baseline comparison frame, and treat scenario 2 as the strongest tested weak-month improver
+    context: User asked to use lot volume as an active lever because futures contribute unevenly in cash terms, then requested full reruns of the corrected baseline plus scenario 2 and scenario 3 on the same frozen window.
+    decision: Extended `run_morning_plan_walk_forward.py` with explicit `fixed_lots` and `target_risk_pct` sizing modes, propagated `qty_lots` and sizing metadata through simulation/reporting, and added `run_signals_sizing_scenarios.py` to rerun the frozen comparison set in corrected money/ROE units. The completed rerun showed `O1 fixed` at `3.83%` ROE, `O1 risk-sized` at `12.97%`, scenario 2 at `30.89%`, and scenario 3 at `26.81%`; scenario 2 had the strongest weak-month improvement (`median monthly ROE 1.12%`, `ROE ex top3 9.78%`) while scenario 3 mainly improved concentration versus the risk-sized baseline (`top share 0.262` vs `0.283`) but weakened weak-month floor metrics.
+    impact: Future strategy loops should compare variants on economic sizing first, not raw one-lot results. The next stabilizing loop should start from the broader scenario 2 family and pair it with concentration or notional caps, because none of the tested variants comes close to the requested `25%` weak-month floor.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - scripts/run_signals_sizing_scenarios.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_sizing_scenarios_20260307.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-096
+    date: 2026-03-06
+    title: Walk-forward futures economics must default to money/equity metrics instead of raw cross-instrument ticks
+    context: User asked to revisit the current futures baseline because annual profitability depends too much on a few bright trades or months and explicitly noted that raw ticks are not economically comparable across futures with different cash tick values.
+    decision: Extended `run_morning_plan_walk_forward.py` to resolve per-instrument cash tick value from MOEX futures specs, emit additive money and return-on-equity fields in planned-signal and summary outputs, and make concentration plus train-selection logic prefer money metrics whenever they are available while retaining legacy tick fields for compatibility.
+    impact: Future strategy comparisons, concentration checks, and weak-month diagnostics can be judged on economically comparable units instead of raw point totals, which reduces cross-instrument distortion without forcing an immediate baseline re-optimization.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-095
+    date: 2026-03-06
+    title: Treat thin roots as cause-based diagnostics and record index-heavy silent cluster on 2025-2026
+    context: User asked to keep the current thin-root policy only provisionally, then requested a late-period check on `2025-2026` and noted that the roots sent to review looked like index instruments rather than commodities.
+    decision: Reclassify sparse roots by cause instead of by one aggregate `thin-sample` label. Keep `FF (TTF Gas)`, `CE (Copper)`, `NC (Nickel)`, `AN (Aluminum)`, and `KC (Coffee)` as `late-launch but active`; keep `DJ (Dow Jones)` and `SU (Sugar)` as `sparse-trigger but active`; and record `N2 (Nikkei 225)`, `SF (S&P 500)`, `DX (DAX)`, and `SX (Euro Stoxx 50)` as a `current-regime silent` cluster on `2025-2026`.
+    impact: Future universe-pruning decisions must not treat sparse roots as one homogeneous failure mode. The late-period silent cluster should be investigated as an index-family regime-fit question before any root-level pruning, and app-facing histogram artifacts should be published in a renderable format (`png`) as well as `svg`.
+    links:
+      - artifacts/research/wf_goal_v6_h4a_cap_off_full_2020_2026_20260306.json
+      - artifacts/research/h4_no_minis_monthly_revenue_histogram_20260306.png
+      - docs/research/evaluation-policy.md
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-094
+    date: 2026-03-06
+    title: Exclude mini-contract duplicates and promote H4 after no-mini historical validation
+    context: User requested a historical re-check without duplicated full-plus-mini exposure for the same underlying and agreed that H4 promotion looked reasonable if the result survived that correction.
+    decision: Added a post-run analyzer to exclude mini roots by default (`BM`, `GN`, `NR`, `RM`, `S1` when the corresponding full root exists), recomputed the historical profile comparison on the cleaned universe, and promoted `H4A_CAP_OFF` as the working execution baseline because it still dominates `O1` on both `2020-2024` and `2020-2026`.
+    impact: Whole-universe execution evaluation no longer double-counts mini contracts, runtime defaults now align with the strongest no-mini historical profile, and future reviews should treat mini exclusion as default universe hygiene.
+    links:
+      - scripts/analyze_execution_profiles_historical_review.py
+      - artifacts/research/wf_goal_v6_execution_profiles_historical_review_no_minis_2020_2026_20260306.json
+      - docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+      - src/moex_carry/config.py
+      - tests/test_config_loading.py
+      - docs/research/evaluation-policy.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-093
+    date: 2026-03-06
+    title: Historical profile review must include full-calendar month accounting and shows H4 broad uplift
+    context: User requested historical regime validation on `2020-2024`, per-instrument quality, and a calendar slice rather than relying only on the short original ladder window or active-month-only summaries.
+    decision: Backfilled `2020-2022`, reran `O1` / `H3B_SL_3P0` / `H4A_CAP_OFF` on valid `2020-2026` coverage using historical `SECID` expansion, and fixed the reporting contract so month diagnostics distinguish active trading months from flat no-fill calendar months. On the resulting whole-universe review, `H4A_CAP_OFF` dominates `O1` on both `2020-2024` and `2020-2026`, improves `26/27` active roots, and still wins after removing `PD`.
+    impact: Historical execution-profile conclusions are now based on valid old-regime coverage rather than modern-contract leakage, and future calendar reporting must disclose silent months explicitly. `H4A_CAP_OFF` now has broad economic evidence as the strongest candidate, but runtime baseline remains a separate explicit decision.
+    links:
+      - scripts/prefetch_historical_front_contracts.py
+      - scripts/run_execution_profiles_historical_review.py
+      - artifacts/research/wf_goal_v6_historical_front_contract_prefetch_2020_2022_20260306.json
+      - artifacts/research/wf_goal_v6_execution_profiles_historical_review_2020_2026_20260306.json
+      - docs/research/execution-profiles-historical-review-2026-03-06.md
+      - docs/research/evaluation-policy.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-092
+    date: 2026-03-06
+    title: Require whole-universe, no-dominant-top, and per-root diagnostics for execution research
+    context: User clarified that aggregate concentration alone is not enough to judge regime quality and that future execution conclusions must stay valid both with dominant tops included and with them removed.
+    decision: Keep the whole-universe result as the primary view, but whenever concentration is material add a supplemental no-dominant-top diagnostic and report quality per root or instrument before calling an uplift structural.
+    impact: Future execution reviews must explain whether a candidate survives removal of dominant contributors and which roots actually carry the quality, instead of relying on aggregate net alone.
+    links:
+      - artifacts/research/wf_goal_v6_h24_o1_h3_h4_compare_without_dominant_root_20260306.json
+      - docs/research/evaluation-policy.md
+      - docs/research/o1-execution-hypothesis-program-2026-03-06.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-091
+    date: 2026-03-06
+    title: Complete O1-relative execution ladder and keep O1 as baseline
+    context: User requested the full `H0`-`H5` execution research program to be run end-to-end against frozen `O1`, with conclusions fixed in repo memory before the next optimization cycle.
+    decision: Added a deterministic runner for the O1-relative ladder, completed `H0`-`H5` on the frozen front-nearest window, and kept `O1` as baseline because no tested candidate improved net revenue while also satisfying the same hard concentration constraint. `H1` and `H2` were noisy/inert, `H3` stop widening and `H4` RR-cap removal improved revenue but worsened concentration, `H4` absolute caps repaired concentration but destroyed too much net, and `H5` remained sensitivity-only/disallowed.
+    impact: "Execution research is now narrowed to one unresolved problem: concentration-aware control of the revenue levers exposed by `sl_rr` and `max_profit_rr`. Future loops should not reopen fill-quality, break-even, trailing, or same-bar assumptions as primary axes on this frozen window."
+    links:
+      - scripts/run_o1_execution_hypothesis_program.py
+      - artifacts/research/wf_goal_v6_h24_o1_execution_hypothesis_ladder_20260306.json
+      - docs/research/o1-execution-hypothesis-results-2026-03-06.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-090
+    date: 2026-03-06
+    title: Restrict execution optimization to O1-relative economic levers and sequential family tests
+    context: User clarified that the goal of execution research is larger net revenue versus baseline, and requested that conclusions about useful versus misleading levers be fixed in durable project memory before the next hypothesis loop.
+    decision: Treat `O1` as the only comparison anchor, optimize first on fill-quality and trade-management levers, delay bracket-clipping levers until later, and forbid cost multipliers or same-bar policy from being used as primary optimization axes; run hypotheses one family at a time and record a verdict for each family before moving on.
+    impact: "Future execution research now has a deterministic ladder: economically credible levers first, simulator-assumption levers only as sensitivity checks, and every claimed improvement must explain how it beats O1."
+    links:
+      - docs/research/o1-execution-hypothesis-program-2026-03-06.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-089
+    date: 2026-03-06
+    title: Fix O1 as the primary execution baseline and require O1-relative drift sign-off
+    context: User decided to anchor the branch on the working O1 execution profile and measure every later execution change against O1 rather than against incidental merged defaults or temporary legacy fallback.
+    decision: Set `SignalEngineMorningExecutionConfig` defaults to the O1 profile, keep O1 as the reference baseline for runtime and research comparisons, and require any future rebase or execution-profile change to include a written drift analysis and accept/reject decision relative to O1.
+    impact: The repository has one explicit execution baseline again; default runtime, walk-forward runs, and future drift reviews now share the same O1 reference point.
+    links:
+      - src/moex_carry/config.py
+      - tests/test_config_loading.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O1_limitfallback10m1t_frontnearest_seed124_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-088
+    date: 2026-03-06
+    title: Split live signals by strategy stream end-to-end for API actionability and Telegram delivery
+    context: User asked to separate arbitrage and commodity-futures signals in the existing live paper-forward contour while preserving current Telegram format and ACK flow.
+    decision: Added normalized strategy metadata propagation (`strategy_id`, `strategy_type`, `strategy_stream`) from runtime adapter into API actionability payloads, strategy-aware signal fingerprinting, and Telegram worker stream-aware cooldown/daily keys plus strategy label in messages.
+    impact: Live contour can now filter and track signals per strategy stream without cross-stream dedupe collisions; operator can query actionability by stream and receive Telegram messages tagged by strategy.
+    links:
+      - src/moex_carry/strategy/two_layer_adapter.py
+      - src/moex_carry/ui/app.py
+      - src/moex_carry/signals_ack.py
+      - src/moex_carry/integrations/telegram_strategy.py
+      - src/moex_carry/integrations/telegram_worker.py
+      - tests/test_api_v2.py
+      - tests/test_telegram_worker.py
+      - tests/test_signal_cycle.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-099
+    date: 2026-03-06
+    title: Harden live paper-forward launcher with automatic raw-data bootstrap on forward-start failure
+    context: Operator launch of `/api/forward/start` failed with `400 Missing raw data` even though signal refresh path was reachable on live MOEX contour.
+    decision: Updated `scripts/start_forward_paper_live.ps1` to load local env (`scripts/moex-carry.local.ps1`) by default, resolve Python executable, and on `Missing raw data` run `moex_carry.cli fetch` then retry `/api/forward/start` once automatically.
+    impact: One-command launch now reaches `forward status=ready` from a cold raw-data state without manual fetch steps, while preserving existing Telegram signal formatting and API contracts.
+    links:
+      - scripts/start_forward_paper_live.ps1
+      - README.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-098
+    date: 2026-03-06
+    title: Revert execution default from O4 cap to O1 and add live paper-forward launch orchestration
+    context: User confirmed O1 dominates O4 on the same trade set and requested signals-only operation with existing Telegram format plus forward-test launch from today on live MOEX contour.
+    decision: Switched `SignalEngineMorningExecutionConfig.max_profit_ticks` default from `120` to `0` (O1 behavior), added `scripts/start_forward_paper_live.ps1` to orchestrate backend startup, manual live signal refresh, optional Telegram worker start, and forward run initialization for current date, and documented the operator flow in `README.md`.
+    impact: Default runtime no longer clips profitable tails by hard absolute TP cap; operator can launch a reproducible live paper-forward contour from one command while preserving current Telegram message contract.
+    links:
+      - src/moex_carry/config.py
+      - scripts/start_forward_paper_live.ps1
+      - README.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-06-097
+    date: 2026-03-06
+    title: Fix O4 execution winner as default morning-plan policy and verify against M3
+    context: User requested to lock the execution winner after O4 had already shown hard-go robustness on full/split/multi-seed causal checks.
+    decision: Promoted O4 parameter set into `SignalEngineMorningExecutionConfig` defaults in `src/moex_carry/config.py` (break-even, TP/SL RR, max holding, TP caps, trailing, same-bar, limit fallback, and outcome-cost multipliers), then reran direct O4 vs M3 comparison on the same front-nearest baseline universe.
+    impact: New default causal execution behavior now aligns with the validated winner profile without CLI override drift; fresh comparison confirms O4 dominates M3 and is acceptance-safe (`O4 pass=true` vs `M3 pass=false` from concentration fail).
+    links:
+      - src/moex_carry/config.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_M3_frontnearest_seed124_20260306.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_frontnearest_seed124_20260306.json
+      - artifacts/research/wf_goal_v6_h24_execution_profile_compare_O4_vs_M3_seed124_20260306.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-084
+    date: 2026-03-05
+    title: Close causal hard-go robustness with LIMIT fallback and absolute TP cap execution semantics
+    context: After correcting to the baseline context, fixed execution profile `M3` passed on full window but failed robustness splits (`P1` trades-per-week/concentration and `P2` winrate), with probability gate intentionally removed.
+    decision: Extend `run_morning_plan_walk_forward.py` execution model with LIMIT fallback-to-market controls (`limit_fallback_to_market_minutes`, `limit_fallback_slip_ticks`) and absolute TP cap (`max_profit_ticks`), keep defaults backward compatible, and iterate execution-only causal reruns; accept profile `O4` (`fallback=10m/1t`, `max_profit_ticks=120`) as current robust profile.
+    impact: Hard-go constraints now pass simultaneously on full period, both split periods, and additional seeds (72/111) under causal walk-forward without probability gate, while preserving deterministic fixed-profile replay speed.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_P1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_P2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed72_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed111_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-089
+    date: 2026-03-05
+    title: Reach causal hard-go on seed124 via execution-only semantics (no probability, no routing/filter additions)
+    context: Filter-only and routing-focused reruns remained below hard winrate target, so the loop pivoted to pure execution semantics (TP/SL/exit/fill/cost behavior) per user request.
+    decision: Extended `run_morning_plan_walk_forward.py` with execution controls for bracket reshaping (`tp_rr/sl_rr`), time/exit controls (`max_holding_minutes`, trailing, same-bar policy), fill quality (`limit_entry_improve_ticks`), and outcome-aware costs (`tp/sl/exit_cost_mult`) plus `max_profit_rr`; added deterministic `execution_fixed_v1` profile and iterated causal reruns until hard-go passed on seed124.
+    impact: Causal execution profile `M3` reached `acceptance.passed=true` on target window (`win_rate_net=0.7574`, `trades_per_week=3.8529`, `concentration_top_share=0.4622`), proving the objective can be achieved through execution semantics without probability gate; next risk is robustness across additional seeds/windows.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_executionsem_v3_entryimprove_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_L_kplus_improve1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_M3_cap03_seed124_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-088
+    date: 2026-03-05
+    title: Add expert trade/skip layer and regime-expert search profile; confirm hard winrate remains limiting factor
+    context: After proving filter-space exhaustion with fast multi-seed verifier, the next hypothesis was to move from pure post-filtering to structural routing in causal runs.
+    decision: Extended `run_morning_plan_walk_forward.py` with JSON-driven `ExpertGateConfig` (rule matching by setup/side/slot/root/cluster/instrument plus risk/target thresholds), added `intraday_goal_regime_experts_v1` cluster-specific HPO profile, and executed new causal reruns on seed124 (expert-gate run and regime-expert runs with/without probability gate).
+    impact: Structural routing is now integrated in the causal runner and reproducible, but current strategy still fails `hard_min_win_rate_net` (best structural run around `0.524` winrate), and even fast post-run filter search on the new artifact found `0` `final_go` candidates; next search space must shift to execution-model changes (TP/SL/exit semantics), not more filter/routing tuning.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_h24_expert_policy_v1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_causalfirst_expert_v1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_expert_v1_seed124_filter_search_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_noprob_seed124_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-087
+    date: 2026-03-05
+    title: Complete fast multi-seed causal filter search and confirm filter-space exhaustion for current strategy
+    context: After speeding up hypothesis verification, remaining requirement was to execute full multi-seed validation loop (not single-artifact checks) and determine whether final-go targets are reachable via filter-only search.
+    decision: Added `search_wf_hypothesis_multi_seed.py` with early pruning and causal-first ranking; ran large sweeps over causal baselines (`seed72/111/124`) for `final_go`/`stage_go`, including targeted neighborhood search around known ORB root-set hypotheses.
+    impact: Search throughput is now high enough for six-figure candidate sweeps, and evidence shows no filter candidate reaches `final_go` even at `pass>=1` across current causal baselines; next iterations must shift to structural strategy changes rather than more filter-axis sweeps.
+    links:
+      - scripts/search_wf_hypothesis_multi_seed.py
+      - tests/test_search_wf_hypothesis_multi_seed.py
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass1_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass3_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_search_stagego_pass2_20260305.json
+      - artifacts/research/wf_goal_v6_h24_multiseed_targeted_search_finalgo_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-086
+    date: 2026-03-05
+    title: Move WF hypothesis verification to signal-tape engine and validate 44x throughput uplift
+    context: Strategy loops required thousands of deterministic hypothesis checks on `planned_signals`, and legacy verifier rescanned raw rows for each candidate, creating a bottleneck for iterative causal validation.
+    decision: Added signal-tape/bitset path to `verify_wf_hypothesis.py` with engine switch (`tape|legacy`), lite-summary and rejection-count pruning knobs, plus dedicated batch evaluator and benchmark scripts; validated parity against legacy path and measured throughput on 8,192 candidates.
+    impact: Hypothesis verification loop is no longer a blocking runtime stage; benchmark shows `44.14x` speedup (`19.99s -> 0.45s`) with `0` parity mismatches, enabling much denser candidate sweeps before expensive causal reruns.
+    links:
+      - scripts/verify_wf_hypothesis.py
+      - scripts/evaluate_wf_hypothesis_batch.py
+      - scripts/benchmark_wf_hypothesis_engines.py
+      - tests/test_verify_wf_hypothesis.py
+      - artifacts/research/wf_goal_v6_verify_engine_benchmark_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-085
+    date: 2026-03-05
+    title: Add root/instrument precision filters and validate causal rerun reproducibility limits
+    context: Post-hoc verifier found one `final_go`-passing filtered hypothesis on `h24`, but direct causal reruns with existing precision controls could not reproduce target thresholds.
+    decision: Extended precision filter in `run_morning_plan_walk_forward.py` with `--precision-allow-root` and `--precision-allow-instrument`, added tests for root/instrument gating, and ran multiple causal reruns (integrated filter, seed sweeps, baseline reruns with post-filter checks).
+    impact: Tooling now supports causal root/instrument gating, but current filter-only strategy still misses target in causal mode (`winrate` and `tpw` shortfall); evidence indicates next iteration must move constraints into train-objective/selection logic, not only precision gate.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_orb_energy_other_roots17_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_seed_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_filtered_finalgo_check_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_posthoc_autosearch_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_local_neighborhood_search_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed_sweep_20260305.json
+      - artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_111_posthoc_compare_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-078
+    date: 2026-03-05
+    title: Reach final-go hypothesis on H24 via iterative root-level search and record stability gap
+    context: Slot/side precision sweeps were insufficient to hit `final_go`; user requested continued testing/iteration until goal thresholds were reached.
+    decision: Performed focused iterative auto-search across constrained artifacts with root-level hill-climb and verified best candidate using deterministic verifier; accepted passing hypothesis on `h24` (`ORB_BREAKOUT`, clusters `energy+other`, slots `12:00/14:15`, 17-root whitelist), then ran cross-artifact check with identical filter.
+    impact: Goal thresholds are now reached on `h24` (`win_rate_net=0.7523`, `trades_per_week=2.0790`, positive net, low concentration), but portability remains limited because the same filter fails neighboring artifacts and multi-report same-config sweep yields `max_passes=0`; next loop must validate causal rerun and OOS stability before promoting as strategy baseline.
+    links:
+      - artifacts/research/wf_goal_v6_iterative_autosearch_focus_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_h24_orb_energy_other_roots17_finalgo_pass_20260305.json
+      - artifacts/research/wf_goal_v6_h24_candidate_crosscheck_20260305.json
+      - artifacts/research/wf_goal_v6_multireport_config_sweep_20260305.json
+      - scripts/verify_wf_hypothesis.py
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-077
+    date: 2026-03-05
+    title: Add deterministic WF hypothesis verifier with explicit pass/fail gates and baseline-candidate verdict
+    context: Strategy iteration required strict, reproducible hypothesis checks on `planned_signals` instead of ad-hoc notebook snippets and manual metric inspection.
+    decision: Added `scripts/verify_wf_hypothesis.py` with deterministic filters (setup/side/slot/cluster/root/instrument plus side-slot exclusions), walk-forward-aligned metrics (`win_rate_net`, `trades_per_week`, concentration), and explicit gate profiles (`stage_go`, `final_go`) with machine-readable verdicts; added focused tests and produced two artifact checks for the current ORB candidate.
+    impact: Each hypothesis can now be evaluated with the same command contract and auditable JSON outputs; current candidate (`ORB_BREAKOUT`, cluster `other`, slots `12:00/14:15`, exclude `BUY@12:00`) passes `stage_go` and fails `final_go`; compact neighbor sweep (`77` variants) found `0` `final_go` passes, narrowing next optimization scope to structural uplift beyond slot/side filtering.
+    links:
+      - scripts/verify_wf_hypothesis.py
+      - tests/test_verify_wf_hypothesis.py
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_stagego_20260305.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_finalgo_20260305.json
+      - artifacts/research/wf_goal_v6_hypothesis_orb_other_slot_sweep_finalgo_20260305.json
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-05-076
+    date: 2026-03-05
+    title: Optimize futures signal-validation walk-forward runtime via indexed minute windows and context-scoped probability cache
+    context: Futures signal-check runs in `run_morning_plan_walk_forward.py` remained slow due to repeated full `m5` scans per setup and repeated probability forecast passes over growing history.
+    decision: Refactor hot path to use `bisect`-based minute-bar slicing in `_simulate_setup`, keep cached `m5` timestamps in `WindowEvalCache`, index history by probability context inside `_evaluate_window`, and reuse forecast result for allow-path planned signals instead of recomputing; align default `--retune-every-folds` with baseline (`3`).
+    impact: Setup simulation avoids full-list scans, probability gate avoids global-history scans and duplicate forecasts, and default fold retuning cadence now follows the baseline speed profile without changing signal semantics.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - docs/session_handoff.md
+      - plans/PLANS.yaml
+
+  - id: ADM-2026-03-04-081
+    date: 2026-03-04
+    title: Expand morning-plan recall families and enforce hard-goal acceptance, then map feasible frontier
+    context: Precision-only loops were unable to satisfy the joint target (`winrate>=0.75` and `~2 trades/week`), while baseline acceptance remained optimistic without explicit hard constraints and concentration accounting.
+    decision: Added hard-goal scoring/acceptance controls, introduced new setup families (`ORB_BREAKOUT`, `EMA_PULLBACK_LIMIT`), added per-setup `time_stop_minutes`, and ran constrained WF iterations H18-H23 with deterministic artifacts.
+    impact: Pipeline now supports structural recall experiments and hard KPI gating; empirical frontier is documented (`win~0.58-0.62` at `tpw~1-4`) and confirms current geometry is insufficient for `75%` target without a new two-stage policy; added VWAP family currently shows zero effective coverage in isolated probes.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/signal_engine/setups/extended_families.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_setups.py
+      - artifacts/research/wf_goal_v6_h18_recall_families_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h23_orb_sell_prob_precision_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h26c_vwap_forced_constrained_20260304.json
+      - artifacts/research/wf_goal_v6_h18_h26_iteration_summary_20260304.json
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
+
+  - id: ADM-2026-03-04-080
+    date: 2026-03-04
+    title: Shift WF improvement roadmap to constrained multi-objective methodology (winrate + frequency + concentration)
+    context: Chat-Pro review plus local scans showed simple precision filters cannot satisfy the combined target (`winrate>=75%` and `~2 trades/week`) on current setup space.
+    decision: Fix a new methodology stack with constrained optimization, anti-data-snooping tests (White RC / SPA / MCS), regime-conditional validation, and a recall-first hypothesis queue before precision filtering.
+    impact: Next hypothesis cycles are now evaluated against joint constraints and robustness, reducing repeated low-frequency overfit loops.
+    links:
+      - docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+      - artifacts/research/wf_goal_v6_methodology_probe_20260304.json
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
+
+  - id: ADM-2026-03-04-079
+    date: 2026-03-04
+    title: Validate precision-filter hypotheses in full causal reruns and select H3 as current precision candidate
+    context: After adding precision-filter controls, offline H1 estimate looked promising but needed end-to-end confirmation under causal walk-forward retuning.
+    decision: Run sequential full reruns (H1-H5) on frozen v6 baseline spec and persist comparison artifact; accept H3 (`min_risk_ticks=114`, `min_target_return_pct=1.5`, `dedup`) as current precision-first candidate because it meets winrate target and has highest net among target-meeting variants.
+    impact: Winrate target (`>=75%`) is now achieved in causal mode (`H3=87.5%`, `H5=77.8%`), while remaining risks (low trade count and instrument concentration) are explicit and tracked for next hypothesis cycle.
+    links:
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp2_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp3_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp4_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_hyp5_precision_filter_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_precision_hypothesis_compare_20260304.json
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - docs/session_handoff.md
+
+  - id: ADM-2026-03-04-078
+    date: 2026-03-04
+    title: Add precision-filter gate to walk-forward runner and lock first hypothesis artifact
+    context: Baseline analysis showed duplicate setup_id rows across decision slots and unstable winrate concentration, while requested target is precision-first improvement with explicit impact tracking.
+    decision: Extend `run_morning_plan_walk_forward.py` with optional precision filter controls (`--enable-precision-filter`, side/setup/stop/time allowlists, `min_risk_ticks`, `min_target_return_pct`, and `--precision-dedup-setup-ids`) and serialize filter config in `tuning_points`; evaluate Hypothesis #1 (`min_risk_ticks>=114 + dedup`) on baseline planned signals and persist results artifact.
+    impact: Team can run controlled precision experiments without changing default baseline path, and each hypothesis now has deterministic metrics artifact to prevent repeated analysis loops.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_hyp1_precision_filter_eval_20260304.json
+      - plans/PLANS.yaml
+      - docs/session_handoff.md
+
+  - id: ADM-2026-03-04-077
+    date: 2026-03-04
+    title: Freeze v6 walk-forward baseline and retire non-performing tuning axes
+    context: Latest full-window reruns on 66 instruments showed result drift versus earlier artifacts, and several added tuning axes produced no measurable uplift.
+    decision: Select `robust_median_mad + objective_negative_fold_penalty=8` as active morning-plan baseline for `28/7/7` weekly causal WF; remove `intraday_goal_v4_clustered` and `fold_stability` from active CLI choices; keep probability-gate code but stop threshold-only retunes until structural signal changes.
+    impact: Baseline is now explicit and reproducible, tuning surface is smaller, and non-productive experiment loops are blocked by documented do-not-retest decisions.
+    links:
+      - docs/research/wf-baseline-v6-decisions-2026-03-04.md
+      - scripts/run_morning_plan_walk_forward.py
+      - tests/test_morning_plan_walk_forward.py
+      - artifacts/research/wf_goal_v6_mad_neg8_seed111_wt_signal_engine_rerun_20260304.json
+      - artifacts/research/wf_goal_v6_negpen0_seed111_wt_signal_engine_rerun_20260304.json
+
+  - id: ADM-2026-03-04-076
+    date: 2026-03-04
+    title: Add cluster-aware fold-stability objective and strict WF acceptance to morning-plan walk-forward
+    context: Wide-universe runs needed stable behavior across folds, with lower negative-period incidence and conservative tail-risk handling without per-instrument overfit.
+    decision: Extend morning-plan WF runner with cluster-prefixed params (`cluster.<name>.*`), fold-stability objective (median subfold net ticks + negative subfold + tail-risk penalties), KPI penalties (SL/EXIT rates), strict WF controls (embargo/purge), fixed holdout evaluation, acceptance summary, and cost stress multiplier; add execution knobs for TTL and stop-limit fallback and corresponding tests.
+    impact: Hyperparameter selection can now optimize for stability (not single lucky windows), tune per cluster (energy/metals), and enforce acceptance by fold robustness under stressed costs.
+    links:
+      - scripts/run_morning_plan_walk_forward.py
+      - src/moex_carry/signal_engine/setups/generator.py
+      - src/moex_carry/config.py
+      - tests/test_morning_plan_walk_forward.py
+      - tests/test_signal_engine_setups.py
+      - docs/hpo-howto.md
+
 incidents:
   - id: AMI-2026-02-20-001
     date: 2026-02-20

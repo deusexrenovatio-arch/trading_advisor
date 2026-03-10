@@ -8,6 +8,18 @@ and the async API endpoints (`/api/hpo/run`, `/api/hpo/status`).
 - Reference data under `data/raw/` (`shares.csv`, `futures.csv`, `key_rates.csv`).
 - Dependencies installed (`pip install -e .[dev]`).
 
+## Morning-plan baseline (current)
+- Canonical baseline decisions are tracked in:
+  - `docs/research/wf-baseline-v6-decisions-2026-03-04.md`
+- Active default runner profile is aligned to `v6` baseline:
+  - weekly causal walk-forward (`train/test/step = 28/7/7`),
+  - `cost_aware_v2` + `intraday_goal_v3`,
+  - robust objective with negative-subfold penalty.
+- Retired from active tuning loop:
+  - `intraday_goal_v4_clustered`,
+  - `fold_stability` objective,
+  - probability-gate threshold-only sweeps (no measurable effect in latest reruns).
+
 ## 1) Prepare a base BacktestRequest
 Create a YAML file with a minimal Backtest v2 request:
 
@@ -114,7 +126,17 @@ You can switch the metric and mode:
   `win_rate`, `profit_factor`, `avg_hold_days`, `share_alpha_exits`,
   `r_d`, `b_d`, `ex_d`, `sharpe`.
 - `mode`: `max` or `min`.
-
+- For fold-stability optimization (fewer negative validation windows), use:
+  - `optimization.negative_fold_penalty` (for example `0.3` to `1.0`)
+  - `optimization.negative_fold_threshold` (usually `0.0`)
+  - `optimization.negative_fold_metric` (for example `portfolio_excess_ann`)
+  - `optimization.hard_max_negative_fold_share` (for example `0.35`)
+  - `optimization.aggregation=p25` (more conservative than median)
+  - Runtime acceleration knobs (for fast screening before final refit):
+    - `optimization.parallel_fold_workers` (set to CPU cores available for fold-level parallelism)
+    - `optimization.max_fold_evaluations_per_trial` (for example `2..4` instead of full fold count)
+    - `optimization.refit_top_n_full_folds` (for example `5..15` best trials rechecked on full folds)
+    - Typical speedup is multiplicative: fewer folds per trial * fold parallelism (10x+ is realistic on medium/large fold counts).
 ### 3.2 Portfolio utility objective (default)
 
 ```

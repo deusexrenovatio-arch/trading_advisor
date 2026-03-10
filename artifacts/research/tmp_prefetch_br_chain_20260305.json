@@ -1,0 +1,43 @@
+{
+  "generated_at": "2026-03-05T13:58:31.926333+00:00",
+  "mode": "cache_prefetch_only",
+  "instruments": [
+    "BRH6",
+    "BRM6",
+    "BRZ5"
+  ],
+  "reporting_instruments": [
+    "BR"
+  ],
+  "instrument_mode": "front_nearest",
+  "front_roll_avoid_expiry_days": 3,
+  "cache": {
+    "enabled": true,
+    "cache_db": "data\\cache\\morning_plan_candles.sqlite",
+    "offline_only": false,
+    "refresh_cache": false,
+    "stats": {
+      "network_fetch_calls": 9,
+      "network_rows": 748,
+      "cache_rows_loaded": 748,
+      "cache_rows_written": 748
+    }
+  },
+  "payload_sizes": {
+    "BRH6": {
+      "d1": 15,
+      "h1": 42,
+      "m5": 62
+    },
+    "BRM6": {
+      "d1": 0,
+      "h1": 0,
+      "m5": 0
+    },
+    "BRZ5": {
+      "d1": 67,
+      "h1": 217,
+      "m5": 273
+    }
+  }
+}

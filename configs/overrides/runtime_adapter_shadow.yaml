@@ -1,0 +1,5 @@
+signal_engine:
+  runtime_adapter:
+    enabled: true
+    override_signal_fields: false
+    synthetic_history_cap: 2000

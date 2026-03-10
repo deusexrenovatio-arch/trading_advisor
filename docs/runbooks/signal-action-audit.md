@@ -1,7 +1,7 @@
 # Signal Action Audit Runbook
 
 ## Scope
-Incident handling for signal actions (`ack|enter|exit|hold_open`) and audit discrepancies.
+Incident handling for signal actions (`mark_viewed|enter_submitted|enter_filled|entry_cancelled|exit_submitted|exit_filled|manual_override`) and audit discrepancies.
 
 ## Primary artifacts
 - API:
@@ -28,6 +28,11 @@ Incident handling for signal actions (`ack|enter|exit|hold_open`) and audit disc
 - Action persisted but lifecycle not refreshed due to stale run snapshot.
 - Entry blocked by fail-closed policy (`ISS_DEGRADED_FAIL_CLOSED`, `PRETRADE_NOT_CONFIRMED`).
 - One-leg execution remains open past timeout and needs auto-unwind.
+- Review action was recorded, but fill-dependent H4A bracket fields were never written after `enter_filled`.
+- Legacy/raw action notes were written without full v2 envelope, so lifecycle had to be reconstructed from pair-level execution evidence.
+- `exit_filled` was recorded without explicit H4A taxonomy (`tp_limit|initial_loss_sl|protective_sl|time_stop_180m|same_bar_ambiguous|entry_fallback_market|manual_override`).
+- `entry_fallback_due` fired, but the operator never confirmed fallback-to-market or deviation handling.
+- Break-even, trailing, or time-stop follow-up fired, but no `confirm_followup` or `manual_override` was recorded for the stage.
 
 ## Recovery actions
 - Duplicate submit:
@@ -41,6 +46,11 @@ Incident handling for signal actions (`ack|enter|exit|hold_open`) and audit disc
   - Apply privileged override only with explicit reason and audit.
 - Stale leg imbalance:
   - Run `POST /api/v2/policies/auto-unwind/run` (`dry_run` first, then execute).
+  - Auto-unwind must be recorded as `exit_reason_code=manual_override` with the policy reason kept in `reason_code`.
+- H4A follow-up mismatch:
+  - Rebuild operator lifecycle from `signal_executions`.
+  - Compare `enter_submitted_at`, `enter_filled_at`, `fill_ts`, `time_stop_deadline_ts`, and `confirm_followup` stages with the Telegram follow-up sequence.
+  - If operator left the baseline path, record `manual_override` explicitly rather than keeping `baseline_h4a`.
 
 ## Escalation
 - P1: Wrong lifecycle blocks/permits execution.

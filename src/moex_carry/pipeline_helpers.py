@@ -122,6 +122,7 @@ def _risk_profile_from_settings(settings: AppSettings) -> RiskProfile:
         account_equity=profile.account_equity,
         account_currency=profile.account_currency,
         max_risk_per_trade_pct=profile.max_risk_per_trade_pct,
+        max_risk_per_trade_money=profile.max_risk_per_trade_money,
         max_daily_loss_pct=profile.max_daily_loss_pct,
         max_open_risk_pct=profile.max_open_risk_pct,
         max_leverage=profile.max_leverage,

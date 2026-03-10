@@ -1,0 +1,98 @@
+{
+  "generated_at_utc": "2026-03-05T13:36:39.823164+00:00",
+  "hypothesis": {
+    "include_setup_kinds": [
+      "ORB_BREAKOUT"
+    ],
+    "include_clusters": [
+      "energy",
+      "other"
+    ],
+    "include_slots": [
+      "12:00",
+      "14:15"
+    ],
+    "include_roots": [
+      "AN",
+      "BR",
+      "CC",
+      "CE",
+      "DX",
+      "FF",
+      "HS",
+      "MM",
+      "MX",
+      "NC",
+      "NG",
+      "RI",
+      "S1",
+      "SA",
+      "SU",
+      "SX",
+      "ZC"
+    ],
+    "gate_profile": "final_go"
+  },
+  "results": [
+    {
+      "artifact": "wf_goal_v6_h15_constrained_precision_recall_rerun_20260304.json",
+      "selected_rows": 0,
+      "filled_trades": 0,
+      "win_rate_net": 0.0,
+      "trades_per_week": 0.0,
+      "net_ticks_sum": 0.0,
+      "concentration_top_share": 0.0,
+      "final_go_passed": false
+    },
+    {
+      "artifact": "wf_goal_v6_h16_constrained_precision_recall_prob_rerun_20260304.json",
+      "selected_rows": 0,
+      "filled_trades": 0,
+      "win_rate_net": 0.0,
+      "trades_per_week": 0.0,
+      "net_ticks_sum": 0.0,
+      "concentration_top_share": 0.0,
+      "final_go_passed": false
+    },
+    {
+      "artifact": "wf_goal_v6_h18_recall_families_constrained_20260304.json",
+      "selected_rows": 44,
+      "filled_trades": 31,
+      "win_rate_net": 0.5806451612903226,
+      "trades_per_week": 0.5912806539509536,
+      "net_ticks_sum": 1866.5,
+      "concentration_top_share": 0.3337492202121023,
+      "final_go_passed": false
+    },
+    {
+      "artifact": "wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+      "selected_rows": 60,
+      "filled_trades": 33,
+      "win_rate_net": 0.6363636363636364,
+      "trades_per_week": 0.6294277929155313,
+      "net_ticks_sum": 640.5,
+      "concentration_top_share": 0.3830528148578062,
+      "final_go_passed": false
+    },
+    {
+      "artifact": "wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+      "selected_rows": 128,
+      "filled_trades": 40,
+      "win_rate_net": 0.7,
+      "trades_per_week": 0.7629427792915532,
+      "net_ticks_sum": 1872.5,
+      "concentration_top_share": 0.5549074308901851,
+      "final_go_passed": false
+    },
+    {
+      "artifact": "wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+      "selected_rows": 176,
+      "filled_trades": 109,
+      "win_rate_net": 0.7522935779816514,
+      "trades_per_week": 2.0790190735694822,
+      "net_ticks_sum": 3622.5,
+      "concentration_top_share": 0.2581090407177364,
+      "final_go_passed": true
+    }
+  ]
+}

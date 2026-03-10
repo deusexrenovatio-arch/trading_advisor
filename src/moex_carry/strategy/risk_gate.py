@@ -60,6 +60,17 @@ def evaluate_risk_profile(
         )
     )
     checks.append(
+        RiskCheckResult(
+            check_id="trade_risk_money_positive",
+            description="max_risk_per_trade_money is positive",
+            limit=">0",
+            value=profile.max_risk_per_trade_money,
+            unit=str(profile.account_currency or "RUB"),
+            passed=profile.max_risk_per_trade_money > 0.0,
+            action="allow" if profile.max_risk_per_trade_money > 0.0 else "block",
+        )
+    )
+    checks.append(
         _range_check(
             "open_risk_range",
             "max_open_risk_pct within 0.1-10.0",

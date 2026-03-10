@@ -18,7 +18,7 @@
 - `need-predictive-evolution`: likely next user needs are considered before finalizing design.
 - `need-decision-audit-review`: filtered decision audit with aggregation drilldown.
 - `need-market-scan-history-analysis`: top-pairs, spread drilldown, and signal history coherence.
-- `need-signal-action-control-loop`: action API + ACK bridge + auto-remediation policy.
+- `need-signal-action-control-loop`: action API + Telegram review/follow-up bridge + auto-remediation policy.
 - `need-research-backtest-forward-lifecycle`: backtest/run/forward cycle plus UI trigger path.
 - `need-ui-platform-entry-and-proxy`: frontend health and proxy contract reliability.
 - `need-news-portfolio-ops-observability`: news workspace, portfolio control, runtime observability.
@@ -45,7 +45,7 @@
     `decision-log-aggregation`, `decision-action`
 - Market scan and signal lifecycle:
   - `top-pairs`, `spread-series`, `signals-active`, `signals-action-v2`,
-    `signals-execute`, `signals-ack-execute`, `signals-history`,
+    `signals-execute`, `signals-ack-execute`, `signals-actionability-h4a-followup`, `signals-history`,
     `signals-history-range`, `signals-history-reasons`, `pretrade-check`,
     `auto-unwind-policy-v2`
 - Research and runtime:
@@ -72,7 +72,7 @@
 5. Research Lab: Backtest v2, Forward status, HPO run/status.
 6. News Intelligence: severity/entity filtering and decision linkage.
 7. Portfolio Control: rebalance preview and commit.
-8. Ops and integration reliability: refresh scheduler state, SLO/health APIs, Telegram ACK/action bridge.
+8. Ops and integration reliability: refresh scheduler state, SLO/health APIs, Telegram review/follow-up bridge.
 
 ### Component outcomes and success criteria
 | Component | Primary user job | Success signal |
@@ -87,7 +87,7 @@
 | News Intelligence | Understand event pressure on decisions | Severity and entity filters reduce noise without losing traceability |
 | Portfolio Control | Approve rebalance with visible risk checks | Plan and risk checks are explicit before commit |
 | Ops and scheduler visibility | Trust runtime freshness and degradation states | Health/SLO/refresh status are actionable and timely |
-| Telegram ACK bridge | Confirm usage quickly and continue in UI | ACK and follow-up execution are linked and auditable |
+| Telegram review/follow-up bridge | Confirm review and H4A follow-up quickly, then continue in UI | Review, follow-up confirmation, and execution remain linked and auditable |
 
 ### Coverage stress-test by component
 - `Trade Console / Decisions`:
