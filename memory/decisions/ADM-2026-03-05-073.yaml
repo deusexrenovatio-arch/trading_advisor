@@ -1,0 +1,21 @@
+id: ADM-2026-03-05-073
+date: 2026-03-05
+title: Enforce cause-first commodity news feed with deterministic taxonomy and post-factum
+  1H/1D verification
+context: Telegram/live-news flow contained many fact-only market-commentary items
+  ("price rose/fell") that lacked primary causal triggers and reduced signal quality.
+decision: Add commodity-aware causal taxonomy (`news_causal.py`) into live scoring,
+  persist causal fields in `news_scores`, filter feed by primary-cause/fundamental
+  score, and enrich feed rows with 1H/1D directional verification from `news_shock_rows`;
+  expose cause and verification context in Telegram message formatting.
+impact: Runtime news output is now biased toward fundamental drivers and has explicit
+  verification telemetry for later calibration against realized moves.
+links:
+- src/moex_carry/news_causal.py
+- src/moex_carry/news_live_runtime.py
+- src/moex_carry/news_live_feed.py
+- src/moex_carry/news_live_bridge.py
+- src/moex_carry/integrations/telegram_news_broadcast.py
+- tests/test_news_causal.py
+- tests/test_news_live_feed.py
+- docs/session_handoff.md

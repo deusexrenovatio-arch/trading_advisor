@@ -1,0 +1,26 @@
+id: P1-ARCH-HARDEN-020
+title: Enforce action idempotency and multi-worker refresh scheduler lease
+lane: architecture
+status: completed
+execution_mode: autonomous
+owner: backend-platform
+acceptance:
+- v2 write contracts require idempotency_key for signal and decision actions
+- signal execution storage enforces pair plus idempotency uniqueness
+- refresh scheduler supports singleton lease mode for multi-worker API deployment
+- direct static import cycle between pipeline and unified runtime is removed
+checks:
+- python scripts/validate_architecture_policy.py
+- pytest tests/test_storage_db.py tests/test_signal_api.py tests/test_api_v2.py -q
+- pytest tests/test_signal_replay_incremental.py tests/test_signal_replay_core.py
+  tests/test_signal_replay_minute_loader.py -q
+docs:
+- docs/contracts/api-v2.yaml
+- docs/architecture/modules/contracts-configs.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P0-ARCH-POLICY-002
+- P1-AGENT-CONTEXT-019
+started_at: 2026-02-23
+completed_at: 2026-02-23

@@ -1,0 +1,18 @@
+id: ADM-2026-03-04-073
+date: 2026-03-04
+title: Promote task request quality to a hard governance gate
+context: External agent-practice review showed that weak operator prompts still caused
+  avoidable ambiguity despite strong code-quality gates.
+decision: Add `validate_task_request_contract.py`, require explicit task contract
+  and first-time-right report sections in session handoff, and run this validator
+  inside `run_lean_gate.py`.
+impact: Ambiguous or contradictory requests are now blocked early with deterministic
+  remediation instead of leaking into implementation and review loops.
+links:
+- scripts/validate_task_request_contract.py
+- scripts/run_lean_gate.py
+- docs/checklists/task-request-contract.md
+- docs/workflows/agent-practices-alignment.md
+- docs/DEV_WORKFLOW.md
+- AGENTS.md
+- docs/session_handoff.md

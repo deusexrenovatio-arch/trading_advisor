@@ -1,0 +1,19 @@
+id: ADM-2026-03-06-092
+date: 2026-03-06
+title: Require whole-universe, no-dominant-top, and per-root diagnostics for execution
+  research
+context: User clarified that aggregate concentration alone is not enough to judge
+  regime quality and that future execution conclusions must stay valid both with dominant
+  tops included and with them removed.
+decision: Keep the whole-universe result as the primary view, but whenever concentration
+  is material add a supplemental no-dominant-top diagnostic and report quality per
+  root or instrument before calling an uplift structural.
+impact: Future execution reviews must explain whether a candidate survives removal
+  of dominant contributors and which roots actually carry the quality, instead of
+  relying on aggregate net alone.
+links:
+- artifacts/research/wf_goal_v6_h24_o1_h3_h4_compare_without_dominant_root_20260306.json
+- docs/research/evaluation-policy.md
+- docs/research/o1-execution-hypothesis-program-2026-03-06.md
+- docs/session_handoff.md
+- plans/PLANS.yaml

@@ -1,0 +1,16 @@
+id: ADM-2026-02-23-020
+date: 2026-02-23
+title: Decompose UI API by route-group registrars while preserving monkeypatch seams
+context: '`ui/app.py` still contained large operational and pretrade route groups,
+  and existing tests monkeypatch symbols on `ui.app`.'
+decision: Move ops and pretrade endpoints into `ui/routes_ops.py` and `ui/routes_pretrade.py`,
+  but keep `MoexIssClient` and `run_delay_gate` resolved from `ui.app` via accessor
+  hooks.
+impact: Reduced app composition size and improved route ownership boundaries without
+  breaking testability or endpoint behavior contracts.
+links:
+- src/moex_carry/ui/app.py
+- src/moex_carry/ui/routes_ops.py
+- src/moex_carry/ui/routes_pretrade.py
+- tests/test_api_v2.py
+- tests/test_ui_api.py

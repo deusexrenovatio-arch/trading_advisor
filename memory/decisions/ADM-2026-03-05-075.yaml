@@ -1,0 +1,25 @@
+id: ADM-2026-03-05-075
+date: 2026-03-05
+title: Add event-first commodity dependency graph to extract root causes beyond financial
+  recap headlines
+context: Cause-first ranking still surfaced many finance-recapped stories because
+  source queries and taxonomy relied on commodity-keyword mentions, while true trigger
+  headlines often mention chokepoints, operators, or policy actions without ticker
+  terms.
+decision: Introduce `news_commodity_graph.py` with wide role catalogs (exporters,
+  producers, importers, chokepoints), directed transmission edges, and event-first
+  inference with claim status and route context; augment live ingestion queries with
+  graph-derived event terms and persist route/status/entities in `news_scores`.
+impact: Pipeline can detect and prioritize primary trigger events from non-financial
+  news sources and provide auditable path context from trigger node to commodity impact
+  channel.
+links:
+- src/moex_carry/news_commodity_graph.py
+- src/moex_carry/news_causal.py
+- src/moex_carry/news_live_runtime.py
+- src/moex_carry/news_live_schema.py
+- src/moex_carry/news_live_feed.py
+- src/moex_carry/integrations/telegram_news_broadcast.py
+- tests/test_news_commodity_graph.py
+- tests/test_news_causal.py
+- tests/test_news_live_runtime.py

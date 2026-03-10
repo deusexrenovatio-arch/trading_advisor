@@ -1,0 +1,10 @@
+id: AMP-2026-02-22-008
+date: 2026-02-22
+title: Gate critical trajectories as scorecard checks
+pattern: Promote key API action-path tests into quality scorecards so regressions
+  block delivery before merge.
+when_to_use: Any user-facing flow where path correctness matters more than text output.
+links:
+- configs/quality_scorecards.yaml
+- scripts/validate_quality_scorecards.py
+- tests/test_api_v2.py

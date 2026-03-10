@@ -1,0 +1,21 @@
+id: P2-NEWS-LIVE-RUNBOOK-015
+title: Live runbook and automation wrapper for NG_US BRN GOLD news cycle
+lane: news
+status: completed
+execution_mode: autonomous
+owner: quant-research
+acceptance:
+- runbook documents shadow and active operations for exactly NG_US BRN GOLD
+- includes explicit PYTHONPATH requirement for local news CLI commands
+- one wrapper script executes daily silver cycle for all three commodities
+checks:
+- powershell -ExecutionPolicy Bypass -Command "$content = Get-Content -Raw 'scripts/run_news_daily_silver_cycle_3c.ps1';
+  [scriptblock]::Create($content) | Out-Null"
+- python scripts/run_lean_gate.py
+docs:
+- docs/runbooks/news-live-3-commodities.md
+- docs/session_handoff.md
+dependencies:
+- P2-NEWS-ARCH-HARDEN-014
+started_at: 2026-03-02
+completed_at: 2026-03-02

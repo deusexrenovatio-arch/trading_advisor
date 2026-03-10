@@ -1,0 +1,21 @@
+id: ADM-2026-03-04-076
+date: 2026-03-04
+title: Add cluster-aware fold-stability objective and strict WF acceptance to morning-plan
+  walk-forward
+context: Wide-universe runs needed stable behavior across folds, with lower negative-period
+  incidence and conservative tail-risk handling without per-instrument overfit.
+decision: Extend morning-plan WF runner with cluster-prefixed params (`cluster.<name>.*`),
+  fold-stability objective (median subfold net ticks + negative subfold + tail-risk
+  penalties), KPI penalties (SL/EXIT rates), strict WF controls (embargo/purge), fixed
+  holdout evaluation, acceptance summary, and cost stress multiplier; add execution
+  knobs for TTL and stop-limit fallback and corresponding tests.
+impact: Hyperparameter selection can now optimize for stability (not single lucky
+  windows), tune per cluster (energy/metals), and enforce acceptance by fold robustness
+  under stressed costs.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- src/moex_carry/signal_engine/setups/generator.py
+- src/moex_carry/config.py
+- tests/test_morning_plan_walk_forward.py
+- tests/test_signal_engine_setups.py
+- docs/hpo-howto.md

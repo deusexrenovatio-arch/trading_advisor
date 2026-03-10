@@ -1,0 +1,23 @@
+id: P2-NEWS-ARCH-HARDEN-014
+title: Harden news-module runtime boundaries and transactional behavior
+lane: news
+status: completed
+execution_mode: autonomous
+owner: quant-research
+acceptance:
+- GET /api/v2/signals/active has no DB write side effect by default
+- signal-news links preserve event_id and include allowlist-aware gate evaluation
+- sync_news_runtime executes news upserts in a single transaction commit
+- anchor seeding/linking and llm full-pass support deferred commit orchestration
+checks:
+- pytest tests/test_api_v2.py -q
+- pytest tests/test_news_anchors.py tests/test_news_llm_gateway.py tests/test_news_sync_profiles.py
+  -q
+- python scripts/run_lean_gate.py
+docs:
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P2-NEWS-SHOCK-SILVER-013
+started_at: 2026-03-02
+completed_at: 2026-03-02

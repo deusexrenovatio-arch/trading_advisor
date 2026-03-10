@@ -1,0 +1,26 @@
+id: P1-PROCESS-UI-BUNDLE-050
+title: Split the Process Governance workspace out of the main frontend bundle and
+  bring up a live preview
+lane: frontend
+status: completed
+execution_mode: autonomous
+owner: frontend-platform
+acceptance:
+- Process Governance loads behind a lazy route boundary instead of the main app bundle
+- the build output shows separate chunks for the governance path or other heavy UI
+  vendors
+- frontend lint and build remain green after the split
+- a live local preview is reachable for manual review
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/run_lean_gate.py
+- cmd /c npm.cmd --prefix ui-web run lint
+- cmd /c npm.cmd --prefix ui-web run build
+docs:
+- docs/session_handoff.md
+- ui-web/src/App.tsx
+- ui-web/vite.config.ts
+dependencies:
+- P1-PROCESS-REPORTS-UI-049
+started_at: 2026-03-09
+completed_at: 2026-03-09

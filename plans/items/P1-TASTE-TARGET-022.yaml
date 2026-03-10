@@ -1,0 +1,22 @@
+id: P1-TASTE-TARGET-022
+title: Add soft target file-size budgets and trim stale large-file exceptions
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- taste invariants config separates hard limits from non-blocking target budgets
+- validator reports target budget overruns without failing the gate
+- allowlist entries for mid-size legacy modules are tightened to explicit caps
+checks:
+- python scripts/validate_taste_invariants.py
+- python scripts/run_lean_gate.py
+docs:
+- configs/taste_invariants.yaml
+- scripts/validate_taste_invariants.py
+- docs/runbooks/governance-remediation.md
+- docs/session_handoff.md
+dependencies:
+- P1-API-DECOMPOSE-021
+started_at: 2026-02-23
+completed_at: 2026-02-23

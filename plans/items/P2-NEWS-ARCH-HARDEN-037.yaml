@@ -1,0 +1,37 @@
+id: P2-NEWS-ARCH-HARDEN-037
+title: Harden news live storage architecture and path resolution for reliable runtime
+  and bridge reads
+lane: architecture
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- runtime, bridge, and live shock input use one shared sqlite/path helper instead
+  of ad-hoc URL parsing
+- csv feed writes are atomic to prevent partial reads by downstream workers
+- sqlite connections use busy timeout and WAL for write paths; read paths avoid silent
+  failures
+- db indexes support bridge filters by published timestamp and confidence/impact
+checks:
+- python -m pytest tests/test_news_live_runtime.py tests/test_news_shock_automation.py
+  tests/test_shock_alert_delivery.py tests/test_telegram_worker.py -q
+- powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours
+  1 -DirectionMaxTasks 10 -CausalMaxTasks 20 -NoTelegramFeed -CheckOnly
+- python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml
+  --output-csv data/output/tmp_live_shocks_input_archfix.csv --lookback-hours 1 --bar-minutes
+  5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6
+- python scripts/run_lean_gate.py
+- python scripts/validate_quality_scorecards.py
+docs:
+- src/moex_carry/news_storage.py
+- src/moex_carry/news_live_runtime.py
+- src/moex_carry/news_live_feed.py
+- src/moex_carry/news_live_bridge.py
+- src/moex_carry/news_shock_live_input.py
+- tests/test_news_live_runtime.py
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P2-NEWS-SHOCK-LIVE-FEED-036
+started_at: 2026-03-04
+completed_at: 2026-03-04

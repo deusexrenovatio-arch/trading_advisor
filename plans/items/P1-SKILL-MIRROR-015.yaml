@@ -1,0 +1,21 @@
+id: P1-SKILL-MIRROR-015
+title: Mirror global skills into local catalog and keep repository gating deterministic
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- all global skills are mirrored into .cursor/skills for repository-local usage
+- AGENTS.md skill mapping reflects the full local catalog
+- local skill validation remains green after mirror update
+checks:
+- python scripts/validate_skills.py
+- python scripts/run_lean_gate.py
+docs:
+- AGENTS.md
+- docs/DEV_WORKFLOW.md
+- docs/workflows/skill-governance-sync.md
+dependencies:
+- P1-SKILL-GOV-014
+started_at: 2026-02-23
+completed_at: 2026-02-23

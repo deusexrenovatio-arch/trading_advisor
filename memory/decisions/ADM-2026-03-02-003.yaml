@@ -1,0 +1,17 @@
+id: ADM-2026-03-02-003
+date: 2026-03-02
+title: Remove read-side DB mutations from signals-active and enforce single-transaction
+  news sync
+context: News runtime had repeated per-step commits and GET /api/v2/signals/active
+  persisted bridge links on every read.
+decision: Gate link persistence behind explicit UI flag, carry event_id in signal
+  links, and run sync/anchors/llm writes with deferred commits and a final single
+  commit.
+impact: Cleaner API semantics, lower write amplification, and consistent runtime transaction
+  boundaries.
+links:
+- src/moex_carry/ui/app.py
+- src/moex_carry/news/sync.py
+- src/moex_carry/news/anchors.py
+- src/moex_carry/news/llm_gateway.py
+- tests/test_api_v2.py

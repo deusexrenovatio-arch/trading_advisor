@@ -1,0 +1,11 @@
+id: AMI-2026-02-20-002
+date: 2026-02-20
+title: EPERM lock on esbuild/rollup binaries during npm ci
+symptom: npm cleanup failed to unlink binary files under ui-web/node_modules on Windows.
+root_cause: Background vite/esbuild processes held file handles during reinstall.
+remediation: Stop vite/esbuild processes before reinstall and continue with npm install
+  when ci unlink fails.
+remediation_type: workflow
+links:
+- docs/DEV_WORKFLOW.md
+- ui-web/package-lock.json

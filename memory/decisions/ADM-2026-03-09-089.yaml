@@ -1,0 +1,18 @@
+id: ADM-2026-03-09-089
+date: 2026-03-09
+title: Introduce process-report source ACL and centralize telemetry rollup engine
+  usage
+context: Process Governance API still had a shared-storage shortcut to task-outcomes
+  YAML at the route layer, and telemetry script kept a duplicated rollup implementation
+  that could drift from runtime reporting.
+decision: Add `process_report_source` service as an anti-corruption layer (snapshot-first,
+  outcomes fallback) and route API calls through it; make `agent_process_telemetry`
+  delegate rollup/markdown rendering to `moex_carry.governance.process_reports`.
+impact: API boundary no longer hard-codes task-outcomes storage access, and process-rollup
+  semantics now come from one canonical implementation for both runtime and telemetry
+  tooling.
+links:
+- src/moex_carry/governance/process_report_source.py
+- src/moex_carry/ui/routes_ops.py
+- scripts/agent_process_telemetry.py
+- tests/test_api_v2.py

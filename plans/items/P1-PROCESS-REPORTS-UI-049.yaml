@@ -1,0 +1,33 @@
+id: P1-PROCESS-REPORTS-UI-049
+title: Surface weekly process-improvement reports in product UI with human-readable
+  conclusions
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- process-improvement reporting exposes structured weekly history and readable conclusions
+  derived from tracked task outcomes
+- backend UI API serves current and historical process-health report payloads without
+  depending on GitHub artifact browsing
+- ui-web includes a dedicated governance/process workspace for weekly review with
+  desktop and mobile-friendly UX
+- weekly workflow and governance dashboard remain aligned with the new structured
+  report contract
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/run_lean_gate.py
+- python -m pytest tests/test_agent_process_telemetry.py tests/test_ui_api.py tests/test_api_v2.py
+  -q
+- npm --prefix ui-web run lint
+- npm --prefix ui-web run build
+docs:
+- docs/session_handoff.md
+- scripts/process_improvement_report.py
+- src/moex_carry/ui/routes_ops.py
+- ui-web/src/App.tsx
+- memory/agent_memory.yaml
+dependencies:
+- P1-PROCESS-TELEMETRY-047
+started_at: 2026-03-06
+completed_at: 2026-03-06

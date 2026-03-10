@@ -1,0 +1,15 @@
+id: ADM-2026-02-23-017
+date: 2026-02-23
+title: Require idempotency keys and scheduler lease for action/execution stability
+context: Architecture review identified duplicate action risk and multi-worker scheduler
+  races in API runtime.
+decision: Make idempotency_key mandatory for write actions, enforce pair+idempotency
+  uniqueness in signal execution storage, and gate refresh scheduler with a runtime
+  lease singleton.
+impact: Lower duplicate execution risk under retries/concurrency; predictable refresh
+  behavior in multi-worker deployment.
+links:
+- docs/contracts/api-v2.yaml
+- src/moex_carry/ui/app.py
+- src/moex_carry/storage/db.py
+- src/moex_carry/storage/repositories.py

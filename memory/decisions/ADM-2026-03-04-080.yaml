@@ -1,0 +1,17 @@
+id: ADM-2026-03-04-080
+date: 2026-03-04
+title: Shift WF improvement roadmap to constrained multi-objective methodology (winrate
+  + frequency + concentration)
+context: Chat-Pro review plus local scans showed simple precision filters cannot satisfy
+  the combined target (`winrate>=75%` and `~2 trades/week`) on current setup space.
+decision: Fix a new methodology stack with constrained optimization, anti-data-snooping
+  tests (White RC / SPA / MCS), regime-conditional validation, and a recall-first
+  hypothesis queue before precision filtering.
+impact: Next hypothesis cycles are now evaluated against joint constraints and robustness,
+  reducing repeated low-frequency overfit loops.
+links:
+- docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+- artifacts/research/wf_goal_v6_methodology_probe_20260304.json
+- docs/research/wf-baseline-v6-decisions-2026-03-04.md
+- plans/PLANS.yaml
+- docs/session_handoff.md

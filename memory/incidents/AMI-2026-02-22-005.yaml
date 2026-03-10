@@ -1,0 +1,13 @@
+id: AMI-2026-02-22-005
+date: 2026-02-22
+title: Repeated signal verification loops due to projection/file/source mismatch
+symptom: Same signal questions re-opened because outputs differed between branches,
+  runtime processes, and file paths.
+root_cause: Checks mixed `data/output/*`, `data/output/unified/*`, and live API state
+  without explicit source contract.
+remediation: Document and enforce canonical source order and verification checklist
+  in a dedicated signal continuity runbook.
+remediation_type: docs
+links:
+- docs/runbooks/signal-agent-continuity.md
+- docs/session_handoff.md

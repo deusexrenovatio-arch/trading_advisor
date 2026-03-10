@@ -1,0 +1,24 @@
+id: ADM-2026-03-04-067
+date: 2026-03-04
+title: Route fresh shock cycles through live MOEX plus live-news input and stabilize
+  topic identity
+context: Shock labeling and Telegram alerts were running on stale static CSV input,
+  while repeated stories fragmented into unstable topic keys and duplicate commodity
+  alerts.
+decision: Auto-build fresh shock input from MOEX front contracts plus live news DB
+  when FreshLookbackHours is used; introduce shared topic utility for stable root
+  keys and impact tiers; deduplicate live feed and Telegram news by story fingerprint
+  across commodities.
+impact: Fresh cycles now evaluate current market moves instead of stale snapshots;
+  root-vs-aftershock continuity is stable; duplicate multi-commodity echoes are reduced.
+links:
+- scripts/build_live_shock_input.py
+- src/moex_carry/news_shock_live_input.py
+- scripts/start_shock_label_cycle.ps1
+- src/moex_carry/news_topic.py
+- src/moex_carry/news_shock_automation.py
+- src/moex_carry/shock_alert_delivery.py
+- src/moex_carry/news_live_feed.py
+- src/moex_carry/news_live_runtime.py
+- src/moex_carry/integrations/telegram_news_broadcast.py
+- src/moex_carry/integrations/telegram_shock_broadcast.py

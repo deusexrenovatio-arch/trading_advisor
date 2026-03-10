@@ -1,0 +1,20 @@
+id: ADM-2026-03-04-071
+date: 2026-03-04
+title: Switch news/shock alert pipeline to DB-first ingestion with CSV fallback
+context: Silver and live shock/news pipelines were still partially coupled to CSV
+  snapshots, which created drift between runtime state and alerting/label-cycle entrypoints.
+decision: Add DB-first loaders for Telegram news/shock broadcasts, add SQLite reader
+  for `news_shock_rows`, and allow `run_shock_label_cycle.py` to run directly from
+  DB input while keeping CSV as compatibility fallback/snapshot.
+impact: Runtime alerting and shock-label cycle now consume the same persisted SQLite
+  state; CSV is no longer a mandatory source-of-truth for operational flow.
+links:
+- src/moex_carry/integrations/telegram_news_broadcast.py
+- src/moex_carry/integrations/telegram_shock_broadcast.py
+- src/moex_carry/shock_alert_delivery.py
+- src/moex_carry/news_shock_store.py
+- src/moex_carry/news_shock_automation.py
+- scripts/run_shock_label_cycle.py
+- tests/test_telegram_worker.py
+- tests/test_news_shock_store.py
+- tests/test_news_shock_automation.py

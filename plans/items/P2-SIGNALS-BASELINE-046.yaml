@@ -1,0 +1,27 @@
+id: P2-SIGNALS-BASELINE-046
+title: Promote H4 baseline after no-mini historical validation and record root-level
+  month diagnostics
+lane: research
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- full and mini contract duplicates are removed from whole-universe historical evaluation
+- H4 remains stronger than O1 on the cleaned historical universe
+- negative months and thin-sample roots are recorded before baseline promotion
+- runtime config and regression test defaults are updated to the accepted H4 profile
+checks:
+- python scripts/run_lean_gate.py
+- python scripts/analyze_execution_profiles_historical_review.py --exclude-mini --out-json
+  artifacts/research/wf_goal_v6_execution_profiles_historical_review_no_minis_2020_2026_20260306.json
+- pytest tests/test_config_loading.py tests/test_morning_plan_walk_forward.py -q
+docs:
+- docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+- docs/research/evaluation-policy.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-RESEARCH-045
+started_at: 2026-03-06
+completed_at: 2026-03-06

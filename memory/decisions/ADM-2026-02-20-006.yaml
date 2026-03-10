@@ -1,0 +1,12 @@
+id: ADM-2026-02-20-006
+date: 2026-02-20
+title: Make load-source attribution mandatory in incident RCA
+context: Prior incidents could be misread when a single process looked small versus
+  system-wide commit and I/O pressure.
+decision: Extend runbook with a mandatory RCA block that quantifies timeline, top
+  contributors, and trigger versus amplifier roles.
+impact: Faster and more reliable identification of true overload source, with action
+  thresholds tied to measurable metrics.
+links:
+- agent-runbook.md
+- plans/PLANS.yaml

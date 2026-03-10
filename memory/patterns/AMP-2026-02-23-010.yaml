@@ -1,0 +1,11 @@
+id: AMP-2026-02-23-010
+date: 2026-02-23
+title: Rebuild AGENTS skill map from local frontmatter after catalog sync
+pattern: After mirroring or adding skills, regenerate the `AGENTS.md` available-skill
+  mapping from local `SKILL.md` frontmatter and re-run skill validation.
+when_to_use: Any `.cursor/skills` catalog update that changes skill count, names,
+  or paths.
+links:
+- AGENTS.md
+- .cursor/skills
+- scripts/validate_skills.py

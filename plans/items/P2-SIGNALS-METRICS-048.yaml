@@ -1,0 +1,29 @@
+id: P2-SIGNALS-METRICS-048
+title: Normalize walk-forward futures results to money/equity units and record year
+  concentration of the current baseline
+lane: research
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- the current one-year baseline is recorded with month-level and root-level concentration
+  evidence
+- walk-forward output includes per-instrument tick-value-derived money metrics and
+  aggregate return-on-equity fields
+- regression tests cover spec-based tick-value resolution and money summary attribution
+checks:
+- python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
+- python scripts/run_lean_gate.py
+- pytest tests/test_morning_plan_walk_forward.py -q
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+docs:
+- scripts/run_morning_plan_walk_forward.py
+- tests/test_morning_plan_walk_forward.py
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-RESEARCH-047
+started_at: 2026-03-06
+completed_at: 2026-03-06

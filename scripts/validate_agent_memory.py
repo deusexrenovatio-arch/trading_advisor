@@ -32,6 +32,65 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _resolve_index_item_path(index_path: Path, item_path: str) -> Path:
+    candidate = Path(item_path)
+    if candidate.is_absolute():
+        return candidate
+    # Prefer repository-root-relative paths produced by sync_state_layout.py.
+    repo_root = index_path.parent.parent.parent
+    search_roots = (
+        repo_root,
+        index_path.parent.parent,
+        index_path.parent,
+    )
+    for root in search_roots:
+        resolved = (root / candidate).resolve()
+        if resolved.exists():
+            return resolved
+    return (repo_root / candidate).resolve()
+
+
+def _load_section_from_index(index_path: Path) -> list[dict[str, Any]]:
+    payload = _load_yaml(index_path)
+    rows = payload.get("items")
+    if not isinstance(rows, list):
+        return []
+    section_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item_path = row.get("path")
+        if not isinstance(item_path, str) or not item_path.strip():
+            continue
+        candidate = _resolve_index_item_path(index_path, item_path)
+        if not candidate.exists():
+            continue
+        item = _load_yaml(candidate)
+        if isinstance(item, dict) and item:
+            section_rows.append(item)
+    return section_rows
+
+
+def _load_layout_memory(memory_root: Path) -> tuple[dict[str, Any] | None, Path | None]:
+    index_paths = {
+        section: memory_root / section / "index.yaml"
+        for section in SECTION_KEYS
+    }
+    if not any(path.exists() for path in index_paths.values()):
+        return None, None
+    payload: dict[str, Any] = {"version": 1, "updated_at": date.today().isoformat()}
+    newest_updated_at = date.today().isoformat()
+    for section, index_path in index_paths.items():
+        payload[section] = _load_section_from_index(index_path) if index_path.exists() else []
+        if index_path.exists():
+            index_payload = _load_yaml(index_path)
+            raw_updated = str(index_payload.get("updated_at", "")).strip()
+            if raw_updated and raw_updated > newest_updated_at:
+                newest_updated_at = raw_updated
+    payload["updated_at"] = newest_updated_at
+    return payload, memory_root
+
+
 def _parse_date(value: Any, label: str, errors: list[str]) -> date | None:
     if isinstance(value, date):
         return value
@@ -112,7 +171,8 @@ def run(path: Path, policy_path: Path) -> int:
         print("remediation: see docs/runbooks/governance-remediation.md")
         return 1
 
-    payload = _load_yaml(path)
+    layout_payload, source_root = _load_layout_memory(path.parent)
+    payload = layout_payload if layout_payload is not None else _load_yaml(path)
     errors: list[str] = []
     (
         allowed_types,
@@ -254,7 +314,8 @@ def run(path: Path, policy_path: Path) -> int:
 
     print(
         "agent memory validation: OK "
-        f"(entries={total_entries} updated_at={updated_at})"
+        f"(source={source_root.as_posix() if source_root else path.as_posix()} "
+        f"entries={total_entries} updated_at={updated_at})"
     )
     return 0
 

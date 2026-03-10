@@ -1,0 +1,32 @@
+id: P2-NEWS-LEGACY-CALIBRATION-043
+title: Reuse prepared live DB and calibrate strict cause+1H/1D verification thresholds
+  for Telegram feed
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- runtime auto-backfills missing causal fields for legacy `news_scores` rows in existing
+  databases
+- prepared `news_livecheck_ng.db` is reused for calibration instead of empty smoke
+  DB
+- feed configuration enforces primary-cause and strict 1H/1D move verification gates
+  with non-zero validated output
+- regression tests cover legacy causal backfill behavior
+checks:
+- python -m pytest tests/test_news_live_runtime.py tests/test_news_causal.py tests/test_news_live_feed.py
+  tests/test_telegram_news_broadcast.py -q
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+- python scripts/run_lean_gate.py
+- python scripts/validate_quality_scorecards.py
+docs:
+- src/moex_carry/news_live_runtime.py
+- configs/news-livecheck-ng.yaml
+- tests/test_news_live_runtime.py
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P2-NEWS-CAUSE-VERIFY-042
+started_at: 2026-03-05
+completed_at: 2026-03-05

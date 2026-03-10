@@ -1,0 +1,17 @@
+id: ADM-2026-03-04-077
+date: 2026-03-04
+title: Freeze v6 walk-forward baseline and retire non-performing tuning axes
+context: Latest full-window reruns on 66 instruments showed result drift versus earlier
+  artifacts, and several added tuning axes produced no measurable uplift.
+decision: Select `robust_median_mad + objective_negative_fold_penalty=8` as active
+  morning-plan baseline for `28/7/7` weekly causal WF; remove `intraday_goal_v4_clustered`
+  and `fold_stability` from active CLI choices; keep probability-gate code but stop
+  threshold-only retunes until structural signal changes.
+impact: Baseline is now explicit and reproducible, tuning surface is smaller, and
+  non-productive experiment loops are blocked by documented do-not-retest decisions.
+links:
+- docs/research/wf-baseline-v6-decisions-2026-03-04.md
+- scripts/run_morning_plan_walk_forward.py
+- tests/test_morning_plan_walk_forward.py
+- artifacts/research/wf_goal_v6_mad_neg8_seed111_wt_signal_engine_rerun_20260304.json
+- artifacts/research/wf_goal_v6_negpen0_seed111_wt_signal_engine_rerun_20260304.json

@@ -1,0 +1,13 @@
+id: AMP-2026-02-23-015
+date: 2026-02-23
+title: Preserve monkeypatch seams during module extraction
+pattern: When extracting logic from a large module, keep backward-compatible runtime
+  seam points (via accessors or module-level exports) until tests and integrations
+  migrate.
+when_to_use: Route/service decomposition where existing tests patch module globals
+  or dynamic imports rely on legacy symbols.
+links:
+- src/moex_carry/ui/app.py
+- src/moex_carry/ui/routes_pretrade.py
+- tests/test_api_v2.py
+- tests/test_ui_api.py

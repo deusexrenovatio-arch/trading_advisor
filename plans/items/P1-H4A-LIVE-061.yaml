@@ -1,0 +1,26 @@
+id: P1-H4A-LIVE-061
+title: Align live/manual futures execution with H4A baseline contract
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- active runtime baseline is H4A_CAP_OFF everywhere user-visible and runtime-visible
+- signal lifecycle distinguishes viewed, submitted, filled, cancelled, and manual
+  override states
+- actionable signal payload includes H4A execution contract fields and real signal
+  expiry
+- execution audit stores fill-driven recalculation and same-bar resolution metadata
+- no-mini and concentration guardrails stay outside baseline semantics and are enforced
+  in live routing
+checks:
+- python scripts/run_lean_gate.py
+- pytest tests/test_api_v2.py tests/test_telegram_worker.py
+docs:
+- docs/runbooks/h4a-manual-execution-baseline.md
+- docs/signals-business-process.md
+- docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+dependencies:
+- P1-PUSH-GATE-060
+started_at: 2026-03-09
+completed_at: 2026-03-09

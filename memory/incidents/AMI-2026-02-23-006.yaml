@@ -1,0 +1,13 @@
+id: AMI-2026-02-23-006
+date: 2026-02-23
+title: Telegram worker cycle spammed errors on transient long-poll disconnects
+symptom: Worker logged Telegram worker cycle failed stack traces when Telegram closed
+  getUpdates connections without response.
+root_cause: _fetch_updates treated transient transport and retryable HTTP failures
+  as fatal instead of bounded-retry/no-op cycles.
+remediation: Add one bounded retry for getUpdates, degrade to empty update batch on
+  repeated transient failure, and lock behavior with tests.
+remediation_type: capability
+links:
+- src/moex_carry/integrations/telegram_worker.py
+- tests/test_telegram_worker.py

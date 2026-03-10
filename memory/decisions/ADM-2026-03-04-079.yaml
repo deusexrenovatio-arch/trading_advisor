@@ -1,0 +1,22 @@
+id: ADM-2026-03-04-079
+date: 2026-03-04
+title: Validate precision-filter hypotheses in full causal reruns and select H3 as
+  current precision candidate
+context: After adding precision-filter controls, offline H1 estimate looked promising
+  but needed end-to-end confirmation under causal walk-forward retuning.
+decision: Run sequential full reruns (H1-H5) on frozen v6 baseline spec and persist
+  comparison artifact; accept H3 (`min_risk_ticks=114`, `min_target_return_pct=1.5`,
+  `dedup`) as current precision-first candidate because it meets winrate target and
+  has highest net among target-meeting variants.
+impact: Winrate target (`>=75%`) is now achieved in causal mode (`H3=87.5%`, `H5=77.8%`),
+  while remaining risks (low trade count and instrument concentration) are explicit
+  and tracked for next hypothesis cycle.
+links:
+- artifacts/research/wf_goal_v6_hyp1_precision_filter_rerun_20260304.json
+- artifacts/research/wf_goal_v6_hyp2_precision_filter_rerun_20260304.json
+- artifacts/research/wf_goal_v6_hyp3_precision_filter_rerun_20260304.json
+- artifacts/research/wf_goal_v6_hyp4_precision_filter_rerun_20260304.json
+- artifacts/research/wf_goal_v6_hyp5_precision_filter_rerun_20260304.json
+- artifacts/research/wf_goal_v6_precision_hypothesis_compare_20260304.json
+- docs/research/wf-baseline-v6-decisions-2026-03-04.md
+- docs/session_handoff.md

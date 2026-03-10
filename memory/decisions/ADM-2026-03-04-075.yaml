@@ -1,0 +1,19 @@
+id: ADM-2026-03-04-075
+date: 2026-03-04
+title: Complete advice-by-advice external practices mapping and enforce recurrence-signature
+  learning
+context: Full comparison request across Boris Way, Anthropic best-practices, and Claude-code
+  tips required explicit mapping for each advice plus targeted implementation of high-fit
+  gaps.
+decision: Add one traceability matrix for all concrete advice items, enforce incident
+  recurrence signatures and behavior-change deltas in memory validation, and enforce
+  numeric same-path attempt caps against policy in task-contract validation.
+impact: External guidance is now auditable against repository controls; repeated failure
+  classes require measurable process/capability change instead of repeated patch loops.
+links:
+- docs/workflows/external-advice-mapping-2026-03-04.md
+- scripts/validate_agent_memory.py
+- scripts/validate_task_request_contract.py
+- configs/agent_incident_policy.yaml
+- docs/DEV_WORKFLOW.md
+- AGENTS.md

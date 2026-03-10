@@ -1,0 +1,24 @@
+id: ADM-2026-03-09-094
+date: 2026-03-09
+title: Use Telegram follow-up confirmations as the H4A baseline guard instead of implicit
+  ACK semantics
+context: H4A execution had already moved to explicit fill-driven lifecycle states,
+  but documentation and operator-loop coverage still left a gap between post-fill
+  recalculation, Telegram prompts, and auditable confirmation of each required manual
+  step.
+decision: Treat `mark_viewed` as the canonical Telegram review action, add explicit
+  `confirm_followup` and `manual_override` stage actions for H4A fallback or post-fill
+  monitoring, and isolate operator-event projection logic in a dedicated UI helper
+  so lifecycle reconstruction stays deterministic without keeping more H4A state machinery
+  inside `ui/app.py`.
+impact: Telegram now covers fallback timeout, recalculated post-fill packet, break-even
+  or trailing triggers, and time-stop monitoring with auditable stage confirmations,
+  while governance artifacts and acceptance catalogs describe the same lifecycle and
+  `ui/app.py` is back under the blocking size limit.
+links:
+- src/moex_carry/ui/operator_execution_projection.py
+- src/moex_carry/integrations/telegram_h4a_followup.py
+- docs/signals-business-process.md
+- docs/test-cases.md
+- configs/acceptance_scenarios.yaml
+- configs/user_needs_catalog.yaml

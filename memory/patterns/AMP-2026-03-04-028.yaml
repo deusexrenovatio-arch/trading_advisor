@@ -1,0 +1,13 @@
+id: AMP-2026-03-04-028
+date: 2026-03-04
+title: Reject under-specified requests before coding
+pattern: Define and validate objective/scope/constraints/done-evidence/priority rule
+  in handoff before implementation; stop and request clarification when any field
+  is missing.
+when_to_use: Any non-trivial task where implicit assumptions can cause rework or hidden
+  scope drift.
+links:
+- docs/checklists/task-request-contract.md
+- scripts/validate_task_request_contract.py
+- docs/session_handoff.md
+- docs/DEV_WORKFLOW.md

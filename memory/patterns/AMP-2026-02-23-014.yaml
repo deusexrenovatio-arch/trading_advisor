@@ -1,0 +1,11 @@
+id: AMP-2026-02-23-014
+date: 2026-02-23
+title: Use hard gate plus soft target to ratchet structural debt
+pattern: Enforce one stable hard boundary for blocking checks, then track lower advisory
+  targets and reduce overruns in small steps.
+when_to_use: Repository has legacy large modules and needs continuous multi-agent
+  delivery without frequent exception churn.
+links:
+- configs/taste_invariants.yaml
+- scripts/validate_taste_invariants.py
+- plans/PLANS.yaml

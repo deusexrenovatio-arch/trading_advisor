@@ -1,0 +1,13 @@
+id: AMI-2026-02-20-003
+date: 2026-02-20
+title: Hard reboot under high multi-agent memory commit pressure
+symptom: Unexpected reboot and hangs with mixed BSOD and live-kernel events during
+  parallel agent workloads.
+root_cause: Near-limit commit pressure amplified by concurrent heavy agents plus unstable
+  low-level utility and driver interactions.
+remediation: Standardize launch gates, concurrency limits, and stop/replan thresholds
+  in a dedicated runbook.
+remediation_type: guardrail
+links:
+- agent-runbook.md
+- memory/agent_memory.yaml

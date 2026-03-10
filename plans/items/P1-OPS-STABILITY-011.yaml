@@ -1,0 +1,23 @@
+id: P1-OPS-STABILITY-011
+title: Agent runtime load guardrail runbook for multi-agent sessions
+lane: reliability
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- agent-runbook.md defines do and do not rules for CPU, memory, and disk pressure
+- runbook includes launch gates and stop/replan thresholds for 3-agent sessions
+- .cursorignore excludes high-churn generated paths to reduce indexing and disk pressure
+- runbook enforces mandatory RCA load attribution with timeline and top-contributor
+  quantification
+- plans and memory registries capture durable decision and incident context
+checks:
+- python scripts/run_lean_gate.py
+docs:
+- agent-runbook.md
+- .cursorignore
+- memory/agent_memory.yaml
+dependencies:
+- P1-HE-PARTIAL-CLOSURE-009
+started_at: 2026-02-20
+completed_at: 2026-02-20

@@ -1,0 +1,23 @@
+id: ADM-2026-03-09-099
+date: 2026-03-09
+title: H4A baseline must be documented as an operator contract, not only as a research
+  label
+context: User pointed out that trailing stop behavior inside H4A was not explicitly
+  known from the operator side and asked to review subtle human-execution assumptions,
+  then requested that H4A be fixed in documentation as the real baseline.
+decision: Added `docs/runbooks/h4a-manual-execution-baseline.md` and aligned the operator/business-process
+  and research baseline documents so that `H4A` is stated as the active execution
+  baseline with explicit rules for LIMIT fallback, fill-dependent bracket recalculation,
+  break-even lifting, trailing stop movement, time stop, and simulator-only same-bar
+  handling.
+impact: Future human execution and baseline reviews should treat `H4A` as a full operator
+  contract rather than as a short "cap off" nickname. Any promoted baseline with hidden
+  dynamic management now requires explicit operator documentation.
+links:
+- docs/runbooks/h4a-manual-execution-baseline.md
+- docs/signals-business-process.md
+- docs/research/o1-execution-hypothesis-results-2026-03-06.md
+- docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+- docs/research/evaluation-policy.md
+- docs/session_handoff.md
+- plans/PLANS.yaml

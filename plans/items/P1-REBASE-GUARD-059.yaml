@@ -1,0 +1,26 @@
+id: P1-REBASE-GUARD-059
+title: Rebase `codex/signals_engine` onto `main` without dropping governance history
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- local `codex/signals_engine` is rebased onto `origin/main`
+- backup refs preserve both the pre-cleanup local tip and the original remote tip
+- missing governance entries from `origin/codex/signals_engine` are retained in final
+  `plans` and `memory`
+- session handoff reflects the completed rebase flow and validation set
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+- python scripts/validate_agent_memory.py
+- python scripts/validate_plans.py
+- python scripts/run_lean_gate.py
+docs:
+- docs/session_handoff.md
+- plans/PLANS.yaml
+- memory/agent_memory.yaml
+dependencies:
+- P1-PROCESS-GOV-ADVISORY-053
+started_at: 2026-03-09
+completed_at: 2026-03-09

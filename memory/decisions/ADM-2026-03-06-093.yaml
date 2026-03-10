@@ -1,0 +1,26 @@
+id: ADM-2026-03-06-093
+date: 2026-03-06
+title: Historical profile review must include full-calendar month accounting and shows
+  H4 broad uplift
+context: User requested historical regime validation on `2020-2024`, per-instrument
+  quality, and a calendar slice rather than relying only on the short original ladder
+  window or active-month-only summaries.
+decision: Backfilled `2020-2022`, reran `O1` / `H3B_SL_3P0` / `H4A_CAP_OFF` on valid
+  `2020-2026` coverage using historical `SECID` expansion, and fixed the reporting
+  contract so month diagnostics distinguish active trading months from flat no-fill
+  calendar months. On the resulting whole-universe review, `H4A_CAP_OFF` dominates
+  `O1` on both `2020-2024` and `2020-2026`, improves `26/27` active roots, and still
+  wins after removing `PD`.
+impact: Historical execution-profile conclusions are now based on valid old-regime
+  coverage rather than modern-contract leakage, and future calendar reporting must
+  disclose silent months explicitly. `H4A_CAP_OFF` now has broad economic evidence
+  as the strongest candidate, but runtime baseline remains a separate explicit decision.
+links:
+- scripts/prefetch_historical_front_contracts.py
+- scripts/run_execution_profiles_historical_review.py
+- artifacts/research/wf_goal_v6_historical_front_contract_prefetch_2020_2022_20260306.json
+- artifacts/research/wf_goal_v6_execution_profiles_historical_review_2020_2026_20260306.json
+- docs/research/execution-profiles-historical-review-2026-03-06.md
+- docs/research/evaluation-policy.md
+- docs/session_handoff.md
+- plans/PLANS.yaml

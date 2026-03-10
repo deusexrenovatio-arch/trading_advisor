@@ -1,0 +1,31 @@
+id: P2-SIGNALS-H4A-SIZING-062
+title: Remove H4A contract-count cap so risk-based sizing is limited only by the `20_000
+  RUB` budget
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- risk-based H4A sizing no longer binds quantity by `max_contracts_per_instrument`
+- capped and uncapped H4A review outputs are compared on the same frozen source artifact
+  with unchanged trade-count and win-rate semantics
+- operator docs and regression tests reflect the risk-only sizing rule
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+- pytest tests/test_morning_plan_walk_forward.py tests/test_h4a_contract_sizing_review.py
+  tests/test_h4a_vs_baseline_risk.py tests/test_risk_gate.py -q
+- python scripts/run_h4a_contract_sizing_review.py --position-sizing-risk-money 20000
+  --out-json artifacts/research/wf_goal_v6_h4a_contract_sizing_20000_20260309.json
+- python scripts/run_lean_gate.py
+docs:
+- scripts/run_morning_plan_walk_forward.py
+- scripts/run_h4a_contract_sizing_review.py
+- docs/runbooks/h4a-manual-execution-baseline.md
+- docs/signals-business-process.md
+- docs/session_handoff.md
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-H4A-SIZING-061
+started_at: 2026-03-09
+completed_at: 2026-03-09

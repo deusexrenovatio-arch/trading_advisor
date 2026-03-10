@@ -1,0 +1,31 @@
+id: AMI-2026-03-05-010
+date: 2026-03-05
+title: Governance history loss risk during rebase conflict resolution
+symptom: During rebase, conflicts in governance files were resolved by taking base
+  versions, which temporarily dropped historical entries in agent memory and plans.
+root_cause: Conflict resolution strategy prioritized clean rebase continuation over
+  history-preservation parity checks for governance registries.
+remediation: Restore missing history entries from pre-rebase branch state and require
+  explicit pre/post parity verification for governance IDs when resolving rebase conflicts
+  in memory/plans/handoff files.
+remediation_type: workflow
+incident_signature: governance-history-drop-on-rebase-conflict
+prevention_change: Always run ID-parity comparison against pre-rebase state for `memory/agent_memory.yaml`
+  and `plans/PLANS.yaml` before concluding conflict resolution.
+prevention_artifact: Incident record plus restored entries in governance registries
+  and mandatory validator pass.
+prevention_check: python scripts/validate_agent_memory.py && python scripts/validate_plans.py
+  && python scripts/run_lean_gate.py
+loop_breaker_trigger: Any rebase/cherry-pick conflict touching governance registries
+  or handoff files.
+search_space_reset: Stop continuing rebase, snapshot pre-rebase refs via reflog, diff
+  IDs old-vs-current for governance registries, then continue only after zero-missing-ID
+  check.
+same_path_attempts: 1
+links:
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+- docs/session_handoff.md
+- scripts/validate_agent_memory.py
+- scripts/validate_plans.py
+- scripts/run_lean_gate.py

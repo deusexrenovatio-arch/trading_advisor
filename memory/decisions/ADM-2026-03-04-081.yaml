@@ -1,0 +1,33 @@
+id: ADM-2026-03-04-081
+date: 2026-03-04
+title: Expand morning-plan recall families and enforce hard-goal acceptance, then
+  map feasible frontier
+context: Precision-only loops were unable to satisfy the joint target (`winrate>=0.75`
+  and `~2 trades/week`), while baseline acceptance remained optimistic without explicit
+  hard constraints and concentration accounting.
+decision: Added hard-goal scoring/acceptance controls, introduced new setup families
+  (`ORB_BREAKOUT`, `EMA_PULLBACK_LIMIT`), added per-setup `time_stop_minutes`, and
+  ran constrained WF iterations H18-H23 with deterministic artifacts.
+impact: Pipeline now supports structural recall experiments and hard KPI gating; empirical
+  frontier is documented (`win~0.58-0.62` at `tpw~1-4`) and confirms current geometry
+  is insufficient for `75%` target without a new two-stage policy; added VWAP family
+  currently shows zero effective coverage in isolated probes.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- src/moex_carry/signal_engine/setups/generator.py
+- src/moex_carry/signal_engine/setups/extended_families.py
+- src/moex_carry/config.py
+- tests/test_morning_plan_walk_forward.py
+- tests/test_signal_engine_setups.py
+- artifacts/research/wf_goal_v6_h18_recall_families_constrained_20260304.json
+- artifacts/research/wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json
+- artifacts/research/wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json
+- artifacts/research/wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json
+- artifacts/research/wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json
+- artifacts/research/wf_goal_v6_h23_orb_sell_prob_precision_constrained_20260304.json
+- artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json
+- artifacts/research/wf_goal_v6_h26c_vwap_forced_constrained_20260304.json
+- artifacts/research/wf_goal_v6_h18_h26_iteration_summary_20260304.json
+- docs/research/wf-winrate75-methodology-plan-2026-03-04.md
+- plans/PLANS.yaml
+- docs/session_handoff.md

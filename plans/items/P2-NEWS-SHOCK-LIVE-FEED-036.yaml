@@ -1,0 +1,39 @@
+id: P2-NEWS-SHOCK-LIVE-FEED-036
+title: Wire fresh MOEX shock input and topic-stable story dedup into live shock and
+  Telegram flow
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- fresh shock cycles auto-build input from live MOEX candles and live news DB when
+  FreshLookbackHours is set
+- shock feed rows include stable root topic keys and impact tiers for primary/aftershock
+  policy
+- live news feed and Telegram news dedup use story fingerprints across commodities
+- line-budget hard gate remains passing after runtime refactor
+checks:
+- python scripts/build_live_shock_input.py --news-config configs/news-livecheck-ng.yaml
+  --output-csv data/output/tmp_live_shocks_input.csv --lookback-hours 1 --bar-minutes
+  5 --min-abs-z 2.0 --max-delay-min 60 --news-min-confidence 0.6
+- powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -FreshLookbackHours
+  1 -DirectionMaxTasks 20 -CausalMaxTasks 40 -NoTelegramFeed
+- python -m pytest tests/test_news_shock_automation.py tests/test_shock_alert_delivery.py
+  tests/test_news_live_runtime.py tests/test_telegram_worker.py -q
+- python scripts/run_lean_gate.py
+- python scripts/validate_quality_scorecards.py
+docs:
+- scripts/build_live_shock_input.py
+- src/moex_carry/news_shock_live_input.py
+- scripts/start_shock_label_cycle.ps1
+- src/moex_carry/news_topic.py
+- src/moex_carry/news_shock_automation.py
+- src/moex_carry/shock_alert_delivery.py
+- src/moex_carry/news_live_feed.py
+- src/moex_carry/news_live_runtime.py
+- src/moex_carry/integrations/telegram_news_broadcast.py
+- src/moex_carry/integrations/telegram_shock_broadcast.py
+dependencies:
+- P2-NEWS-LIVE-INGEST-035
+started_at: 2026-03-04
+completed_at: 2026-03-04

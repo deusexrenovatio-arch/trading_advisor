@@ -1,0 +1,17 @@
+id: ADM-2026-03-09-088
+date: 2026-03-09
+title: Fail-close process governance API when task-outcome source is unavailable
+context: The new process-governance API route loaded task outcomes directly from YAML
+  without an error boundary, so parse/source failures could surface as opaque 500
+  responses and break ops observability.
+decision: Add explicit fail-closed handling in `/api/v2/ops/process-improvement` to
+  return `503 unavailable` with structured diagnostic payload, and align API contract/test
+  coverage with this degraded mode.
+impact: Ops consumers now receive deterministic degraded-state semantics instead of
+  unhandled runtime failures, while preserving the normal report contract on healthy
+  source reads.
+links:
+- src/moex_carry/ui/routes_ops.py
+- docs/contracts/api-v2.yaml
+- tests/test_api_v2.py
+- docs/session_handoff.md

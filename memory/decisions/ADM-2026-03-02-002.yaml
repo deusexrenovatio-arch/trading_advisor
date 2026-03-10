@@ -1,0 +1,13 @@
+id: ADM-2026-03-02-002
+date: 2026-03-02
+title: Make NLI GPU-first by default for factor autolabel
+context: User workstation has RTX 4090 and CPU-only default leaves the main bottleneck
+  unresolved.
+decision: Set defaults to `nli_device=cuda:0` and `nli_batch_size=64` for factor autolabel
+  API and CLI/cycle wrappers.
+impact: Out-of-the-box runs use GPU without extra flags; CPU fallback remains available
+  via explicit `--nli-device cpu`.
+links:
+- src/moex_carry/news/factor_autolabel.py
+- src/moex_carry/cli_news_parsers.py
+- scripts/run_news_shock_silver_cycle.py

@@ -1,0 +1,32 @@
+id: P2-SIGNALS-H4A-OPS-051
+title: Publish the H4A manual execution contract and align baseline-status docs with
+  the active runtime baseline
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- operator-facing docs explicitly state the dynamic H4A execution rules that were
+  previously hidden in the simulator
+- stale O1-baseline wording is marked historical or superseded where H4A is already
+  the active runtime baseline
+- governance records state that the real execution baseline is H4A and link to the
+  operator contract
+checks:
+- python scripts/run_lean_gate.py
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+docs:
+- docs/runbooks/h4a-manual-execution-baseline.md
+- docs/signals-business-process.md
+- docs/research/o1-execution-hypothesis-results-2026-03-06.md
+- docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+- docs/research/evaluation-policy.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-H4A-MONEY-050
+- P2-SIGNALS-BASELINE-046
+started_at: 2026-03-09
+completed_at: 2026-03-09

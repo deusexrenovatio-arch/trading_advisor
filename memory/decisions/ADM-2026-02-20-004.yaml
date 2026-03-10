@@ -1,0 +1,12 @@
+id: ADM-2026-02-20-004
+date: 2026-02-20
+title: Introduce explicit multi-agent load guardrails via runbook
+context: Repeated hard resets and mixed kernel failures appeared under parallel high-load
+  agent sessions.
+decision: Add a dedicated runtime runbook with strict launch gates and stop/replan
+  thresholds for CPU, memory commit, and disk pressure.
+impact: Lower probability of commit-limit exhaustion and unstable mixed compute plus
+  driver behavior.
+links:
+- agent-runbook.md
+- plans/PLANS.yaml

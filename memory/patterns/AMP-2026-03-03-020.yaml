@@ -1,0 +1,13 @@
+id: AMP-2026-03-03-020
+date: 2026-03-03
+title: Evaluate news-linking changes with precision-at-coverage, not single scalar
+  score
+pattern: For shock-to-news matching, always report at least coverage, labeled directional
+  accuracy, and relevance quality together, then add threshold sweep with minimum
+  coverage constraint.
+when_to_use: Any tuning of strict vs broad candidate selection where naive high-precision
+  or high-coverage settings can look misleading in isolation.
+links:
+- src/moex_carry/news_mode_compare.py
+- scripts/compare_news_modes.py
+- data/output/news_mode_compare_365d_5m_opt/news_mode_compare_sweep.csv

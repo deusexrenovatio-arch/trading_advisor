@@ -1,0 +1,27 @@
+id: P1-UX-RISK-HARDENING-027
+title: Close operator action safety gaps from component-first review
+lane: product
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- Signals and Decisions UI write actions send explicit idempotency keys for v2 endpoints
+- portfolio rebalance commit endpoint enforces server-side max_positions risk gate
+- Forward workspace allows run start and status inspection in one operator flow
+checks:
+- pytest tests/test_api_v2.py -k "rebalance or decision_actions_require_idempotency_key
+  or signals_actions_require_idempotency_key" -q
+- npm --prefix ui-web run lint
+- npm --prefix ui-web run build
+- python scripts/run_lean_gate.py
+docs:
+- ui-web/src/features/market/useMarketTables.ts
+- ui-web/src/features/decisions/useDecisionView.ts
+- src/moex_carry/ui/routes_market_data.py
+- ui-web/src/features/forward/ForwardTab.tsx
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-PRODUCT-REVIEW-026
+started_at: 2026-03-02
+completed_at: 2026-03-02

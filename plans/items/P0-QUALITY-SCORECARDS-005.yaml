@@ -1,0 +1,19 @@
+id: P0-QUALITY-SCORECARDS-005
+title: Quality scorecards with merge-blocking thresholds
+lane: quality
+status: completed
+execution_mode: autonomous
+owner: quality-engineering
+acceptance:
+- quality scorecards config exists
+- validator computes dimension score and enforces thresholds
+- CI has blocking quality-scorecards job with report artifact
+checks:
+- python scripts/validate_quality_scorecards.py
+docs:
+- harness-guideline.md
+- docs/DEV_WORKFLOW.md
+dependencies:
+- P0-AGENT-PLANS-001
+started_at: 2026-02-20
+completed_at: 2026-02-20

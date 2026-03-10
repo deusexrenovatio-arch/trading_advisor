@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from handoff_resolver import read_task_note_lines
+
 REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 INCIDENT_POLICY_PATH = Path("configs/agent_incident_policy.yaml")
 REQUIRED_CONTRACT_ITEMS = (
@@ -113,8 +115,7 @@ def run(path: Path) -> int:
         print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
-    text = path.read_text(encoding="utf-8")
-    lines = text.splitlines()
+    target_path, lines, is_pointer = read_task_note_lines(path)
     errors: list[str] = []
 
     contract_heading = "## Task Request Contract"
@@ -167,7 +168,8 @@ def run(path: Path) -> int:
 
     print(
         "task request contract validation: OK "
-        f"(contract_items={len(REQUIRED_CONTRACT_ITEMS)} "
+        f"(source={target_path.as_posix()} pointer_mode={is_pointer} "
+        f"contract_items={len(REQUIRED_CONTRACT_ITEMS)} "
         f"report_items={len(REQUIRED_REPORT_ITEMS)} "
         f"repetition_items={len(REQUIRED_REPETITION_ITEMS)})"
     )

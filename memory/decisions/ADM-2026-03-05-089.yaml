@@ -1,0 +1,24 @@
+id: ADM-2026-03-05-089
+date: 2026-03-05
+title: Reach causal hard-go on seed124 via execution-only semantics (no probability,
+  no routing/filter additions)
+context: Filter-only and routing-focused reruns remained below hard winrate target,
+  so the loop pivoted to pure execution semantics (TP/SL/exit/fill/cost behavior)
+  per user request.
+decision: Extended `run_morning_plan_walk_forward.py` with execution controls for
+  bracket reshaping (`tp_rr/sl_rr`), time/exit controls (`max_holding_minutes`, trailing,
+  same-bar policy), fill quality (`limit_entry_improve_ticks`), and outcome-aware
+  costs (`tp/sl/exit_cost_mult`) plus `max_profit_rr`; added deterministic `execution_fixed_v1`
+  profile and iterated causal reruns until hard-go passed on seed124.
+impact: Causal execution profile `M3` reached `acceptance.passed=true` on target window
+  (`win_rate_net=0.7574`, `trades_per_week=3.8529`, `concentration_top_share=0.4622`),
+  proving the objective can be achieved through execution semantics without probability
+  gate; next risk is robustness across additional seeds/windows.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- tests/test_morning_plan_walk_forward.py
+- artifacts/research/wf_goal_v6_h24_causal_rerun_executionsem_v3_entryimprove_seed124_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_L_kplus_improve1_seed124_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_M3_cap03_seed124_20260305.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

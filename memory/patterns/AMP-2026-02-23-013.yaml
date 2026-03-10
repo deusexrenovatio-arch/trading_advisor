@@ -1,0 +1,11 @@
+id: AMP-2026-02-23-013
+date: 2026-02-23
+title: Keep app as composition root, move behavior into focused UI services
+pattern: When API entrypoint grows, extract long-running loops and domain write flows
+  into dedicated modules and leave route wiring in app root.
+when_to_use: Backend UI module exceeds reviewable size or combines scheduler, persistence,
+  and route concerns in one function.
+links:
+- src/moex_carry/ui/app.py
+- src/moex_carry/ui/refresh_scheduler.py
+- src/moex_carry/ui/decision_actions.py

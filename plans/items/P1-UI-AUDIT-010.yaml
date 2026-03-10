@@ -1,0 +1,20 @@
+id: P1-UI-AUDIT-010
+title: Reduce ui-web npm audit risk in eslint toolchain
+lane: security
+status: completed
+execution_mode: autonomous
+owner: frontend-platform
+acceptance:
+- ui-web dependency updates are documented by ADR
+- npm audit has no high or critical findings
+- ui-web lint and build stay green after lockfile update
+checks:
+- npm --prefix ui-web audit --json
+- npm --prefix ui-web run lint
+- npm --prefix ui-web run build
+docs:
+- docs/architecture/adr/0002-ui-web-audit-remediation-eslint-chain.md
+dependencies:
+- P0-QUALITY-SCORECARDS-005
+started_at: 2026-02-20
+completed_at: 2026-02-20

@@ -1,0 +1,19 @@
+id: P0-AGENT-PLANS-001
+title: Machine-readable plans registry and schema validation
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- plans/PLANS.yaml exists and is machine-readable
+- scripts/validate_plans.py validates schema and dependencies
+- lean gate runs plan validation
+checks:
+- python scripts/validate_plans.py
+docs:
+- AGENTS.md
+- docs/DEV_WORKFLOW.md
+- harness-guideline.md
+dependencies: []
+started_at: 2026-02-20
+completed_at: 2026-02-20

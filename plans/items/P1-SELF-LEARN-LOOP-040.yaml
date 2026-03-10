@@ -1,0 +1,33 @@
+id: P1-SELF-LEARN-LOOP-040
+title: Enforce repeated-issue self-learning and search-space reset as machine-checked
+  governance
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- new incidents require explicit behavior-change and loop-breaker evidence
+- handoff task contract requires repetition-control section with stop/reset/new-search
+  fields
+- repeated-issue skill requires prevention artifact and enforcement-check output
+- governance docs and remediation flow are aligned with the new policy
+checks:
+- python scripts/validate_agent_memory.py
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_skills.py
+- python scripts/run_lean_gate.py
+docs:
+- configs/agent_incident_policy.yaml
+- scripts/validate_agent_memory.py
+- scripts/validate_task_request_contract.py
+- docs/checklists/task-request-contract.md
+- docs/checklists/first-time-right-gate.md
+- docs/DEV_WORKFLOW.md
+- AGENTS.md
+- docs/session_handoff.md
+- .cursor/skills/repeated-issue-review/SKILL.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-REQUEST-CONTRACT-039
+started_at: 2026-03-04
+completed_at: 2026-03-04

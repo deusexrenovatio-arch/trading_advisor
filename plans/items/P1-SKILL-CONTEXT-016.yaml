@@ -1,0 +1,22 @@
+id: P1-SKILL-CONTEXT-016
+title: Reduce skill context footprint via centralized governance reference
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- skill governance details are centralized in docs/workflows/skill-governance-sync.md
+- local SKILL.md files use short governance references instead of duplicated command
+  catalogs
+- AGENTS.md skill list is compact while path mapping remains machine-parseable
+checks:
+- python scripts/validate_skills.py
+- python scripts/run_lean_gate.py
+docs:
+- AGENTS.md
+- docs/workflows/skill-governance-sync.md
+- scripts/validate_skills.py
+dependencies:
+- P1-SKILL-MIRROR-015
+started_at: 2026-02-23
+completed_at: 2026-02-23

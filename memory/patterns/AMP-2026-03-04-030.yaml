@@ -1,0 +1,11 @@
+id: AMP-2026-03-04-030
+date: 2026-03-04
+title: Keep external-practice adoption explicit with per-advice decision traceability
+pattern: For each external recommendation, record usefulness and decision (`ADOPT/ADAPT/DEFER/REJECT`)
+  against architecture and active governance gates before implementing changes.
+when_to_use: Any methodology import where generic advice may conflict with repository-specific
+  safety, risk, or delivery constraints.
+links:
+- docs/workflows/external-advice-mapping-2026-03-04.md
+- docs/workflows/agent-practices-alignment.md
+- plans/PLANS.yaml

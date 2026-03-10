@@ -1,0 +1,23 @@
+id: P2-NEWS-SHOCK-SILVER-013
+title: Unified shock-first to silver-high-confidence cycle for commodity news
+lane: news
+status: completed
+execution_mode: autonomous
+owner: quant-research
+acceptance:
+- single command/script runs shock-first target build, factor autolabel, and silver
+  bootstrap for NG_US BRN GOLD
+- run produces machine-readable summary and silver_high_conf dataset artifacts
+- workflow remains compatible with existing target_v2 and factor-autolabel logic
+checks:
+- python -m ruff check scripts/run_news_shock_silver_cycle.py
+- python scripts/run_news_shock_silver_cycle.py --from-date 2026-01-01 --to-date 2026-01-03
+  --horizon 5m --max-events 5 --factor-max-events 5 --out-dir data/output/shock_silver_cycle_smoke
+- python scripts/run_lean_gate.py
+docs:
+- scripts/run_news_shock_silver_cycle.py
+- docs/session_handoff.md
+dependencies:
+- P1-CONTEXT-BUDGET-012
+started_at: 2026-02-23
+completed_at: 2026-02-23

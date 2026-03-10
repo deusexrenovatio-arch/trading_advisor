@@ -1,0 +1,17 @@
+id: ADM-2026-03-03-028
+date: 2026-03-03
+title: Deliver shock alerts in Telegram as topic episodes with multi-day aftershock
+  continuity
+context: User requirement shifted to operational shock capture where aftershocks can
+  occur days after root event but still belong to one tradeable theme.
+decision: Wire Telegram worker to consume shock feed with topic-aware policy (primary
+  and aftershock roles), reopen window in hours, cooldown, and fingerprint dedupe
+  TTL.
+impact: Worker can emit actionable shock alerts that preserve root-topic identity
+  across days instead of treating each move as unrelated single-shot signal.
+links:
+- src/moex_carry/shock_alert_delivery.py
+- src/moex_carry/integrations/telegram_shock_broadcast.py
+- src/moex_carry/integrations/telegram_worker.py
+- tests/test_shock_alert_delivery.py
+- tests/test_telegram_worker.py

@@ -1,0 +1,13 @@
+id: ADM-2026-02-23-013
+date: 2026-02-23
+title: Centralize skill governance details to control context size
+context: Mirroring all skills locally increased repetitive governance text and AGENTS
+  payload size.
+decision: Replace per-skill command catalogs with a short baseline reference to docs/workflows/skill-governance-sync.md
+  and keep AGENTS skill entries compact.
+impact: Lower per-turn prompt overhead while preserving deterministic governance checks
+  through centralized docs and validator rules.
+links:
+- docs/workflows/skill-governance-sync.md
+- scripts/validate_skills.py
+- AGENTS.md

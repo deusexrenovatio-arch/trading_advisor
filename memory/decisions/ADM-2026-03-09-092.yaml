@@ -1,0 +1,21 @@
+id: ADM-2026-03-09-092
+date: 2026-03-09
+title: Serve weekly process-improvement reports from the tracked outcome ledger and
+  surface them in a dedicated governance workspace
+context: Process telemetry and the tracked task-outcome ledger existed, but weekly
+  process-health review still depended on markdown artifacts and lacked a product
+  UI for human-readable conclusions, weekly trend inspection, and recommendation follow-up.
+decision: Add a shared governance reporting module that builds deterministic human-readable
+  summaries and weekly history from `memory/task_outcomes.yaml`, expose it through
+  a new ops API endpoint, preserve router start recommendations in telemetry and the
+  outcome ledger, and render the result in a dedicated `ui-web` Process Governance
+  workspace with trend, leaderboard, and task drilldown views.
+impact: Weekly process-health review now lives inside the product UI instead of GitHub
+  artifacts alone, while the same tracked ledger continues to drive markdown/json
+  reports, governance dashboard artifacts, and blocking process-quality checks.
+links:
+- src/moex_carry/governance/process_reports.py
+- src/moex_carry/ui/routes_ops.py
+- ui-web/src/features/process-governance/ProcessGovernanceTab.tsx
+- scripts/process_improvement_report.py
+- docs/contracts/api-v2.yaml

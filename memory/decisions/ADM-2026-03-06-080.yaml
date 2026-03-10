@@ -1,0 +1,21 @@
+id: ADM-2026-03-06-080
+date: 2026-03-06
+title: Unify process-improvement telemetry through local task events plus tracked
+  task-outcome ledger
+context: Governance already had plans, handoff, memory, scorecards, KPI, and dashboard
+  artifacts, but task-level process learning stayed implicit and diff-window closeout
+  was not machine-enforced.
+decision: Add local `.runlogs/agent-process/` task lifecycle telemetry, sync a tracked
+  `memory/task_outcomes.yaml` ledger from `docs/session_handoff.md` plus local task
+  state, and enforce outcome/regression gates through lean loop, scorecards, reporting,
+  CI, and weekly docs-gardening.
+impact: Task start/first-patch/end timing, route match, repeated signatures, and improvement
+  artifacts are now visible in one governance loop with burn-in-aware thresholds and
+  deterministic remediation.
+links:
+- scripts/agent_process_telemetry.py
+- scripts/sync_task_outcomes.py
+- scripts/validate_task_outcomes.py
+- scripts/validate_process_regressions.py
+- memory/task_outcomes.yaml
+- docs/DEV_WORKFLOW.md

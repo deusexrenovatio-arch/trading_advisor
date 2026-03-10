@@ -1,0 +1,27 @@
+id: ADM-2026-03-07-097
+date: 2026-03-07
+title: Use economic lot sizing as the baseline comparison frame, and treat scenario
+  2 as the strongest tested weak-month improver
+context: User asked to use lot volume as an active lever because futures contribute
+  unevenly in cash terms, then requested full reruns of the corrected baseline plus
+  scenario 2 and scenario 3 on the same frozen window.
+decision: Extended `run_morning_plan_walk_forward.py` with explicit `fixed_lots` and
+  `target_risk_pct` sizing modes, propagated `qty_lots` and sizing metadata through
+  simulation/reporting, and added `run_signals_sizing_scenarios.py` to rerun the frozen
+  comparison set in corrected money/ROE units. The completed rerun showed `O1 fixed`
+  at `3.83%` ROE, `O1 risk-sized` at `12.97%`, scenario 2 at `30.89%`, and scenario
+  3 at `26.81%`; scenario 2 had the strongest weak-month improvement (`median monthly
+  ROE 1.12%`, `ROE ex top3 9.78%`) while scenario 3 mainly improved concentration
+  versus the risk-sized baseline (`top share 0.262` vs `0.283`) but weakened weak-month
+  floor metrics.
+impact: Future strategy loops should compare variants on economic sizing first, not
+  raw one-lot results. The next stabilizing loop should start from the broader scenario
+  2 family and pair it with concentration or notional caps, because none of the tested
+  variants comes close to the requested `25%` weak-month floor.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- scripts/run_signals_sizing_scenarios.py
+- tests/test_morning_plan_walk_forward.py
+- artifacts/research/wf_goal_v6_sizing_scenarios_20260307.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

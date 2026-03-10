@@ -1,0 +1,11 @@
+id: AMP-2026-03-05-032
+date: 2026-03-05
+title: Make time-window tests explicit about evaluation clock
+pattern: Any logic with lookback/time-cutoff gates should accept optional as-of timestamp
+  and tests should pass fixed as-of values instead of relying on datetime.now().
+when_to_use: Filtering, gating, or ranking code where fixture timestamps can drift
+  outside windows as real time advances.
+links:
+- src/moex_carry/news_live_bridge.py
+- tests/test_news_live_runtime.py
+- docs/checklists/first-time-right-gate.md

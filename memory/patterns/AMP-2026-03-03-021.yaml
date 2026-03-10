@@ -1,0 +1,12 @@
+id: AMP-2026-03-03-021
+date: 2026-03-03
+title: Measure shock-capture quality by role (primary vs aftershock)
+pattern: Compute and track recall for initial shock impulse and follow-up aftershock
+  legs separately; use primary recall for detector tuning and aftershock recall for
+  continuation logic.
+when_to_use: Any shock-detection strategy where continuation bursts are materially
+  different from root impulse behavior.
+links:
+- src/moex_carry/shock_episodes.py
+- scripts/analyze_shock_episodes.py
+- data/output/shock_episode_analysis_2026_ytd/shock_mode_capture.csv

@@ -1,0 +1,23 @@
+id: P1-SKILL-DECISION-017
+title: Add machine decision gate for skill update vs new-skill creation
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- deterministic decision script exists and reports UPDATE_EXISTING/ADD_NEW/NO_CHANGE
+- decision gates are documented in skill governance workflow
+- update command is linked from AGENTS and DEV workflow
+checks:
+- python scripts/skill_update_decision.py --request "skill update decision smoke"
+  --json
+docs:
+- docs/workflows/skill-governance-sync.md
+- docs/DEV_WORKFLOW.md
+- AGENTS.md
+- scripts/skill_update_decision.py
+- memory/agent_memory.yaml
+dependencies:
+- P1-SKILL-CONTEXT-016
+started_at: 2026-02-23
+completed_at: 2026-02-23

@@ -1,0 +1,11 @@
+id: ADM-2026-02-20-001
+date: 2026-02-20
+title: Introduce lean governance gate as single fast loop
+context: High context usage and fragmented checks slowed agent iteration.
+decision: Consolidate governance checks into scripts/run_lean_gate.py and route CI/pre-push
+  through it.
+impact: Lower orchestration overhead, deterministic feedback loop, easier agent reuse.
+links:
+- scripts/run_lean_gate.py
+- .github/workflows/ci.yml
+- .githooks/pre-push

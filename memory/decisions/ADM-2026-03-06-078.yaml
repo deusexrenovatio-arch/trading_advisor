@@ -1,0 +1,19 @@
+id: ADM-2026-03-06-078
+date: 2026-03-06
+title: Remove research-route reverse import and classify remaining architecture boundary
+  risks
+context: Whole-app architecture audit found route module coupling to `ui.app` internals
+  and replay context depending on private pipeline functions.
+decision: "Inject research runtime callables through composition root (`register_research_routes`)\
+  \ and keep replay\u2194pipeline private-function coupling as explicit blocker for\
+  \ separate extraction."
+impact: API research route layer no longer depends on `ui.app` module import path;
+  architecture debt inventory now highlights anti-corruption and shared-storage shortcut
+  risks with concrete remediation path.
+links:
+- src/moex_carry/ui/routes_research.py
+- src/moex_carry/ui/app.py
+- src/moex_carry/signal_replay/incremental.py
+- src/moex_carry/pipeline.py
+- docs/session_handoff.md
+- plans/PLANS.yaml

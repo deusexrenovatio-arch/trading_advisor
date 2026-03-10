@@ -1,0 +1,14 @@
+id: ADM-2026-03-02-001
+date: 2026-03-02
+title: Add explicit NLI device and batch controls for factor autolabel runtime
+context: NLI remains the dominant runtime bottleneck and CPU-only execution causes
+  local workstation pressure.
+decision: Add `nli_device`, `nli_batch_size`, and `nli_text_max_chars` controls to
+  factor autolabel and CLI/cycle entrypoints; keep `auto` device fallback.
+impact: Deterministic runtime tuning per host and direct path to CUDA acceleration
+  when available, without code edits.
+links:
+- src/moex_carry/news/factor_autolabel.py
+- src/moex_carry/cli_news_parsers.py
+- src/moex_carry/cli_news_handlers.py
+- scripts/run_news_shock_silver_cycle.py

@@ -1,0 +1,19 @@
+id: P0-SELF-HEAL-006
+title: Deterministic self-heal loop with auto-PR workflow
+lane: reliability
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- self-heal script attempts deterministic remediations and reruns gates
+- self-heal workflow runs on schedule and manual trigger
+- self-heal workflow can open PR when changes are produced
+checks:
+- python scripts/self_heal.py
+docs:
+- harness-guideline.md
+- docs/DEV_WORKFLOW.md
+dependencies:
+- P0-AGENT-PLANS-001
+started_at: 2026-02-20
+completed_at: 2026-02-20

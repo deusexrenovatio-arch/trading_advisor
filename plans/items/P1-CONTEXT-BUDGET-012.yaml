@@ -1,0 +1,25 @@
+id: P1-CONTEXT-BUDGET-012
+title: Team-wide context budget workflow with machine gate
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- session handoff contract is documented and versioned
+- lean gate includes context budget validator
+- governance docs and remediation runbook cover failure handling
+- plans and memory capture durable rollout decision
+checks:
+- python scripts/validate_session_handoff.py
+- python scripts/run_lean_gate.py
+docs:
+- docs/workflows/context-budget.md
+- docs/session_handoff.md
+- docs/DEV_WORKFLOW.md
+- harness-guideline.md
+- docs/runbooks/governance-remediation.md
+dependencies:
+- P0-AGENT-PLANS-001
+- P1-OPS-STABILITY-011
+started_at: 2026-02-20
+completed_at: 2026-02-20

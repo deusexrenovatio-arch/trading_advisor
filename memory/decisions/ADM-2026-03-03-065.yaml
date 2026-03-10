@@ -1,0 +1,19 @@
+id: ADM-2026-03-03-065
+date: 2026-03-03
+title: Split commodity news live ingestion into runtime, scoring, and client modules
+  with GPU-first model fallback
+context: Live NewsAPI/GDELT ingestion and model scoring were needed in production
+  loop, while governance blocked oversized single-file implementation.
+decision: Implement ingestion as three modules (`news_live_runtime`, `news_live_clients`,
+  `news_live_scoring`) and bridge scored SQLite news into pipeline news gate; use
+  NLI/FinBERT primary mode with automatic GPU selection and keyword fallback.
+impact: Enabled 5-minute live polling plus continuous backfill with robust fallback
+  behavior; pipeline now consumes runtime news instead of empty list.
+links:
+- src/moex_carry/news_live_runtime.py
+- src/moex_carry/news_live_clients.py
+- src/moex_carry/news_live_scoring.py
+- src/moex_carry/news_live_bridge.py
+- src/moex_carry/pipeline.py
+- scripts/manage_news_ingest_tasks.ps1
+- configs/news-livecheck-ng.yaml

@@ -1,0 +1,11 @@
+id: AMP-2026-03-03-025
+date: 2026-03-03
+title: Use user-context scheduled task for unattended local ML/news jobs
+pattern: For workstation automation, install Task Scheduler jobs under current user
+  by default and keep SYSTEM mode optional for elevated deployments.
+when_to_use: Any recurring local research/labeling pipeline that must run daily without
+  manual CLI launch and without admin-only setup.
+links:
+- scripts/manage_shock_label_cycle_task.ps1
+- scripts/start_shock_label_cycle.ps1
+- docs/runbooks/news-shock-go-live.md

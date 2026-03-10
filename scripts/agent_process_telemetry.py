@@ -19,6 +19,7 @@ REPO_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(REPO_SRC) not in sys.path:
     sys.path.insert(0, str(REPO_SRC))
 
+from handoff_resolver import read_task_note_lines
 from context_router import route_files
 from moex_carry.governance.process_reports import ROLLING_WINDOW_SIZE
 
@@ -229,7 +230,7 @@ def parse_session_handoff(path: Path) -> dict[str, Any]:
             "blockers_text": "",
             "blockers_lines": [],
         }
-    lines = path.read_text(encoding="utf-8").splitlines()
+    _resolved_path, lines, _is_pointer = read_task_note_lines(path)
     blockers_lines = _section_lines(lines, "## Blockers")
     return {
         "goal_text": _section_text(lines, "## Goal"),

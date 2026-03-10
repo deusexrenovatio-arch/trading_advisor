@@ -1,0 +1,22 @@
+id: P2-SIGNALS-FWD-LIVE-040
+title: Align O1 execution baseline and launch live paper-forward operator contour
+lane: operations
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- default morning execution policy matches O1 profile (no hard absolute TP cap)
+- operator launch script starts backend, refreshes live signals, and initializes forward
+  run for today
+- Telegram worker format remains unchanged and is reused by launch flow
+checks:
+- python scripts/run_lean_gate.py
+- powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -CheckOnly
+- powershell -ExecutionPolicy Bypass -File scripts/start_forward_paper_live.ps1 -ForceFullRefresh
+docs:
+- README.md
+- docs/session_handoff.md
+dependencies:
+- P0-AGENT-PLANS-001
+started_at: 2026-03-06
+completed_at: 2026-03-06

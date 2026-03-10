@@ -1,0 +1,13 @@
+id: AMI-2026-02-23-007
+date: 2026-02-23
+title: Editable package path drifted to another worktree during architecture patch
+  validation
+symptom: Pytest in a new worktree imported moex_carry from a different checkout path
+  and missed new repository symbols.
+root_cause: Local editable install still pointed to previous worktree after branch/worktree
+  switch.
+remediation: Reinstall editable package from active worktree before running tests.
+remediation_type: workflow
+links:
+- pyproject.toml
+- docs/DEV_WORKFLOW.md

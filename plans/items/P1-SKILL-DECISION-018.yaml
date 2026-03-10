@@ -1,0 +1,23 @@
+id: P1-SKILL-DECISION-018
+title: Add commit-time enforcement for skill decision routing
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- pre-commit gate executes decision helper for staged skill/governance edits
+- commit is blocked for NO_CHANGE decisions unless user provides explicit intent
+- strict mode supports blocking ADD_NEW when explicitly enabled
+- hooks behavior documented in workflow and AGENTS
+checks:
+- python scripts/skill_precommit_gate.py
+docs:
+- .githooks/pre-commit
+- docs/workflows/skill-governance-sync.md
+- AGENTS.md
+- docs/DEV_WORKFLOW.md
+- scripts/skill_precommit_gate.py
+dependencies:
+- P1-SKILL-DECISION-017
+started_at: 2026-02-23
+completed_at: 2026-02-23

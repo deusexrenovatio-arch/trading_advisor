@@ -1,0 +1,23 @@
+id: ADM-2026-03-06-084
+date: 2026-03-06
+title: Promote root-first news routing to production cycle with DB-linked aftershocks
+  and route graph maintenance
+context: Research-mode routing still depended on legacy `v2_clean/broad` branches
+  and had no single production cycle that continuously linked root causes to aftershocks
+  in storage.
+decision: Add root-first candidate selection in live shock input, candidate-window
+  NewsAPI enrichment with DB persistence/scoring, persist root/aftershock fields in
+  `news_shock_rows`, auto-build root maintenance tables (`news_root_links`, `news_root_registry`,
+  `news_root_route_edges`), and expose unified `news_root_cycle` CLI command for ingest->shock->root
+  maintenance.
+impact: Runtime now has one operational flow from ingest to root/aftershock linkage
+  with persistent graph context, while preserving fallback candidate modes for coverage
+  and backward compatibility.
+links:
+- src/moex_carry/news_shock_live_input.py
+- src/moex_carry/news_shock_enrichment.py
+- src/moex_carry/news_shock_store.py
+- src/moex_carry/news_root_maintenance.py
+- src/moex_carry/cli.py
+- src/moex_carry/cli_news_runtime_handlers.py
+- docs/runbooks/news-shock-go-live.md

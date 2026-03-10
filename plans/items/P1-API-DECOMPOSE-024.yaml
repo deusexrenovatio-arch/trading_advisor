@@ -1,0 +1,30 @@
+id: P1-API-DECOMPOSE-024
+title: Extract market-data route group from UI app composition
+lane: architecture
+status: completed
+execution_mode: autonomous
+owner: backend-platform
+acceptance:
+- signal history/executions and v1 execute adapter routes moved from `ui/app.py` into
+  dedicated registrar module
+- backtests, rebalance preview/commit, and spread-series routes moved to the same
+  registrar without API behavior drift
+- existing monkeypatch seam for `build_spread_series` remains available from `ui.app`
+- parity and baseline metrics scanners account for multi-file UI route registrations
+checks:
+- pytest tests/test_signal_api.py::test_signals_history_endpoint_returns_rows tests/test_signal_api.py::test_signals_executions_endpoint_returns_rows
+  tests/test_ui_api.py::test_spread_series_endpoint_uses_builder tests/test_api_v2.py::test_v2_portfolio_rebalance_preview_and_commit
+  -q
+- python scripts/validate_api_v2_contract_parity.py
+- python scripts/harness_baseline_metrics.py
+docs:
+- src/moex_carry/ui/routes_market_data.py
+- docs/architecture/modules/backend-core.md
+- scripts/validate_api_v2_contract_parity.py
+- scripts/harness_baseline_metrics.py
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-API-DECOMPOSE-023
+started_at: 2026-02-23
+completed_at: 2026-02-23

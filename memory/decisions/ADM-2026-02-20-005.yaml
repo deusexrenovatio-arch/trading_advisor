@@ -1,0 +1,12 @@
+id: ADM-2026-02-20-005
+date: 2026-02-20
+title: Limit Cursor indexing scope with repository-level .cursorignore
+context: Crash-window telemetry showed high-churn indexing and retrieval activity
+  during heavy parallel workloads.
+decision: Add .cursorignore to exclude generated and dependency-heavy paths from indexing
+  by default.
+impact: Lower background CPU and disk pressure; reduced probability of commit-limit
+  amplification from concurrent indexing.
+links:
+- .cursorignore
+- agent-runbook.md

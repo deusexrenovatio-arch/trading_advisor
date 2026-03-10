@@ -1,0 +1,14 @@
+id: ADM-2026-03-05-081
+date: 2026-03-05
+title: Raise synthetic root/aftershock launch target to 90% recall on known shocks
+context: User target was clarified to require catching at least 90% of known shock
+  episodes before forward rollout.
+decision: Set no-lookahead synthetic replay defaults and launch protocol thresholds
+  to `avg_primary_recall_episode>=0.90` and `avg_aftershock_recall_episode>=0.90`.
+impact: Release decision now aligns with explicit high-recall requirement; current
+  pipeline state is treated as below-goal until recall gap is closed.
+links:
+- scripts/news_forward_synthetic.py
+- docs/runbooks/news-forward-synthetic-validation.md
+- docs/runbooks/news-shock-go-live.md
+- docs/session_handoff.md

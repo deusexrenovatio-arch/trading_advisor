@@ -1,0 +1,19 @@
+id: ADM-2026-03-05-074
+date: 2026-03-05
+title: Auto-backfill causal fields for legacy live-news scores and lock strict verified-feed
+  defaults
+context: Prepared historical `news_livecheck_ng.db` had populated legacy `news_scores`
+  rows without new causal columns, which made cause-first feed gating return empty
+  or near-empty output under strict verification settings.
+decision: Add runtime path to backfill missing causal fields for existing `news_scores`
+  rows on each ingest cycle, and lock NG livecheck feed defaults to primary-cause
+  + `require_verified_move=true` + `require_verified_both_horizons=true` with calibrated
+  `feed_min_confidence=0.6`.
+impact: Existing databases can be reused immediately without manual rescoring migration;
+  Telegram/live feed now emits only fundamental items with realized move confirmation
+  when available.
+links:
+- src/moex_carry/news_live_runtime.py
+- configs/news-livecheck-ng.yaml
+- tests/test_news_live_runtime.py
+- docs/session_handoff.md

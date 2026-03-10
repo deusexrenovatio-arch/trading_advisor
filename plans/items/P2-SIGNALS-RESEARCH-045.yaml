@@ -1,0 +1,27 @@
+id: P2-SIGNALS-RESEARCH-045
+title: Validate execution profiles on 2020-2024 history and record per-root/calendar
+  diagnostics
+lane: research
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- historical 2020-2022 data is prefetched with correct fixed-contract coverage
+- execution profiles are rerun on valid 2020-2026 coverage with a 2020-2024 robustness
+  slice
+- research artifacts state whole-universe result, per-root quality, and active-vs-full-calendar
+  month diagnostics
+checks:
+- python scripts/run_lean_gate.py
+- python scripts/validate_session_handoff.py
+- python scripts/validate_task_request_contract.py
+docs:
+- docs/research/execution-profiles-historical-review-2026-03-06.md
+- docs/research/evaluation-policy.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-RESEARCH-044
+started_at: 2026-03-06
+completed_at: 2026-03-06

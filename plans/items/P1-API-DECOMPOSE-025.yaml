@@ -1,0 +1,27 @@
+id: P1-API-DECOMPOSE-025
+title: Extract v2 research route group from UI app composition
+lane: architecture
+status: completed
+execution_mode: autonomous
+owner: backend-platform
+acceptance:
+- v2 research wrappers moved from `ui/app.py` into dedicated `ui/routes_research.py`
+  registrar
+- research runtime monkeypatch seams remain compatible through `moex_carry.ui.app`
+  call resolution
+- route parity and baseline metrics remain green under multi-file UI route layout
+checks:
+- pytest tests/test_api_v2.py::test_v2_research_wrappers tests/test_api_v2.py::test_v2_hpo_status_fails_on_quality_gate
+  -q
+- python scripts/validate_api_v2_contract_parity.py
+- python scripts/harness_baseline_metrics.py
+- python scripts/run_lean_gate.py
+docs:
+- src/moex_carry/ui/routes_research.py
+- docs/architecture/modules/backend-core.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-API-DECOMPOSE-024
+started_at: 2026-02-23
+completed_at: 2026-02-23

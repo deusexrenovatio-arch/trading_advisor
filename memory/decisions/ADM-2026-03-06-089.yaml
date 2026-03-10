@@ -1,0 +1,18 @@
+id: ADM-2026-03-06-089
+date: 2026-03-06
+title: Fix O1 as the primary execution baseline and require O1-relative drift sign-off
+context: User decided to anchor the branch on the working O1 execution profile and
+  measure every later execution change against O1 rather than against incidental merged
+  defaults or temporary legacy fallback.
+decision: Set `SignalEngineMorningExecutionConfig` defaults to the O1 profile, keep
+  O1 as the reference baseline for runtime and research comparisons, and require any
+  future rebase or execution-profile change to include a written drift analysis and
+  accept/reject decision relative to O1.
+impact: The repository has one explicit execution baseline again; default runtime,
+  walk-forward runs, and future drift reviews now share the same O1 reference point.
+links:
+- src/moex_carry/config.py
+- tests/test_config_loading.py
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O1_limitfallback10m1t_frontnearest_seed124_20260305.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

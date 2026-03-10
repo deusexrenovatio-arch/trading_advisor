@@ -1,0 +1,23 @@
+id: P2-SIGNALS-BASELINE-042
+title: Fix O1 as primary execution baseline and require O1-relative drift analysis
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- default morning execution policy matches the accepted O1 profile
+- any alternative execution profile is compared and explained relative to O1 before
+  baseline promotion
+- plans, memory, and session handoff record mandatory write-up and branch-goal decision
+  for future rebase baseline drift
+checks:
+- python scripts/run_lean_gate.py
+- pytest tests/test_config_loading.py tests/test_morning_plan_walk_forward.py -q
+docs:
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-FWD-LIVE-040
+started_at: 2026-03-06
+completed_at: 2026-03-06

@@ -1,0 +1,18 @@
+id: P0-AGENT-REVIEW-004
+title: CI agent-review job with findings artifact
+lane: review
+status: completed
+execution_mode: autonomous
+owner: quality-engineering
+acceptance:
+- agent-review CI job exists
+- findings report is generated on every CI run
+- report is uploaded as artifact
+checks:
+- python scripts/agent_review.py
+docs:
+- .github/pull_request_template.md
+dependencies:
+- P0-AGENT-PLANS-001
+started_at: 2026-02-20
+completed_at: 2026-02-20

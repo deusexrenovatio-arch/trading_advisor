@@ -1,0 +1,9 @@
+id: AMP-2026-02-22-007
+date: 2026-02-22
+title: Source-first verification for signal claims
+pattern: Any statement about signals must name worktree, runtime process source, and
+  exact data path before interpreting metrics.
+when_to_use: Signal lifecycle, score-gate, telegram delivery, or data freshness investigations.
+links:
+- docs/runbooks/signal-agent-continuity.md
+- scripts/worktree_guard.ps1

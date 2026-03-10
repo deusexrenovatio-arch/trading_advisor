@@ -1,0 +1,22 @@
+id: ADM-2026-03-09-093
+date: 2026-03-09
+title: Treat H4A runbook as the normative live execution contract and move operator
+  lifecycle to execution-fact states
+context: Research and runbook work already promoted `H4A_CAP_OFF` as the preferred
+  execution profile, but runtime signal delivery and UI/API lifecycle still behaved
+  like a coarse `ack`-driven intent model with callback-TTL expiry and no fill-driven
+  recalculation contract.
+decision: Promote `H4A_CAP_OFF` as the only active baseline in runtime-facing metadata,
+  use `docs/runbooks/h4a-manual-execution-baseline.md` as the execution source of
+  truth, keep `O1` only as a regression reference, replace `ack` semantics with explicit
+  viewed/submitted/filled/cancelled/manual-override states, and treat concentration
+  control as a separate live-routing layer rather than a reason to reintroduce winner
+  caps into the baseline.
+impact: Manual execution, runtime actionability, and audit trails can now converge
+  on one H4A contract, while legacy `ack` remains only as a compatibility alias and
+  concentration remains controlled by routing/exposure logic instead of baseline distortion.
+links:
+- docs/runbooks/h4a-manual-execution-baseline.md
+- docs/signals-business-process.md
+- docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+- docs/research/o1-execution-hypothesis-results-2026-03-06.md

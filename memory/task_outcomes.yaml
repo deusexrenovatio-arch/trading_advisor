@@ -712,3 +712,163 @@ items:
   - session_handoff
   start_recommendations:
   - Patch is scoped to one context.
+- task_id: APT-20260310T172216Z-a54fd7be
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  - CTX-STRATEGY
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  route_match: pending
+  time_to_first_patch_sec: 66
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-CODEX-FIRST-LEAN-HARNESS
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+  - Intent spans multiple contexts. Set an explicit target module before implementation.
+- task_id: APT-20260310T172726Z-789e84b3
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  route_match: pending
+  time_to_first_patch_sec: 8
+  same_path_attempts: 3
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-CODEX-FIRST-LEAN-HARNESS
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 2
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260310T172841Z-a7dc05ee
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-NEWS
+  route_match: pending
+  time_to_first_patch_sec: 25
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 2
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260310T181232Z-a7dc05ee
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-NEWS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-NEWS
+  route_match: pending
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 42
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - CTX-NEWS imports span multiple neighboring contexts. Treat as cross-cutting and
+    keep adapters thin.
+  - CTX-ORCHESTRATION imports span multiple neighboring contexts. Treat as cross-cutting
+    and keep adapters thin.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260310T181512Z-a7dc05ee
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-NEWS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-NEWS
+  route_match: pending
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 42
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - CTX-NEWS imports span multiple neighboring contexts. Treat as cross-cutting and
+    keep adapters thin.
+  - CTX-ORCHESTRATION imports span multiple neighboring contexts. Treat as cross-cutting
+    and keep adapters thin.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.

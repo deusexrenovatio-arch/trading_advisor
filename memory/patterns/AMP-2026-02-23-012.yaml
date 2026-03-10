@@ -1,0 +1,11 @@
+id: AMP-2026-02-23-012
+date: 2026-02-23
+title: API idempotency must be backed by storage uniqueness
+pattern: For any write action endpoint, require client idempotency key in contract
+  and enforce a matching unique key at storage level.
+when_to_use: Action/execution APIs where retries, network duplicates, or multi-worker
+  races are expected.
+links:
+- docs/contracts/api-v2.yaml
+- src/moex_carry/storage/models.py
+- src/moex_carry/storage/db.py

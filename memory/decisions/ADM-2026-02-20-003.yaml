@@ -1,0 +1,11 @@
+id: ADM-2026-02-20-003
+date: 2026-02-20
+title: Prefer minimatch override plus ESLint 9 compatibility for ui-web audit remediation
+context: Upgrading to ESLint 10 introduced peer conflicts while high audit findings
+  were rooted in minimatch.
+decision: Keep ESLint on 9.x and pin minimatch 10.2.2 via overrides in ui-web dependencies.
+impact: Removed high/critical findings with minimal frontend linting disruption.
+links:
+- ui-web/package.json
+- ui-web/package-lock.json
+- docs/architecture/adr/0002-ui-web-audit-remediation-eslint-chain.md
