@@ -1,0 +1,1162 @@
+{
+  "generated_at": "2026-03-03T11:50:11.709271+00:00",
+  "mode": "causal_walk_forward",
+  "instruments": [
+    "BRH6",
+    "CCH6",
+    "NGH6",
+    "PDH6"
+  ],
+  "reporting_instruments": [
+    "BRH6",
+    "CCH6",
+    "NGH6",
+    "PDH6"
+  ],
+  "instrument_mode": "fixed",
+  "tick_sizes": {
+    "BRH6": 0.01,
+    "CCH6": 0.1,
+    "NGH6": 0.001,
+    "PDH6": 0.01
+  },
+  "cache": {
+    "enabled": true,
+    "cache_db": "data\\cache\\morning_plan_candles.sqlite",
+    "offline_only": true,
+    "refresh_cache": false,
+    "stats": {
+      "network_fetch_calls": 0,
+      "network_rows": 0,
+      "cache_rows_loaded": 197121,
+      "cache_rows_written": 0
+    }
+  },
+  "period": {
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-15",
+    "decision_time": "10:30",
+    "decision_times": [
+      "10:30",
+      "12:00"
+    ],
+    "timezone": "Europe/Moscow"
+  },
+  "cost_assumptions_ticks": {
+    "commission_ticks_per_side": 0.5,
+    "slippage_ticks_per_side": 1.0,
+    "spread_half_ticks": 1.0
+  },
+  "tuning_points": {
+    "objective": "robust_normalized",
+    "search_algorithm": "TPE",
+    "profile": "cost_aware_v2",
+    "search_space_profile": "intraday_goal_v3",
+    "combinations": 32,
+    "hpo_trials": 6,
+    "hpo_startup_trials": 3,
+    "hpo_seed": 42,
+    "retune_every_folds": 1,
+    "cost_model_profile": "fixed_v1",
+    "probability_gate": {
+      "enabled": false,
+      "apply_on_test_only": true,
+      "min_n_effective": 50.0,
+      "min_expected_return_ticks": 2.0,
+      "half_life_days": 30.0,
+      "dirichlet_alpha": 1.0,
+      "context_mode": "setup_kind",
+      "min_filled_trades_per_fold": 0
+    },
+    "grid": {
+      "execution.buffer_atr_mult": [
+        0.08,
+        0.1
+      ],
+      "setups.min_rr_net": [
+        1.0,
+        1.2
+      ],
+      "setups.min_reward_net_ticks": [
+        1.0,
+        2.0
+      ],
+      "setups.max_risk_atr_mult": [
+        1.0,
+        1.2
+      ],
+      "setups.sl_atr_mult": [
+        0.7,
+        0.8
+      ]
+    },
+    "search_space": {
+      "execution.buffer_atr_mult": {
+        "type": "float",
+        "min": 0.07,
+        "max": 0.16,
+        "step": 0.01
+      },
+      "levels.h1.box_range_atr_mult": {
+        "type": "float",
+        "min": 1.0,
+        "max": 1.8,
+        "step": 0.1
+      },
+      "regime.d1.adx_trend_min": {
+        "type": "int",
+        "min": 20,
+        "max": 27,
+        "step": 1
+      },
+      "regime.d1.er_trend_min": {
+        "type": "float",
+        "min": 0.2,
+        "max": 0.35,
+        "step": 0.01
+      },
+      "regime.h1.dir_band_atr_mult": {
+        "type": "float",
+        "min": 0.15,
+        "max": 0.3,
+        "step": 0.01
+      },
+      "setups.stop_model": [
+        "structure",
+        "volatility",
+        "local_extreme",
+        "volume_extreme"
+      ],
+      "setups.stop_lookback_bars": {
+        "type": "int",
+        "min": 12,
+        "max": 48,
+        "step": 6
+      },
+      "setups.stop_volume_quantile": {
+        "type": "float",
+        "min": 0.6,
+        "max": 0.9,
+        "step": 0.05
+      },
+      "setups.require_vol_not_low": [
+        true,
+        false
+      ],
+      "setups.rr_default": {
+        "type": "float",
+        "min": 1.4,
+        "max": 2.2,
+        "step": 0.1
+      },
+      "setups.pullback_max_dist_atr_mult": {
+        "type": "float",
+        "min": 0.6,
+        "max": 1.2,
+        "step": 0.1
+      },
+      "setups.max_risk_atr_mult": {
+        "type": "float",
+        "min": 0.9,
+        "max": 1.4,
+        "step": 0.1
+      },
+      "setups.sl_atr_mult": {
+        "type": "float",
+        "min": 0.7,
+        "max": 1.0,
+        "step": 0.1
+      },
+      "setups.min_rr_net": {
+        "type": "float",
+        "min": 1.0,
+        "max": 1.4,
+        "step": 0.1
+      },
+      "setups.min_reward_net_ticks": {
+        "type": "float",
+        "min": 1.0,
+        "max": 4.0,
+        "step": 1.0
+      },
+      "setups.min_reward_gross_ticks": {
+        "type": "float",
+        "min": 10.0,
+        "max": 22.0,
+        "step": 2.0
+      },
+      "setups.min_target_return_pct": {
+        "type": "float",
+        "min": 0.5,
+        "max": 0.9,
+        "step": 0.1
+      },
+      "setups.min_atr_h1_cost_mult": {
+        "type": "float",
+        "min": 4.0,
+        "max": 8.0,
+        "step": 1.0
+      },
+      "setups.min_atr_d1_cost_mult": {
+        "type": "float",
+        "min": 8.0,
+        "max": 14.0,
+        "step": 2.0
+      }
+    },
+    "goal": {
+      "min_target_return_pct": 0.5,
+      "min_trades_per_week": 2.0,
+      "max_trades_per_week": 12.0,
+      "trade_freq_penalty": 3.0
+    },
+    "objective_scoring": {
+      "concentration_penalty_weight": 0.0,
+      "concentration_top_share_soft_cap": 0.35,
+      "normalization_floor_ticks": 1.0
+    },
+    "effective_min_target_return_pct": 0.5,
+    "front_roll_avoid_expiry_days": 3,
+    "min_train_trades": 12,
+    "min_train_instruments_with_trades": 4,
+    "min_trades_per_instrument": 1,
+    "robust_mad_penalty": 0.5,
+    "train_days": 10,
+    "test_days": 5,
+    "step_days": 5
+  },
+  "comparison_points": [
+    "setups_total",
+    "filled_trades",
+    "fill_rate",
+    "tp_rate",
+    "sl_rate",
+    "exit_rate",
+    "win_rate_net",
+    "expectancy_net_ticks",
+    "net_ticks_sum"
+  ],
+  "folds": [
+    {
+      "fold_id": 1,
+      "train_start": "2026-01-22",
+      "train_end": "2026-01-31",
+      "test_start": "2026-02-01",
+      "test_end": "2026-02-05",
+      "search_algorithm": "TPE",
+      "retuned_this_fold": true,
+      "train_candidates": 6,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.07,
+        "levels.h1.box_range_atr_mult": 1.6,
+        "regime.d1.adx_trend_min": 24,
+        "regime.d1.er_trend_min": 0.32,
+        "regime.h1.dir_band_atr_mult": 0.16999999999999998,
+        "setups.stop_model": "volume_extreme",
+        "setups.stop_lookback_bars": 36,
+        "setups.stop_volume_quantile": 0.8,
+        "setups.require_vol_not_low": true,
+        "setups.rr_default": 1.7999999999999998,
+        "setups.pullback_max_dist_atr_mult": 0.6,
+        "setups.max_risk_atr_mult": 1.2000000000000002,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.2,
+        "setups.min_reward_net_ticks": 1.0,
+        "setups.min_reward_gross_ticks": 18.0,
+        "setups.min_target_return_pct": 0.7,
+        "setups.min_atr_h1_cost_mult": 5.0,
+        "setups.min_atr_d1_cost_mult": 10.0
+      },
+      "train_summary": {
+        "setups_total": 3,
+        "gated_out": 0,
+        "filled_trades": 2,
+        "fill_rate": 0.6666666666666666,
+        "tp_rate": 0.5,
+        "sl_rate": 0.0,
+        "exit_rate": 0.5,
+        "win_rate_net": 0.5,
+        "expectancy_net_ticks": 14.5,
+        "gross_ticks_sum": 39.0,
+        "abs_gross_ticks_sum": 59.0,
+        "net_ticks_sum": 29.0,
+        "by_setup_kind": {
+          "BOX_BREAKOUT": {
+            "count": 2,
+            "net_ticks_sum": 29.0,
+            "expectancy_net_ticks": 14.5
+          }
+        },
+        "by_instrument": {
+          "CCH6": {
+            "count": 2,
+            "net_ticks_sum": 29.0,
+            "gross_ticks_sum": 39.0,
+            "abs_gross_ticks_sum": 59.0,
+            "tp_count": 1,
+            "sl_count": 0,
+            "exit_count": 1,
+            "win_count": 1,
+            "expectancy_net_ticks": 14.5,
+            "tp_rate": 0.5,
+            "sl_rate": 0.0,
+            "exit_rate": 0.5,
+            "win_rate_net": 0.5
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": 14.5,
+        "median_expectancy": 14.5,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": 0.4915254237288136,
+        "normalized_median_expectancy": 0.4915254237288136,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 1.0,
+        "concentration_hhi": 1.0,
+        "concentration_penalty": 0.0,
+        "selection_score": -1.3084745762711867,
+        "trades_per_week": 1.4
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "CCH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "PDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 0,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 0
+    },
+    {
+      "fold_id": 2,
+      "train_start": "2026-01-27",
+      "train_end": "2026-02-05",
+      "test_start": "2026-02-06",
+      "test_end": "2026-02-10",
+      "search_algorithm": "TPE",
+      "retuned_this_fold": true,
+      "train_candidates": 6,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.13,
+        "levels.h1.box_range_atr_mult": 1.7000000000000002,
+        "regime.d1.adx_trend_min": 23,
+        "regime.d1.er_trend_min": 0.30000000000000004,
+        "regime.h1.dir_band_atr_mult": 0.21,
+        "setups.stop_model": "local_extreme",
+        "setups.stop_lookback_bars": 24,
+        "setups.stop_volume_quantile": 0.8,
+        "setups.require_vol_not_low": false,
+        "setups.rr_default": 1.5,
+        "setups.pullback_max_dist_atr_mult": 0.8,
+        "setups.max_risk_atr_mult": 1.2000000000000002,
+        "setups.sl_atr_mult": 0.7999999999999999,
+        "setups.min_rr_net": 1.3,
+        "setups.min_reward_net_ticks": 1.0,
+        "setups.min_reward_gross_ticks": 12.0,
+        "setups.min_target_return_pct": 0.7,
+        "setups.min_atr_h1_cost_mult": 6.0,
+        "setups.min_atr_d1_cost_mult": 14.0
+      },
+      "train_summary": {
+        "setups_total": 4,
+        "gated_out": 0,
+        "filled_trades": 1,
+        "fill_rate": 0.25,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 1.0,
+        "win_rate_net": 1.0,
+        "expectancy_net_ticks": 33.0,
+        "gross_ticks_sum": 38.0,
+        "abs_gross_ticks_sum": 38.0,
+        "net_ticks_sum": 33.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 1,
+            "net_ticks_sum": 33.0,
+            "expectancy_net_ticks": 33.0
+          }
+        },
+        "by_instrument": {
+          "BRH6": {
+            "count": 1,
+            "net_ticks_sum": 33.0,
+            "gross_ticks_sum": 38.0,
+            "abs_gross_ticks_sum": 38.0,
+            "tp_count": 0,
+            "sl_count": 0,
+            "exit_count": 1,
+            "win_count": 1,
+            "expectancy_net_ticks": 33.0,
+            "tp_rate": 0.0,
+            "sl_rate": 0.0,
+            "exit_rate": 1.0,
+            "win_rate_net": 1.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": 33.0,
+        "median_expectancy": 33.0,
+        "mad_expectancy": 0.0,
+        "instruments_with_trades": 1,
+        "robust_instruments": 1,
+        "normalized_robust_score": 0.868421052631579,
+        "normalized_median_expectancy": 0.868421052631579,
+        "normalized_mad_expectancy": 0.0,
+        "normalized_instruments": 1,
+        "concentration_top_share": 1.0,
+        "concentration_hhi": 1.0,
+        "concentration_penalty": 0.0,
+        "selection_score": -3.0315789473684216,
+        "trades_per_week": 0.7
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "CCH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "PDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 4,
+        "gated_out": 0,
+        "filled_trades": 4,
+        "fill_rate": 1.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.75,
+        "exit_rate": 0.25,
+        "win_rate_net": 0.25,
+        "expectancy_net_ticks": 2.5,
+        "gross_ticks_sum": 30.0,
+        "abs_gross_ticks_sum": 82.0,
+        "net_ticks_sum": 10.0,
+        "by_setup_kind": {
+          "PULLBACK_LIMIT": {
+            "count": 1,
+            "net_ticks_sum": -10.0,
+            "expectancy_net_ticks": -10.0
+          },
+          "BOX_BREAKOUT": {
+            "count": 3,
+            "net_ticks_sum": 20.0,
+            "expectancy_net_ticks": 6.666666666666667
+          }
+        },
+        "by_instrument": {
+          "CCH6": {
+            "count": 4,
+            "net_ticks_sum": 10.0,
+            "gross_ticks_sum": 30.0,
+            "abs_gross_ticks_sum": 82.0,
+            "tp_count": 0,
+            "sl_count": 3,
+            "exit_count": 1,
+            "win_count": 1,
+            "expectancy_net_ticks": 2.5,
+            "tp_rate": 0.0,
+            "sl_rate": 0.75,
+            "exit_rate": 0.25,
+            "win_rate_net": 0.25
+          }
+        }
+      },
+      "planned_signals_count": 4
+    },
+    {
+      "fold_id": 3,
+      "train_start": "2026-02-01",
+      "train_end": "2026-02-10",
+      "test_start": "2026-02-11",
+      "test_end": "2026-02-15",
+      "search_algorithm": "TPE",
+      "retuned_this_fold": true,
+      "train_candidates": 6,
+      "selected_params": {
+        "execution.buffer_atr_mult": 0.11000000000000001,
+        "levels.h1.box_range_atr_mult": 1.7000000000000002,
+        "regime.d1.adx_trend_min": 24,
+        "regime.d1.er_trend_min": 0.22,
+        "regime.h1.dir_band_atr_mult": 0.18,
+        "setups.stop_model": "volatility",
+        "setups.stop_lookback_bars": 36,
+        "setups.stop_volume_quantile": 0.9,
+        "setups.require_vol_not_low": false,
+        "setups.rr_default": 1.4,
+        "setups.pullback_max_dist_atr_mult": 0.6,
+        "setups.max_risk_atr_mult": 1.1,
+        "setups.sl_atr_mult": 0.8999999999999999,
+        "setups.min_rr_net": 1.1,
+        "setups.min_reward_net_ticks": 1.0,
+        "setups.min_reward_gross_ticks": 12.0,
+        "setups.min_target_return_pct": 0.9,
+        "setups.min_atr_h1_cost_mult": 5.0,
+        "setups.min_atr_d1_cost_mult": 10.0
+      },
+      "train_summary": {
+        "setups_total": 5,
+        "gated_out": 0,
+        "filled_trades": 5,
+        "fill_rate": 1.0,
+        "tp_rate": 0.2,
+        "sl_rate": 0.6,
+        "exit_rate": 0.2,
+        "win_rate_net": 0.4,
+        "expectancy_net_ticks": -8.8,
+        "gross_ticks_sum": -19.0,
+        "abs_gross_ticks_sum": 253.0,
+        "net_ticks_sum": -44.0,
+        "by_setup_kind": {
+          "BOX_BREAKOUT": {
+            "count": 4,
+            "net_ticks_sum": 16.0,
+            "expectancy_net_ticks": 4.0
+          },
+          "PULLBACK_LIMIT": {
+            "count": 1,
+            "net_ticks_sum": -60.0,
+            "expectancy_net_ticks": -60.0
+          }
+        },
+        "by_instrument": {
+          "CCH6": {
+            "count": 3,
+            "net_ticks_sum": 62.0,
+            "gross_ticks_sum": 77.0,
+            "abs_gross_ticks_sum": 157.0,
+            "tp_count": 1,
+            "sl_count": 1,
+            "exit_count": 1,
+            "win_count": 2,
+            "expectancy_net_ticks": 20.666666666666668,
+            "tp_rate": 0.3333333333333333,
+            "sl_rate": 0.3333333333333333,
+            "exit_rate": 0.3333333333333333,
+            "win_rate_net": 0.6666666666666666
+          },
+          "BRH6": {
+            "count": 2,
+            "net_ticks_sum": -106.0,
+            "gross_ticks_sum": -96.0,
+            "abs_gross_ticks_sum": 96.0,
+            "tp_count": 0,
+            "sl_count": 2,
+            "exit_count": 0,
+            "win_count": 0,
+            "expectancy_net_ticks": -53.0,
+            "tp_rate": 0.0,
+            "sl_rate": 1.0,
+            "exit_rate": 0.0,
+            "win_rate_net": 0.0
+          }
+        }
+      },
+      "train_selection_metrics": {
+        "robust_score": -34.58333333333333,
+        "median_expectancy": -16.166666666666664,
+        "mad_expectancy": 36.83333333333333,
+        "instruments_with_trades": 2,
+        "robust_instruments": 2,
+        "normalized_robust_score": -0.7293988853503186,
+        "normalized_median_expectancy": -0.3546311040339703,
+        "normalized_mad_expectancy": 0.7495355626326965,
+        "normalized_instruments": 2,
+        "concentration_top_share": 1.0,
+        "concentration_hhi": 1.0,
+        "concentration_penalty": 0.0,
+        "selection_score": -0.7293988853503186,
+        "trades_per_week": 3.5
+      },
+      "cost_assumptions_by_instrument": {
+        "BRH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "CCH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "NGH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        },
+        "PDH6": {
+          "commission_ticks_per_side": 0.5,
+          "slippage_ticks_per_side": 1.0,
+          "spread_half_ticks": 1.0
+        }
+      },
+      "probability_gate_fallback": {
+        "applied": false,
+        "min_filled_trades_per_fold": 0
+      },
+      "test_summary": {
+        "setups_total": 1,
+        "gated_out": 0,
+        "filled_trades": 0,
+        "fill_rate": 0.0,
+        "tp_rate": 0.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "win_rate_net": 0.0,
+        "expectancy_net_ticks": 0.0,
+        "gross_ticks_sum": 0.0,
+        "abs_gross_ticks_sum": 0.0,
+        "net_ticks_sum": 0.0,
+        "by_setup_kind": {},
+        "by_instrument": {}
+      },
+      "planned_signals_count": 1
+    }
+  ],
+  "overall_test_summary": {
+    "setups_total": 5,
+    "gated_out": 0,
+    "filled_trades": 4,
+    "fill_rate": 0.8,
+    "tp_rate": 0.0,
+    "sl_rate": 0.75,
+    "exit_rate": 0.25,
+    "win_rate_net": 0.25,
+    "expectancy_net_ticks": 2.5,
+    "gross_ticks_sum": 30.0,
+    "abs_gross_ticks_sum": 82.0,
+    "net_ticks_sum": 10.0,
+    "by_setup_kind": {
+      "PULLBACK_LIMIT": {
+        "count": 1,
+        "net_ticks_sum": -10.0,
+        "expectancy_net_ticks": -10.0
+      },
+      "BOX_BREAKOUT": {
+        "count": 3,
+        "net_ticks_sum": 20.0,
+        "expectancy_net_ticks": 6.666666666666667
+      }
+    },
+    "by_instrument": {
+      "CCH6": {
+        "count": 4,
+        "net_ticks_sum": 10.0,
+        "gross_ticks_sum": 30.0,
+        "abs_gross_ticks_sum": 82.0,
+        "tp_count": 0,
+        "sl_count": 3,
+        "exit_count": 1,
+        "win_count": 1,
+        "expectancy_net_ticks": 2.5,
+        "tp_rate": 0.0,
+        "sl_rate": 0.75,
+        "exit_rate": 0.25,
+        "win_rate_net": 0.25
+      }
+    }
+  },
+  "planned_signals_total": 5,
+  "planned_signals": [
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-06",
+      "as_of_ts": "2026-02-06T10:30:00+03:00",
+      "setup_id": "CCH6:PULLBACK_LIMIT:SELL:3376",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 3376,
+      "entry_range_low_ticks": 3376,
+      "entry_range_high_ticks": 3376,
+      "sl_ticks": 3381,
+      "tp_ticks": 3332,
+      "horizon": "EOD",
+      "risk_ticks": 5,
+      "entry_expire_ts": "2026-02-06T18:49:59+03:00",
+      "stop_model": "local_extreme",
+      "target_return_pct": 1.3033175355450237,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-02-06T11:00:00+03:00",
+      "simulated_exit_ts": "2026-02-06T11:05:00+03:00",
+      "simulated_gross_ticks": -5.0,
+      "simulated_net_ticks": -10.0
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-06",
+      "as_of_ts": "2026-02-06T10:30:00+03:00",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3334",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "entry_order_type": "STOP_LIMIT",
+      "entry_ticks": 3334,
+      "entry_range_low_ticks": 3332,
+      "entry_range_high_ticks": 3334,
+      "sl_ticks": 3339,
+      "tp_ticks": 3271,
+      "horizon": "EOD",
+      "risk_ticks": 5,
+      "entry_expire_ts": "2026-02-06T18:49:59+03:00",
+      "stop_model": "local_extreme",
+      "target_return_pct": 1.889622075584883,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-02-06T12:35:00+03:00",
+      "simulated_exit_ts": "2026-02-06T12:40:00+03:00",
+      "simulated_gross_ticks": -7.0,
+      "simulated_net_ticks": -12.0
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-10",
+      "as_of_ts": "2026-02-10T10:30:00+03:00",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3232",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "entry_order_type": "STOP_LIMIT",
+      "entry_ticks": 3232,
+      "entry_range_low_ticks": 3230,
+      "entry_range_high_ticks": 3232,
+      "sl_ticks": 3244,
+      "tp_ticks": 3154,
+      "horizon": "EOD",
+      "risk_ticks": 12,
+      "entry_expire_ts": "2026-02-10T18:49:59+03:00",
+      "stop_model": "local_extreme",
+      "target_return_pct": 2.4133663366336635,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-02-10T12:30:00+03:00",
+      "simulated_exit_ts": "2026-02-10T12:35:00+03:00",
+      "simulated_gross_ticks": -14.0,
+      "simulated_net_ticks": -19.0
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-10",
+      "as_of_ts": "2026-02-10T12:00:00+03:00",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3220",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "entry_order_type": "STOP_LIMIT",
+      "entry_ticks": 3220,
+      "entry_range_low_ticks": 3218,
+      "entry_range_high_ticks": 3220,
+      "sl_ticks": 3252,
+      "tp_ticks": 3154,
+      "horizon": "EOD",
+      "risk_ticks": 32,
+      "entry_expire_ts": "2026-02-10T18:49:59+03:00",
+      "stop_model": "local_extreme",
+      "target_return_pct": 2.049689440993789,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "EXIT",
+      "simulated_entry_ts": "2026-02-10T17:00:00+03:00",
+      "simulated_exit_ts": "2026-02-10T18:45:00+03:00",
+      "simulated_gross_ticks": 56.0,
+      "simulated_net_ticks": 51.0
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-11",
+      "as_of_ts": "2026-02-11T10:30:00+03:00",
+      "setup_id": "CCH6:PULLBACK_LIMIT:SELL:3162",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 3162,
+      "entry_range_low_ticks": 3162,
+      "entry_range_high_ticks": 3162,
+      "sl_ticks": 3194,
+      "tp_ticks": 3095,
+      "horizon": "EOD",
+      "risk_ticks": 32,
+      "entry_expire_ts": "2026-02-11T18:49:59+03:00",
+      "stop_model": "volatility",
+      "target_return_pct": 2.118912080961417,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": false,
+      "simulated_outcome": "NO_FILL",
+      "simulated_entry_ts": "None",
+      "simulated_exit_ts": "None",
+      "simulated_gross_ticks": 0.0,
+      "simulated_net_ticks": 0.0
+    }
+  ],
+  "sample_planned_signals": [
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-06",
+      "as_of_ts": "2026-02-06T10:30:00+03:00",
+      "setup_id": "CCH6:PULLBACK_LIMIT:SELL:3376",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 3376,
+      "entry_range_low_ticks": 3376,
+      "entry_range_high_ticks": 3376,
+      "sl_ticks": 3381,
+      "tp_ticks": 3332,
+      "horizon": "EOD",
+      "risk_ticks": 5,
+      "entry_expire_ts": "2026-02-06T18:49:59+03:00",
+      "stop_model": "local_extreme",
+      "target_return_pct": 1.3033175355450237,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-02-06T11:00:00+03:00",
+      "simulated_exit_ts": "2026-02-06T11:05:00+03:00",
+      "simulated_gross_ticks": -5.0,
+      "simulated_net_ticks": -10.0
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-06",
+      "as_of_ts": "2026-02-06T10:30:00+03:00",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3334",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "entry_order_type": "STOP_LIMIT",
+      "entry_ticks": 3334,
+      "entry_range_low_ticks": 3332,
+      "entry_range_high_ticks": 3334,
+      "sl_ticks": 3339,
+      "tp_ticks": 3271,
+      "horizon": "EOD",
+      "risk_ticks": 5,
+      "entry_expire_ts": "2026-02-06T18:49:59+03:00",
+      "stop_model": "local_extreme",
+      "target_return_pct": 1.889622075584883,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-02-06T12:35:00+03:00",
+      "simulated_exit_ts": "2026-02-06T12:40:00+03:00",
+      "simulated_gross_ticks": -7.0,
+      "simulated_net_ticks": -12.0
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-10",
+      "as_of_ts": "2026-02-10T10:30:00+03:00",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3232",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "entry_order_type": "STOP_LIMIT",
+      "entry_ticks": 3232,
+      "entry_range_low_ticks": 3230,
+      "entry_range_high_ticks": 3232,
+      "sl_ticks": 3244,
+      "tp_ticks": 3154,
+      "horizon": "EOD",
+      "risk_ticks": 12,
+      "entry_expire_ts": "2026-02-10T18:49:59+03:00",
+      "stop_model": "local_extreme",
+      "target_return_pct": 2.4133663366336635,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "SL",
+      "simulated_entry_ts": "2026-02-10T12:30:00+03:00",
+      "simulated_exit_ts": "2026-02-10T12:35:00+03:00",
+      "simulated_gross_ticks": -14.0,
+      "simulated_net_ticks": -19.0
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-10",
+      "as_of_ts": "2026-02-10T12:00:00+03:00",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3220",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "entry_order_type": "STOP_LIMIT",
+      "entry_ticks": 3220,
+      "entry_range_low_ticks": 3218,
+      "entry_range_high_ticks": 3220,
+      "sl_ticks": 3252,
+      "tp_ticks": 3154,
+      "horizon": "EOD",
+      "risk_ticks": 32,
+      "entry_expire_ts": "2026-02-10T18:49:59+03:00",
+      "stop_model": "local_extreme",
+      "target_return_pct": 2.049689440993789,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": true,
+      "simulated_outcome": "EXIT",
+      "simulated_entry_ts": "2026-02-10T17:00:00+03:00",
+      "simulated_exit_ts": "2026-02-10T18:45:00+03:00",
+      "simulated_gross_ticks": 56.0,
+      "simulated_net_ticks": 51.0
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-11",
+      "as_of_ts": "2026-02-11T10:30:00+03:00",
+      "setup_id": "CCH6:PULLBACK_LIMIT:SELL:3162",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "entry_order_type": "LIMIT",
+      "entry_ticks": 3162,
+      "entry_range_low_ticks": 3162,
+      "entry_range_high_ticks": 3162,
+      "sl_ticks": 3194,
+      "tp_ticks": 3095,
+      "horizon": "EOD",
+      "risk_ticks": 32,
+      "entry_expire_ts": "2026-02-11T18:49:59+03:00",
+      "stop_model": "volatility",
+      "target_return_pct": 2.118912080961417,
+      "gate_status": "DISABLED",
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null,
+      "simulated_filled": false,
+      "simulated_outcome": "NO_FILL",
+      "simulated_entry_ts": "None",
+      "simulated_exit_ts": "None",
+      "simulated_gross_ticks": 0.0,
+      "simulated_net_ticks": 0.0
+    }
+  ],
+  "sample_test_results": [
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-06",
+      "setup_id": "CCH6:PULLBACK_LIMIT:SELL:3376",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2026-02-06T10:30:00+03:00",
+      "entry_ts": "2026-02-06T11:00:00+03:00",
+      "exit_ts": "2026-02-06T11:05:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -5.0,
+      "net_ticks": -10.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 3376,
+      "exit_ticks": 3381,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-06",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3334",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "as_of_ts": "2026-02-06T10:30:00+03:00",
+      "entry_ts": "2026-02-06T12:35:00+03:00",
+      "exit_ts": "2026-02-06T12:40:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -7.0,
+      "net_ticks": -12.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 3332,
+      "exit_ticks": 3339,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-10",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3232",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "as_of_ts": "2026-02-10T10:30:00+03:00",
+      "entry_ts": "2026-02-10T12:30:00+03:00",
+      "exit_ts": "2026-02-10T12:35:00+03:00",
+      "filled": true,
+      "outcome": "SL",
+      "gross_ticks": -14.0,
+      "net_ticks": -19.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 3230,
+      "exit_ticks": 3244,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-10",
+      "setup_id": "CCH6:BOX_BREAKOUT:SELL:3220",
+      "setup_kind": "BOX_BREAKOUT",
+      "side": "SELL",
+      "as_of_ts": "2026-02-10T12:00:00+03:00",
+      "entry_ts": "2026-02-10T17:00:00+03:00",
+      "exit_ts": "2026-02-10T18:45:00+03:00",
+      "filled": true,
+      "outcome": "EXIT",
+      "gross_ticks": 56.0,
+      "net_ticks": 51.0,
+      "cost_ticks": 5.0,
+      "entry_ticks": 3218,
+      "exit_ticks": 3162,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    },
+    {
+      "instrument_id": "CCH6",
+      "trade_date": "2026-02-11",
+      "setup_id": "CCH6:PULLBACK_LIMIT:SELL:3162",
+      "setup_kind": "PULLBACK_LIMIT",
+      "side": "SELL",
+      "as_of_ts": "2026-02-11T10:30:00+03:00",
+      "entry_ts": null,
+      "exit_ts": null,
+      "filled": false,
+      "outcome": "NO_FILL",
+      "gross_ticks": 0.0,
+      "net_ticks": 0.0,
+      "cost_ticks": 0.0,
+      "entry_ticks": null,
+      "exit_ticks": null,
+      "gate_status": null,
+      "gate_reason": null,
+      "gate_expected_return_ticks": null,
+      "gate_n_effective": null,
+      "gate_p_tp": null,
+      "gate_p_sl": null,
+      "gate_p_exit": null
+    }
+  ]
+}

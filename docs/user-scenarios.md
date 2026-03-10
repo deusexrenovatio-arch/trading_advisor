@@ -66,11 +66,11 @@ Actor: Operator / Maintainer
 Goal: Keep operational trust during degradation or retries.
 Primary flow:
 1. Check refresh status and ops health/SLO.
-2. Use Telegram ACK bridge for signal confirmation.
+2. Use Telegram review bridge for signal confirmation.
 3. Handle stale/ambiguous action flows.
 Expected:
 - Degraded states are explicit, not silent.
-- ACK/action lifecycle remains idempotent and traceable.
+- Telegram review plus execution lifecycle remains idempotent and traceable.
 
 ## US-01 Configure the strategy
 Actor: Operator
@@ -212,18 +212,18 @@ Expected:
 - API uses server-side filters (`strategy_type`, `primary_instrument`, `risk_state`, `news_severity`, `created_from`, `created_to`).
 - Result list updates quickly without client-side heavy filtering.
 
-## US-12 Confirm signal usage from Telegram
+## US-12 Confirm signal review from Telegram
 Actor: Operator
-Goal: Mark that a signal was used from Telegram, then complete trade details in UI.
+Goal: Mark that a signal was reviewed from Telegram, then complete order and fill details in UI.
 Steps:
 1. Start `telegram_bot` with whitelist and send `/start`.
 2. Wait for an actionable signal message in Telegram.
-3. Click `Use signal` inline button.
+3. Click `Mark viewed` inline button.
 4. Open Signals table in UI and reload.
 Expected:
-- Backend writes `action=ack` and `status=acknowledged` to `signal_executions`.
-- Active row shows `signal_used=true` and `signal_used_at/signal_used_by`.
-- `signal_details_pending=true` remains until first `enter` or `exit` execution is logged.
+- Backend writes canonical `action=mark_viewed` and `status=viewed` to `signal_executions`.
+- Active row shows `signal_viewed=true` and `signal_viewed_at/signal_viewed_by`.
+- `signal_details_pending=true` remains until first `enter_filled` or `entry_cancelled` is logged.
 
 ## US-13 Morning bot liveness check
 Actor: Operator
@@ -242,12 +242,13 @@ Actor: Operator
 Goal: Continue seeing actionable `enter` while intent is still valid, even if latest strategy row is `hold`.
 Steps:
 1. Generate an `enter` signal for a pair.
-2. Let next cycle move pair to `hold` without explicit ACK/action usage.
+2. Let next cycle move pair to `hold` without explicit execution usage.
 3. Open `/api/v2/pairs/actionability` or Signals tab.
 Expected:
 - Pair remains visible as `actionable_enter` while current bounds are executable within intent TTL.
 - Row contains `intent_id`, current entry bounds, and origin links to source signal history.
-- After explicit ACK/action for that `intent_id`, Telegram delivery is suppressed for this intent.
+- `mark_viewed` alone does not suppress Telegram delivery for that intent.
+- Delivery is suppressed only after explicit execution progression such as `enter_submitted`, `enter_filled`, `entry_cancelled`, or `manual_override`.
 
 ## US-15 Telegram out-of-range update without spam
 Actor: Operator
@@ -264,10 +265,10 @@ Expected:
 
 ## US-16 Pair-level action API for UI and Telegram
 Actor: Operator
-Goal: Confirm usage and executions on pair + intent level without depending on transient signal rows.
+Goal: Confirm review and executions on pair + intent level without depending on transient signal rows.
 Steps:
 1. Fetch pair row from `/api/v2/pairs/actionability`.
-2. Submit `POST /api/v2/pairs/{pair_id}/actions` with `action=ack|enter|exit` and `intent_id`.
+2. Submit `POST /api/v2/pairs/{pair_id}/actions` with `action=mark_viewed|enter_submitted|enter_filled|entry_cancelled|exit_filled|confirm_followup|manual_override` and `intent_id` when required.
 3. Reload actionability feed.
 Expected:
 - Response includes `status`, `pair_id`, `action`, `intent_id`, and `fail_closed`.
@@ -325,7 +326,7 @@ Actor: Operator
 Goal: Safely retry action submissions without duplicate execution side effects.
 Status: Implemented in UI/backend on 2026-03-02.
 Steps:
-1. Submit `ack|enter|exit` from Signals UI and `approve|reject|execute` from Decisions UI.
+1. Submit `mark_viewed|enter_submitted|enter_filled|entry_cancelled|exit_filled|confirm_followup|manual_override` from Signals UI and `approve|reject|execute` from Decisions UI.
 2. Repeat the same request after simulated network timeout/retry.
 Expected:
 - UI request payload includes explicit `idempotency_key`.

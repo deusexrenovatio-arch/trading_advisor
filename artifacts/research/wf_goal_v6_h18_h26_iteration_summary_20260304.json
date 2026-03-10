@@ -1,0 +1,314 @@
+{
+  "h18_recall_families_constrained": {
+    "path": "artifacts/research/wf_goal_v6_h18_recall_families_constrained_20260304.json",
+    "setups_total": 1644,
+    "filled_trades": 815,
+    "win_rate_net": 0.5496932515337424,
+    "net_ticks_sum": 111292.0,
+    "expectancy_net_ticks": 136.55460122699387,
+    "trades_per_week": 15.544959128065395,
+    "concentration_top_share": 0.663704790303963,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_max_concentration_top_share"
+    ],
+    "by_setup_kind": {
+      "PULLBACK_LIMIT": {
+        "count": 189,
+        "net_ticks_sum": -101.0,
+        "expectancy_net_ticks": -0.5343915343915344
+      },
+      "ORB_BREAKOUT": {
+        "count": 407,
+        "net_ticks_sum": 107105.5,
+        "expectancy_net_ticks": 263.1584766584767
+      },
+      "EMA_PULLBACK_LIMIT": {
+        "count": 193,
+        "net_ticks_sum": 4437.5,
+        "expectancy_net_ticks": 22.992227979274613
+      },
+      "BOX_BREAKOUT": {
+        "count": 26,
+        "net_ticks_sum": -150.0,
+        "expectancy_net_ticks": -5.769230769230769
+      }
+    }
+  },
+  "h19_recall_families_timestop_constrained": {
+    "path": "artifacts/research/wf_goal_v6_h19_recall_families_timestop_constrained_20260304.json",
+    "setups_total": 1844,
+    "filled_trades": 753,
+    "win_rate_net": 0.49933598937583,
+    "net_ticks_sum": 38567.5,
+    "expectancy_net_ticks": 51.21845949535192,
+    "trades_per_week": 14.362397820163487,
+    "concentration_top_share": 0.6206587700141898,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_max_concentration_top_share"
+    ],
+    "by_setup_kind": {
+      "EMA_PULLBACK_LIMIT": {
+        "count": 145,
+        "net_ticks_sum": -3651.5,
+        "expectancy_net_ticks": -25.182758620689654
+      },
+      "PULLBACK_LIMIT": {
+        "count": 205,
+        "net_ticks_sum": 596.0,
+        "expectancy_net_ticks": 2.9073170731707316
+      },
+      "ORB_BREAKOUT": {
+        "count": 374,
+        "net_ticks_sum": 39477.0,
+        "expectancy_net_ticks": 105.55347593582887
+      },
+      "BOX_BREAKOUT": {
+        "count": 29,
+        "net_ticks_sum": 2146.0,
+        "expectancy_net_ticks": 74.0
+      }
+    }
+  },
+  "h20_orb_sell_precision": {
+    "path": "artifacts/research/wf_goal_v6_h20_orb_sell_precision_constrained_20260304.json",
+    "setups_total": 729,
+    "filled_trades": 53,
+    "win_rate_net": 0.6226415094339622,
+    "net_ticks_sum": 2207.5,
+    "expectancy_net_ticks": 41.65094339622642,
+    "trades_per_week": 1.0108991825613078,
+    "concentration_top_share": 0.4273190621814475,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_min_trades_per_week"
+    ],
+    "by_setup_kind": {
+      "ORB_BREAKOUT": {
+        "count": 53,
+        "net_ticks_sum": 2207.5,
+        "win_count": 33,
+        "tp_count": 31,
+        "sl_count": 17,
+        "exit_count": 5,
+        "expectancy_net_ticks": 41.65094339622642,
+        "win_rate_net": 0.6226415094339622,
+        "tp_rate": 0.5849056603773585,
+        "sl_rate": 0.32075471698113206,
+        "exit_rate": 0.09433962264150944
+      }
+    }
+  },
+  "h21_orb_biside_precision": {
+    "path": "artifacts/research/wf_goal_v6_h21_orb_biside_precision_constrained_20260304.json",
+    "setups_total": 632,
+    "filled_trades": 205,
+    "win_rate_net": 0.5804878048780487,
+    "net_ticks_sum": 26183.5,
+    "expectancy_net_ticks": 127.72439024390243,
+    "trades_per_week": 3.9100817438692097,
+    "concentration_top_share": 0.7059722921444687,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_max_concentration_top_share"
+    ],
+    "by_setup_kind": {
+      "ORB_BREAKOUT": {
+        "count": 205,
+        "net_ticks_sum": 26183.5,
+        "win_count": 119,
+        "tp_count": 77,
+        "sl_count": 73,
+        "exit_count": 55,
+        "expectancy_net_ticks": 127.72439024390243,
+        "win_rate_net": 0.5804878048780487,
+        "tp_rate": 0.375609756097561,
+        "sl_rate": 0.35609756097560974,
+        "exit_rate": 0.2682926829268293
+      }
+    }
+  },
+  "h22_orb_sell_bislot_precision": {
+    "path": "artifacts/research/wf_goal_v6_h22_orb_sell_bislot_precision_constrained_20260304.json",
+    "setups_total": 737,
+    "filled_trades": 57,
+    "win_rate_net": 0.5964912280701754,
+    "net_ticks_sum": 1556.0,
+    "expectancy_net_ticks": 27.29824561403509,
+    "trades_per_week": 1.0871934604904632,
+    "concentration_top_share": 0.4,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_min_trades_per_week"
+    ],
+    "by_setup_kind": {
+      "ORB_BREAKOUT": {
+        "count": 57,
+        "net_ticks_sum": 1556.0,
+        "win_count": 34,
+        "tp_count": 31,
+        "sl_count": 16,
+        "exit_count": 10,
+        "expectancy_net_ticks": 27.29824561403509,
+        "win_rate_net": 0.5964912280701754,
+        "tp_rate": 0.543859649122807,
+        "sl_rate": 0.2807017543859649,
+        "exit_rate": 0.17543859649122806
+      }
+    }
+  },
+  "h23_orb_sell_prob_precision": {
+    "path": "artifacts/research/wf_goal_v6_h23_orb_sell_prob_precision_constrained_20260304.json",
+    "setups_total": 616,
+    "filled_trades": 0,
+    "win_rate_net": 0.0,
+    "net_ticks_sum": 0.0,
+    "expectancy_net_ticks": 0.0,
+    "trades_per_week": 0.0,
+    "concentration_top_share": 0.0,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_min_trades_per_week"
+    ],
+    "by_setup_kind": {}
+  },
+  "h24_recall_orb_ema_vwap_constrained": {
+    "path": "artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+    "setups_total": 1118,
+    "filled_trades": 503,
+    "win_rate_net": 0.5407554671968191,
+    "net_ticks_sum": 9783.5,
+    "expectancy_net_ticks": 19.450298210735586,
+    "trades_per_week": 9.59400544959128,
+    "concentration_top_share": 0.27165864881823887,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net"
+    ],
+    "by_setup_kind": {
+      "PULLBACK_LIMIT": {
+        "count": 91,
+        "net_ticks_sum": 1317.0,
+        "win_count": 36,
+        "tp_count": 17,
+        "sl_count": 29,
+        "exit_count": 45,
+        "expectancy_net_ticks": 14.472527472527473,
+        "win_rate_net": 0.3956043956043956,
+        "tp_rate": 0.18681318681318682,
+        "sl_rate": 0.31868131868131866,
+        "exit_rate": 0.4945054945054945
+      },
+      "ORB_BREAKOUT": {
+        "count": 322,
+        "net_ticks_sum": 7588.0,
+        "win_count": 196,
+        "tp_count": 109,
+        "sl_count": 70,
+        "exit_count": 143,
+        "expectancy_net_ticks": 23.565217391304348,
+        "win_rate_net": 0.6086956521739131,
+        "tp_rate": 0.3385093167701863,
+        "sl_rate": 0.21739130434782608,
+        "exit_rate": 0.4440993788819876
+      },
+      "EMA_PULLBACK_LIMIT": {
+        "count": 78,
+        "net_ticks_sum": 724.5,
+        "win_count": 35,
+        "tp_count": 18,
+        "sl_count": 25,
+        "exit_count": 35,
+        "expectancy_net_ticks": 9.288461538461538,
+        "win_rate_net": 0.44871794871794873,
+        "tp_rate": 0.23076923076923078,
+        "sl_rate": 0.32051282051282054,
+        "exit_rate": 0.44871794871794873
+      },
+      "BOX_BREAKOUT": {
+        "count": 12,
+        "net_ticks_sum": 154.0,
+        "win_count": 5,
+        "tp_count": 2,
+        "sl_count": 1,
+        "exit_count": 9,
+        "expectancy_net_ticks": 12.833333333333334,
+        "win_rate_net": 0.4166666666666667,
+        "tp_rate": 0.16666666666666666,
+        "sl_rate": 0.08333333333333333,
+        "exit_rate": 0.75
+      }
+    }
+  },
+  "h25_vwap_only_precision": {
+    "path": "artifacts/research/wf_goal_v6_h25_vwap_only_precision_constrained_20260304.json",
+    "setups_total": 497,
+    "filled_trades": 0,
+    "win_rate_net": 0.0,
+    "net_ticks_sum": 0.0,
+    "expectancy_net_ticks": 0.0,
+    "trades_per_week": 0.0,
+    "concentration_top_share": 0.0,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_min_trades_per_week"
+    ],
+    "by_setup_kind": {}
+  },
+  "h26_vwap_forced_constrained": {
+    "path": "artifacts/research/wf_goal_v6_h26_vwap_forced_constrained_20260304.json",
+    "setups_total": 0,
+    "filled_trades": 0,
+    "win_rate_net": 0.0,
+    "net_ticks_sum": 0.0,
+    "expectancy_net_ticks": 0.0,
+    "trades_per_week": 0.0,
+    "concentration_top_share": 0.0,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_min_trades_per_week"
+    ],
+    "by_setup_kind": {}
+  },
+  "h26b_vwap_forced_constrained": {
+    "path": "artifacts/research/wf_goal_v6_h26b_vwap_forced_constrained_20260304.json",
+    "setups_total": 0,
+    "filled_trades": 0,
+    "win_rate_net": 0.0,
+    "net_ticks_sum": 0.0,
+    "expectancy_net_ticks": 0.0,
+    "trades_per_week": 0.0,
+    "concentration_top_share": 0.0,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_min_trades_per_week"
+    ],
+    "by_setup_kind": {}
+  },
+  "h26c_vwap_forced_constrained": {
+    "path": "artifacts/research/wf_goal_v6_h26c_vwap_forced_constrained_20260304.json",
+    "setups_total": 0,
+    "filled_trades": 0,
+    "win_rate_net": 0.0,
+    "net_ticks_sum": 0.0,
+    "expectancy_net_ticks": 0.0,
+    "trades_per_week": 0.0,
+    "concentration_top_share": 0.0,
+    "accept_passed": false,
+    "failed_reasons": [
+      "hard_min_win_rate_net",
+      "hard_min_trades_per_week"
+    ],
+    "by_setup_kind": {}
+  }
+}

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
+import yaml
+
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
 from moex_carry.contracts.strategy_test import BacktestRequest, HpoRequest
 from moex_carry.storage import models as db_models
@@ -489,6 +491,83 @@ def test_v2_pairs_actionability_preserves_entry_plan_and_live_range_fields(tmp_p
     assert live["spread_pct_now"] == 0.01
 
 
+def test_v2_actionability_strategy_filters_split_streams(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 8, 12, 0, 0)
+        store_signal_run(session, "run-v2-actionability-strategy-filter", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-actionability-strategy-filter",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.21,
+                    "signal_reasons": ["arb"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_type": "arbitrage",
+                        "strategy_stream": "arbitrage",
+                    },
+                },
+                {
+                    "stock": "BBB",
+                    "future": "BBH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.37,
+                    "signal_reasons": ["spec"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_type": "speculative",
+                        "strategy_stream": "commodity_futures",
+                    },
+                },
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    stream_response = client.get(
+        "/api/v2/pairs/actionability?include_non_actionable=true&strategy_stream=commodity_futures"
+    )
+    assert stream_response.status_code == 200
+    stream_rows = stream_response.get_json()
+    assert isinstance(stream_rows, list)
+    assert len(stream_rows) == 1
+    assert stream_rows[0]["pair_id"] == "BBB__BBH6"
+    assert stream_rows[0]["strategy_type"] == "speculative"
+    assert stream_rows[0]["strategy_stream"] == "commodity_futures"
+
+    alias_type_response = client.get(
+        "/api/v2/signals/actionability?entity_type=pair&include_non_actionable=true&strategy_type=commodity_futures"
+    )
+    assert alias_type_response.status_code == 200
+    alias_type_rows = alias_type_response.get_json()
+    assert isinstance(alias_type_rows, list)
+    assert len(alias_type_rows) == 1
+    assert alias_type_rows[0]["stock"] == "BBB"
+    assert alias_type_rows[0]["strategy_stream"] == "commodity_futures"
+
+    type_response = client.get(
+        "/api/v2/signals/actionability?entity_type=pair&include_non_actionable=true&strategy_type=arbitrage"
+    )
+    assert type_response.status_code == 200
+    type_rows = type_response.get_json()
+    assert isinstance(type_rows, list)
+    assert len(type_rows) == 1
+    assert type_rows[0]["stock"] == "AAA"
+    assert type_rows[0]["strategy_stream"] == "arbitrage"
+
+
 def test_v2_entity_and_pair_actions_endpoints_are_idempotent(tmp_path):
     settings = _build_settings(tmp_path)
     engine = create_engine_from_settings(settings)
@@ -518,13 +597,14 @@ def test_v2_entity_and_pair_actions_endpoints_are_idempotent(tmp_path):
     first_data = first.get_json()
     assert first_data["status"] == "ok"
     assert first_data["entity_ref"]["entity_type"] == "pair"
-    assert first_data["action"] == "ack"
+    assert first_data["action"] == "mark_viewed"
+    assert first_data["action_alias"] == "ack"
 
     second = client.post("/api/v2/entities/pair/AAA__AAH6/signals/actions", json=payload)
     assert second.status_code == 200
     second_data = second.get_json()
     assert second_data["status"] == "duplicate"
-    assert second_data["action"] == "ack"
+    assert second_data["action"] == "mark_viewed"
 
     pair_payload = {
         "action": "ack",
@@ -583,7 +663,7 @@ def test_v2_pair_actions_reject_stale_intent_id(tmp_path):
         assert executions == []
 
 
-def test_v2_pair_ack_consumes_intent_in_projection(tmp_path):
+def test_v2_pair_ack_alias_marks_signal_as_viewed_without_consuming_intent(tmp_path):
     settings = _build_settings(tmp_path)
     engine = create_engine_from_settings(settings)
     init_db(engine)
@@ -636,9 +716,9 @@ def test_v2_pair_ack_consumes_intent_in_projection(tmp_path):
     assert isinstance(after_rows, list)
     assert len(after_rows) == 1
     after = after_rows[0]
-    assert str((after.get("intent") or {}).get("status") or "") == "consumed"
-    assert after["actionability_state"] in {"inactive", "hold_open"}
-    assert str((after.get("delivery") or {}).get("delivery_suppressed_reason") or "") == "intent_consumed"
+    assert str((after.get("intent") or {}).get("status") or "") == "viewed"
+    assert after["actionability_state"] in {"actionable_enter", "actionable_enter_repriced"}
+    assert str((after.get("delivery") or {}).get("delivery_suppressed_reason") or "") == ""
 
 
 def test_v2_instrument_actions_resolve_pair_context_and_store_execution(tmp_path):
@@ -683,7 +763,7 @@ def test_v2_instrument_actions_resolve_pair_context_and_store_execution(tmp_path
     with session_factory() as session:
         executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
         assert len(executions) == 1
-        assert executions[0].action == "ack"
+        assert executions[0].action == "mark_viewed"
 
 
 def test_v2_instrument_actions_require_pair_hint_when_ambiguous(tmp_path):
@@ -738,6 +818,570 @@ def test_v2_instrument_actions_require_pair_hint_when_ambiguous(tmp_path):
     assert ambiguous_payload["error"] == "ambiguous_instrument_entity"
     assert isinstance(ambiguous_payload.get("candidate_pairs"), list)
     assert sorted(ambiguous_payload["candidate_pairs"]) == ["AAA__AAH6", "AAA__AAM6"]
+
+
+def test_v2_actionability_exposes_h4a_execution_contract_and_signal_expiry(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 10, 9, 0, 0)
+        store_signal_run(session, "run-v2-h4a-contract", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-h4a-contract",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.4,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "signal_expire_ts": "2025-01-10T09:25:00Z",
+                    },
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    rows = client.get("/api/v2/pairs/actionability?include_non_actionable=true").get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+    contract = row["execution_contract"]
+    assert row["baseline_id"] == "H4A_CAP_OFF"
+    assert row["execution_profile_id"] == "H4A_CAP_OFF"
+    assert row["signal_expire_ts"] == "2025-01-10T09:25:00Z"
+    assert contract["baseline_id"] == "H4A_CAP_OFF"
+    assert contract["entry_order_type"] == "LIMIT"
+    assert contract["entry_improve_ticks"] == 1
+    assert contract["entry_fallback_after_minutes"] == 10
+    assert contract["break_even_rr"] == 0.1
+    assert contract["trail_activation_rr"] == 0.1
+    assert contract["time_stop_minutes"] == 180
+    assert contract["same_bar_policy"] == "open_direction"
+    assert contract["same_bar_policy_source"] == "simulator_only"
+    assert row["entry_plan"]["valid_until"] == "2025-01-10T09:25:00Z"
+
+
+def test_v2_enter_filled_persists_h4a_fill_recalculation(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 11, 9, 0, 0)
+        store_signal_run(session, "run-v2-enter-filled", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-enter-filled",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.4,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "sl_ticks": 4,
+                        "tick_size": 0.5,
+                        "engine_action": "BUY",
+                    },
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    signal_id = client.get("/api/v2/signals/active").get_json()[0]["signal_id"]
+
+    response = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "enter_filled",
+            "source": "ui",
+            "actor_id": "tester",
+            "idempotency_key": "idem-enter-filled-1",
+            "fill_price": 100.0,
+            "price": 100.0,
+            "tick_size": 0.5,
+            "risk_ticks": 4,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["action"] == "enter_filled"
+    assert payload["stored_action"] == "enter_filled"
+    assert payload["baseline_id"] == "H4A_CAP_OFF"
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        assert len(executions) == 1
+        note = json.loads(str(executions[0].note))
+        assert note["operator_execution_mode"] == "baseline_h4a"
+        assert note["effective_fill_price"] == 100.0
+        assert note["recalc_applied"] is True
+        assert note["initial_loss_sl"] == 95.0
+        assert note["tp_limit"] == 103.0
+        assert note["protective_sl"] == 95.0
+        assert isinstance(note["time_stop_deadline_ts"], str)
+
+
+def test_v2_pairs_actionability_blocks_full_root_when_open_mini_exists(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 12, 9, 0, 0)
+        store_signal_run(session, "run-v2-mini-full-duplicate", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-mini-full-duplicate",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "BMH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.5,
+                    "signal_reasons": ["mini_open"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_stream": "commodity_futures",
+                    },
+                },
+                {
+                    "stock": "BBB",
+                    "future": "BRH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.6,
+                    "signal_reasons": ["full_candidate"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_stream": "commodity_futures",
+                    },
+                },
+            ],
+        )
+        store_signal_execution(
+            session,
+            ts + timedelta(minutes=1),
+            {
+                "stock": "AAA",
+                "future": "BMH6",
+                "direction": "cash_and_carry",
+                "action": "enter_filled",
+                "price": 100.0,
+                "quantity": 1.0,
+                "side": "stock",
+                "order_id": "ord-mini-open",
+                "status": "filled",
+                "idempotency_key": "idem-mini-open",
+                "note": json.dumps(
+                    {
+                        "fingerprint": "fp-mini-open",
+                        "requested_action": "enter_filled",
+                        "operator_execution_mode": "baseline_h4a",
+                    }
+                ),
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    rows = client.get(
+        "/api/v2/pairs/actionability?include_non_actionable=true&strategy_stream=commodity_futures"
+    ).get_json()
+    assert isinstance(rows, list)
+    full_row = next(row for row in rows if row["future"] == "BRH6")
+    assert full_row["actionability_state"] == "blocked_entry"
+    assert full_row["delivery"]["delivery_suppressed_reason"] == "portfolio_limits"
+    assert "mini_full_duplicate_live_routing" in (full_row["metrics"].get("portfolio_limit_reasons") or [])
+
+
+def test_v2_pairs_actionability_blocks_mini_root_for_live_commodity_stream(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 12, 10, 0, 0)
+        store_signal_run(session, "run-v2-no-mini", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-no-mini",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "BMH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.5,
+                    "signal_reasons": ["mini_candidate"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_stream": "commodity_futures",
+                    },
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    rows = client.get(
+        "/api/v2/pairs/actionability?include_non_actionable=true&strategy_stream=commodity_futures"
+    ).get_json()
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["actionability_state"] == "blocked_entry"
+    assert row["delivery"]["delivery_suppressed_reason"] == "no_mini_universe"
+    assert "no_mini_universe" in (row["metrics"].get("portfolio_limit_reasons") or [])
+
+
+def test_v2_pairs_actionability_blocks_cluster_concentration_before_publish(tmp_path):
+    settings = _build_settings(tmp_path)
+    settings.risk_profile.max_positions = 4
+    settings.risk_profile.max_correlated_exposure_pct = 25.0
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 12, 11, 0, 0)
+        store_signal_run(session, "run-v2-cluster-cap", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-cluster-cap",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "BRH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.7,
+                    "signal_reasons": ["energy_open"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_stream": "commodity_futures",
+                    },
+                },
+                {
+                    "stock": "BBB",
+                    "future": "NGH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.6,
+                    "signal_reasons": ["energy_candidate"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "strategy_stream": "commodity_futures",
+                    },
+                },
+            ],
+        )
+        store_signal_execution(
+            session,
+            ts + timedelta(minutes=1),
+            {
+                "stock": "AAA",
+                "future": "BRH6",
+                "direction": "cash_and_carry",
+                "action": "enter_filled",
+                "price": 100.0,
+                "side": "stock",
+                "order_id": "ord-energy-open",
+                "status": "filled",
+                "idempotency_key": "idem-energy-open",
+                "note": json.dumps(
+                    {
+                        "fingerprint": "fp-energy-open",
+                        "requested_action": "enter_filled",
+                        "operator_execution_mode": "baseline_h4a",
+                        "fill_ts": (ts + timedelta(minutes=1)).isoformat() + "Z",
+                        "fill_price": 100.0,
+                    }
+                ),
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    rows = client.get(
+        "/api/v2/pairs/actionability?include_non_actionable=true&strategy_stream=commodity_futures"
+    ).get_json()
+    assert isinstance(rows, list)
+    candidate_row = next(row for row in rows if row["future"] == "NGH6")
+    assert candidate_row["actionability_state"] == "blocked_entry"
+    assert candidate_row["delivery"]["delivery_suppressed_reason"] == "portfolio_limits"
+    assert "max_correlated_exposure_live_routing" in (
+        candidate_row["metrics"].get("portfolio_limit_reasons") or []
+    )
+
+
+def test_v2_actionability_exposes_h4a_followup_state(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    now_utc = datetime.utcnow().replace(microsecond=0)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 13, 9, 0, 0)
+        store_signal_run(session, "run-v2-h4a-followup", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-h4a-followup",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.4,
+                    "signal_reasons": ["submitted"],
+                    "signal_metrics": {"score_gate_pass": True},
+                },
+                {
+                    "stock": "BBB",
+                    "future": "BBH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.5,
+                    "signal_reasons": ["filled"],
+                    "signal_metrics": {"score_gate_pass": True},
+                    "spread_mid": 100.6,
+                },
+            ],
+        )
+        store_signal_execution(
+            session,
+            now_utc - timedelta(minutes=11),
+            {
+                "stock": "AAA",
+                "future": "AAH6",
+                "direction": "cash_and_carry",
+                "action": "enter_submitted",
+                "price": 100.0,
+                "quantity": 1.0,
+                "side": "stock",
+                "order_id": "ord-submit-followup",
+                "status": "submitted",
+                "idempotency_key": "idem-submit-followup",
+                "note": json.dumps(
+                    {
+                        "fingerprint": "fp-submit-followup",
+                        "requested_action": "enter_submitted",
+                    }
+                ),
+            },
+        )
+        store_signal_execution(
+            session,
+            now_utc - timedelta(minutes=5),
+            {
+                "stock": "BBB",
+                "future": "BBH6",
+                "direction": "cash_and_carry",
+                "action": "enter_filled",
+                "price": 100.0,
+                "quantity": 1.0,
+                "side": "stock",
+                "order_id": "ord-fill-followup",
+                "status": "filled",
+                "idempotency_key": "idem-fill-followup",
+                "note": json.dumps(
+                    {
+                        "fingerprint": "fp-fill-followup",
+                        "requested_action": "enter_filled",
+                        "operator_execution_mode": "baseline_h4a",
+                        "fill_ts": (now_utc - timedelta(minutes=5)).isoformat() + "Z",
+                        "fill_price": 100.0,
+                        "effective_fill_price": 100.0,
+                        "initial_loss_sl": 95.0,
+                        "tp_limit": 103.0,
+                        "protective_sl": 95.0,
+                        "break_even_activation_price": 100.5,
+                        "break_even_stop_price": 100.1,
+                        "trail_activation_price": 100.5,
+                        "time_stop_deadline_ts": (now_utc + timedelta(minutes=10)).isoformat() + "Z",
+                    }
+                ),
+            },
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    rows = client.get("/api/v2/pairs/actionability?include_non_actionable=true").get_json()
+    assert isinstance(rows, list)
+    submitted_row = next(row for row in rows if row["future"] == "AAH6")
+    filled_row = next(row for row in rows if row["future"] == "BBH6")
+    assert submitted_row["h4a_followup"]["entry_fallback_due"] is True
+    assert isinstance(submitted_row["h4a_followup"]["entry_fallback_due_at"], str)
+    assert filled_row["h4a_followup"]["post_fill_active"] is True
+    assert filled_row["h4a_followup"]["break_even_trigger_reached"] is True
+    assert filled_row["h4a_followup"]["trail_trigger_reached"] is True
+    assert filled_row["h4a_followup"]["time_stop_reminder_due"] is True
+
+
+def test_v2_exit_filled_requires_h4a_exit_reason_code(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 14, 9, 0, 0)
+        store_signal_run(session, "run-v2-exit-reason", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-exit-reason",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.4,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {"score_gate_pass": True},
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    signal_id = client.get("/api/v2/signals/active").get_json()[0]["signal_id"]
+
+    missing_reason = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "exit_filled",
+            "source": "ui",
+            "actor_id": "tester",
+            "idempotency_key": "idem-exit-missing-reason",
+            "fill_price": 100.0,
+        },
+    )
+    assert missing_reason.status_code == 400
+
+    ok = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "exit_filled",
+            "source": "ui",
+            "actor_id": "tester",
+            "idempotency_key": "idem-exit-valid-reason",
+            "fill_price": 100.0,
+            "exit_reason_code": "time_stop_180m",
+        },
+    )
+    assert ok.status_code == 200
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        note = json.loads(str(executions[0].note))
+        assert note["exit_reason_code"] == "time_stop_180m"
+
+
+def test_v2_confirm_followup_persists_stage_without_changing_operator_status(tmp_path):
+    settings = _build_settings(tmp_path)
+    engine = create_engine_from_settings(settings)
+    init_db(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        ts = datetime(2025, 1, 15, 9, 0, 0)
+        store_signal_run(session, "run-v2-followup-confirm", ts, params={"source": "test"})
+        store_signal_history(
+            session,
+            "run-v2-followup-confirm",
+            ts,
+            [
+                {
+                    "stock": "AAA",
+                    "future": "AAH6",
+                    "signal_action": "enter",
+                    "signal_direction": "cash_and_carry",
+                    "signal_score": 0.4,
+                    "signal_reasons": ["test"],
+                    "signal_metrics": {
+                        "score_gate_pass": True,
+                        "sl_ticks": 4,
+                        "tick_size": 0.5,
+                        "engine_action": "BUY",
+                    },
+                }
+            ],
+        )
+
+    app = create_app(settings)
+    client = app.server.test_client()
+    signal_id = client.get("/api/v2/signals/active").get_json()[0]["signal_id"]
+
+    enter_filled = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "enter_filled",
+            "source": "ui",
+            "actor_id": "tester",
+            "idempotency_key": "idem-followup-enter-filled",
+            "fill_price": 100.0,
+            "price": 100.0,
+            "tick_size": 0.5,
+            "risk_ticks": 4,
+        },
+    )
+    assert enter_filled.status_code == 200
+
+    confirmed = client.post(
+        f"/api/v2/signals/{signal_id}/actions",
+        json={
+            "action": "confirm_followup",
+            "source": "telegram",
+            "actor_id": "telegram:alice",
+            "idempotency_key": "idem-followup-confirm-post-fill",
+            "h4a_stage": "post_fill_packet",
+        },
+    )
+    assert confirmed.status_code == 200
+    confirmed_payload = confirmed.get_json()
+    assert confirmed_payload["action"] == "confirm_followup"
+    assert confirmed_payload["stored_action"] == "confirm_followup"
+
+    with session_factory() as session:
+        executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
+        notes = [json.loads(str(item.note)) for item in executions]
+        confirm_note = next(note for note in notes if note["requested_action"] == "confirm_followup")
+        assert confirm_note["h4a_stage"] == "post_fill_packet"
+
+    rows = client.get("/api/v2/pairs/actionability?include_non_actionable=true").get_json()
+    assert isinstance(rows, list)
+    row = rows[0]
+    assert row["operator_signal_status"] == "enter_filled"
+    followup = row["h4a_followup"]
+    assert followup["post_fill_active"] is True
+    assert followup["confirmation_required"] is False
+    assert "post_fill_packet" in (followup["confirmed_stages"] or [])
+    assert followup["confirmations"]["post_fill_packet"]["confirmed_by"] == "telegram:alice"
+
 
 def test_v2_signal_action_fail_closed_blocks_unconfirmed_entry(tmp_path):
     settings = _build_settings(tmp_path, ff_fail_closed_execution=True)
@@ -839,7 +1483,7 @@ def test_v2_signal_action_fail_closed_allows_privileged_override(tmp_path):
     with session_factory() as session:
         executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
         assert len(executions) == 1
-        assert executions[0].action == "enter"
+        assert executions[0].action == "enter_filled"
         assert '"fail_closed_override":true' in str(executions[0].note or "")
 
 
@@ -918,7 +1562,7 @@ def test_v2_auto_unwind_policy_run_dry_run_and_live(tmp_path):
     with session_factory() as session:
         executions = load_signal_executions(session, stock="AAA", future="AAH6", limit=20)
         assert len(executions) == 2
-        assert executions[0].action == "exit"
+        assert executions[0].action == "exit_filled"
         assert "LEG_IMBALANCE_TIMEOUT" in str(executions[0].note or "")
 
 
@@ -1108,6 +1752,90 @@ def test_v2_ops_process_improvement_report_unavailable(tmp_path, monkeypatch):
     assert payload["error"] == "process_report_unavailable"
     assert payload["query"] == {"weeks": 3, "window_size": 9}
     assert payload["source_path"] == report_path.as_posix()
+
+
+def test_v2_ops_process_improvement_report_exposes_acknowledged_debt(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    report_path = tmp_path / "task_outcomes.yaml"
+    plans_path = tmp_path / "plans.yaml"
+    plans_path.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "updated_at: 2026-03-09",
+                "items:",
+                "- id: P1-PROCESS-REG-GATE-063",
+                "  title: staged process regression remediation",
+                "  lane: governance",
+                "  status: active",
+                "  execution_mode: autonomous",
+                "  owner: test",
+                "  acceptance:",
+                "  - x",
+                "  checks:",
+                "  - pytest",
+                "  docs:",
+                "  - docs/session_handoff.md",
+                "  dependencies: []",
+                "  started_at: 2026-03-09",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "updated_at": "2026-03-09",
+                "items": [
+                    {
+                        "task_id": f"TASK-{index}",
+                        "closed_at": (
+                            datetime(2026, 3, 1, 10, 0, 0) + timedelta(minutes=index)
+                        ).isoformat()
+                        + "Z",
+                        "branch": "codex/process-regression-gate-staging",
+                        "goal_class": "ops",
+                        "start_primary_context": "CTX-OPS",
+                        "start_contexts": ["CTX-OPS"],
+                        "final_contexts": ["CTX-OPS"],
+                        "route_match": "expanded" if index < 6 else "matched",
+                        "time_to_first_patch_sec": 30 + index,
+                        "same_path_attempts": 1,
+                        "decision_quality": "wrong_path" if index < 8 else "correct_first_time",
+                        "primary_rework_cause": "none",
+                        "incident_signature": "none",
+                        "improvement_action": "none",
+                        "improvement_artifact": "none",
+                        "linked_plan_id": None,
+                        "linked_memory_id": None,
+                        "outcome_status": "completed",
+                        "unmapped_files_count": 0,
+                        "intent_sources": ["session_handoff"],
+                        "start_recommendations": ["Patch is scoped to one context."],
+                    }
+                    for index in range(20)
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MOEX_CARRY_TASK_OUTCOMES_PATH", str(report_path))
+    monkeypatch.setenv("MOEX_CARRY_PLANS_PATH", str(plans_path))
+
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    response = client.get("/api/v2/ops/process-improvement?weeks=4&window_size=20")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["human_summary"]["status"] == "remediation"
+    assert payload["current_rollup"]["threshold_results"]["decision-quality"]["status"] == "acknowledged_debt"
+    assert payload["current_rollup"]["threshold_results"]["decision-quality"]["blocking"] is False
+    assert payload["current_rollup"]["threshold_results"]["context-efficiency"]["status"] == "acknowledged_debt"
+    assert payload["current_rollup"]["threshold_results"]["context-efficiency"]["blocking"] is False
 
 
 def test_v2_ops_process_improvement_report_uses_snapshot_source(tmp_path, monkeypatch):
@@ -1565,6 +2293,51 @@ def test_v2_research_wrappers(tmp_path, monkeypatch):
     assert hpo_status_response.status_code == 200
     hpo_status_data = hpo_status_response.get_json()
     assert hpo_status_data["promotion_gate"]["status"] == "pass"
+
+
+def test_v2_research_morning_plan_wrapper(tmp_path, monkeypatch):
+    settings = _build_settings(tmp_path)
+    app = create_app(settings)
+    client = app.server.test_client()
+
+    class _FakeMorningPlanBuilder:
+        def __init__(self, _provider, _calendar, _cfg):
+            pass
+
+        def build_plan(self, *, as_of_ts, instrument_id, tick_size):
+            assert instrument_id == "BRK6"
+            assert tick_size == 0.01
+            return {
+                "instrument_id": instrument_id,
+                "tick_size": tick_size,
+                "as_of_ts": as_of_ts,
+                "setups": [{"setup_id": "S1"}],
+                "warnings": ["ok"],
+            }
+
+    monkeypatch.setattr(ui_app, "MorningPlanBuilder", _FakeMorningPlanBuilder)
+
+    response = client.post(
+        "/api/v2/research/morning-plan",
+        json={
+            "instrument_id": "BRK6",
+            "tick_size": 0.01,
+            "as_of_ts": "2026-03-02T07:00:00Z",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["instrument_id"] == "BRK6"
+    assert payload["tick_size"] == 0.01
+    assert payload["as_of_ts"] == "2026-03-02T07:00:00+00:00"
+    assert payload["setups"][0]["setup_id"] == "S1"
+
+    invalid_tick_size = client.post(
+        "/api/v2/research/morning-plan",
+        json={"instrument_id": "BRK6", "tick_size": 0},
+    )
+    assert invalid_tick_size.status_code == 400
+    assert invalid_tick_size.get_json()["message"] == "invalid_tick_size"
 
 
 def test_v2_hpo_status_fails_on_quality_gate(tmp_path, monkeypatch):

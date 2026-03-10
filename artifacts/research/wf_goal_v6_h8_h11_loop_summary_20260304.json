@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-03-04T15:57:49Z",
+  "source": "artifacts\\research\\wf_goal_v6_seed110_neg0.json",
+  "target": {
+    "win_rate_gt": 0.75,
+    "trades_per_week_ge": 1.8,
+    "net_gt": 0
+  },
+  "runs": [
+    {
+      "filled": 95,
+      "win_rate": 0.4,
+      "net": 5911.0,
+      "tpw": 1.8119891008174387,
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "id": "h8_slot1415_recall",
+      "out": "artifacts/research/wf_goal_v6_h8_slot1415_recall_rerun_20260304.json"
+    },
+    {
+      "filled": 0,
+      "win_rate": 0.0,
+      "net": 0.0,
+      "tpw": 0.0,
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "id": "h9_slot1415_prob_moderate",
+      "out": "artifacts/research/wf_goal_v6_h9_slot1415_prob_moderate_rerun_20260304.json"
+    },
+    {
+      "filled": 0,
+      "win_rate": 0.0,
+      "net": 0.0,
+      "tpw": 0.0,
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "id": "h10_slot1415_prob_strict",
+      "out": "artifacts/research/wf_goal_v6_h10_slot1415_prob_strict_rerun_20260304.json"
+    },
+    {
+      "filled": 0,
+      "win_rate": 0.0,
+      "net": 0.0,
+      "tpw": 0.0,
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "id": "h11_slot1415_prob_plus_precision",
+      "out": "artifacts/research/wf_goal_v6_h11_slot1415_prob_plus_precision_rerun_20260304.json"
+    }
+  ],
+  "success": null
+}

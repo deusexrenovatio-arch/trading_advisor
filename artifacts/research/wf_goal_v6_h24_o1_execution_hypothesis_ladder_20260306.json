@@ -1,0 +1,102 @@
+{
+  "generated_at": "2026-03-06T10:45:17.082690+00:00",
+  "reference_artifact": "artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O1_limitfallback10m1t_frontnearest_seed124_20260305.json",
+  "reference_metrics": {
+    "setups_total": 259,
+    "filled_trades": 222,
+    "fill_rate": 0.8571428571428571,
+    "tp_rate": 0.7297297297297297,
+    "sl_rate": 0.22072072072072071,
+    "exit_rate": 0.04954954954954955,
+    "win_rate_net": 0.9414414414414415,
+    "expectancy_net_ticks": 56.781531531531535,
+    "net_ticks_sum": 12605.5,
+    "trades_per_week": 4.23433242506812,
+    "concentration_top_share": 0.5321787049793347,
+    "acceptance_passed": false,
+    "failed_reasons": [
+      "hard_max_concentration_top_share"
+    ]
+  },
+  "families": {
+    "H0": {
+      "summary_artifact": "artifacts/research/wf_goal_v6_h24_o1_h0_family_summary_20260306.json",
+      "family_verdict": "useful",
+      "promotion_candidate": "H0_REPRO",
+      "hypothesis_artifacts": [
+        "artifacts/research/wf_goal_v6_h24_o1_h0_repro_20260306.json"
+      ]
+    },
+    "H1": {
+      "summary_artifact": "artifacts/research/wf_goal_v6_h24_o1_h1_family_summary_20260306.json",
+      "family_verdict": "noisy",
+      "promotion_candidate": null,
+      "hypothesis_artifacts": [
+        "artifacts/research/wf_goal_v6_h24_o1_h1a_improve_0_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h1a_improve_2_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h1b_fallback_0m_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h1b_fallback_5m_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h1b_fallback_15m_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h1c_fallback_slip_0_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h1c_fallback_slip_2_20260306.json"
+      ]
+    },
+    "H2": {
+      "summary_artifact": "artifacts/research/wf_goal_v6_h24_o1_h2_family_summary_20260306.json",
+      "family_verdict": "noisy",
+      "promotion_candidate": null,
+      "hypothesis_artifacts": [
+        "artifacts/research/wf_goal_v6_h24_o1_h2a_be_off_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h2a_be_early_tight_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h2a_be_later_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h2b_trail_off_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h2b_trail_early_tight_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h2b_trail_later_wide_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h2c_hold_120_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h2c_hold_240_20260306.json"
+      ]
+    },
+    "H3": {
+      "summary_artifact": "artifacts/research/wf_goal_v6_h24_o1_h3_family_summary_20260306.json",
+      "family_verdict": "noisy",
+      "promotion_candidate": null,
+      "hypothesis_artifacts": [
+        "artifacts/research/wf_goal_v6_h24_o1_h3a_tp_setup_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h3a_tp_0p8_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h3b_sl_setup_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h3b_sl_3p0_20260306.json"
+      ]
+    },
+    "H4": {
+      "summary_artifact": "artifacts/research/wf_goal_v6_h24_o1_h4_family_summary_20260306.json",
+      "family_verdict": "noisy",
+      "promotion_candidate": null,
+      "hypothesis_artifacts": [
+        "artifacts/research/wf_goal_v6_h24_o1_h4a_cap_off_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h4a_cap_0p4_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h4b_abs_cap_120_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h4b_abs_cap_240_20260306.json"
+      ]
+    },
+    "H5": {
+      "summary_artifact": "artifacts/research/wf_goal_v6_h24_o1_h5_family_summary_20260306.json",
+      "family_verdict": "disallowed",
+      "promotion_candidate": null,
+      "hypothesis_artifacts": [
+        "artifacts/research/wf_goal_v6_h24_o1_h5a_samebar_sl_first_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h5a_samebar_tp_first_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h5b_cost_stress_125_20260306.json",
+        "artifacts/research/wf_goal_v6_h24_o1_h5b_cost_stress_150_20260306.json"
+      ]
+    }
+  },
+  "completed_families": [
+    "H0",
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H5"
+  ],
+  "status": "completed"
+}

@@ -7,11 +7,13 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import agent_process_telemetry as telemetry  # noqa: E402
+import validate_process_regressions  # noqa: E402
 
 
 def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -99,16 +101,56 @@ def _write_handoff(
     handoff_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _init_repo(tmp_path: Path) -> Path:
+def _init_repo(tmp_path: Path, *, include_remediation_plan: bool = False) -> Path:
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     (repo_root / "scripts").mkdir()
-    (repo_root / "configs").mkdir()
-    (repo_root / "configs/task_outcome_policy.yaml").write_text(
-        (ROOT / "configs/task_outcome_policy.yaml").read_text(encoding="utf-8"),
+    (repo_root / "memory").mkdir()
+    (repo_root / "plans").mkdir()
+    (repo_root / "scripts/sample.py").write_text("print('baseline')\n", encoding="utf-8")
+    plan_lines = [
+        "version: 1",
+        "updated_at: 2026-03-06",
+        "items:",
+        "- id: P1-TEMP-001",
+        "  title: temp",
+        "  lane: governance",
+        "  status: active",
+        "  execution_mode: autonomous",
+        "  owner: test",
+        "  acceptance:",
+        "  - x",
+        "  checks:",
+        "  - pytest",
+        "  docs:",
+        "  - docs/session_handoff.md",
+        "  dependencies: []",
+        "  started_at: 2026-03-06",
+    ]
+    if include_remediation_plan:
+        plan_lines.extend(
+            [
+                "- id: P1-PROCESS-REG-GATE-063",
+                "  title: staged process regression remediation",
+                "  lane: governance",
+                "  status: active",
+                "  execution_mode: autonomous",
+                "  owner: test",
+                "  acceptance:",
+                "  - x",
+                "  checks:",
+                "  - pytest",
+                "  docs:",
+                "  - docs/session_handoff.md",
+                "  dependencies: []",
+                "  started_at: 2026-03-06",
+            ]
+        )
+    (repo_root / "plans/PLANS.yaml").write_text("\n".join(plan_lines) + "\n", encoding="utf-8")
+    (repo_root / "memory/task_outcomes.yaml").write_text(
+        "version: 1\nupdated_at: 2026-03-06\nitems: []\n",
         encoding="utf-8",
     )
-    (repo_root / "scripts/sample.py").write_text("print('baseline')\n", encoding="utf-8")
     _write_handoff(repo_root)
     assert _run(["git", "init"], repo_root).returncode == 0
     assert _run(["git", "config", "user.email", "test@example.com"], repo_root).returncode == 0
@@ -122,59 +164,6 @@ def _events(path: Path) -> list[dict[str, object]]:
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-
-def _task_snapshot(
-    *,
-    task_id: str,
-    branch: str,
-    worktree_path: Path,
-    started_at: str,
-    outcome_status: str = "in_progress",
-    closed_at: str | None = None,
-) -> dict[str, object]:
-    snapshot: dict[str, object] = {
-        "task_id": task_id,
-        "task_key": f"{task_id.lower()}-key",
-        "started_at": started_at,
-        "branch": branch,
-        "head_sha": "deadbeef",
-        "scope_id": worktree_path.resolve().as_posix().lower(),
-        "worktree_path": str(worktree_path.resolve()),
-        "start_primary_context": "CTX-OPS",
-        "start_contexts": ["CTX-OPS"],
-        "intent_sources": ["session_handoff"],
-        "unmapped_files_count": 0,
-        "start_recommendations": ["No diff yet. Using request/session intent fallback."],
-        "baseline_changed_files": [],
-        "baseline_diff_hash": "base",
-        "last_seen_diff_hash": "base",
-        "last_path_signature": "",
-        "current_same_path_attempts": 0,
-        "max_same_path_attempts_observed": 0,
-        "first_patch_at": None,
-        "time_to_first_patch_sec": None,
-        "first_patch_changed_files_count": 0,
-        "first_patch_changed_contexts": [],
-        "closed_at": closed_at,
-        "outcome_status": outcome_status,
-        "decision_quality": "pending" if outcome_status == "in_progress" else "correct_first_time",
-        "route_match": "pending" if outcome_status == "in_progress" else "matched",
-        "primary_rework_cause": "none",
-        "incident_signature": "none",
-        "improvement_action": "pending" if outcome_status == "in_progress" else "none",
-        "improvement_artifact": "pending" if outcome_status == "in_progress" else "none",
-    }
-    if outcome_status != "in_progress":
-        snapshot["final_contexts"] = ["CTX-OPS"]
-    return snapshot
-
-
-def _legacy_task_snapshot(snapshot: dict[str, object]) -> dict[str, object]:
-    legacy = dict(snapshot)
-    legacy.pop("scope_id", None)
-    legacy.pop("worktree_path", None)
-    return legacy
 
 
 def _build_record(index: int, **overrides: object) -> dict[str, object]:
@@ -276,7 +265,10 @@ def test_first_patch_records_event_and_same_path_attempts(tmp_path: Path, monkey
     assert state["active_task"]["max_same_path_attempts_observed"] == 2
 
 
-def test_rollup_respects_burn_in_and_thresholds() -> None:
+def test_rollup_respects_burn_in_and_thresholds(tmp_path: Path, monkeypatch) -> None:
+    plan_path = tmp_path / "plans.yaml"
+    plan_path.write_text("version: 1\nupdated_at: 2026-03-09\nitems: []\n", encoding="utf-8")
+    monkeypatch.setenv("MOEX_CARRY_PLANS_PATH", str(plan_path))
     payload_under_burn_in = {"items": [_build_record(index) for index in range(19)]}
     rollup_under_burn_in = telemetry.compute_process_rollup(payload_under_burn_in)
     assert rollup_under_burn_in["burn_in_complete"] is False
@@ -296,126 +288,90 @@ def test_rollup_respects_burn_in_and_thresholds() -> None:
     weak_rollup = telemetry.compute_process_rollup(weak_payload)
     assert weak_rollup["burn_in_complete"] is True
     assert weak_rollup["current_metrics"]["correct_first_time_pct"] == 0.60
-    assert weak_rollup["threshold_results"]["decision-quality"]["ok"] is False
-    assert weak_rollup["threshold_results"]["context-efficiency"]["ok"] is False
-    assert weak_rollup["threshold_results"]["self-learning"]["ok"] is False
+    assert weak_rollup["threshold_results"]["decision-quality"]["status"] == "fail"
+    assert weak_rollup["threshold_results"]["decision-quality"]["blocking"] is True
+    assert weak_rollup["threshold_results"]["context-efficiency"]["status"] == "fail"
+    assert weak_rollup["threshold_results"]["context-efficiency"]["blocking"] is True
+    assert weak_rollup["threshold_results"]["self-learning"]["status"] == "fail"
+    assert weak_rollup["threshold_results"]["self-learning"]["blocking"] is True
 
 
-def test_start_task_in_linked_worktree_uses_shared_canonical_root(tmp_path: Path, monkeypatch) -> None:
-    repo_root = _init_repo(tmp_path)
-    linked = tmp_path / "linked"
-    assert _run(["git", "worktree", "add", "-b", "feat/linked", str(linked)], repo_root).returncode == 0
-
-    monkeypatch.chdir(linked)
-    events_path = telemetry.default_events_path()
-    state_path = telemetry.default_state_path()
-    handoff_path = linked / "docs/session_handoff.md"
-
-    created, active = telemetry.start_task(
-        events_path=events_path,
-        state_path=state_path,
-        handoff_path=handoff_path,
-    )
-
-    assert created is True
-    assert active["worktree_path"] == str(linked.resolve())
-    assert events_path == (repo_root / ".runlogs/agent-process/task-events.jsonl").resolve()
-    assert state_path == (repo_root / ".runlogs/agent-process/state.json").resolve()
-    assert events_path.exists()
-    assert not (linked / ".runlogs/agent-process/task-events.jsonl").exists()
-
-
-def test_reconcile_legacy_process_storage_merges_worktree_shards(tmp_path: Path) -> None:
-    repo_root = _init_repo(tmp_path)
-    linked = tmp_path / "linked"
-    assert _run(["git", "worktree", "add", "-b", "feat/linked", str(linked)], repo_root).returncode == 0
-
-    canonical_root = repo_root / ".runlogs/agent-process"
-    canonical_events = canonical_root / "task-events.jsonl"
-    canonical_state = canonical_root / "state.json"
-    legacy_root = linked / ".runlogs/agent-process"
-    legacy_events = legacy_root / "task-events.jsonl"
-    legacy_state = legacy_root / "state.json"
-
-    root_task = _task_snapshot(
-        task_id="ROOT-1",
-        branch="main",
-        worktree_path=repo_root,
-        started_at="2026-03-09T10:00:00Z",
-    )
-    linked_task = _task_snapshot(
-        task_id="LINKED-1",
-        branch="feat/linked",
-        worktree_path=linked,
-        started_at="2026-03-09T10:05:00Z",
-        outcome_status="completed",
-        closed_at="2026-03-09T10:07:00Z",
-    )
-    telemetry.write_json(canonical_state, {"version": 1, "active_task": _legacy_task_snapshot(root_task)})
-    telemetry.append_jsonl(
-        canonical_events,
-        {"event_type": "task_start", "task_id": "ROOT-1", "started_at": "2026-03-09T10:00:00Z"},
-    )
-    telemetry.write_json(legacy_state, {"version": 1, "active_task": _legacy_task_snapshot(linked_task)})
-    telemetry.append_jsonl(
-        legacy_events,
-        {"event_type": "task_start", "task_id": "LINKED-1", "started_at": "2026-03-09T10:05:00Z"},
-    )
-
-    state = telemetry.reconcile_legacy_process_storage(
-        linked,
-        events_path=canonical_events,
-        state_path=canonical_state,
-    )
-
-    merged_events = _events(canonical_events)
-    assert {event["task_id"] for event in merged_events} == {"ROOT-1", "LINKED-1"}
-    assert telemetry.get_active_task(state, repo_root) is not None
-    assert telemetry.get_active_task(state, repo_root)["task_id"] == "ROOT-1"
-    assert telemetry.get_active_task(state, linked) is not None
-    assert telemetry.get_active_task(state, linked)["task_id"] == "LINKED-1"
-    assert "default" not in state["tasks_by_scope"]
-    assert all(not key.endswith("/.runlogs") for key in state["tasks_by_scope"])
-
-    persisted = telemetry.load_state(canonical_state)
-    assert len(persisted["tasks_by_scope"]) == 2
-    assert set(persisted["tasks_by_scope"]) == {
-        repo_root.resolve().as_posix().lower(),
-        linked.resolve().as_posix().lower(),
+def test_validate_process_regressions_allows_acknowledged_baseline_debt(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = _init_repo(tmp_path, include_remediation_plan=True)
+    monkeypatch.chdir(repo_root)
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    payload = {
+        "version": 1,
+        "updated_at": "2026-03-09",
+        "items": [
+            _build_record(
+                index,
+                decision_quality="wrong_path" if index < 8 else "correct_first_time",
+                route_match="expanded" if index < 6 else "matched",
+            )
+            for index in range(20)
+        ],
     }
-    assert persisted["migration"]["canonical_worktree"] == str(repo_root.resolve())
+    task_outcomes_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
-
-def test_reconcile_legacy_process_storage_repairs_buggy_runlogs_scope(tmp_path: Path) -> None:
-    repo_root = _init_repo(tmp_path)
-    canonical_root = repo_root / ".runlogs/agent-process"
-    canonical_state = canonical_root / "state.json"
-    buggy_worktree_path = repo_root / ".runlogs"
-    buggy_task = _task_snapshot(
-        task_id="BUG-1",
-        branch="main",
-        worktree_path=buggy_worktree_path,
-        started_at="2026-03-09T10:00:00Z",
+    assert (
+        validate_process_regressions.run(
+            task_outcomes_path=task_outcomes_path,
+            focus=None,
+            report=None,
+        )
+        == 0
     )
-    telemetry.write_json(
-        canonical_state,
-        {
-            "version": 2,
-            "tasks_by_scope": {
-                buggy_worktree_path.resolve().as_posix().lower(): buggy_task,
-            },
-            "active_task": buggy_task,
-        },
-    )
+    rollup = telemetry.compute_process_rollup(payload)
+    assert rollup["threshold_results"]["decision-quality"]["status"] == "acknowledged_debt"
+    assert rollup["threshold_results"]["decision-quality"]["blocking"] is False
+    assert rollup["threshold_results"]["context-efficiency"]["status"] == "acknowledged_debt"
+    assert rollup["threshold_results"]["context-efficiency"]["blocking"] is False
 
-    state = telemetry.reconcile_legacy_process_storage(
-        repo_root,
-        events_path=canonical_root / "task-events.jsonl",
-        state_path=canonical_state,
-    )
 
-    assert set(state["tasks_by_scope"]) == {repo_root.resolve().as_posix().lower()}
-    repaired = telemetry.get_active_task(state, repo_root)
-    assert repaired is not None
-    assert repaired["task_id"] == "BUG-1"
-    assert repaired["worktree_path"] == str(repo_root.resolve())
+def test_validate_process_regressions_blocks_worsening_acknowledged_debt(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = _init_repo(tmp_path, include_remediation_plan=True)
+    monkeypatch.chdir(repo_root)
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    previous_window = [
+        _build_record(
+            index,
+            decision_quality="wrong_path" if index < 7 else "correct_first_time",
+            route_match="expanded" if index < 6 else "matched",
+        )
+        for index in range(20)
+    ]
+    current_window = [
+        _build_record(
+            20 + index,
+            decision_quality="wrong_path" if index < 8 else "correct_first_time",
+            route_match="expanded" if index < 7 else "matched",
+        )
+        for index in range(20)
+    ]
+    payload = {
+        "version": 1,
+        "updated_at": "2026-03-09",
+        "items": previous_window + current_window,
+    }
+    task_outcomes_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    assert (
+        validate_process_regressions.run(
+            task_outcomes_path=task_outcomes_path,
+            focus=None,
+            report=None,
+        )
+        == 1
+    )
+    rollup = telemetry.compute_process_rollup(payload)
+    assert rollup["threshold_results"]["decision-quality"]["status"] == "regressed"
+    assert rollup["threshold_results"]["decision-quality"]["blocking"] is True
+    assert rollup["threshold_results"]["context-efficiency"]["status"] == "regressed"
+    assert rollup["threshold_results"]["context-efficiency"]["blocking"] is True

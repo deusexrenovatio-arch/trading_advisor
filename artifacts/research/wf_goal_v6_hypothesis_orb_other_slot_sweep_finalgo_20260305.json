@@ -1,0 +1,1504 @@
+{
+  "generated_at_utc": "2026-03-05T12:58:00.141050+00:00",
+  "source_report": "artifacts/research/wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+  "search_space": {
+    "setup_kind": [
+      "ORB_BREAKOUT"
+    ],
+    "cluster": [
+      "other"
+    ],
+    "slot_family": [
+      "10:30",
+      "12:00",
+      "14:15"
+    ],
+    "exclude_side_slot_candidates": [
+      "BUY@10:30",
+      "SELL@10:30",
+      "BUY@12:00",
+      "SELL@12:00",
+      "BUY@14:15",
+      "SELL@14:15"
+    ],
+    "extra_pairs": [
+      [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      [
+        "SELL@12:00",
+        "SELL@14:15"
+      ]
+    ]
+  },
+  "evaluated": 77,
+  "final_go_passed": 0,
+  "top_by_final_go_distance": [
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 122,
+      "win_rate_net": 0.7049180327868853,
+      "trades_per_week": 2.326975476839237,
+      "net_ticks_sum": 3054.5,
+      "concentration_top_share": 0.22587268993839835,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 122,
+      "win_rate_net": 0.7049180327868853,
+      "trades_per_week": 2.326975476839237,
+      "net_ticks_sum": 3054.5,
+      "concentration_top_share": 0.22587268993839835,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 122,
+      "win_rate_net": 0.7049180327868853,
+      "trades_per_week": 2.326975476839237,
+      "net_ticks_sum": 3054.5,
+      "concentration_top_share": 0.22587268993839835,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 151,
+      "win_rate_net": 0.6688741721854304,
+      "trades_per_week": 2.880108991825613,
+      "net_ticks_sum": 2885.0,
+      "concentration_top_share": 0.2054710500490677,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 146,
+      "win_rate_net": 0.6164383561643836,
+      "trades_per_week": 2.784741144414169,
+      "net_ticks_sum": 2398.5,
+      "concentration_top_share": 0.20068823124569857,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 175,
+      "win_rate_net": 0.6,
+      "trades_per_week": 3.337874659400545,
+      "net_ticks_sum": 2229.0,
+      "concentration_top_share": 0.20818156346315494,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 102,
+      "win_rate_net": 0.6470588235294118,
+      "trades_per_week": 1.9455040871934606,
+      "net_ticks_sum": 3111.0,
+      "concentration_top_share": 0.2971223021582734,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 151,
+      "win_rate_net": 0.5827814569536424,
+      "trades_per_week": 2.880108991825613,
+      "net_ticks_sum": 3276.0,
+      "concentration_top_share": 0.2787526997840173,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 150,
+      "win_rate_net": 0.58,
+      "trades_per_week": 2.861035422343324,
+      "net_ticks_sum": 1408.0,
+      "concentration_top_share": 0.25744975744975745,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 98,
+      "win_rate_net": 0.7040816326530612,
+      "trades_per_week": 1.8692098092643052,
+      "net_ticks_sum": 4101.5,
+      "concentration_top_share": 0.24200164068908941,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "filled_trades": 111,
+      "win_rate_net": 0.5675675675675675,
+      "trades_per_week": 2.11716621253406,
+      "net_ticks_sum": 1336.0,
+      "concentration_top_share": 0.2621978021978022,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "filled_trades": 135,
+      "win_rate_net": 0.5925925925925926,
+      "trades_per_week": 2.5749318801089918,
+      "net_ticks_sum": 289.0,
+      "concentration_top_share": 0.38205980066445183,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "filled_trades": 142,
+      "win_rate_net": 0.5563380281690141,
+      "trades_per_week": 2.7084468664850134,
+      "net_ticks_sum": 888.5,
+      "concentration_top_share": 0.34326634326634325,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 97,
+      "win_rate_net": 0.7010309278350515,
+      "trades_per_week": 1.8501362397820162,
+      "net_ticks_sum": 2233.5,
+      "concentration_top_share": 0.21419127368884971,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 117,
+      "win_rate_net": 0.5213675213675214,
+      "trades_per_week": 2.231607629427793,
+      "net_ticks_sum": 67.5,
+      "concentration_top_share": 0.30887549366036166,
+      "final_go_passed": false
+    }
+  ],
+  "rows": [
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 24,
+      "win_rate_net": 0.16666666666666666,
+      "trades_per_week": 0.45776566757493187,
+      "net_ticks_sum": -656.0,
+      "concentration_top_share": 0.30125,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 29,
+      "win_rate_net": 0.5172413793103449,
+      "trades_per_week": 0.553133514986376,
+      "net_ticks_sum": -169.5,
+      "concentration_top_share": 0.21642619311875694,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 49,
+      "win_rate_net": 0.7142857142857143,
+      "trades_per_week": 0.9346049046321526,
+      "net_ticks_sum": -226.0,
+      "concentration_top_share": 0.5324074074074074,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 49,
+      "win_rate_net": 0.7142857142857143,
+      "trades_per_week": 0.9346049046321526,
+      "net_ticks_sum": -226.0,
+      "concentration_top_share": 0.5324074074074074,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 49,
+      "win_rate_net": 0.7142857142857143,
+      "trades_per_week": 0.9346049046321526,
+      "net_ticks_sum": -226.0,
+      "concentration_top_share": 0.5324074074074074,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 25,
+      "win_rate_net": 0.72,
+      "trades_per_week": 0.4768392370572207,
+      "net_ticks_sum": 821.0,
+      "concentration_top_share": 0.35714285714285715,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 24,
+      "win_rate_net": 0.7083333333333334,
+      "trades_per_week": 0.45776566757493187,
+      "net_ticks_sum": -1047.0,
+      "concentration_top_share": 0.7482482482482482,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "filled_trades": 49,
+      "win_rate_net": 0.7142857142857143,
+      "trades_per_week": 0.9346049046321526,
+      "net_ticks_sum": -226.0,
+      "concentration_top_share": 0.5324074074074074,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "filled_trades": 49,
+      "win_rate_net": 0.7142857142857143,
+      "trades_per_week": 0.9346049046321526,
+      "net_ticks_sum": -226.0,
+      "concentration_top_share": 0.5324074074074074,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "filled_trades": 25,
+      "win_rate_net": 0.72,
+      "trades_per_week": 0.4768392370572207,
+      "net_ticks_sum": 821.0,
+      "concentration_top_share": 0.35714285714285715,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 0,
+      "win_rate_net": 0.0,
+      "trades_per_week": 0.0,
+      "net_ticks_sum": 0.0,
+      "concentration_top_share": 0.0,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 25,
+      "win_rate_net": 0.72,
+      "trades_per_week": 0.4768392370572207,
+      "net_ticks_sum": 821.0,
+      "concentration_top_share": 0.35714285714285715,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 24,
+      "win_rate_net": 0.7083333333333334,
+      "trades_per_week": 0.45776566757493187,
+      "net_ticks_sum": -1047.0,
+      "concentration_top_share": 0.7482482482482482,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 73,
+      "win_rate_net": 0.6986301369863014,
+      "trades_per_week": 1.3923705722070845,
+      "net_ticks_sum": 3280.5,
+      "concentration_top_share": 0.29245149412264554,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 73,
+      "win_rate_net": 0.6986301369863014,
+      "trades_per_week": 1.3923705722070845,
+      "net_ticks_sum": 3280.5,
+      "concentration_top_share": 0.29245149412264554,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 73,
+      "win_rate_net": 0.6986301369863014,
+      "trades_per_week": 1.3923705722070845,
+      "net_ticks_sum": 3280.5,
+      "concentration_top_share": 0.29245149412264554,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 73,
+      "win_rate_net": 0.6986301369863014,
+      "trades_per_week": 1.3923705722070845,
+      "net_ticks_sum": 3280.5,
+      "concentration_top_share": 0.29245149412264554,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 73,
+      "win_rate_net": 0.6986301369863014,
+      "trades_per_week": 1.3923705722070845,
+      "net_ticks_sum": 3280.5,
+      "concentration_top_share": 0.29245149412264554,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "filled_trades": 33,
+      "win_rate_net": 0.7878787878787878,
+      "trades_per_week": 0.6294277929155313,
+      "net_ticks_sum": 1340.5,
+      "concentration_top_share": 0.3833383640205252,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "filled_trades": 40,
+      "win_rate_net": 0.625,
+      "trades_per_week": 0.7629427792915532,
+      "net_ticks_sum": 1940.0,
+      "concentration_top_share": 0.5106330365974283,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "filled_trades": 33,
+      "win_rate_net": 0.7878787878787878,
+      "trades_per_week": 0.6294277929155313,
+      "net_ticks_sum": 1340.5,
+      "concentration_top_share": 0.3833383640205252,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 73,
+      "win_rate_net": 0.6986301369863014,
+      "trades_per_week": 1.3923705722070845,
+      "net_ticks_sum": 3280.5,
+      "concentration_top_share": 0.29245149412264554,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 40,
+      "win_rate_net": 0.625,
+      "trades_per_week": 0.7629427792915532,
+      "net_ticks_sum": 1940.0,
+      "concentration_top_share": 0.5106330365974283,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 40,
+      "win_rate_net": 0.625,
+      "trades_per_week": 0.7629427792915532,
+      "net_ticks_sum": 1940.0,
+      "concentration_top_share": 0.5106330365974283,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 102,
+      "win_rate_net": 0.5294117647058824,
+      "trades_per_week": 1.9455040871934606,
+      "net_ticks_sum": -1051.5,
+      "concentration_top_share": 0.603918400323167,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 73,
+      "win_rate_net": 0.5342465753424658,
+      "trades_per_week": 1.3923705722070845,
+      "net_ticks_sum": -882.0,
+      "concentration_top_share": 0.6149732620320856,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 78,
+      "win_rate_net": 0.6410256410256411,
+      "trades_per_week": 1.4877384196185286,
+      "net_ticks_sum": -395.5,
+      "concentration_top_share": 0.5136574471740251,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 78,
+      "win_rate_net": 0.47435897435897434,
+      "trades_per_week": 1.4877384196185286,
+      "net_ticks_sum": -4.5,
+      "concentration_top_share": 0.1474626865671642,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 77,
+      "win_rate_net": 0.4675324675324675,
+      "trades_per_week": 1.4686648501362398,
+      "net_ticks_sum": -1872.5,
+      "concentration_top_share": 0.5529868688736823,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "filled_trades": 102,
+      "win_rate_net": 0.5294117647058824,
+      "trades_per_week": 1.9455040871934606,
+      "net_ticks_sum": -1051.5,
+      "concentration_top_share": 0.603918400323167,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "filled_trades": 102,
+      "win_rate_net": 0.5294117647058824,
+      "trades_per_week": 1.9455040871934606,
+      "net_ticks_sum": -1051.5,
+      "concentration_top_share": 0.603918400323167,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "filled_trades": 78,
+      "win_rate_net": 0.47435897435897434,
+      "trades_per_week": 1.4877384196185286,
+      "net_ticks_sum": -4.5,
+      "concentration_top_share": 0.1474626865671642,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 53,
+      "win_rate_net": 0.3584905660377358,
+      "trades_per_week": 1.0108991825613078,
+      "net_ticks_sum": -825.5,
+      "concentration_top_share": 0.32689521970062774,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 78,
+      "win_rate_net": 0.47435897435897434,
+      "trades_per_week": 1.4877384196185286,
+      "net_ticks_sum": -4.5,
+      "concentration_top_share": 0.1474626865671642,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 77,
+      "win_rate_net": 0.4675324675324675,
+      "trades_per_week": 1.4686648501362398,
+      "net_ticks_sum": -1872.5,
+      "concentration_top_share": 0.5529868688736823,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 97,
+      "win_rate_net": 0.5670103092783505,
+      "trades_per_week": 1.8501362397820162,
+      "net_ticks_sum": 2624.5,
+      "concentration_top_share": 0.33268889962945064,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 102,
+      "win_rate_net": 0.6470588235294118,
+      "trades_per_week": 1.9455040871934606,
+      "net_ticks_sum": 3111.0,
+      "concentration_top_share": 0.2971223021582734,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "filled_trades": 86,
+      "win_rate_net": 0.5232558139534884,
+      "trades_per_week": 1.6403269754768393,
+      "net_ticks_sum": 515.0,
+      "concentration_top_share": 0.19203367875647667,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "filled_trades": 93,
+      "win_rate_net": 0.4731182795698925,
+      "trades_per_week": 1.7738419618528611,
+      "net_ticks_sum": 1114.5,
+      "concentration_top_share": 0.40721751133898637,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "filled_trades": 86,
+      "win_rate_net": 0.5232558139534884,
+      "trades_per_week": 1.6403269754768393,
+      "net_ticks_sum": 515.0,
+      "concentration_top_share": 0.19203367875647667,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 93,
+      "win_rate_net": 0.4731182795698925,
+      "trades_per_week": 1.7738419618528611,
+      "net_ticks_sum": 1114.5,
+      "concentration_top_share": 0.40721751133898637,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 93,
+      "win_rate_net": 0.4731182795698925,
+      "trades_per_week": 1.7738419618528611,
+      "net_ticks_sum": 1114.5,
+      "concentration_top_share": 0.40721751133898637,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 122,
+      "win_rate_net": 0.7049180327868853,
+      "trades_per_week": 2.326975476839237,
+      "net_ticks_sum": 3054.5,
+      "concentration_top_share": 0.22587268993839835,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 122,
+      "win_rate_net": 0.7049180327868853,
+      "trades_per_week": 2.326975476839237,
+      "net_ticks_sum": 3054.5,
+      "concentration_top_share": 0.22587268993839835,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 122,
+      "win_rate_net": 0.7049180327868853,
+      "trades_per_week": 2.326975476839237,
+      "net_ticks_sum": 3054.5,
+      "concentration_top_share": 0.22587268993839835,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 98,
+      "win_rate_net": 0.7040816326530612,
+      "trades_per_week": 1.8692098092643052,
+      "net_ticks_sum": 4101.5,
+      "concentration_top_share": 0.24200164068908941,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 97,
+      "win_rate_net": 0.7010309278350515,
+      "trades_per_week": 1.8501362397820162,
+      "net_ticks_sum": 2233.5,
+      "concentration_top_share": 0.21419127368884971,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "filled_trades": 82,
+      "win_rate_net": 0.7439024390243902,
+      "trades_per_week": 1.564032697547684,
+      "net_ticks_sum": 1114.5,
+      "concentration_top_share": 0.34004321619470035,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "filled_trades": 89,
+      "win_rate_net": 0.6741573033707865,
+      "trades_per_week": 1.6975476839237058,
+      "net_ticks_sum": 1714.0,
+      "concentration_top_share": 0.27080237741456165,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "filled_trades": 58,
+      "win_rate_net": 0.7586206896551724,
+      "trades_per_week": 1.106267029972752,
+      "net_ticks_sum": 2161.5,
+      "concentration_top_share": 0.3842202588863776,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 73,
+      "win_rate_net": 0.6986301369863014,
+      "trades_per_week": 1.3923705722070845,
+      "net_ticks_sum": 3280.5,
+      "concentration_top_share": 0.29245149412264554,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 65,
+      "win_rate_net": 0.6615384615384615,
+      "trades_per_week": 1.2397820163487738,
+      "net_ticks_sum": 2761.0,
+      "concentration_top_share": 0.36691542288557216,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 64,
+      "win_rate_net": 0.65625,
+      "trades_per_week": 1.220708446866485,
+      "net_ticks_sum": 893.0,
+      "concentration_top_share": 0.3836842105263158,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [],
+      "filled_trades": 175,
+      "win_rate_net": 0.6,
+      "trades_per_week": 3.337874659400545,
+      "net_ticks_sum": 2229.0,
+      "concentration_top_share": 0.20818156346315494,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@10:30"
+      ],
+      "filled_trades": 146,
+      "win_rate_net": 0.6164383561643836,
+      "trades_per_week": 2.784741144414169,
+      "net_ticks_sum": 2398.5,
+      "concentration_top_share": 0.20068823124569857,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@10:30"
+      ],
+      "filled_trades": 151,
+      "win_rate_net": 0.6688741721854304,
+      "trades_per_week": 2.880108991825613,
+      "net_ticks_sum": 2885.0,
+      "concentration_top_share": 0.2054710500490677,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00"
+      ],
+      "filled_trades": 151,
+      "win_rate_net": 0.5827814569536424,
+      "trades_per_week": 2.880108991825613,
+      "net_ticks_sum": 3276.0,
+      "concentration_top_share": 0.2787526997840173,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00"
+      ],
+      "filled_trades": 150,
+      "win_rate_net": 0.58,
+      "trades_per_week": 2.861035422343324,
+      "net_ticks_sum": 1408.0,
+      "concentration_top_share": 0.25744975744975745,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@14:15"
+      ],
+      "filled_trades": 135,
+      "win_rate_net": 0.5925925925925926,
+      "trades_per_week": 2.5749318801089918,
+      "net_ticks_sum": 289.0,
+      "concentration_top_share": 0.38205980066445183,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@14:15"
+      ],
+      "filled_trades": 142,
+      "win_rate_net": 0.5563380281690141,
+      "trades_per_week": 2.7084468664850134,
+      "net_ticks_sum": 888.5,
+      "concentration_top_share": 0.34326634326634325,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "BUY@14:15"
+      ],
+      "filled_trades": 111,
+      "win_rate_net": 0.5675675675675675,
+      "trades_per_week": 2.11716621253406,
+      "net_ticks_sum": 1336.0,
+      "concentration_top_share": 0.2621978021978022,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@12:00"
+      ],
+      "filled_trades": 126,
+      "win_rate_net": 0.5555555555555556,
+      "trades_per_week": 2.4032697547683926,
+      "net_ticks_sum": 2455.0,
+      "concentration_top_share": 0.3417742469381,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "BUY@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 118,
+      "win_rate_net": 0.5254237288135594,
+      "trades_per_week": 2.250681198910082,
+      "net_ticks_sum": 1935.5,
+      "concentration_top_share": 0.44998910438003925,
+      "final_go_passed": false
+    },
+    {
+      "slots": [
+        "10:30",
+        "12:00",
+        "14:15"
+      ],
+      "exclude_side_slot": [
+        "SELL@12:00",
+        "SELL@14:15"
+      ],
+      "filled_trades": 117,
+      "win_rate_net": 0.5213675213675214,
+      "trades_per_week": 2.231607629427793,
+      "net_ticks_sum": 67.5,
+      "concentration_top_share": 0.30887549366036166,
+      "final_go_passed": false
+    }
+  ]
+}

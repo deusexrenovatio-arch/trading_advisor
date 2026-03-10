@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import date
 from typing import Any, Literal
@@ -201,9 +201,19 @@ class HpoOptimizationConfig(BaseModel):
 
     metric: str = "excess_ann"
     mode: Literal["max", "min"] = "max"
+    algorithm: Literal["RANDOM", "TPE"] = "RANDOM"
+    aggregation: Literal["median", "p25", "mean"] = "median"
+    evaluation_mode: Literal["CONTINUOUS", "WARMUP_THEN_FLAT"] = "CONTINUOUS"
     max_trials: int = 50
     random_seed: int | None = None
     timeout_sec: int | None = None
+    parallel_fold_workers: int = 1
+    max_fold_evaluations_per_trial: int = 0
+    refit_top_n_full_folds: int = 0
+    negative_fold_penalty: float = 0.0
+    negative_fold_threshold: float = 0.0
+    negative_fold_metric: str | None = None
+    hard_max_negative_fold_share: float | None = None
     quality_review_enabled: bool = True
     quality_top_n: int = 10
     quality_min_trades_closed_total: int = 5

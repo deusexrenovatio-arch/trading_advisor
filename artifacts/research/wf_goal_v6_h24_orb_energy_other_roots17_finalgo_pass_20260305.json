@@ -1,0 +1,439 @@
+{
+  "generated_at_utc": "2026-03-05T13:36:26.201982+00:00",
+  "source_report_path": "artifacts\\research\\wf_goal_v6_h24_recall_orb_ema_vwap_constrained_20260304.json",
+  "source_planned_signals_total": 1118,
+  "selection": {
+    "selected_rows": 176,
+    "rejected_rows": 942,
+    "rejected_by_reason": {
+      "include_setup_kinds": 634,
+      "include_slots": 144,
+      "include_roots": 51,
+      "include_clusters": 113
+    },
+    "filters": {
+      "include_setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "include_sides": [],
+      "include_slots": [
+        "12:00",
+        "14:15"
+      ],
+      "include_clusters": [
+        "energy",
+        "other"
+      ],
+      "include_roots": [
+        "AN",
+        "BR",
+        "CC",
+        "CE",
+        "DX",
+        "FF",
+        "HS",
+        "MM",
+        "MX",
+        "NC",
+        "NG",
+        "RI",
+        "S1",
+        "SA",
+        "SU",
+        "SX",
+        "ZC"
+      ],
+      "include_instrument_ids": [],
+      "exclude_setup_kinds": [],
+      "exclude_sides": [],
+      "exclude_slots": [],
+      "exclude_clusters": [],
+      "exclude_roots": [],
+      "exclude_instrument_ids": [],
+      "exclude_side_slots": [],
+      "energy_roots": [
+        "BR",
+        "NG"
+      ],
+      "metals_roots": [
+        "GD",
+        "PL",
+        "PT",
+        "SV"
+      ]
+    },
+    "tpw_period_scope": "report",
+    "tpw_period_source": "report"
+  },
+  "summary": {
+    "setups_total": 176,
+    "filled_trades": 109,
+    "fill_rate": 0.6193181818181818,
+    "tp_rate": 0.5412844036697247,
+    "sl_rate": 0.13761467889908258,
+    "exit_rate": 0.3211009174311927,
+    "win_rate_net": 0.7522935779816514,
+    "expectancy_net_ticks": 33.23394495412844,
+    "gross_ticks_sum": 4341.0,
+    "net_ticks_sum": 3622.5,
+    "trades_per_week": 2.0790190735694822,
+    "period_start": "2025-03-01",
+    "period_end": "2026-03-02",
+    "concentration_top_share": 0.2581090407177364,
+    "concentration_hhi": 0.1557059079320309,
+    "by_setup_kind": {
+      "ORB_BREAKOUT": {
+        "count": 109,
+        "net_ticks_sum": 3622.5,
+        "win_count": 82,
+        "tp_count": 59,
+        "sl_count": 15,
+        "exit_count": 35,
+        "expectancy_net_ticks": 33.23394495412844,
+        "win_rate_net": 0.7522935779816514,
+        "tp_rate": 0.5412844036697247,
+        "sl_rate": 0.13761467889908258,
+        "exit_rate": 0.3211009174311927
+      }
+    },
+    "by_instrument": {
+      "AN": {
+        "count": 5,
+        "net_ticks_sum": 72.5,
+        "win_count": 4,
+        "tp_count": 2,
+        "sl_count": 0,
+        "exit_count": 3,
+        "expectancy_net_ticks": 14.5,
+        "win_rate_net": 0.8,
+        "tp_rate": 0.4,
+        "sl_rate": 0.0,
+        "exit_rate": 0.6,
+        "gross_ticks_sum": 105.0,
+        "abs_gross_ticks_sum": 105.0
+      },
+      "BR": {
+        "count": 10,
+        "net_ticks_sum": 132.0,
+        "win_count": 8,
+        "tp_count": 4,
+        "sl_count": 1,
+        "exit_count": 5,
+        "expectancy_net_ticks": 13.2,
+        "win_rate_net": 0.8,
+        "tp_rate": 0.4,
+        "sl_rate": 0.1,
+        "exit_rate": 0.5,
+        "gross_ticks_sum": 197.0,
+        "abs_gross_ticks_sum": 275.0
+      },
+      "CC": {
+        "count": 28,
+        "net_ticks_sum": 605.0,
+        "win_count": 22,
+        "tp_count": 20,
+        "sl_count": 2,
+        "exit_count": 6,
+        "expectancy_net_ticks": 21.607142857142858,
+        "win_rate_net": 0.7857142857142857,
+        "tp_rate": 0.7142857142857143,
+        "sl_rate": 0.07142857142857142,
+        "exit_rate": 0.21428571428571427,
+        "gross_ticks_sum": 787.0,
+        "abs_gross_ticks_sum": 891.0
+      },
+      "CE": {
+        "count": 6,
+        "net_ticks_sum": 47.0,
+        "win_count": 4,
+        "tp_count": 1,
+        "sl_count": 2,
+        "exit_count": 3,
+        "expectancy_net_ticks": 7.833333333333333,
+        "win_rate_net": 0.6666666666666666,
+        "tp_rate": 0.16666666666666666,
+        "sl_rate": 0.3333333333333333,
+        "exit_rate": 0.5,
+        "gross_ticks_sum": 87.0,
+        "abs_gross_ticks_sum": 239.0
+      },
+      "DX": {
+        "count": 3,
+        "net_ticks_sum": 272.5,
+        "win_count": 3,
+        "tp_count": 3,
+        "sl_count": 0,
+        "exit_count": 0,
+        "expectancy_net_ticks": 90.83333333333333,
+        "win_rate_net": 1.0,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "gross_ticks_sum": 292.0,
+        "abs_gross_ticks_sum": 292.0
+      },
+      "FF": {
+        "count": 3,
+        "net_ticks_sum": 27.5,
+        "win_count": 2,
+        "tp_count": 2,
+        "sl_count": 1,
+        "exit_count": 0,
+        "expectancy_net_ticks": 9.166666666666666,
+        "win_rate_net": 0.6666666666666666,
+        "tp_rate": 0.6666666666666666,
+        "sl_rate": 0.3333333333333333,
+        "exit_rate": 0.0,
+        "gross_ticks_sum": 47.0,
+        "abs_gross_ticks_sum": 109.0
+      },
+      "HS": {
+        "count": 3,
+        "net_ticks_sum": 281.5,
+        "win_count": 2,
+        "tp_count": 1,
+        "sl_count": 0,
+        "exit_count": 2,
+        "expectancy_net_ticks": 93.83333333333333,
+        "win_rate_net": 0.6666666666666666,
+        "tp_rate": 0.3333333333333333,
+        "sl_rate": 0.0,
+        "exit_rate": 0.6666666666666666,
+        "gross_ticks_sum": 301.0,
+        "abs_gross_ticks_sum": 301.0
+      },
+      "MM": {
+        "count": 9,
+        "net_ticks_sum": 935.0,
+        "win_count": 6,
+        "tp_count": 5,
+        "sl_count": 3,
+        "exit_count": 1,
+        "expectancy_net_ticks": 103.88888888888889,
+        "win_rate_net": 0.6666666666666666,
+        "tp_rate": 0.5555555555555556,
+        "sl_rate": 0.3333333333333333,
+        "exit_rate": 0.1111111111111111,
+        "gross_ticks_sum": 1001.0,
+        "abs_gross_ticks_sum": 2303.0
+      },
+      "MX": {
+        "count": 6,
+        "net_ticks_sum": 207.0,
+        "win_count": 5,
+        "tp_count": 5,
+        "sl_count": 1,
+        "exit_count": 0,
+        "expectancy_net_ticks": 34.5,
+        "win_rate_net": 0.8333333333333334,
+        "tp_rate": 0.8333333333333334,
+        "sl_rate": 0.16666666666666666,
+        "exit_rate": 0.0,
+        "gross_ticks_sum": 246.0,
+        "abs_gross_ticks_sum": 324.0
+      },
+      "NC": {
+        "count": 7,
+        "net_ticks_sum": 35.5,
+        "win_count": 5,
+        "tp_count": 3,
+        "sl_count": 1,
+        "exit_count": 3,
+        "expectancy_net_ticks": 5.071428571428571,
+        "win_rate_net": 0.7142857142857143,
+        "tp_rate": 0.42857142857142855,
+        "sl_rate": 0.14285714285714285,
+        "exit_rate": 0.42857142857142855,
+        "gross_ticks_sum": 81.0,
+        "abs_gross_ticks_sum": 103.0
+      },
+      "NG": {
+        "count": 5,
+        "net_ticks_sum": 38.5,
+        "win_count": 3,
+        "tp_count": 3,
+        "sl_count": 1,
+        "exit_count": 1,
+        "expectancy_net_ticks": 7.7,
+        "win_rate_net": 0.6,
+        "tp_rate": 0.6,
+        "sl_rate": 0.2,
+        "exit_rate": 0.2,
+        "gross_ticks_sum": 71.0,
+        "abs_gross_ticks_sum": 133.0
+      },
+      "RI": {
+        "count": 8,
+        "net_ticks_sum": 215.0,
+        "win_count": 6,
+        "tp_count": 4,
+        "sl_count": 2,
+        "exit_count": 2,
+        "expectancy_net_ticks": 26.875,
+        "win_rate_net": 0.75,
+        "tp_rate": 0.5,
+        "sl_rate": 0.25,
+        "exit_rate": 0.25,
+        "gross_ticks_sum": 267.0,
+        "abs_gross_ticks_sum": 383.0
+      },
+      "S1": {
+        "count": 15,
+        "net_ticks_sum": 729.0,
+        "win_count": 11,
+        "tp_count": 5,
+        "sl_count": 1,
+        "exit_count": 9,
+        "expectancy_net_ticks": 48.6,
+        "win_rate_net": 0.7333333333333333,
+        "tp_rate": 0.3333333333333333,
+        "sl_rate": 0.06666666666666667,
+        "exit_rate": 0.6,
+        "gross_ticks_sum": 828.0,
+        "abs_gross_ticks_sum": 1074.0
+      },
+      "ZC": {
+        "count": 1,
+        "net_ticks_sum": 24.5,
+        "win_count": 1,
+        "tp_count": 1,
+        "sl_count": 0,
+        "exit_count": 0,
+        "expectancy_net_ticks": 24.5,
+        "win_rate_net": 1.0,
+        "tp_rate": 1.0,
+        "sl_rate": 0.0,
+        "exit_rate": 0.0,
+        "gross_ticks_sum": 31.0,
+        "abs_gross_ticks_sum": 31.0
+      }
+    },
+    "by_slot": {
+      "12:00": {
+        "count": 49,
+        "net_ticks_sum": 1178.0,
+        "win_count": 35,
+        "tp_count": 23,
+        "sl_count": 9,
+        "exit_count": 17,
+        "expectancy_net_ticks": 24.040816326530614,
+        "win_rate_net": 0.7142857142857143,
+        "tp_rate": 0.46938775510204084,
+        "sl_rate": 0.1836734693877551,
+        "exit_rate": 0.3469387755102041
+      },
+      "14:15": {
+        "count": 60,
+        "net_ticks_sum": 2444.5,
+        "win_count": 47,
+        "tp_count": 36,
+        "sl_count": 6,
+        "exit_count": 18,
+        "expectancy_net_ticks": 40.74166666666667,
+        "win_rate_net": 0.7833333333333333,
+        "tp_rate": 0.6,
+        "sl_rate": 0.1,
+        "exit_rate": 0.3
+      }
+    },
+    "by_cluster": {
+      "energy": {
+        "count": 15,
+        "net_ticks_sum": 170.5,
+        "win_count": 11,
+        "tp_count": 7,
+        "sl_count": 2,
+        "exit_count": 6,
+        "expectancy_net_ticks": 11.366666666666667,
+        "win_rate_net": 0.7333333333333333,
+        "tp_rate": 0.4666666666666667,
+        "sl_rate": 0.13333333333333333,
+        "exit_rate": 0.4
+      },
+      "other": {
+        "count": 94,
+        "net_ticks_sum": 3452.0,
+        "win_count": 71,
+        "tp_count": 52,
+        "sl_count": 13,
+        "exit_count": 29,
+        "expectancy_net_ticks": 36.723404255319146,
+        "win_rate_net": 0.7553191489361702,
+        "tp_rate": 0.5531914893617021,
+        "sl_rate": 0.13829787234042554,
+        "exit_rate": 0.30851063829787234
+      }
+    },
+    "by_side": {
+      "BUY": {
+        "count": 53,
+        "net_ticks_sum": 1363.0,
+        "win_count": 38,
+        "tp_count": 18,
+        "sl_count": 8,
+        "exit_count": 27,
+        "expectancy_net_ticks": 25.71698113207547,
+        "win_rate_net": 0.7169811320754716,
+        "tp_rate": 0.33962264150943394,
+        "sl_rate": 0.1509433962264151,
+        "exit_rate": 0.5094339622641509
+      },
+      "SELL": {
+        "count": 56,
+        "net_ticks_sum": 2259.5,
+        "win_count": 44,
+        "tp_count": 41,
+        "sl_count": 7,
+        "exit_count": 8,
+        "expectancy_net_ticks": 40.348214285714285,
+        "win_rate_net": 0.7857142857142857,
+        "tp_rate": 0.7321428571428571,
+        "sl_rate": 0.125,
+        "exit_rate": 0.14285714285714285
+      }
+    }
+  },
+  "gates_config": {
+    "min_setups_total": null,
+    "min_filled_trades": null,
+    "min_win_rate_net": 0.75,
+    "min_trades_per_week": 2.0,
+    "max_trades_per_week": null,
+    "min_net_ticks_sum": 0.0,
+    "min_expectancy_net_ticks": null,
+    "max_concentration_top_share": 0.35
+  },
+  "acceptance": {
+    "passed": true,
+    "checks": [
+      {
+        "id": "min_win_rate_net",
+        "passed": true,
+        "actual": 0.7522935779816514,
+        "expected": 0.75,
+        "operator": ">="
+      },
+      {
+        "id": "min_trades_per_week",
+        "passed": true,
+        "actual": 2.0790190735694822,
+        "expected": 2.0,
+        "operator": ">="
+      },
+      {
+        "id": "min_net_ticks_sum",
+        "passed": true,
+        "actual": 3622.5,
+        "expected": 0.0,
+        "operator": ">="
+      },
+      {
+        "id": "max_concentration_top_share",
+        "passed": true,
+        "actual": 0.2581090407177364,
+        "expected": 0.35,
+        "operator": "<="
+      }
+    ]
+  }
+}

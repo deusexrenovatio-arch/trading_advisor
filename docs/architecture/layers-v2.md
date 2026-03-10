@@ -36,7 +36,7 @@ This document defines bounded layers for the modular monolith v2 and maps owners
 - Owner: portfolio engineering.
 
 ### 6) Execution & Audit Layer
-- Scope: action capture (`ack|enter|exit|hold_open`), order linking, audit trail.
+- Scope: action capture (`mark_viewed|enter_submitted|enter_filled|entry_cancelled|exit_submitted|exit_filled|manual_override`), order linking, audit trail.
 - Inputs: operator actions (UI/bot/system), signal references.
 - Outputs: `ExecutionEvent`, audit runbooks, incident traces.
 - Owner: execution platform.

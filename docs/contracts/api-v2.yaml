@@ -141,7 +141,7 @@ paths:
                   $ref: '#/components/schemas/PairActionabilityV2'
   /entities/{entity_type}/{entity_id}/signals/actions:
     post:
-      summary: Append entity-level operator action (ack/enter/exit/hold).
+      summary: Append entity-level operator lifecycle action.
       description: >
         Canonical action endpoint for pair and instrument signals.
         `/pairs/{pair_id}/actions` remains supported as compatibility adapter.
@@ -175,7 +175,7 @@ paths:
           description: Action blocked by fail-closed execution policy.
   /pairs/{pair_id}/actions:
     post:
-      summary: Append pair-level operator action (ack/enter/exit/hold).
+      summary: Append pair-level operator lifecycle action.
       description: >
         Planned endpoint that decouples user actions from transient signal_id and binds them
         to pair + intent_id. Backend may internally resolve to v2 signal action storage.
@@ -204,7 +204,7 @@ paths:
           description: Action blocked by fail-closed execution policy.
   /signals/{signal_id}/actions:
     post:
-      summary: Append signal action event (ack/enter/exit/hold).
+      summary: Append signal lifecycle action event.
       parameters:
         - in: path
           name: signal_id
@@ -794,6 +794,12 @@ paths:
       responses:
         '200':
           description: HPO status.
+  /research/morning-plan:
+    post:
+      summary: Build futures morning plan (D1/H1/M5 regime, levels, setups).
+      responses:
+        '200':
+          description: Morning plan payload.
   /portfolio/rebalance/preview:
     get:
       summary: Build rebalance proposal from active lifecycle.
@@ -885,6 +891,9 @@ components:
             - signal_used
             - entry_expired
             - entry_out_of_range
+            - execution_pending
+            - entry_cancelled
+            - manual_override
             - unsupported_action
         entry_signal_expired:
           type: boolean
@@ -1075,6 +1084,11 @@ components:
           type: string
           enum:
             - active
+            - viewed
+            - submitted
+            - filled
+            - cancelled
+            - manual_override
             - out_of_range
             - expired
             - consumed
@@ -1087,7 +1101,7 @@ components:
         consumed_by_action:
           type: string
           nullable: true
-          enum: [ack, enter, exit, hold]
+          enum: [ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, manual_override]
         consumed_at:
           type: string
           format: date-time
@@ -1095,6 +1109,20 @@ components:
         consumed_by:
           type: string
           nullable: true
+        viewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        viewed_by:
+          type: string
+          nullable: true
+        operator_signal_status:
+          type: string
+          nullable: true
+        operator_execution_mode:
+          type: string
+          nullable: true
+          enum: [baseline_h4a, manual_override]
     SignalEntryPlanV2:
       type: object
       properties:
@@ -1133,6 +1161,45 @@ components:
         execution_window_sec:
           type: integer
           nullable: true
+        baseline_id:
+          type: string
+          nullable: true
+        execution_profile_id:
+          type: string
+          nullable: true
+        entry_order_type:
+          type: string
+          nullable: true
+        entry_improve_ticks:
+          type: integer
+          nullable: true
+        entry_fallback_after_minutes:
+          type: integer
+          nullable: true
+        entry_fallback_slip_ticks:
+          type: integer
+          nullable: true
+        break_even_rr:
+          type: number
+          nullable: true
+        break_even_buffer_ticks:
+          type: integer
+          nullable: true
+        trail_activation_rr:
+          type: number
+          nullable: true
+        trail_offset_ticks:
+          type: integer
+          nullable: true
+        time_stop_minutes:
+          type: integer
+          nullable: true
+        same_bar_policy:
+          type: string
+          nullable: true
+        same_bar_policy_source:
+          type: string
+          nullable: true
     SignalEntryRangeNowV2:
       type: object
       required: [in_range]
@@ -1167,8 +1234,16 @@ components:
           enum:
             - intent_consumed
             - intent_expired
+            - intent_cancelled
             - out_of_range
             - cooldown
+            - execution_pending
+            - manual_override
+            - manual_review_required
+            - policy_blocked
+            - portfolio_limits
+            - no_mini_universe
+            - synthetic_promotion
             - unsupported_action
             - not_actionable
         signal_fingerprint:
@@ -1180,6 +1255,95 @@ components:
           type: string
           format: date-time
           nullable: true
+    H4AFollowupConfirmationV2:
+      type: object
+      additionalProperties: false
+      properties:
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        confirmed_by:
+          type: string
+          nullable: true
+        reason_code:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        confirmed:
+          type: boolean
+          nullable: true
+    H4AFollowupStateV2:
+      type: object
+      additionalProperties: false
+      properties:
+        baseline_id:
+          type: string
+          nullable: true
+        entry_fallback_due_at:
+          type: string
+          format: date-time
+          nullable: true
+        entry_fallback_due:
+          type: boolean
+          nullable: true
+        post_fill_active:
+          type: boolean
+          nullable: true
+        current_price:
+          type: number
+          nullable: true
+        current_price_source:
+          type: string
+          nullable: true
+        break_even_trigger_reached:
+          type: boolean
+          nullable: true
+        trail_trigger_reached:
+          type: boolean
+          nullable: true
+        time_stop_reminder_due_at:
+          type: string
+          format: date-time
+          nullable: true
+        time_stop_deadline_ts:
+          type: string
+          format: date-time
+          nullable: true
+        time_stop_reminder_due:
+          type: boolean
+          nullable: true
+        time_stop_overdue:
+          type: boolean
+          nullable: true
+        confirmations:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/H4AFollowupConfirmationV2'
+        confirmed_stages:
+          type: array
+          items:
+            type: string
+            enum: [entry_fallback_due, post_fill_packet, break_even_due, trailing_due, break_even_trailing_due, time_stop_due, time_stop_overdue]
+        confirmation_required:
+          type: boolean
+          nullable: true
+        unconfirmed_stages:
+          type: array
+          items:
+            type: string
+            enum: [entry_fallback_due, post_fill_packet, break_even_due, trailing_due, break_even_trailing_due, time_stop_due, time_stop_overdue]
+        baseline_guard_status:
+          type: string
+          nullable: true
+          enum: [ok, confirmation_required, deviation_review, manual_override]
+        baseline_guard_reasons:
+          type: array
+          items:
+            type: string
+            enum: [entry_fallback_due, post_fill_packet, break_even_due, trailing_due, break_even_trailing_due, time_stop_due, time_stop_overdue]
     SignalActionabilityAxesV2:
       type: object
       required: [policy_state, intent_state, position_state, delivery_state]
@@ -1189,7 +1353,7 @@ components:
           enum: [allow, reduce, review, block]
         intent_state:
           type: string
-          enum: [none, active, out_of_range, consumed, expired, superseded]
+          enum: [none, active, viewed, submitted, filled, cancelled, manual_override, out_of_range, consumed, expired, superseded]
         position_state:
           type: string
           enum: [flat, open]
@@ -1209,6 +1373,11 @@ components:
       description: >
         Entity-centric actionable projection. `actionability_state` is a derived UI label,
         while deterministic decisions are represented by explicit axes, policy outcome, and gate trace.
+        Runtime rows also expose H4A operator-execution fields such as `baseline_id`,
+        `execution_profile_id`, `operator_signal_status`, `operator_execution_mode`,
+        `execution_contract`, `h4a_followup`, fill-dependent bracket fields, live-routing
+        metadata, `same_bar_resolution`, `exit_reason_code`, and persisted Telegram/operator
+        confirmations for H4A follow-up stages.
       x-policy-precedence:
         version: v1
         ordering:
@@ -1322,13 +1491,89 @@ components:
         metrics:
           type: object
           additionalProperties: true
+        baseline_id:
+          type: string
+          nullable: true
+        execution_profile_id:
+          type: string
+          nullable: true
+        operator_execution_mode:
+          type: string
+          nullable: true
+          enum: [baseline_h4a, manual_override]
+        operator_signal_status:
+          type: string
+          nullable: true
+        signal_expire_ts:
+          type: string
+          format: date-time
+          nullable: true
+        execution_contract:
+          type: object
+          additionalProperties: true
+        h4a_followup:
+          $ref: '#/components/schemas/H4AFollowupStateV2'
+        enter_submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        enter_filled_at:
+          type: string
+          format: date-time
+          nullable: true
+        fill_ts:
+          type: string
+          format: date-time
+          nullable: true
+        fill_price:
+          type: number
+          nullable: true
+        effective_fill_price:
+          type: number
+          nullable: true
+        initial_loss_sl:
+          type: number
+          nullable: true
+        tp_limit:
+          type: number
+          nullable: true
+        protective_sl:
+          type: number
+          nullable: true
+        break_even_activation_price:
+          type: number
+          nullable: true
+        break_even_stop_price:
+          type: number
+          nullable: true
+        trail_activation_price:
+          type: number
+          nullable: true
+        fallback_applied:
+          type: boolean
+          nullable: true
+        recalc_applied:
+          type: boolean
+          nullable: true
+        time_stop_deadline_ts:
+          type: string
+          format: date-time
+          nullable: true
+        same_bar_resolution:
+          type: string
+          nullable: true
+          enum: [live_timestamp, broker_timestamp, exchange_timestamp, same_bar_ambiguous]
+        exit_reason_code:
+          type: string
+          nullable: true
+          enum: [tp_limit, initial_loss_sl, protective_sl, time_stop_180m, same_bar_ambiguous, entry_fallback_market, manual_override]
     EntitySignalActionRequestV2:
       type: object
       required: [action, source, idempotency_key]
       properties:
         action:
           type: string
-          enum: [ack, enter, exit, hold]
+          enum: [ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, confirm_followup, manual_override]
         source:
           type: string
           enum: [ui, telegram, system]
@@ -1342,10 +1587,37 @@ components:
           type: string
         comment:
           type: string
+        note:
+          type: string
         fail_closed_override:
           type: boolean
         override_reason:
           type: string
+        operator_execution_mode:
+          type: string
+          enum: [baseline_h4a, manual_override]
+        fill_price:
+          type: number
+        fill_ts:
+          type: string
+          format: date-time
+        same_bar_resolution:
+          type: string
+          enum: [live_timestamp, broker_timestamp, exchange_timestamp, same_bar_ambiguous]
+        fallback_applied:
+          type: boolean
+        side_action:
+          type: string
+        tick_size:
+          type: number
+        risk_ticks:
+          type: number
+        h4a_stage:
+          type: string
+          enum: [entry_fallback_due, post_fill_packet, break_even_due, trailing_due, break_even_trailing_due, time_stop_due, time_stop_overdue]
+        exit_reason_code:
+          type: string
+          enum: [tp_limit, initial_loss_sl, protective_sl, time_stop_180m, same_bar_ambiguous, entry_fallback_market, manual_override]
         idempotency_key:
           type: string
     EntitySignalActionResponseV2:
@@ -1357,7 +1629,7 @@ components:
           enum: [ok, duplicate, blocked, ignored, not_found]
         action:
           type: string
-          enum: [ack, enter, exit, hold]
+          enum: [ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, confirm_followup, manual_override]
         entity_ref:
           $ref: '#/components/schemas/EntityRef'
         intent_id:
@@ -1378,6 +1650,10 @@ components:
         message:
           type: string
           nullable: true
+        stored_action:
+          type: string
+          nullable: true
+          enum: [mark_viewed, enter_submitted, enter_filled, entry_cancelled, exit_submitted, exit_filled, confirm_followup, manual_override]
     PairIntentV2:
       type: object
       required: [status]
@@ -1400,6 +1676,11 @@ components:
           type: string
           enum:
             - active
+            - viewed
+            - submitted
+            - filled
+            - cancelled
+            - manual_override
             - out_of_range
             - expired
             - consumed
@@ -1412,7 +1693,7 @@ components:
         consumed_by_action:
           type: string
           nullable: true
-          enum: [ack, enter, exit, hold]
+          enum: [ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, manual_override]
         consumed_at:
           type: string
           format: date-time
@@ -1420,6 +1701,20 @@ components:
         consumed_by:
           type: string
           nullable: true
+        viewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        viewed_by:
+          type: string
+          nullable: true
+        operator_signal_status:
+          type: string
+          nullable: true
+        operator_execution_mode:
+          type: string
+          nullable: true
+          enum: [baseline_h4a, manual_override]
     PairEntryPlanV2:
       type: object
       properties:
@@ -1461,6 +1756,45 @@ components:
         entry_spread_pct_max:
           type: number
           nullable: true
+        baseline_id:
+          type: string
+          nullable: true
+        execution_profile_id:
+          type: string
+          nullable: true
+        entry_order_type:
+          type: string
+          nullable: true
+        entry_improve_ticks:
+          type: integer
+          nullable: true
+        entry_fallback_after_minutes:
+          type: integer
+          nullable: true
+        entry_fallback_slip_ticks:
+          type: integer
+          nullable: true
+        break_even_rr:
+          type: number
+          nullable: true
+        break_even_buffer_ticks:
+          type: integer
+          nullable: true
+        trail_activation_rr:
+          type: number
+          nullable: true
+        trail_offset_ticks:
+          type: integer
+          nullable: true
+        time_stop_minutes:
+          type: integer
+          nullable: true
+        same_bar_policy:
+          type: string
+          nullable: true
+        same_bar_policy_source:
+          type: string
+          nullable: true
     PairEntryRangeNowV2:
       type: object
       required: [in_range]
@@ -1498,8 +1832,16 @@ components:
           enum:
             - intent_consumed
             - intent_expired
+            - intent_cancelled
             - out_of_range
             - pair_cooldown
+            - execution_pending
+            - manual_override
+            - manual_review_required
+            - policy_blocked
+            - portfolio_limits
+            - no_mini_universe
+            - synthetic_promotion
             - unsupported_action
             - not_actionable
         signal_fingerprint:
@@ -1513,7 +1855,11 @@ components:
           nullable: true
     PairActionabilityV2:
       type: object
-      description: Pair-specialized view over the generalized SignalActionabilityV2 projection.
+      description: >
+        Pair-specialized view over the generalized SignalActionabilityV2 projection.
+        Pair rows also expose H4A execution contract, follow-up state, live-routing data,
+        operator lifecycle timestamps, fill-dependent bracket fields, `same_bar_resolution`,
+        explicit `exit_reason_code`, and persisted H4A follow-up confirmations.
       required:
         - pair_id
         - stock
@@ -1595,13 +1941,89 @@ components:
         metrics:
           type: object
           additionalProperties: true
+        baseline_id:
+          type: string
+          nullable: true
+        execution_profile_id:
+          type: string
+          nullable: true
+        operator_execution_mode:
+          type: string
+          nullable: true
+          enum: [baseline_h4a, manual_override]
+        operator_signal_status:
+          type: string
+          nullable: true
+        signal_expire_ts:
+          type: string
+          format: date-time
+          nullable: true
+        execution_contract:
+          type: object
+          additionalProperties: true
+        h4a_followup:
+          $ref: '#/components/schemas/H4AFollowupStateV2'
+        enter_submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        enter_filled_at:
+          type: string
+          format: date-time
+          nullable: true
+        fill_ts:
+          type: string
+          format: date-time
+          nullable: true
+        fill_price:
+          type: number
+          nullable: true
+        effective_fill_price:
+          type: number
+          nullable: true
+        initial_loss_sl:
+          type: number
+          nullable: true
+        tp_limit:
+          type: number
+          nullable: true
+        protective_sl:
+          type: number
+          nullable: true
+        break_even_activation_price:
+          type: number
+          nullable: true
+        break_even_stop_price:
+          type: number
+          nullable: true
+        trail_activation_price:
+          type: number
+          nullable: true
+        fallback_applied:
+          type: boolean
+          nullable: true
+        recalc_applied:
+          type: boolean
+          nullable: true
+        time_stop_deadline_ts:
+          type: string
+          format: date-time
+          nullable: true
+        same_bar_resolution:
+          type: string
+          nullable: true
+          enum: [live_timestamp, broker_timestamp, exchange_timestamp, same_bar_ambiguous]
+        exit_reason_code:
+          type: string
+          nullable: true
+          enum: [tp_limit, initial_loss_sl, protective_sl, time_stop_180m, same_bar_ambiguous, entry_fallback_market, manual_override]
     PairActionRequestV2:
       type: object
       required: [action, source]
       properties:
         action:
           type: string
-          enum: [ack, enter, exit, hold]
+          enum: [ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, confirm_followup, manual_override]
         source:
           type: string
           enum: [ui, telegram, system]
@@ -1614,10 +2036,37 @@ components:
           type: string
         comment:
           type: string
+        note:
+          type: string
         fail_closed_override:
           type: boolean
         override_reason:
           type: string
+        operator_execution_mode:
+          type: string
+          enum: [baseline_h4a, manual_override]
+        fill_price:
+          type: number
+        fill_ts:
+          type: string
+          format: date-time
+        same_bar_resolution:
+          type: string
+          enum: [live_timestamp, broker_timestamp, exchange_timestamp, same_bar_ambiguous]
+        fallback_applied:
+          type: boolean
+        side_action:
+          type: string
+        tick_size:
+          type: number
+        risk_ticks:
+          type: number
+        h4a_stage:
+          type: string
+          enum: [entry_fallback_due, post_fill_packet, break_even_due, trailing_due, break_even_trailing_due, time_stop_due, time_stop_overdue]
+        exit_reason_code:
+          type: string
+          enum: [tp_limit, initial_loss_sl, protective_sl, time_stop_180m, same_bar_ambiguous, entry_fallback_market, manual_override]
         idempotency_key:
           type: string
     PairActionResponseV2:
@@ -1631,7 +2080,7 @@ components:
           type: string
         action:
           type: string
-          enum: [ack, enter, exit, hold]
+          enum: [ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, confirm_followup, manual_override]
         entity_ref:
           $ref: '#/components/schemas/EntityRef'
         intent_id:
@@ -1653,6 +2102,10 @@ components:
         message:
           type: string
           nullable: true
+        stored_action:
+          type: string
+          nullable: true
+          enum: [mark_viewed, enter_submitted, enter_filled, entry_cancelled, exit_submitted, exit_filled, confirm_followup, manual_override]
     DecisionRefV2:
       type: object
       required: [decision_id]
@@ -2080,7 +2533,7 @@ components:
       properties:
         action:
           type: string
-          enum: [ack, enter, exit, hold]
+          enum: [ack, mark_viewed, enter, enter_submitted, enter_filled, entry_cancelled, exit, exit_submitted, exit_filled, hold, confirm_followup, manual_override]
         source:
           type: string
           enum: [ui, telegram, system]
@@ -2088,10 +2541,39 @@ components:
           type: string
         reason_code:
           type: string
+        comment:
+          type: string
+        note:
+          type: string
         fail_closed_override:
           type: boolean
         override_reason:
           type: string
+        operator_execution_mode:
+          type: string
+          enum: [baseline_h4a, manual_override]
+        fill_price:
+          type: number
+        fill_ts:
+          type: string
+          format: date-time
+        same_bar_resolution:
+          type: string
+          enum: [live_timestamp, broker_timestamp, exchange_timestamp, same_bar_ambiguous]
+        fallback_applied:
+          type: boolean
+        side_action:
+          type: string
+        tick_size:
+          type: number
+        risk_ticks:
+          type: number
+        h4a_stage:
+          type: string
+          enum: [entry_fallback_due, post_fill_packet, break_even_due, trailing_due, break_even_trailing_due, time_stop_due, time_stop_overdue]
+        exit_reason_code:
+          type: string
+          enum: [tp_limit, initial_loss_sl, protective_sl, time_stop_180m, same_bar_ambiguous, entry_fallback_market, manual_override]
         pretrade_status:
           type: string
           enum: [pass, block, check]

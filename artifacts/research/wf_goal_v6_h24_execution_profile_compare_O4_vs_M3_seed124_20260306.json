@@ -1,0 +1,41 @@
+﻿{
+    "generated_at":  "2026-03-05T21:47:31.6133834Z",
+    "baseline":  "M3_frontnearest_seed124_20260306",
+    "candidate":  "O4_frontnearest_seed124_20260306",
+    "constraints":  {
+                        "hard_min_win_rate_net":  0.75,
+                        "hard_min_trades_per_week":  1.8,
+                        "hard_max_concentration_top_share":  0.5
+                    },
+    "metrics":  {
+                    "M3":  {
+                               "filled":  138,
+                               "win_rate_net":  0.79710144927536231,
+                               "trades_per_week":  2.6321525885558583,
+                               "concentration_top_share":  0.64095162253633287,
+                               "net_ticks_sum":  3743,
+                               "acceptance_passed":  false,
+                               "failed_reasons":  [
+                                                      "hard_max_concentration_top_share"
+                                                  ]
+                           },
+                    "O4":  {
+                               "filled":  222,
+                               "win_rate_net":  0.9414414414414416,
+                               "trades_per_week":  4.23433242506812,
+                               "concentration_top_share":  0.22167850918353663,
+                               "net_ticks_sum":  7362,
+                               "acceptance_passed":  true,
+                               "failed_reasons":  [
+
+                                                  ]
+                           }
+                },
+    "delta_o4_minus_m3":  {
+                              "filled":  84,
+                              "win_rate_net":  0.14433999216607929,
+                              "trades_per_week":  1.6021798365122613,
+                              "concentration_top_share":  -0.41927311335279627,
+                              "net_ticks_sum":  3619
+                          }
+}

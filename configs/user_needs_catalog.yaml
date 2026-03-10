@@ -129,19 +129,22 @@ needs:
       - TC-SIG-HIST-API-004
 
   - id: need-signal-action-control-loop
-    title: Signal action, acknowledgment, and policy remediation form one control loop
-    problem_statement: Execution lifecycle is brittle if action API, ACK bridge, and auto-remediation are disconnected.
+    title: Signal action, review, follow-up, and policy remediation form one control loop
+    problem_statement: Execution lifecycle is brittle if action API, Telegram review or follow-up bridge, and auto-remediation are disconnected.
     value_if_solved: Fewer unresolved execution states and clearer operator control.
     user_cases:
       - uc-signal-action-and-ack-bridge
     acceptance_scenarios:
       - signals-action-v2
       - signals-actionability-stale-intent
+      - signals-actionability-h4a-followup
       - signals-ack-execute
       - auto-unwind-policy-v2
     test_cases:
       - TC-SIG-ACT-API-003
       - TC-TG-WRK-009
+      - TC-TG-WRK-010
+      - TC-TG-WRK-011
       - TC-SIG-ACK-API-001
       - TC-SIG-POLICY-API-001
 
@@ -221,11 +224,15 @@ needs:
       - process-task-outcome-closeout
       - process-repeated-signature-prevention
       - process-regression-burn-in-thresholds
+      - process-regression-acknowledged-debt
+      - process-regression-worsening-after-ack
     test_cases:
       - TC-PROC-TELE-001
       - TC-PROC-TELE-002
       - TC-PROC-TELE-003
       - TC-PROC-TELE-004
+      - TC-PROC-TELE-005
+      - TC-PROC-TELE-006
 
 user_cases:
   - id: uc-actionable-signal-to-execution
@@ -355,18 +362,21 @@ user_cases:
       - TC-SIG-HIST-API-004
 
   - id: uc-signal-action-and-ack-bridge
-    title: Signal action and ACK are bridged with policy remediation
+    title: Signal action, Telegram review, and H4A follow-up are bridged with policy remediation
     persona: Operator
-    trigger: User acknowledges and executes signals while one-leg imbalance controls are active.
-    expected_outcome: Action endpoint, ACK bridge, and auto-unwind policy are coherent.
+    trigger: User reviews signals in Telegram, executes them manually, and confirms H4A follow-up stages while one-leg imbalance controls are active.
+    expected_outcome: Action endpoint, Telegram review/follow-up bridge, and auto-unwind policy are coherent.
     acceptance_scenarios:
       - signals-action-v2
       - signals-actionability-stale-intent
+      - signals-actionability-h4a-followup
       - signals-ack-execute
       - auto-unwind-policy-v2
     test_cases:
       - TC-SIG-ACT-API-003
       - TC-TG-WRK-009
+      - TC-TG-WRK-010
+      - TC-TG-WRK-011
       - TC-SIG-ACK-API-001
       - TC-SIG-POLICY-API-001
 
@@ -448,8 +458,12 @@ user_cases:
       - process-task-outcome-closeout
       - process-repeated-signature-prevention
       - process-regression-burn-in-thresholds
+      - process-regression-acknowledged-debt
+      - process-regression-worsening-after-ack
     test_cases:
       - TC-PROC-TELE-001
       - TC-PROC-TELE-002
       - TC-PROC-TELE-003
       - TC-PROC-TELE-004
+      - TC-PROC-TELE-005
+      - TC-PROC-TELE-006

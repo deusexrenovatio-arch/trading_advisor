@@ -1,0 +1,46 @@
+{
+  "enabled": true,
+  "default_action": "allow",
+  "rules": [
+    {
+      "name": "pullback_quality_floor",
+      "allow_setup_kinds": [
+        "PULLBACK_LIMIT"
+      ],
+      "min_risk_ticks": 120,
+      "min_target_return_pct": 1.0
+    },
+    {
+      "name": "orb_other_1030_floor",
+      "allow_setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "allow_sides": [
+        "BUY"
+      ],
+      "allow_decision_times": [
+        "10:30"
+      ],
+      "allow_clusters": [
+        "other"
+      ],
+      "min_target_return_pct": 0.8
+    },
+    {
+      "name": "orb_metals_1200_floor",
+      "allow_setup_kinds": [
+        "ORB_BREAKOUT"
+      ],
+      "allow_sides": [
+        "BUY"
+      ],
+      "allow_decision_times": [
+        "12:00"
+      ],
+      "allow_clusters": [
+        "metals"
+      ],
+      "min_target_return_pct": 0.8
+    }
+  ]
+}

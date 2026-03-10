@@ -114,6 +114,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
         summary="Signals, gates, portfolio intent, and decision semantics.",
         owned_paths=(
             "src/moex_carry/strategy/",
+            "src/moex_carry/signal_engine/",
             "src/moex_carry/selection/",
             "src/moex_carry/portfolio/",
             "src/moex_carry/pretrade/",
@@ -244,6 +245,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "src/moex_carry/cli_news_parsers.py",
             "src/moex_carry/cli_news_runtime_handlers.py",
             "src/moex_carry/config.py",
+            "src/moex_carry/config_news.py",
             "src/moex_carry/config_resolver.py",
             "src/moex_carry/pipeline.py",
             "src/moex_carry/pipeline_helpers.py",
@@ -274,6 +276,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
         summary="API handlers, UI behavior, operator actions, and delivery surfaces.",
         owned_paths=(
             "src/moex_carry/integrations/",
+            "src/moex_carry/signal_execution_contract.py",
             "src/moex_carry/signals_ack.py",
             "src/moex_carry/signals_delivery.py",
             "src/moex_carry/ui/",

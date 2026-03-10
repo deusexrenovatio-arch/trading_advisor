@@ -55,4 +55,5 @@ python scripts/validate_agent_contexts.py
 - If one file pulls dependency hints from many CTX groups, treat it as orchestration work even if the file set is small.
 - If a patch touches `CTX-CONTRACTS` plus another context, treat as high-risk and split into reviewable steps.
 - If routing reports `unmapped_files`, classify manually before implementation.
+- Treat `src/moex_carry/signal_engine/` as `CTX-STRATEGY` unless the change is purely runtime wiring in `config*`, `pipeline*`, or CLI entrypoints.
 

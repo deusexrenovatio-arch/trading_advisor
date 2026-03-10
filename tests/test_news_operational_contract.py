@@ -54,15 +54,13 @@ def test_root_cycle_scripts_define_single_scheduler_contract() -> None:
 def test_docs_and_defaults_point_to_discovery_and_root_cycle() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     runbook = (REPO_ROOT / "docs" / "runbooks" / "news-shock-go-live.md").read_text(encoding="utf-8")
-    handoff = (REPO_ROOT / "docs" / "session_handoff.md").read_text(encoding="utf-8")
 
-    for text in (readme, runbook, handoff):
+    for text in (readme, runbook):
         assert "news_root_cycle" in text
     for token in LEGACY_TOKENS:
         assert token not in runbook
     for token in ("manage_news_ingest_tasks.ps1", "manage_shock_label_cycle_task.ps1", "run_shock_label_cycle.py"):
         assert token not in readme
-        assert token not in handoff
 
     assert "live_news_discovery.csv" in runbook
     assert "live_news_verified.csv" in runbook

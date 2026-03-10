@@ -207,6 +207,7 @@ risk_profile:
   account_equity: 1000000
   account_currency: "RUB"
   max_risk_per_trade_pct: 0.5
+  max_risk_per_trade_money: 20000
   max_daily_loss_pct: 2.0
   max_open_risk_pct: 1.5
   max_leverage: 3
@@ -447,3 +448,194 @@ news_llm:
   top_impact_priority: true
   min_impact_for_priority: 0.0
 
+signal_engine:
+  data:
+    bar_interval_sec: 60
+    timezone: "Europe/Moscow"
+    iss:
+      page_size: 100
+      retry:
+        max_attempts: 5
+        base_backoff_ms: 200
+        max_backoff_ms: 5000
+  features:
+    atr:
+      period: 14
+      timeframe_sec: 300
+    realized_vol:
+      window_bars: 60
+    vwap:
+      use_typical_price: true
+      reset: "session_start"
+    zscore:
+      window_bars: 60
+    rel_volume:
+      window_bars: 60
+  regimes:
+    volatility:
+      lookback_days: 20
+      high_quantile: 0.60
+      low_quantile: 0.40
+    liquidity:
+      max_spread_ticks: 2
+      min_depth_lots: 50
+      vacuum:
+        spread_ticks: 4
+        depth_lots: 20
+  strategies:
+    orb:
+      opening_range_min: 15
+      buffer_atr_mult: 0.10
+      buffer_ticks_min: 1
+      tp_atr_mult: 1.0
+      sl_atr_mult: 0.7
+      horizon_min: 90
+      require_high_vol: true
+    vwap_mr:
+      z_enter: 2.0
+      z_exit: 0.5
+      sl_atr_mult: 0.8
+      min_tp_ticks: 2
+      horizon_min: 45
+    micro_momo:
+      ema_fast: 9
+      ema_slow: 21
+      rel_volume_min: 1.2
+      tp_atr_mult: 0.8
+      sl_atr_mult: 0.6
+      horizon_min: 60
+  labeling:
+    triple_barrier:
+      on_same_bar_tp_sl: "worst_case"
+      price_source: "ohlc"
+  probability:
+    method: "dirichlet_decay_v1"
+    dirichlet_alpha: [1.0, 1.0, 1.0]
+    decay_half_life_days: 30
+    tier_thresholds:
+      mid: 100
+      high: 500
+    calibration:
+      method: "binning_ovr_renorm"
+      bins: 15
+      min_bin_count: 30
+      smoothing_alpha: 1.0
+  cost:
+    model: "ticks_v1"
+    commission_ticks_per_side: 0.5
+    slippage_ticks_per_side: 1.0
+    spread_half_ticks_fallback: 1.0
+    liquidity_penalty:
+      enable: true
+      depth_ref_lots: 100
+      max_penalty_ticks: 2.0
+  gate:
+    forbid_windows_min: 5
+    min_expected_return_ticks: 1.0
+  runtime_adapter:
+    enabled: false
+    override_signal_fields: true
+    synthetic_history_cap: 2000
+  morning_plan:
+    timezone: "Europe/Moscow"
+    calendar:
+      sessions:
+        - {start: "10:00", end: "14:00"}
+        - {start: "14:05", end: "18:50"}
+        - {start: "19:05", end: "23:50"}
+      clearing_windows:
+        - {start: "14:00", end: "14:05"}
+        - {start: "18:50", end: "19:05"}
+      forbid_new_positions_margin_min: 5
+      entry_expiry_policy: "EOD_BEFORE_EVENING_CLEARING"
+    data:
+      d1_limit: 200
+      h1_limit: 300
+      m5_limit: 300
+    regime:
+      d1:
+        ema_fast: 20
+        ema_slow: 50
+        adx_period: 14
+        er_period: 20
+        dir_band_atr_mult: 0.25
+        adx_trend_min: 25
+        adx_range_max: 18
+        er_trend_min: 0.30
+        er_range_max: 0.20
+        atr_period: 14
+        atr_rank_lookback: 60
+        vol_high_pct: 0.70
+        vol_low_pct: 0.30
+      h1:
+        ema_fast: 20
+        ema_slow: 50
+        atr_period: 14
+        dir_band_atr_mult: 0.20
+      liquidity:
+        use_orderbook_if_available: true
+        spread_thin_ticks: 2
+        spread_vacuum_ticks: 4
+        depth_thin_lots: 50
+        depth_vacuum_lots: 20
+    levels:
+      merge_distance_ticks: 2
+      d1:
+        donchian_period: 20
+        pivots: true
+      h1:
+        swing_k: 2
+        max_swings_each_side: 8
+        box_hours: 6
+        box_range_atr_mult: 1.2
+        include_ema20_level: true
+    execution:
+      m5_atr_period: 14
+      buffer_atr_mult: 0.10
+      buffer_min_ticks: 1
+      limit_slip_ticks: 2
+      noise_warn_high: 2.5
+      noise_warn_low: 0.4
+      swing_k: 2
+    setups:
+      mode: "trend_first"
+      max_setups_per_instrument: 2
+      require_vol_not_low: true
+      pullback_max_dist_atr_mult: 1.0
+      rr_default: 1.6
+      min_target_return_pct: 0.5
+      min_target_ticks: 3
+      max_risk_atr_mult: 1.2
+      sl_atr_mult: 0.8
+      stop_model: "structure"   # structure|volatility|local_extreme|volume_extreme
+      stop_lookback_bars: 24
+      stop_volume_quantile: 0.75
+      entry_range_half_width_ticks: 0
+      qty_lots: 1
+      horizon: "EOD"
+      entry_tif: "GTT"
+      entry_expiry_policy: "EOD_BEFORE_EVENING_CLEARING"
+      entry_zone_offset_ticks: 0
+      enable_cost_net_gate: true
+      estimated_round_trip_cost_ticks: 5.0
+      min_reward_net_ticks: 2.0
+      min_rr_net: 1.1
+      min_reward_gross_ticks: 10.0
+      enable_eligibility_filter: true
+      min_atr_h1_cost_mult: 6.0
+      min_atr_d1_cost_mult: 12.0
+    news_gate:
+      enabled: false
+      db_url: "sqlite:///./data/news_livecheck_ng.db"
+      lookback_minutes: 180
+      block_severity_threshold: "high"
+      reduce_severity_threshold: "medium"
+      min_impact_score: 0.35
+      min_confidence: 0.9
+      max_items: 200
+      sources: []
+      commodity_map:
+        BR: "BRN"
+        NG: "NG_US"
+        GD: "GOLD"
+      reduce_max_setups: 1

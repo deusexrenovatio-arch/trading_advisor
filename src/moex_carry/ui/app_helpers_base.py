@@ -7,15 +7,23 @@ from datetime import datetime, timezone
 
 import pandas as pd
 import requests
-from dash.dash_table.Format import Format, Scheme, Trim
 from flask import jsonify
 
 from moex_carry.config import AppSettings
+from moex_carry.signal_execution_contract import (
+    normalize_execution_action as _normalize_execution_action_contract,
+    normalize_signal_action_request as _normalize_signal_action_request_contract,
+)
 from moex_carry.domain.decision_engine import (
     build_signal_gate_results,
     derive_signal_lifecycle_state,
 )
 from moex_carry.signals_delivery import parse_iso_utc
+from moex_carry.ui.app_helpers_tables import (
+    _decision_columns as _decision_columns_impl,
+    _prepare_decisions as _prepare_decisions_impl,
+    _table_columns as _table_columns_impl,
+)
 
 
 def _to_float(value: object) -> float | None:
@@ -39,59 +47,9 @@ def _latest_by_decision_id(records: list[dict[str, object]]) -> dict[str, dict[s
     return latest
 
 
-def _table_columns(df):
-    return [{"name": col, "id": col} for col in df.columns]
-
-
-def _decision_columns():
-    return [
-        {"name": "Time", "id": "created_at"},
-        {"name": "Decision", "id": "decision_id"},
-        {"name": "Strategy", "id": "strategy_type"},
-        {"name": "Instrument", "id": "primary_instrument"},
-        {"name": "Action", "id": "action"},
-        {"name": "Risk", "id": "risk_state"},
-        {"name": "News", "id": "news_severity"},
-        {
-            "name": "Cost",
-            "id": "cost_round_trip",
-            "type": "numeric",
-            "format": Format(precision=2, scheme=Scheme.fixed, trim=Trim.yes),
-        },
-        {
-            "name": "Max DD",
-            "id": "max_drawdown",
-            "type": "numeric",
-            "format": Format(precision=4, scheme=Scheme.fixed, trim=Trim.yes),
-        },
-    ]
-
-
-def _prepare_decisions(decisions: pd.DataFrame) -> pd.DataFrame:
-    if decisions.empty:
-        return decisions
-    decisions = decisions.copy()
-    if "cost_summary.round_trip_cost" in decisions.columns:
-        decisions["cost_round_trip"] = decisions["cost_summary.round_trip_cost"]
-    if "backtest_metrics.max_drawdown" in decisions.columns:
-        decisions["max_drawdown"] = decisions["backtest_metrics.max_drawdown"]
-    display_columns = [
-        "created_at",
-        "decision_id",
-        "strategy_type",
-        "primary_instrument",
-        "action",
-        "risk_state",
-        "news_severity",
-        "cost_round_trip",
-        "max_drawdown",
-    ]
-    for col in display_columns:
-        if col not in decisions.columns:
-            decisions[col] = None
-    decisions["cost_round_trip"] = pd.to_numeric(decisions["cost_round_trip"], errors="coerce")
-    decisions["max_drawdown"] = pd.to_numeric(decisions["max_drawdown"], errors="coerce")
-    return decisions[display_columns].sort_values("created_at", ascending=False)
+_table_columns = _table_columns_impl
+_decision_columns = _decision_columns_impl
+_prepare_decisions = _prepare_decisions_impl
 
 
 def _sanitize_value(value):
@@ -409,6 +367,9 @@ SIGNAL_METRIC_CONTRACT_KEYS: tuple[str, ...] = (
     "unfilled_entry_rate",
     "unfilled_exit_rate",
     "forced_exit_rate",
+    "strategy_id",
+    "strategy_type",
+    "strategy_stream",
 )
 
 
@@ -431,6 +392,98 @@ def _merge_signal_metrics(record: dict[str, object]) -> dict[str, object]:
         if key not in merged:
             merged[key] = _sanitize_value(value)
     return merged
+
+
+_ALLOWED_STRATEGY_TYPES: set[str] = {"arbitrage", "speculative", "fundamental"}
+_ALLOWED_STRATEGY_STREAMS: set[str] = {"arbitrage", "commodity_futures", "fundamental"}
+
+
+def _normalize_strategy_type_value(value: object) -> str | None:
+    raw = str(value or "").strip().lower()
+    aliases = {
+        "commodity": "speculative",
+        "commodity_futures": "speculative",
+        "futures": "speculative",
+    }
+    normalized = aliases.get(raw, raw)
+    if normalized in _ALLOWED_STRATEGY_TYPES:
+        return normalized
+    return None
+
+
+def _normalize_strategy_stream_value(value: object) -> str | None:
+    raw = str(value or "").strip().lower()
+    if raw == "speculative":
+        return "commodity_futures"
+    if raw in _ALLOWED_STRATEGY_STREAMS:
+        return raw
+    return None
+
+
+def _strategy_stream_from_type(strategy_type: str | None) -> str:
+    if strategy_type == "speculative":
+        return "commodity_futures"
+    if strategy_type in _ALLOWED_STRATEGY_TYPES:
+        return str(strategy_type)
+    return "arbitrage"
+
+
+def _string_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    return raw or None
+
+
+def _extract_strategy_metadata(row: dict[str, object]) -> dict[str, str | None]:
+    metrics = row.get("signal_metrics")
+    metrics_map = metrics if isinstance(metrics, dict) else {}
+    nested_two_layer = metrics_map.get("two_layer")
+    nested_map = nested_two_layer if isinstance(nested_two_layer, dict) else {}
+
+    strategy_type = _normalize_strategy_type_value(row.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = _normalize_strategy_type_value(metrics_map.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = _normalize_strategy_type_value(nested_map.get("strategy_type"))
+    if strategy_type is None:
+        strategy_type = "arbitrage"
+
+    strategy_stream = _normalize_strategy_stream_value(row.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _normalize_strategy_stream_value(metrics_map.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _normalize_strategy_stream_value(nested_map.get("strategy_stream"))
+    if strategy_stream is None:
+        strategy_stream = _strategy_stream_from_type(strategy_type)
+
+    strategy_id = _string_or_none(row.get("strategy_id"))
+    if strategy_id is None:
+        strategy_id = _string_or_none(metrics_map.get("strategy_id"))
+    if strategy_id is None:
+        strategy_id = _string_or_none(nested_map.get("strategy_id"))
+
+    return {
+        "strategy_type": strategy_type,
+        "strategy_stream": strategy_stream,
+        "strategy_id": strategy_id,
+    }
+
+
+def _matches_strategy_filters(
+    row: dict[str, object],
+    *,
+    strategy_type_filter: str | None,
+    strategy_stream_filter: str | None,
+) -> bool:
+    metadata = _extract_strategy_metadata(row)
+    row_strategy_type = _normalize_strategy_type_value(metadata.get("strategy_type"))
+    row_strategy_stream = _normalize_strategy_stream_value(metadata.get("strategy_stream"))
+    if strategy_type_filter and row_strategy_type != strategy_type_filter:
+        return False
+    if strategy_stream_filter and row_strategy_stream != strategy_stream_filter:
+        return False
+    return True
 
 
 def _build_execution_quality(record: dict[str, object]) -> dict[str, object]:
@@ -476,33 +529,13 @@ def _normalize_execution_leg(value: object) -> str:
 
 
 def _normalize_execution_action(value: object) -> str:
-    raw = str(value or "").strip().lower()
-    if raw in {"exit", "close"}:
-        return "exit"
-    if raw in {"ack", "acknowledged"}:
-        return "ack"
-    if raw in {"enter", "open", "hold_open", "hold"}:
-        # hold_open in execution logs is treated as opening/maintaining leg exposure.
-        return "enter"
-    return raw or "enter"
+    return _normalize_execution_action_contract(value)
 
 
 def _coerce_signal_action_request(
     value: object, *, legacy_mode: bool = False
 ) -> tuple[str, str] | None:
-    raw = str(value or "").strip().lower()
-    if raw in {"ack", "acknowledged"}:
-        return "ack", "ack"
-    if raw in {"enter", "open"}:
-        return "enter", "enter"
-    if raw in {"exit", "close"}:
-        return "exit", "exit"
-    if raw in {"hold", "hold_open"}:
-        if legacy_mode:
-            # Keep v1 storage semantics: hold-like actions are persisted as enter.
-            return "enter", "enter"
-        return "hold", "hold_open"
-    return None
+    return _normalize_signal_action_request_contract(value, legacy_mode=legacy_mode)
 
 
 def _normalize_signal_action_source(value: object, *, default: str) -> str:
