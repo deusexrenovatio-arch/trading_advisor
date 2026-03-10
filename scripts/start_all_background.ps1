@@ -42,7 +42,7 @@ $workerErr = Join-Path $logDir "worker.err.log"
 $frontendOut = Join-Path $logDir "frontend.out.log"
 $frontendErr = Join-Path $logDir "frontend.err.log"
 
-if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli ui")) {
+if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli server")) {
     Start-Process `
         -FilePath $powerShellExe `
         -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$backendScript`" -ConfigPath `"$configAbsolute`" -LogLevel `"$LogLevel`"" `

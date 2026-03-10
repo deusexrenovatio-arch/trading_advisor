@@ -39,7 +39,7 @@ python -m moex_carry.cli signals --config configs/default.yaml --max-pairs 200
 ```
 ```powershell
 $env:PYTHONPATH="D:\wt-news-module\src"
-python -m moex_carry.cli ui --config configs/default.yaml
+python -m moex_carry.cli server --config configs/default.yaml
 ```
 
 Daily silver expansion for all three commodities:

@@ -96,7 +96,7 @@ The UI expects these endpoints (served by the Python backend in
   - Commit approved rebalance plan.
 
 ## Parallel dev workflow
-- Backend API (Flask) runs via `python -m moex_carry.cli ui` on `127.0.0.1:8050`.
+- Backend API (Flask) runs via `python -m moex_carry.cli server` on `127.0.0.1:8050`.
 - React UI runs via `npm run dev` in `ui-web/` on the Vite dev server.
 - Vite is configured to proxy `/api` to the backend (`ui-web/vite.config.ts`).
 - This keeps frontend and backend deployable separately while supporting parallel development.

@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -96,7 +97,10 @@ def main() -> None:
         help="Backfill signal history for the last N days.",
     )
 
-    ui_parser = subparsers.add_parser("ui", help="Run Dash UI")
+    server_parser = subparsers.add_parser("server", help="Run canonical Python server/API boundary")
+    _add_common_args(server_parser)
+
+    ui_parser = subparsers.add_parser("ui", help="Run Dash UI (deprecated alias for `server`)")
     _add_common_args(ui_parser)
 
     telegram_parser = subparsers.add_parser("telegram_bot", help="Run Telegram signal worker")
@@ -345,10 +349,12 @@ def main() -> None:
         return
     elif handle_news_runtime_command(args, settings):
         return
-    elif args.command == "ui":
-        from moex_carry.ui.app import run_ui
+    elif args.command in {"server", "ui"}:
+        from moex_carry.server import run_server
 
-        run_ui(settings)
+        if args.command == "ui":
+            print("warning: `ui` command is deprecated; use `server`.", file=sys.stderr)
+        run_server(settings)
     elif args.command == "telegram_bot":
         from moex_carry.integrations.telegram_worker import run_telegram_worker
 

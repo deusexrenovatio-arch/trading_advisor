@@ -65,8 +65,8 @@ def main() -> None:
             str(args.history_interval_sec),
         ]
         subprocess.Popen(history_cmd, cwd=ROOT)
-    print("[build] Start Dash UI.", flush=True)
-    _run([str(venv_python), "scripts/run_ui.py", "--config", args.config])
+    print("[build] Start server boundary.", flush=True)
+    _run([str(venv_python), "scripts/run_server.py", "--config", args.config])
 
 
 if __name__ == "__main__":

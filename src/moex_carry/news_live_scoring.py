@@ -398,6 +398,11 @@ class ModelScorer:
                 device=self.model_device,
             )
             return self._nli_pipeline
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+            self._pipeline_error = (
+                f"nli:{exc}. Install extra: .[news]"
+            )
+            return None
         except Exception as exc:  # pragma: no cover - runtime fallback
             self._pipeline_error = f"nli:{exc}"
             return None
@@ -415,6 +420,11 @@ class ModelScorer:
                 device=self.model_device,
             )
             return self._finbert_pipeline
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+            self._pipeline_error = (
+                f"finbert:{exc}. Install extra: .[news]"
+            )
+            return None
         except Exception as exc:  # pragma: no cover - runtime fallback
             self._pipeline_error = f"finbert:{exc}"
             return None

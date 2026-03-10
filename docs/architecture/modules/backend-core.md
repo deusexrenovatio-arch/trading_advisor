@@ -8,7 +8,8 @@ but the API endpoints remain the primary backend interface for the React app.
 ## Entry points
 - `src/moex_carry/__main__.py`: entry point that delegates to the CLI.
 - `src/moex_carry/cli.py`: commands for `fetch`, `compute`, `backtest`, `paper`,
-  `signals`, `ui`, `history`, `backtest_v2`, `forward_start`, and `forward_status`.
+  `signals`, `server` (`ui` kept as compatibility alias), `history`, `backtest_v2`,
+  `forward_start`, and `forward_status`.
 
 ## Orchestration
 - `src/moex_carry/pipeline.py`
@@ -183,7 +184,7 @@ but the API endpoints remain the primary backend interface for the React app.
     - `GET /api/v2/portfolio/rebalance/preview`, `POST /api/v2/portfolio/rebalance/commit`
 
 ## Parallel dev workflow
-- Run backend API: `python -m moex_carry.cli ui` (serves `/api/*` on `127.0.0.1:8050`).
+- Run backend API: `python -m moex_carry.cli server` (serves `/api/*` on `127.0.0.1:8050`).
 - Run React UI: `npm run dev` from `ui-web/` (Vite proxies `/api` to `127.0.0.1:8050`).
 - This allows backend and frontend development in parallel with independent reloads.
 
