@@ -143,7 +143,13 @@ Blockers:
 
 ## Lean loop (default while coding)
 - Use progressive disclosure: load only the files/slices required for the active step.
+- Local workflow modes:
+  - quick: `python scripts/run_dev_workflow.py --mode quick`
+  - expanded: `python scripts/run_dev_workflow.py --mode expanded`
+  - release: `python scripts/run_dev_workflow.py --mode release`
 - Run fast governance loop after each meaningful patch:
+  - `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- Compatibility wrapper for one transition cycle:
   - `python scripts/run_lean_gate.py`
 - Lean gate automatically:
   - records first-patch telemetry when the diff meaningfully changes,
@@ -169,7 +175,7 @@ Blockers:
   - update `docs/session_handoff.md` with current goal, delta, blockers, and next step.
   - keep task request contract and first-time-right report sections current.
 - Keep task outcome ledger fresh:
-  - run `python scripts/sync_task_outcomes.py` after updating `## Task Outcome` or let `python scripts/run_lean_gate.py` sync it automatically.
+  - run `python scripts/sync_task_outcomes.py` after updating `## Task Outcome` or let `python scripts/run_loop_gate.py` sync it automatically.
   - if `Outcome Status` disagrees with the policy-derived status, sync writes the derived status and `python scripts/validate_task_outcomes.py` fails until handoff is corrected.
   - `memory/task_outcomes.yaml` is the canonical tracked ledger for PR/weekly process rollups.
 - Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
@@ -187,7 +193,8 @@ Blockers:
 
 ### Backend (Python)
 - `python -m pip install -e ".[dev]"`
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
 - `python scripts/validate_agent_contexts.py`
 - `python scripts/validate_session_handoff.py`
 - `python scripts/validate_task_request_contract.py`
@@ -209,7 +216,7 @@ Blockers:
 ## Automatic pre-push gate (recommended)
 - Enable repository hooks once per clone:
   - `python scripts/install_git_hooks.py`
-- This installs `core.hooksPath=.githooks` and runs required backend/frontend checks on `git push`.
+- This installs `core.hooksPath=.githooks` and runs scoped loop gate on `git push`.
 - Any failed required check blocks push.
 - Direct push to `main` is blocked (PR-only).
 - Required merge path:
@@ -220,9 +227,8 @@ Blockers:
 - Emergency override for direct `main` push (incident/hotfix only, with explicit reason):
   - Bash: `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1 MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>' git push`
   - PowerShell: `$env:MOEX_CARRY_EMERGENCY_MAIN_PUSH='1'; $env:MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'; git push`
-- Windows lock workaround for `npm ci` (`EPERM` on `esbuild.exe`):
-  - Bash: `MOEX_CARRY_SKIP_NPM_CI=1 git push`
-  - PowerShell: `$env:MOEX_CARRY_SKIP_NPM_CI='1'; git push`
+- Hook command baseline:
+  - `python scripts/run_loop_gate.py --base-ref origin/main --head-ref HEAD`
 
 ## Optional checks (manual / data-dependent)
 - Data integrity parity:

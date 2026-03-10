@@ -1,0 +1,63 @@
+version: 1
+
+python:
+  leaf_max_lines: 400
+  orchestrator_max_lines: 700
+  orchestrator_patterns:
+    - src/moex_carry/cli.py
+    - src/moex_carry/pipeline.py
+    - src/moex_carry/unified_runtime.py
+    - src/moex_carry/ui/app.py
+    - src/moex_carry/backtest_v2/engine.py
+  temporary_facade_allowlist:
+    src/moex_carry/ui/app.py:
+      max_lines: 6000
+      reason: temporary_facade_phase_split_python_web_app
+    src/moex_carry/pipeline.py:
+      max_lines: 3200
+      reason: temporary_facade_phase_split_pipeline
+    src/moex_carry/unified_runtime.py:
+      max_lines: 2200
+      reason: temporary_facade_phase_split_config_runtime
+    src/moex_carry/backtest_v2/engine.py:
+      max_lines: 1800
+      reason: temporary_facade_phase_split_backtest_orchestrator
+    src/moex_carry/signal_replay/minute_replay.py:
+      max_lines: 1400
+      reason: temporary_facade_phase_split_news_runtime
+    src/moex_carry/integrations/telegram_worker.py:
+      max_lines: 1400
+      reason: temporary_facade_phase_split_api_worker
+    src/moex_carry/portfolio/rebalance_controller.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_portfolio
+    src/moex_carry/backtest_v2/minute_portfolio_engine.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_minute_engine
+    src/moex_carry/signal_engine/setups/generator.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_signal_setup
+    src/moex_carry/news/target_v2.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_news_target
+    src/moex_carry/news_silver_store.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_news_silver
+    src/moex_carry/news_shock_live_input.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_news_shock
+    src/moex_carry/news/llm_gateway.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_news_llm
+    src/moex_carry/news/backfill.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_news_backfill
+    src/moex_carry/news_live_scoring.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_news_scoring
+    src/moex_carry/signal_engine/setups/extended_families.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_signal_families
+    src/moex_carry/cli_news_handlers.py:
+      max_lines: 900
+      reason: temporary_facade_phase_split_cli_handlers
