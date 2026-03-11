@@ -22,7 +22,7 @@ items:
   - python scripts/validate_session_handoff.py
   - python -m pytest tests/test_agent_process_telemetry.py tests/test_api_v2.py -q
   - python scripts/validate_process_regressions.py
-  - python scripts/run_lean_gate.py
+  - python scripts/run_loop_gate.py --base-ref origin/main --head-ref HEAD --skip-session-check
   docs:
   - docs/session_handoff.md
   - docs/DEV_WORKFLOW.md
