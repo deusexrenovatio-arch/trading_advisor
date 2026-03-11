@@ -2,9 +2,9 @@
 Updated: 2026-03-11 09:45 UTC
 
 ## Active Task Note
-- Path: docs/tasks/active/TASK-2026-03-11-harness-tail-fixes.md
+- Path: docs/tasks/archive/TASK-2026-03-11-harness-tail-fixes.md
 - Mode: full
-- Status: in_progress
+- Status: completed
 
 ## Current Delta
 - Closing four remaining harness tails: active plan check drift, archived contract inheritance risk, PR-only live-doc coverage drift, and optional `feedparser` guard in standalone utility.
