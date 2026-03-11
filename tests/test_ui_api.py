@@ -5,7 +5,7 @@ import requests
 
 from moex_carry.config import AppSettings, DataConfig, UiConfig
 from moex_carry.server import SIGNAL_METRIC_CONTRACT_KEYS, create_server_app as create_app
-import moex_carry.ui.app as ui_app
+import moex_carry.server.app as server_app
 
 
 def _write_csv(path, rows):
@@ -260,7 +260,7 @@ def test_spread_series_endpoint_uses_builder(tmp_path, monkeypatch):
             }
         ]
     )
-    monkeypatch.setattr(ui_app, "build_spread_series", lambda *args, **kwargs: df)
+    monkeypatch.setattr(server_app, "build_spread_series", lambda *args, **kwargs: df)
     settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
     app = create_app(settings)
     client = app.server.test_client()
@@ -340,7 +340,7 @@ def test_pretrade_check_endpoint_returns_price_bands_and_volume_gate(tmp_path, m
             }
         ],
     )
-    monkeypatch.setattr(ui_app, "MoexIssClient", _FakeMoexClientPretrade)
+    monkeypatch.setattr(server_app, "MoexIssClient", _FakeMoexClientPretrade)
 
     settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
     app = create_app(settings)
@@ -393,7 +393,7 @@ def test_pretrade_check_endpoint_fail_opens_on_iss_transport_error(tmp_path, mon
             }
         ],
     )
-    monkeypatch.setattr(ui_app, "MoexIssClient", _FakeMoexClientPretradeTransportFail)
+    monkeypatch.setattr(server_app, "MoexIssClient", _FakeMoexClientPretradeTransportFail)
 
     settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
     app = create_app(settings)
@@ -445,7 +445,7 @@ def test_v1_endpoints_return_deprecation_headers(tmp_path, monkeypatch):
             }
         ],
     )
-    monkeypatch.setattr(ui_app, "MoexIssClient", _FakeMoexClientPretrade)
+    monkeypatch.setattr(server_app, "MoexIssClient", _FakeMoexClientPretrade)
 
     settings = AppSettings(data=DataConfig(data_dir=str(tmp_path)))
     app = create_app(settings)

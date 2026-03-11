@@ -530,7 +530,7 @@ def test_manual_refresh_defaults_to_incremental_and_supports_force_full(tmp_path
             degraded=False,
         )
 
-    monkeypatch.setattr("moex_carry.ui.app.run_incremental_minute_ingest", _fake_incremental_ingest)
+    monkeypatch.setattr("moex_carry.server.app.run_incremental_minute_ingest", _fake_incremental_ingest)
 
     app = create_app(settings)
     client = app.server.test_client()

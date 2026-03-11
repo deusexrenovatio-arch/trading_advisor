@@ -24,7 +24,7 @@ from moex_carry.storage.repositories import (
     upsert_decision_view_projection,
 )
 from moex_carry.server import create_server_app as create_app
-import moex_carry.ui.app as ui_app
+import moex_carry.server.app as server_app
 
 
 def _build_settings(
@@ -1612,7 +1612,7 @@ def test_v2_ops_health_and_slo_observability(tmp_path, monkeypatch):
         assert blocked.status_code == 409
 
     monkeypatch.setattr(
-        ui_app,
+        server_app,
         "run_delay_gate",
         lambda *_args, **_kwargs: {
             "status": "CHECK",
@@ -2228,22 +2228,19 @@ def test_v2_decision_view_db_projection_bootstraps_from_jsonl(tmp_path):
 
 def test_v2_research_wrappers(tmp_path, monkeypatch):
     settings = _build_settings(tmp_path)
-    app = create_app(settings)
-    client = app.server.test_client()
-
-    monkeypatch.setattr(ui_app, "run_backtest_v2_cached", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(server_app, "run_backtest_v2_cached", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
-        ui_app,
+        server_app,
         "serialize_backtest_report",
         lambda _report: {"summary_metrics": {"cagr": 0.1}},
     )
     monkeypatch.setattr(
-        ui_app,
+        server_app,
         "start_hpo_run",
         lambda *_args, **_kwargs: {"run_id": "hpo-1", "status": "running", "progress": {"completed": 0, "total": 1}},
     )
     monkeypatch.setattr(
-        ui_app,
+        server_app,
         "load_hpo_status",
         lambda *_args, **_kwargs: {
             "run_id": "hpo-1",
@@ -2251,6 +2248,8 @@ def test_v2_research_wrappers(tmp_path, monkeypatch):
             "result": {"leaderboard": [{"objective": 1.0}]},
         },
     )
+    app = create_app(settings)
+    client = app.server.test_client()
 
     backtest_request = BacktestRequest().model_dump(mode="json")
     backtest_request["test"]["start_date"] = "2025-01-01"
@@ -2297,8 +2296,6 @@ def test_v2_research_wrappers(tmp_path, monkeypatch):
 
 def test_v2_research_morning_plan_wrapper(tmp_path, monkeypatch):
     settings = _build_settings(tmp_path)
-    app = create_app(settings)
-    client = app.server.test_client()
 
     class _FakeMorningPlanBuilder:
         def __init__(self, _provider, _calendar, _cfg):
@@ -2315,7 +2312,9 @@ def test_v2_research_morning_plan_wrapper(tmp_path, monkeypatch):
                 "warnings": ["ok"],
             }
 
-    monkeypatch.setattr(ui_app, "MorningPlanBuilder", _FakeMorningPlanBuilder)
+    monkeypatch.setattr(server_app, "MorningPlanBuilder", _FakeMorningPlanBuilder)
+    app = create_app(settings)
+    client = app.server.test_client()
 
     response = client.post(
         "/api/v2/research/morning-plan",
@@ -2342,11 +2341,8 @@ def test_v2_research_morning_plan_wrapper(tmp_path, monkeypatch):
 
 def test_v2_hpo_status_fails_on_quality_gate(tmp_path, monkeypatch):
     settings = _build_settings(tmp_path)
-    app = create_app(settings)
-    client = app.server.test_client()
-
     monkeypatch.setattr(
-        ui_app,
+        server_app,
         "load_hpo_status",
         lambda *_args, **_kwargs: {
             "run_id": "hpo-1",
@@ -2354,9 +2350,11 @@ def test_v2_hpo_status_fails_on_quality_gate(tmp_path, monkeypatch):
             "result": {
                 "leaderboard": [{"objective": 1.0}],
                 "quality_review": {"skipped": False, "quality_gate_pass_count": 0},
+                },
             },
-        },
-    )
+        )
+    app = create_app(settings)
+    client = app.server.test_client()
 
     response = client.get("/api/v2/research/hpo/status?run_id=hpo-1")
     assert response.status_code == 200
@@ -2465,11 +2463,8 @@ def test_v2_decision_actions_and_v1_adapter(tmp_path):
 
 def test_v2_pretrade_check_post(tmp_path, monkeypatch):
     settings = _build_settings(tmp_path)
-    app = create_app(settings)
-    client = app.server.test_client()
-
     monkeypatch.setattr(
-        ui_app,
+        server_app,
         "run_delay_gate",
         lambda *_args, **_kwargs: {
             "status": "PLACE",
@@ -2481,6 +2476,8 @@ def test_v2_pretrade_check_post(tmp_path, monkeypatch):
             "hits": {"required": 2, "snapshots": 2},
         },
     )
+    app = create_app(settings)
+    client = app.server.test_client()
 
     response = client.post(
         "/api/v2/pretrade/check",
