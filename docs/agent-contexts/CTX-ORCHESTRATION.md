@@ -1,4 +1,4 @@
-# CTX-ORCHESTRATION
+﻿# CTX-ORCHESTRATION
 
 ## Scope
 Entrypoints, runtime wiring, configuration, and cross-context orchestration.
@@ -31,5 +31,6 @@ Entrypoints, runtime wiring, configuration, and cross-context orchestration.
 - If dependency hints span many contexts, split adapter extraction from behavior changes.
 
 ## Minimum Checks
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `python scripts/validate_architecture_policy.py`
+

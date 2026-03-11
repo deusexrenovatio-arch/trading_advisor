@@ -76,12 +76,33 @@ def _load_profiles(config_path: Path) -> dict[str, ProfileSpec]:
 
 
 def _summary(values: list[float]) -> dict[str, float]:
+    ordered = sorted(float(value) for value in values)
+    if len(ordered) == 1:
+        p95 = ordered[0]
+    else:
+        raw_index = 0.95 * (len(ordered) - 1)
+        lower = int(raw_index)
+        upper = min(lower + 1, len(ordered) - 1)
+        weight = raw_index - lower
+        p95 = ordered[lower] * (1.0 - weight) + ordered[upper] * weight
     return {
-        "median_sec": round(float(statistics.median(values)), 3),
-        "mean_sec": round(float(statistics.mean(values)), 3),
-        "min_sec": round(float(min(values)), 3),
-        "max_sec": round(float(max(values)), 3),
+        "median_sec": round(float(statistics.median(ordered)), 3),
+        "mean_sec": round(float(statistics.mean(ordered)), 3),
+        "min_sec": round(float(min(ordered)), 3),
+        "max_sec": round(float(max(ordered)), 3),
+        "p95_sec": round(float(p95), 3),
     }
+
+
+def _build_timing_stats(values: list[float]) -> dict[str, Any]:
+    summary = _summary(values)
+    summary["samples_sec"] = [round(float(value), 3) for value in values]
+    summary["cold_sec"] = round(float(values[0]), 3)
+    if len(values) > 1:
+        summary["warm_summary"] = _summary(values[1:])
+    else:
+        summary["warm_summary"] = None
+    return summary
 
 
 def _run_command(command: CommandSpec, iteration: int, total_iterations: int) -> tuple[int, float]:
@@ -117,27 +138,39 @@ def _render_report(payload: dict[str, Any]) -> str:
                 "",
                 profile["description"] or "No description.",
                 "",
-                "| Metric | Median (s) | Mean (s) | Min (s) | Max (s) |",
-                "| --- | ---: | ---: | ---: | ---: |",
+                "| Metric | Median (s) | Mean (s) | Min (s) | Max (s) | P95 (s) |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for item in profile["command_stats"]:
             lines.append(
                 f"| `{item['name']}` | {item['median_sec']:.3f} | {item['mean_sec']:.3f} | "
-                f"{item['min_sec']:.3f} | {item['max_sec']:.3f} |"
+                f"{item['min_sec']:.3f} | {item['max_sec']:.3f} | {item['p95_sec']:.3f} |"
             )
+            if item.get("warm_summary"):
+                lines.append(
+                    f"| `{item['name']}: cold/warm` | {item['cold_sec']:.3f} | "
+                    f"{item['warm_summary']['median_sec']:.3f} | {item['warm_summary']['min_sec']:.3f} | "
+                    f"{item['warm_summary']['max_sec']:.3f} | {item['warm_summary']['p95_sec']:.3f} |"
+                )
         total = profile["profile_total"]
         lines.append(
             f"| `profile_total` | {total['median_sec']:.3f} | {total['mean_sec']:.3f} | "
-            f"{total['min_sec']:.3f} | {total['max_sec']:.3f} |"
+            f"{total['min_sec']:.3f} | {total['max_sec']:.3f} | {total['p95_sec']:.3f} |"
         )
+        if total.get("warm_summary"):
+            lines.append(
+                f"| `profile_total: cold/warm` | {total['cold_sec']:.3f} | "
+                f"{total['warm_summary']['median_sec']:.3f} | {total['warm_summary']['min_sec']:.3f} | "
+                f"{total['warm_summary']['max_sec']:.3f} | {total['warm_summary']['p95_sec']:.3f} |"
+            )
         lines.append("")
     return "\n".join(lines)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Measure local harness timing baselines for loop/pre-push/CI profiles."
+        description="Measure local harness timing baselines for session, loop, pre-push, and CI profiles."
     )
     parser.add_argument("--config", default="configs/dev_loop_timing_profiles.yaml")
     parser.add_argument(
@@ -201,7 +234,7 @@ def main() -> int:
             profile_totals.append(total)
 
         command_stats = [
-            {"name": name, **_summary(values)}
+            {"name": name, **_build_timing_stats(values)}
             for name, values in sorted(command_durations.items(), key=lambda item: item[0])
         ]
         report_profiles.append(
@@ -209,7 +242,7 @@ def main() -> int:
                 "name": profile.name,
                 "description": profile.description,
                 "command_stats": command_stats,
-                "profile_total": _summary(profile_totals),
+                "profile_total": _build_timing_stats(profile_totals),
             }
         )
 

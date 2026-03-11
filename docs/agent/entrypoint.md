@@ -19,11 +19,12 @@ This is the hot-path map for implementation turns. Keep it compact and route det
 - Cold context: plans, memory, archives, historical artifacts, full skill catalog.
 
 ## Non-Negotiable Loop
-1. `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
+1. `python scripts/task_session.py begin --request "<request>"`
 2. Update `docs/session_handoff.md` task contract.
 3. Validate contract: `python scripts/validate_task_request_contract.py`
-4. Run governance gate before/after meaningful patches: `python scripts/run_lean_gate.py`
+4. Run governance gate in the hot loop: `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 5. Keep `plans/PLANS.yaml` and `memory/agent_memory.yaml` aligned with durable decisions.
+6. Before push/PR run `python scripts/run_pr_gate.py --from-git --git-ref HEAD`, then close with `python scripts/task_session.py end`.
 
 ## PR-Only Policy
 - PR-only flow for `main`: feature branch -> PR -> merge.

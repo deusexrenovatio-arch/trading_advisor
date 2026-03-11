@@ -1,4 +1,4 @@
-# Signal Agent Continuity Runbook
+﻿# Signal Agent Continuity Runbook
 
 Use this runbook when the same signal/data/runtime issues repeat across sessions, worktrees, or branches.
 
@@ -9,7 +9,7 @@ Use this runbook when the same signal/data/runtime issues repeat across sessions
 ## Canonical Contracts
 ### Runtime and worktree
 - Every edit and run must start with:
-  - `./scripts/worktree_guard.ps1 -Action Check`
+  - `python scripts/task_session.py begin --request "<request>"`
 - UI/worker process command line must point to the intended worktree config.
 - Do not validate outputs from one worktree and claim results for another.
 
@@ -41,7 +41,7 @@ Use this runbook when the same signal/data/runtime issues repeat across sessions
 - Root cause:
   - edits/tests were run in another checkout.
 - Fix:
-  - enforce `worktree_guard` before edits and long runs.
+  - enforce `task_session` begin/status before edits and long runs.
   - print active worktree in progress updates.
 
 ### 2) Stale projection confusion
@@ -84,7 +84,7 @@ Use this runbook when the same signal/data/runtime issues repeat across sessions
 ## Verification Checklist
 Run this after any signal lifecycle/data/scoring fix:
 
-1. `python scripts/run_lean_gate.py`
+1. `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 2. Confirm process source:
   - active UI command line points to intended worktree/config.
 3. Refresh signal projection once:
@@ -109,4 +109,5 @@ Run this after any signal lifecycle/data/scoring fix:
   - projection metric (`trades_closed` sample),
   - real execution metric (`signal_executions`).
 - If values differ between files, explicitly name both file paths and timestamps.
+
 

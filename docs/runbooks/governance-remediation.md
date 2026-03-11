@@ -2,6 +2,11 @@
 
 Use this guide when a governance gate fails.
 
+## `python scripts/task_session.py begin --request "<request>"`
+- Start the session from the worktree and branch you are actually using.
+- If `begin` refuses because a session is already active, inspect it with `python scripts/task_session.py status`.
+- Fix branch/worktree mismatch first; do not bypass it by recreating manual context files.
+
 ## `python scripts/run_loop_gate.py`
 - Read the reported `primary_surface` and failing command.
 - Re-run `python scripts/compute_change_surface.py --from-git --git-ref HEAD --format text` to confirm routing.
@@ -15,10 +20,10 @@ Use this guide when a governance gate fails.
 - Ensure `run_pr_gate` passes first.
 - Fix nightly-only drift/hygiene failures and rerun.
 
-## `python scripts/run_lean_gate.py`
-- Read the first failing command from output.
-- Run that command directly to isolate details.
-- Apply the matching remediation section below.
+## `python scripts/task_session.py end`
+- Ensure `## Task Outcome` is terminal in `docs/session_handoff.md`.
+- End syncs telemetry closeout into `memory/task_outcomes.yaml`; review and stage both files together.
+- If `end` fails, fix the policy issue in `Task Outcome` instead of editing the ledger by hand.
 
 ## `python scripts/validate_plans.py`
 - Ensure `plans/PLANS.yaml` follows schema in `docs/planning/plans-registry.md`.
@@ -74,8 +79,8 @@ Use this guide when a governance gate fails.
   - `Incident Signature`
   - `Improvement Action`
   - `Improvement Artifact`
-- For active tasks, ensure `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check` has created the repo-shared `.runlogs/agent-process/state.json`.
-- Sync ledger with `python scripts/sync_task_outcomes.py` so `memory/task_outcomes.yaml` contains the current task record.
+- For active tasks, ensure `python scripts/task_session.py begin --request "<request>"` has created the repo-shared `.runlogs/agent-process/state.json`.
+- Close the task with `python scripts/task_session.py end` so `memory/task_outcomes.yaml` contains the final task record.
 - Treat `Outcome Status` as a derived field, not a free-form choice. Policy source: `configs/task_outcome_policy.yaml`.
 - Status matrix:
   - `pending -> in_progress`

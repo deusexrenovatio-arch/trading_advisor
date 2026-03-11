@@ -1,4 +1,4 @@
-# Task Note
+﻿# Task Note
 Updated: YYYY-MM-DD HH:MM UTC
 
 ## Goal
@@ -48,4 +48,5 @@ Updated: YYYY-MM-DD HH:MM UTC
 ## Validation
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+

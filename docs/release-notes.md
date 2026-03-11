@@ -1,4 +1,4 @@
-# Release Notes
+﻿# Release Notes
 
 ## 2026-02-20 - PR-only main hardening and emergency override contract
 
@@ -15,7 +15,7 @@ Changed
   - legacy `MOEX_CARRY_ALLOW_MAIN_PUSH` override is rejected.
 - New governance validator:
   - `scripts/validate_pr_only_policy.py`
-  - wired into `scripts/run_lean_gate.py` and `tests/architecture/test_governance_policies.py`.
+  - wired into `scripts/run_loop_gate.py` and `tests/architecture/test_governance_policies.py`.
 - Governance docs aligned:
   - `AGENTS.md`
   - `docs/DEV_WORKFLOW.md`
@@ -25,7 +25,7 @@ Changed
 
 Verification
 - `python scripts/validate_pr_only_policy.py`
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `pytest tests/architecture/test_governance_policies.py -q`
 
 ## 2026-02-17 - Minute portfolio HPO parity + execution quality projection
@@ -821,4 +821,5 @@ Added
 
 Notes
 - Backtest engine and decision_log/decision_view schemas unchanged.
+
 

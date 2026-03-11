@@ -23,7 +23,7 @@
   - `python scripts/validate_session_handoff.py`
 - The command is part of:
   - `python scripts/run_loop_gate.py`
-  - `python scripts/run_lean_gate.py` (compatibility wrapper)
+  - `python scripts/run_pr_gate.py`
 
 ## Failure Remediation
 - Follow `docs/runbooks/governance-remediation.md`.

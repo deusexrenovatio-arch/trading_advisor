@@ -53,11 +53,13 @@ This directory is the repository knowledge system for agent-first engineering.
 - `docs/runbooks/flaky-tests-policy.md`
 
 ## Validation Commands
-- `python scripts/measure_dev_loop.py --iterations 1 --profiles loop pre_push ci`
-- `python scripts/run_loop_gate.py`
-- `python scripts/run_pr_gate.py`
+- `python scripts/measure_dev_loop.py --iterations 1 --profiles session_check loop pre_push ci`
+- `python scripts/task_session.py begin --request "<request>"`
+- `python scripts/task_session.py status`
+- `python scripts/task_session.py end`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
 - `python scripts/run_nightly_gate.py`
-- `python scripts/run_lean_gate.py` (compatibility wrapper)
 - `python scripts/validate_agent_contexts.py`
 - `python scripts/validate_session_handoff.py`
 - `python scripts/validate_task_request_contract.py`

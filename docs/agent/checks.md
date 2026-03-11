@@ -1,12 +1,13 @@
 # Agent Checks
 
 ## Loop (local hot path)
-- `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
+- `python scripts/task_session.py status`
 - `python scripts/validate_task_request_contract.py`
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 
 ## PR Closeout
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
+- `python scripts/task_session.py end`
 - `python scripts/validate_quality_scorecards.py`
 - Required checks from `docs/DEV_WORKFLOW.md`
 

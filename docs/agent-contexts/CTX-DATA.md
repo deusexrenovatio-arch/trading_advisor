@@ -1,4 +1,4 @@
-# CTX-DATA
+﻿# CTX-DATA
 
 ## Scope
 Ingestion and normalization of external market/reference data.
@@ -21,6 +21,7 @@ Ingestion and normalization of external market/reference data.
 - Output: normalized minute series and incremental ingest state.
 
 ## Minimum Checks
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `python scripts/check_data_integrity.py --data-dir data --max-day-gap 2`
+
 

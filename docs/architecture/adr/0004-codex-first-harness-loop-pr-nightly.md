@@ -7,30 +7,34 @@ Accepted
 2026-03-10
 
 ## Context
-The repository currently enforces strong governance, but most checks are concentrated in a single all-in-one hot-path gate (`run_lean_gate`). This keeps strictness high, yet overloads local coding loops with global checks and broad-context retrieval pressure.
+The repository enforces strong governance, but the original workflow mixed four concerns in one guard path: worktree identity, context routing, telemetry start, and local validation. That kept strictness high, yet overloaded the hot loop and created a split PowerShell/Python contract.
 
 The redesign program requires:
 - Keeping architecture, contract, runtime, and data-integrity strictness unchanged.
 - Moving expensive/global checks to the right stage (`pr` and `nightly`) instead of running everything in `loop`.
+- Making `task_session.py` the only canonical session lifecycle entrypoint.
 - Shrinking mandatory hot context to routing information and scoped decision points.
-- Preserving compatibility during migration with wrappers/shims and deterministic rollback paths.
+- Removing wrapper/shim entrypoints after the contract is stable.
 
 ## Decision
-We adopt a three-level harness model:
+We adopt a session-driven three-level harness model:
+- `task_session begin/status/end`: canonical session lifecycle and worktree identity contract.
 - `loop`: smallest deterministic local gate for changed surface only.
 - `pr`: widened, merge-relevant verification for touched domains.
 - `nightly`: full cold-context and heavy governance hygiene.
 
 Implementation policy:
 1. Strictness moves between harness levels, never weakens.
-2. Every migration step uses compatibility shims for one transition cycle.
-3. Legacy entrypoints remain callable until nightly confirms new path stability.
-4. Hot-context docs must stay compact and routing-oriented.
-5. State migration (plans/memory/task notes) uses dual-write during transition.
+2. Session lock keeps only identity fields: worktree, branch, started_at, expires_at, session_id.
+3. Context routing runs once in `begin`, never inside ordinary session checks.
+4. Telemetry start happens in `begin`; first-patch telemetry happens only in `loop`.
+5. Hot-context docs must stay compact and routing-oriented.
 
 Baseline policy:
 - `scripts/harness_baseline_metrics.py` remains a structural invariants report only.
 - Timing baselines are measured separately via `scripts/measure_dev_loop.py`.
+- Baseline captures must use at least 3 iterations and report cold-first-run versus warm-follow-up timings plus p95.
+- Baseline captures must include a scoped surface matrix for `docs`, `contracts`, `core`, and `ui`, in addition to `loop`, `pre_push`, and `ci`.
 - Every baseline capture is stored as a dated artifact under `docs/planning/baselines/`.
 
 ## Consequences
@@ -40,8 +44,8 @@ Positive:
 - Better deterministic behavior in CI through scope-aware routing.
 
 Trade-offs:
-- Short-term complexity increase due to wrapper and dual-write compatibility layers.
-- Temporary duplication of paths until transition window closes.
+- Slightly more explicit start/end ceremony for the developer.
+- Automation paths need an explicit session-bypass flag because CI/nightly run without an interactive task session.
 
 Risk controls:
 - Mandatory validator runs before/after meaningful patch sets.
@@ -53,8 +57,8 @@ Risk controls:
    - Rejected: does not reduce hot-path context pressure and keeps expensive checks in every loop.
 2. Add a second governance layer without changing entrypoints.
    - Rejected: increases cognitive load and duplicates policy wiring.
-3. Immediate hard cut to new harness without compatibility layer.
-   - Rejected: high migration risk and poor rollback/reproducibility.
+3. Keep the PowerShell guard as a parallel primary path.
+   - Rejected: preserves ambiguity and keeps session identity coupled to side effects.
 
 ## Validation and Rollout
 1. `PR-00`: timing baseline tooling + this ADR.
@@ -64,6 +68,9 @@ Risk controls:
 5. `PR-12..PR-13`: file-size policy + module split + root cleanup/nightly hygiene.
 
 Validation commands:
-- `python scripts/measure_dev_loop.py --iterations 1 --profiles loop`
+- `python scripts/measure_dev_loop.py --iterations 3 --profiles surface_docs surface_contracts surface_core surface_ui loop pre_push ci`
 - `python scripts/validate_dependency_decisions.py`
-- `python scripts/run_lean_gate.py`
+- `python scripts/task_session.py begin --request "<request>"`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
+- `python scripts/task_session.py end`

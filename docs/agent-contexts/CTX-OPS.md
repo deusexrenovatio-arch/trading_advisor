@@ -1,4 +1,4 @@
-# CTX-OPS
+﻿# CTX-OPS
 
 ## Scope
 Governance automation, observability, and operational workflow tooling.
@@ -31,6 +31,7 @@ Governance automation, observability, and operational workflow tooling.
 - Output: deterministic checks, automation scripts, and runbook behavior.
 
 ## Minimum Checks
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `python scripts/validate_session_handoff.py`
+
 

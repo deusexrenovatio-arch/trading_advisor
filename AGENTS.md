@@ -26,14 +26,15 @@
 - Full skill catalog path: `docs/agent/skills-catalog.md`.
 
 ## Non-Negotiable Loop
-1) Verify worktree context with `./scripts/worktree_guard.ps1 -Action Check`.
+1) Start the task session with `python scripts/task_session.py begin --request "<request>"`.
 2) Before non-trivial implementation, fill task contract in `docs/session_handoff.md`.
 3) Validate contract: `python scripts/validate_task_request_contract.py`.
-4) Before and after meaningful patches run `python scripts/run_lean_gate.py`.
+4) In the hot loop run `python scripts/run_loop_gate.py --from-git --git-ref HEAD`.
 5) Keep `plans/PLANS.yaml` and `memory/agent_memory.yaml` aligned with durable decisions.
 6) Keep `docs/session_handoff.md` valid via `python scripts/validate_session_handoff.py`.
-7) Before push run blockers from `docs/DEV_WORKFLOW.md`, including `python scripts/validate_quality_scorecards.py`.
-8) Any failing gate is a blocker; fix first using `docs/runbooks/governance-remediation.md`.
+7) Before push/PR run `python scripts/run_pr_gate.py --from-git --git-ref HEAD`, then close with `python scripts/task_session.py end`.
+8) Before push run blockers from `docs/DEV_WORKFLOW.md`, including `python scripts/validate_quality_scorecards.py`.
+9) Any failing gate is a blocker; fix first using `docs/runbooks/governance-remediation.md`.
 
 ## PR-Only Main Policy
 - Use PR-only flow for `main`: feature branch -> PR -> merge.
@@ -67,8 +68,8 @@
 
 ## Worktree Safety Protocol
 - Before code edits or long commands:
-  - `./scripts/worktree_guard.ps1 -Action Check`
-- If context missing or expired:
-  - `./scripts/worktree_guard.ps1 -Action Init -WorktreePath "<path>" -Branch "<branch>" -ContextTtlHours 12`
+  - `python scripts/task_session.py status`
+- If session is missing or expired:
+  - `python scripts/task_session.py begin --request "<request>"`
 - If mismatch is reported, stop and switch to expected worktree/branch.
 </INSTRUCTIONS>

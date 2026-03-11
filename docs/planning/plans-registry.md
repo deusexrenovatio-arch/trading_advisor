@@ -8,7 +8,7 @@
 - Sync command: `python scripts/sync_state_layout.py`
 - Included in:
   - `python scripts/run_loop_gate.py`
-  - `python scripts/run_lean_gate.py` (compatibility wrapper)
+  - `python scripts/run_pr_gate.py`
 
 ## Schema (v1)
 - Index top-level (`plans/items/index.yaml`):

@@ -6,7 +6,10 @@ from pathlib import Path
 
 
 REQUIRED_SECTIONS = [
-    "## `python scripts/run_lean_gate.py`",
+    "## `python scripts/task_session.py begin --request \"<request>\"`",
+    "## `python scripts/task_session.py end`",
+    "## `python scripts/run_loop_gate.py`",
+    "## `python scripts/run_pr_gate.py`",
     "## `python scripts/validate_plans.py`",
     "## `python scripts/validate_agent_memory.py`",
     "## `python scripts/validate_session_handoff.py`",

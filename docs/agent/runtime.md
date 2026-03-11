@@ -2,21 +2,25 @@
 
 ## Core Entrypoints
 - `python scripts/measure_dev_loop.py`
-- `python scripts/run_lean_gate.py`
+- `python scripts/task_session.py begin --request "<request>"`
+- `python scripts/task_session.py status`
+- `python scripts/task_session.py end`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
 - `python scripts/validate_quality_scorecards.py`
 
-## Worktree Safety
-- Check: `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
-- Init: `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Init -WorktreePath "<path>" -Branch "<branch>" -ContextTtlHours 12`
-- Show: `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Show`
+## Session Safety
+- Begin: `python scripts/task_session.py begin --request "<request>"`
+- Check: `python scripts/task_session.py status`
+- End: `python scripts/task_session.py end`
 
 ## Telemetry and Recovery
-- Task outcomes sync: `python scripts/sync_task_outcomes.py`
+- Task closeout sync: `python scripts/task_session.py end`
 - Remediation guide: `docs/runbooks/governance-remediation.md`
 - Process reports: `python scripts/process_improvement_report.py`
 
-## Compatibility Rule
-- During migration, keep wrapper entrypoints available for one transition cycle.
-- Remove legacy aliases only after one successful nightly cycle plus one merged PR on new entrypoints.
+## Contract Rule
+- Session start, hot loop, PR gate, and closeout use one Python contract.
+- Do not reintroduce wrapper entrypoints or PowerShell-specific guard paths.

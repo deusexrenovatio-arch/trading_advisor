@@ -1,4 +1,4 @@
-# CTX-RESEARCH
+﻿# CTX-RESEARCH
 
 ## Scope
 Backtest, replay, analytics, and HPO runtime/performance.
@@ -31,6 +31,7 @@ Backtest, replay, analytics, and HPO runtime/performance.
 - Keep compute stack policy boundaries (`pandas` boundary, `numpy`/`numba` kernels).
 
 ## Minimum Checks
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `pytest tests/perf -q`
+
 

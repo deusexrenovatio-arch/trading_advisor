@@ -97,8 +97,8 @@ scenarios:
     title: Process telemetry lifecycle gate
     user_story: Engineer gets task start and first-patch telemetry without manual bookkeeping.
     expectations:
-      - "worktree_guard emits task-start telemetry for the active task."
-      - "run_lean_gate records first-patch telemetry once the diff changes."
+      - "task_session begin emits task-start telemetry for the active task."
+      - "run_loop_gate records first-patch telemetry once the diff changes."
 
   - id: process-task-outcome-closeout
     type: manual
@@ -107,8 +107,8 @@ scenarios:
     title: Task outcome closeout and ledger sync gate
     user_story: Non-trivial diffs require an up-to-date task outcome section and repo-tracked ledger record.
     expectations:
-      - "Task outcome validation fails before ledger sync on a non-trivial diff."
-      - "memory/task_outcomes.yaml is updated after sync and validation passes."
+      - "task_session end blocks closeout until Task Outcome is terminal and policy-consistent."
+      - "memory/task_outcomes.yaml is updated during closeout and the session lock is cleared."
 
   - id: process-repeated-signature-prevention
     type: manual

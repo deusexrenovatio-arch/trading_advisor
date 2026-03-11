@@ -19,7 +19,7 @@ This document defines the repository baseline aligned to Harness Engineering pri
 | Contract-first API surface | `python scripts/validate_api_v2_contract_parity.py` | Backend platform | `governance` |
 | Directional module boundaries (no core -> UI imports) | `python scripts/validate_import_boundaries.py` | Architecture owner | `governance` |
 | Hard architecture policy-as-code | `python scripts/validate_architecture_policy.py` | Architecture owner | `governance` |
-| Progressive disclosure + short feedback loops | `python scripts/run_lean_gate.py` | Engineering owner | `governance` |
+| Progressive disclosure + short feedback loops | `python scripts/task_session.py begin --request "<request>"` + `python scripts/run_loop_gate.py --from-git --git-ref HEAD` | Engineering owner | `governance` |
 | Context budget and concise handoff contract | `python scripts/validate_session_handoff.py` | Engineering owner | `governance` |
 | PR-only merge discipline for `main` | `python scripts/validate_pr_only_policy.py` | Engineering manager | `governance` |
 | Scenario traceability to executable/acceptance cases | `python scripts/validate_test_cases.py` | QA owner | `governance` |

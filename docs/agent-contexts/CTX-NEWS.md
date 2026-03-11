@@ -1,4 +1,4 @@
-# CTX-NEWS
+﻿# CTX-NEWS
 
 ## Scope
 News intelligence, shock pipelines, and event-driven alerting flows.
@@ -46,5 +46,6 @@ News intelligence, shock pipelines, and event-driven alerting flows.
 - Output: news-gate inputs, shock labels, alerts, and event-aware runtime projections.
 
 ## Minimum Checks
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `pytest tests/test_news_live_runtime.py -q`
+

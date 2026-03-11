@@ -37,7 +37,7 @@ python scripts/context_router.py --changed-files src/moex_carry/ui/app.py docs/c
 ```
 
 Start-of-work behavior:
-- `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check` auto-runs `context_router`.
+- `python scripts/task_session.py begin --request "<request>"` runs one routing pass before the hot loop starts.
 - Default routing input: changed files + `docs/session_handoff.md`.
 - Optional intent sharpeners:
   - `MOEX_CARRY_CONTEXT_ROUTER_REQUEST="<user request>"`

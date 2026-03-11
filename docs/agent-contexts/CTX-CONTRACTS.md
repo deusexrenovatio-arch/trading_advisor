@@ -1,4 +1,4 @@
-# CTX-CONTRACTS
+﻿# CTX-CONTRACTS
 
 ## Scope
 Schema/version boundaries for storage, decision projection, and public API contracts.
@@ -26,7 +26,8 @@ High. If combined with any other context, split into ordered patches:
 3. docs and follow-up checks
 
 ## Minimum Checks
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `python scripts/validate_dependency_decisions.py`
 - `python scripts/validate_codeowners.py`
+
 
