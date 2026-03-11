@@ -1,43 +1,38 @@
 # Task Note
-Updated: 2026-03-10 20:05 UTC
+Updated: 2026-03-11 06:20 UTC
 
 ## Goal
-- Close the external Chat PRO validation gaps for the harness redesign and make the branch pass deterministic validation for `PR-00`..`PR-13`.
+- Replace the mixed worktree/session orchestration with one canonical Python task-session contract and make `loop/pr` gates use cheap session-lock checks only.
 
 ## Task Request Contract
-- Objective: resolve all validated regressions from external branch audit, including deterministic gate routing, worktree guard parity, context cold-split enforcement, task-outcome closure, regression coverage, canonical server surface, and file-size policy closure.
-- In Scope: `run_pr_gate`/`run_nightly_gate` nested scope propagation, `.cursorignore` cold-context exclusions, `worktree_guard.py` parity with PowerShell context schema, failing runtime harness tests, strengthened change-surface regression suite, server-entrypoint canonicalization in tests/runtime, task outcome closeout, and file-size policy global pass.
-- Out of Scope: unrelated strategy/business logic, feature additions outside harness/governance/runtime scaffolding, and broad refactors not required for audited blockers.
-- Constraints: keep PR-only flow intact, keep fail-closed behavior for unknown scope, preserve compatibility shims where still required, and avoid weakening blocking validators.
-- Done Evidence: previously failing commands pass (`tests/test_task_outcomes.py`, `validate_task_outcomes --base-sha`, `worktree_guard.py --force-python`, `validate_file_size_policy --all-files`), targeted gate-routing behavior is regression-tested, and `run_lean_gate`/`run_pr_gate`/`run_nightly_gate` stay green.
-- Priority Rule: deterministic correctness and governance integrity over speed; fix root causes and close regression gaps before cosmetic cleanup.
+- Objective: implement the canonical session flow `task_session begin -> run_loop_gate -> run_pr_gate -> task_session end`, with one Python-only session lock, one task start, and no hidden routing/telemetry side effects inside session checks.
+- In Scope: new `scripts/task_session.py`, Python session-lock model, refactor of `run_loop_gate.py` and `run_pr_gate.py` to use cheap session checks, removal of PowerShell-primary guard path and `run_lean_gate.py` wrapper flow, relocation of routing/task-start/task-end orchestration, hook/docs/test updates, and hot-path latency proof for the new contract.
+- Out of Scope: unrelated domain/business logic, non-session governance refactors beyond what the new contract forces, and feature work outside the harness/runtime control path.
+- Constraints: keep worktree/branch identity as a hard invariant, keep unknown-scope behavior fail-closed, remove duplicate ways to start/check a task, and do not hide task-start or routing inside ordinary loop checks.
+- Done Evidence: `task_session begin/status/end` works as the only session lifecycle entrypoint, `run_loop_gate`/`run_pr_gate` pass with cheap session checks, PowerShell/legacy wrapper paths are removed from normal flow, targeted tests cover start-once/first-patch/session-mismatch/nightly hygiene, and updated timing baseline shows session-check hot-path cost and cold/warm matrix.
+- Priority Rule: make the session contract simpler and more deterministic even if the refactor is broader; prefer one canonical path over layered compatibility.
 
 ## Current Delta
-- Fixed nested `pr/nightly` scope propagation for explicit `--changed-files` and `--stdin` inputs.
-- Fixed `worktree_guard.py` parity with PowerShell context schema (`valid_until_utc`, UTF-8 BOM, Windows path compare).
-- Fixed runtime harness regressions (`tests/test_task_outcomes.py` green).
-- Added mechanical cold-context exclusions in `.cursorignore`.
-- Expanded change-surface regression coverage for rename/delete/unknown/fail-closed/routing cases.
-- Closed global file-size policy failures in `--all-files` mode via explicit temporary facade allowlist.
-- Completed server/UI canonicalization around `moex_carry.server` entrypoints with compatibility seams preserved.
-- Remaining step is opening the PR with the prepared remediation summary.
+- `task_session begin/status/end` is now the canonical session lifecycle, and `begin` no longer syncs the task ledger on start.
+- `run_loop_gate` and `run_pr_gate` use cheap session-lock checks, while hook/CI/nightly paths use explicit automation bypass instead of implicit PowerShell behavior.
+- Legacy `worktree_guard` and `run_lean_gate` entrypoints are removed from active docs, hooks, validators, and tests; new session-contract regressions are in place.
 
 ## First-Time-Right Report
-1. Confirmed coverage: each reported failure is mapped to one explicit remediation patch and one deterministic validation command.
-2. Missing or risky scenarios: scope propagation across nested gates and minimal-repo runtime harness compatibility are easy to regress without dedicated tests.
-3. Resource/time risks and chosen controls: prioritize P1 invariants first, run scoped tests immediately after each fix, and defer broader cleanup until all hard blockers pass.
-4. Highest-priority fixes or follow-ups: deterministic nested gate routing and cross-platform worktree guard parity, then regression-suite hardening and policy closure.
+1. Confirmed coverage: the requested target flow explicitly defines begin, hot loop, PR gate, and end responsibilities, plus removal targets and latency criteria.
+2. Missing or risky scenarios: stale session locks, branch/worktree mismatch after begin, repeated begin calls, and hidden task-start in gates can regress unless covered with dedicated tests.
+3. Resource/time risks and chosen controls: refactor in one coherent pass, keep session payload minimal, and verify latency with a fresh timing capture instead of relying on inference.
+4. Highest-priority fixes or follow-ups: Python-only session lock, explicit task lifecycle orchestration, then docs/hooks cleanup and hot-path timing proof.
 
 ## Repetition Control
 - Max Same-Path Attempts: 2
 - Stop Trigger: same validator or migration failure repeats after two attempts on unchanged path.
 - Reset Action: stop patching current path, restore deterministic baseline checks, and switch to a new compatibility-first probe.
 - New Search Space: (1) config-driven routing update, (2) wrapper/shim compatibility layer, (3) scoped validator arguments, (4) artifact migration script with dual-write.
-- Next Probe: if a fix still fails after two same-path attempts, switch from patching behavior to contract-level fallback (compatibility shim + dedicated regression test) before returning to refactor.
+- Next Probe: if the one-pass refactor still leaks orchestration into ordinary checks, stop adding shims and move the leaked responsibility into `task_session.py` plus a dedicated regression test before continuing.
 
 ## Task Outcome
 - Outcome Status: completed
-- Decision Quality: correct_first_time
+- Decision Quality: correct_after_replan
 - Final Contexts: CTX-OPS
 - Route Match: matched
 - Primary Rework Cause: none
@@ -50,15 +45,13 @@ Updated: 2026-03-10 20:05 UTC
 - No blocker.
 
 ## Next Step
-- Open the PR with the prepared remediation summary and validation evidence.
+- Run PR closeout on the new contract and finish the task session cleanly.
 
 ## Validation
-- `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
-- `python scripts/run_lean_gate.py`
-- `python scripts/run_pr_gate.py --changed-files docs/README.md`
-- `python scripts/worktree_guard.py --action Check --force-python`
-- `python -m pytest tests/test_task_outcomes.py -q`
-- `python scripts/validate_task_outcomes.py --base-sha <merge-base> --head-sha HEAD`
-- `python scripts/validate_file_size_policy.py --all-files`
+- `python scripts/task_session.py begin --request "<request>"`
+- `python scripts/task_session.py status`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
+- `python scripts/task_session.py end`

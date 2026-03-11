@@ -1,5 +1,5 @@
 # Session Handoff
-Updated: 2026-03-10 20:06 UTC
+Updated: 2026-03-11 07:30 UTC
 
 ## Active Task Note
 - Path: docs/tasks/active/TASK-2026-03-10-lean-harness-redesign.md
@@ -7,19 +7,20 @@ Updated: 2026-03-10 20:06 UTC
 - Status: completed
 
 ## Current Delta
-- Chat PRO remediation gaps are closed: nested scope routing, worktree parity, cold-context retrieval exclusion, runtime harness regressions, classifier regression-suite, canonical server surface, and file-size all-files gate.
-- Targeted failing commands from external audit are now passing on local validation.
+- Canonical Python session contract is in place: `task_session begin/status/end` now owns lifecycle, and `loop/pr` gates only verify session identity plus run scoped checks.
+- Legacy `worktree_guard` and `run_lean_gate` paths are removed from active flow, docs, validators, and hook/CI wiring.
 
 ## Blockers
 - No blocker.
 
 ## Next Step
-- Open PR with the prepared remediation summary and validation evidence.
+- Split the completed refactor into reviewable commits and prepare the final PR summary.
 
 ## Validation
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
-- `python -m pytest tests/test_compute_change_surface.py tests/test_gate_scope_routing.py tests/test_task_outcomes.py -q`
-- `python scripts/worktree_guard.py --action Check --force-python`
-- `python scripts/validate_file_size_policy.py --all-files`
-- `python scripts/validate_task_outcomes.py --base-sha <merge-base> --head-sha HEAD`
+- `python scripts/task_session.py begin --request "<request>"`
+- `python scripts/task_session.py status`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
+- `python scripts/task_session.py end`
