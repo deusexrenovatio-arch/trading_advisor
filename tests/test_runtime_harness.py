@@ -8,6 +8,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import agent_bootstrap  # noqa: E402
 
 
 def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -42,10 +45,28 @@ def test_agent_bootstrap_writes_profile_runtime_targets(tmp_path: Path) -> None:
     coordinates_path = tmp_path / ".runlogs/runtime" / task_id / "coordinates.json"
     payload = json.loads(coordinates_path.read_text(encoding="utf-8"))
     assert payload["profile"] == "core"
+    assert isinstance(payload.get("server_port"), int)
     assert isinstance(payload.get("runtime_targets"), list)
     assert payload["runtime_targets"]
     assert payload["runtime_targets"][0]["command"]
     assert payload["runtime_targets"][0]["probes"]
+    assert "--port" in payload["runtime_targets"][0]["command"]
+    assert str(payload["server_port"]) in payload["runtime_targets"][0]["command"]
+    assert payload["runtime_targets"][0]["probes"][0]["port"] == payload["server_port"]
+
+
+def test_agent_bootstrap_port_derivation_is_deterministic_by_worktree() -> None:
+    worktree_a = Path("D:/worktrees/alpha")
+    worktree_b = Path("D:/worktrees/bravo")
+
+    port_a_core_first = agent_bootstrap._derive_server_port(worktree=worktree_a, profile="core")
+    port_a_core_second = agent_bootstrap._derive_server_port(worktree=worktree_a, profile="core")
+    port_b_core = agent_bootstrap._derive_server_port(worktree=worktree_b, profile="core")
+    port_a_ui = agent_bootstrap._derive_server_port(worktree=worktree_a, profile="ui")
+
+    assert port_a_core_first == port_a_core_second
+    assert port_a_core_first != port_b_core
+    assert port_a_core_first != port_a_ui
 
 
 def test_agent_smoke_runs_process_and_checks_readiness(tmp_path: Path) -> None:

@@ -44,9 +44,8 @@ def create_server_app(settings: Any):
 
 
 def run_server(settings: Any) -> None:
-    _sync_server_overrides_to_legacy()
-    legacy_ui_app = _legacy_ui_app()
-    legacy_ui_app.run_ui(settings)
+    app = create_server_app(settings)
+    app.run(host=settings.ui.host, port=settings.ui.port, debug=False)
 
 
 def create_app(settings: Any):
