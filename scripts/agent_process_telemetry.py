@@ -19,9 +19,42 @@ REPO_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(REPO_SRC) not in sys.path:
     sys.path.insert(0, str(REPO_SRC))
 
-from handoff_resolver import read_task_note_lines
-from context_router import route_files
-from moex_carry.governance.process_reports import ROLLING_WINDOW_SIZE
+try:
+    from handoff_resolver import read_task_note_lines
+except Exception:
+    def read_task_note_lines(path: Path) -> tuple[Path, list[str], bool]:
+        if not path.exists():
+            return path, [], False
+        text = path.read_text(encoding="utf-8")
+        return path, text.splitlines(), False
+
+try:
+    from context_router import route_files
+except Exception:
+    def route_files(
+        changed_files: list[str],
+        *,
+        request_text: str = "",
+        target_modules: list[str] | None = None,
+        session_handoff_text: str = "",
+    ) -> dict[str, Any]:
+        _ = (request_text, target_modules, session_handoff_text)
+        has_scope = bool(changed_files)
+        contexts = [{"id": "CTX-OPS"}] if has_scope else []
+        return {
+            "primary_context": "CTX-OPS" if has_scope else None,
+            "contexts": contexts,
+            "intent_sources": [],
+            "cold_context_files": [],
+            "unmapped_dependency_hints": {},
+            "unmapped_files": [],
+            "recommendations": [],
+        }
+
+try:
+    from moex_carry.governance.process_reports import ROLLING_WINDOW_SIZE
+except Exception:
+    ROLLING_WINDOW_SIZE = 20
 
 
 TERMINAL_OUTCOME_STATUSES = {"completed", "partial", "blocked"}

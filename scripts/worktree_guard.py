@@ -48,7 +48,7 @@ def _load_context(path: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception:
         return {}
     if not isinstance(payload, dict):
@@ -84,10 +84,15 @@ def _delegate_to_powershell(args: argparse.Namespace) -> int:
 def _python_init(args: argparse.Namespace, context_file: Path) -> int:
     worktree = Path(args.worktree_path or _git_root()).resolve()
     branch = args.branch or _git_branch()
+    set_at = _now()
+    valid_until = _iso(set_at + timedelta(hours=int(args.context_ttl_hours)))
     payload = {
+        "version": 1,
         "expected_worktree": str(worktree),
         "expected_branch": branch,
-        "valid_until": _iso(_now() + timedelta(hours=int(args.context_ttl_hours))),
+        "set_at_utc": _iso(set_at),
+        "valid_until": valid_until,
+        "valid_until_utc": valid_until,
         "ttl_hours": int(args.context_ttl_hours),
     }
     _write_context(context_file, payload)
@@ -104,11 +109,14 @@ def _python_show(context_file: Path) -> int:
     if not payload:
         print("worktree_guard(py): context is not set")
         return 1
+    valid_until = str(payload.get("valid_until_utc", "")).strip() or str(
+        payload.get("valid_until", "")
+    ).strip()
     print("worktree_guard(py): status")
     print(f"  context_file: {context_file.as_posix()}")
     print(f"  expected_worktree: {payload.get('expected_worktree')}")
     print(f"  expected_branch: {payload.get('expected_branch')}")
-    print(f"  valid_until: {payload.get('valid_until')}")
+    print(f"  valid_until: {valid_until}")
     return 0
 
 
@@ -128,7 +136,9 @@ def _python_check(context_file: Path) -> int:
         return 1
     expected_worktree = str(payload.get("expected_worktree", "")).strip()
     expected_branch = str(payload.get("expected_branch", "")).strip()
-    valid_until = str(payload.get("valid_until", "")).strip()
+    valid_until = str(payload.get("valid_until_utc", "")).strip() or str(
+        payload.get("valid_until", "")
+    ).strip()
 
     current_worktree = str(_git_root())
     current_branch = _git_branch()
@@ -141,7 +151,11 @@ def _python_check(context_file: Path) -> int:
     if _now() > valid_until_dt:
         print(f"worktree_guard(py): context expired at {valid_until}")
         return 1
-    if current_worktree != expected_worktree or current_branch != expected_branch:
+    same_worktree = current_worktree == expected_worktree
+    if os.name == "nt":
+        same_worktree = current_worktree.casefold() == expected_worktree.casefold()
+
+    if not same_worktree or current_branch != expected_branch:
         print("worktree_guard(py): mismatch detected")
         print(f"  current_worktree: {current_worktree}")
         print(f"  expected_worktree: {expected_worktree}")

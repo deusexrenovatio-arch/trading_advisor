@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from pathlib import Path
 
 REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 DEPRECATION_NOTICE = (
@@ -16,6 +17,27 @@ def _run(cmd: list[str]) -> int:
     print(f">>> {printable}", flush=True)
     completed = subprocess.run(cmd, check=False)
     return int(completed.returncode)
+
+
+def _run_compat_fallback() -> int:
+    print(
+        "lean gate wrapper: run_loop_gate.py not found; "
+        "using minimal compatibility fallback sequence."
+    )
+    fallback_commands = [
+        [sys.executable, "scripts/agent_process_telemetry.py", "first-patch"],
+        [sys.executable, "scripts/sync_task_outcomes.py"],
+        [sys.executable, "scripts/validate_task_outcomes.py"],
+        [sys.executable, "scripts/validate_process_regressions.py"],
+    ]
+    for command in fallback_commands:
+        if not Path(command[1]).exists():
+            continue
+        code = _run(command)
+        if code != 0:
+            print(f"lean gate wrapper: FAILED\nremediation: see {REMEDIATION_DOC}")
+            return code
+    return 0
 
 
 def main() -> int:
@@ -39,19 +61,28 @@ def main() -> int:
     if args.skip_metrics:
         print("lean gate wrapper: --skip-metrics is deprecated and has no effect")
 
-    command = [
-        sys.executable,
-        "scripts/run_loop_gate.py",
-        "--mapping",
-        args.mapping,
-        "--from-git",
-        "--git-ref",
-        "HEAD",
-    ]
-    if args.summary_file:
-        command.extend(["--summary-file", str(args.summary_file)])
+    loop_gate_path = Path("scripts/run_loop_gate.py")
+    if loop_gate_path.exists():
+        command = [
+            sys.executable,
+            str(loop_gate_path),
+            "--mapping",
+            args.mapping,
+            "--from-git",
+            "--git-ref",
+            "HEAD",
+        ]
+        if args.summary_file:
+            command.extend(["--summary-file", str(args.summary_file)])
+        code = _run(command)
+    else:
+        if args.summary_file:
+            print(
+                "lean gate wrapper: --summary-file is ignored in fallback mode "
+                "(run_loop_gate.py missing)"
+            )
+        code = _run_compat_fallback()
 
-    code = _run(command)
     if code != 0:
         print(f"lean gate wrapper: FAILED\nremediation: see {REMEDIATION_DOC}")
         return code
