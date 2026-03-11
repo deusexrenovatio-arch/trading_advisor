@@ -1,19 +1,10 @@
 # Session Handoff
-Updated: 2026-03-11 09:45 UTC
+Updated: 2026-03-11 13:12 UTC
 
 ## Active Task Note
-- Path: docs/tasks/archive/TASK-2026-03-11-harness-tail-fixes.md
+- Path: docs/tasks/active/TASK-2026-03-11-pr-review-remediation.md
 - Mode: full
-- Status: completed
-
-## Current Delta
-- Closing four remaining harness tails: active plan check drift, archived contract inheritance risk, PR-only live-doc coverage drift, and optional `feedparser` guard in standalone utility.
-
-## Blockers
-- No blocker.
-
-## Next Step
-- Finish the four targeted fixes, run scoped validators/tests, then close the task with terminal outcome.
+- Status: in_progress
 
 ## Validation
 - `python scripts/validate_task_request_contract.py`

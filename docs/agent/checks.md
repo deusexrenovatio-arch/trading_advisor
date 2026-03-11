@@ -2,17 +2,16 @@
 
 ## Loop (local hot path)
 - `python scripts/task_session.py status`
-- `python scripts/validate_task_request_contract.py`
 - `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- task contract and handoff validation run in loop only for non-trivial non-docs diffs.
 
 ## PR Closeout
 - `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
 - `python scripts/task_session.py end`
-- `python scripts/validate_quality_scorecards.py`
 - Required checks from `docs/DEV_WORKFLOW.md`
 
 ## Nightly / Cold Hygiene
-- docs gardening, governance dashboard, and scheduled deep checks.
+- quality scorecards, codeowners, docs gardening, governance dashboard, and scheduled deep checks.
 - drift cleanup, archive hygiene, and long-running quality/perf probes.
 
 ## First-Time-Right Gate

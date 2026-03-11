@@ -9,7 +9,7 @@
 - `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
-- `python scripts/validate_quality_scorecards.py`
+- `python scripts/run_nightly_gate.py --from-git --git-ref HEAD`
 
 ## Session Safety
 - Begin: `python scripts/task_session.py begin --request "<request>"`
@@ -20,6 +20,7 @@
 - Task closeout sync: `python scripts/task_session.py end`
 - Remediation guide: `docs/runbooks/governance-remediation.md`
 - Process reports: `python scripts/process_improvement_report.py`
+- Runtime bootstrap (`scripts/agent_bootstrap.py`) derives a deterministic server port from `worktree + profile` to avoid cross-worktree contention.
 
 ## Contract Rule
 - Session start, hot loop, PR gate, and closeout use one Python contract.

@@ -12,16 +12,9 @@
 - `docs/agent/checks.md`
 - `docs/agent/runtime.md`
 - `docs/agent/skills-routing.md`
-- `docs/README.md`
-- `docs/DEV_WORKFLOW.md`
-- `docs/workflows/context-budget.md`
-- `docs/workflows/skill-governance-sync.md`
-- `docs/session_handoff.md`
-- `harness-guideline.md`
-- `CODEOWNERS`
 
 ## Warm and Cold Source of Truth
-- Warm: runbooks, architecture deep dives, workflows.
+- Warm: runbooks, architecture deep dives, workflows, and operational docs (`docs/README.md`, `docs/DEV_WORKFLOW.md`, `docs/workflows/context-budget.md`, `docs/workflows/skill-governance-sync.md`, `docs/session_handoff.md`, `harness-guideline.md`, `CODEOWNERS`).
 - Cold: `plans/`, `memory/`, archives, artifacts, skill catalog.
 - Full skill catalog path: `docs/agent/skills-catalog.md`.
 
@@ -30,7 +23,7 @@
 2) Before non-trivial implementation, fill task contract in `docs/session_handoff.md`.
 3) Validate contract: `python scripts/validate_task_request_contract.py`.
 4) In the hot loop run `python scripts/run_loop_gate.py --from-git --git-ref HEAD`.
-5) Keep `plans/PLANS.yaml` and `memory/agent_memory.yaml` aligned with durable decisions.
+5) When durable decisions change, update `plans/PLANS.yaml` and `memory/agent_memory.yaml` during closeout; do not pull them into the hot loop without need.
 6) Keep `docs/session_handoff.md` valid via `python scripts/validate_session_handoff.py`.
 7) Before push/PR run `python scripts/run_pr_gate.py --from-git --git-ref HEAD`, then close with `python scripts/task_session.py end`.
 8) Before push run blockers from `docs/DEV_WORKFLOW.md`, including `python scripts/validate_quality_scorecards.py`.

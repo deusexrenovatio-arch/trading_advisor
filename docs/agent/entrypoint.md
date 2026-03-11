@@ -23,7 +23,7 @@ This is the hot-path map for implementation turns. Keep it compact and route det
 2. Update `docs/session_handoff.md` task contract.
 3. Validate contract: `python scripts/validate_task_request_contract.py`
 4. Run governance gate in the hot loop: `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
-5. Keep `plans/PLANS.yaml` and `memory/agent_memory.yaml` aligned with durable decisions.
+5. Update `plans/PLANS.yaml` and `memory/agent_memory.yaml` only when durable decisions change; avoid pulling them into the hot loop by default.
 6. Before push/PR run `python scripts/run_pr_gate.py --from-git --git-ref HEAD`, then close with `python scripts/task_session.py end`.
 
 ## PR-Only Policy
