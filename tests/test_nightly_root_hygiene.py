@@ -33,6 +33,9 @@ def test_nightly_root_hygiene_preserves_git_and_dotfiles(tmp_path: Path, monkeyp
     archive_root = repo / "docs" / "archive" / "root-hygiene" / stamp
     assert (archive_root / "stale.log").exists()
     assert not (archive_root / ".git").exists()
+    assert not (archive_root / ".pytest_cache").exists()
+    assert not (archive_root / ".ruff_cache").exists()
+    assert not (archive_root / "commitlint.config.cjs").exists()
     assert (repo / ".git").exists()
     assert (repo / ".pytest_cache").exists()
     assert (repo / ".ruff_cache").exists()

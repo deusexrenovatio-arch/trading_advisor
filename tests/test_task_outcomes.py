@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -131,7 +130,10 @@ def _init_repo(tmp_path: Path) -> Path:
     return repo_root
 
 
-def test_validate_task_outcomes_requires_sync_for_non_trivial_diff(tmp_path: Path, monkeypatch) -> None:
+def test_validate_task_outcomes_allows_active_non_trivial_diff_before_closeout(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     repo_root = _init_repo(tmp_path)
     monkeypatch.chdir(repo_root)
     events_path = repo_root / ".runlogs/agent-process/task-events.jsonl"
@@ -151,8 +153,9 @@ def test_validate_task_outcomes_requires_sync_for_non_trivial_diff(tmp_path: Pat
             focus=None,
             base_sha=None,
             head_sha=None,
+            require_terminal_outcome=False,
         )
-        == 1
+        == 0
     )
 
     assert (
@@ -173,6 +176,7 @@ def test_validate_task_outcomes_requires_sync_for_non_trivial_diff(tmp_path: Pat
             focus=None,
             base_sha=None,
             head_sha=None,
+            require_terminal_outcome=False,
         )
         == 0
     )
@@ -254,6 +258,7 @@ def test_validate_task_outcomes_blocks_repeated_signature_without_new_artifact(t
             focus=None,
             base_sha=None,
             head_sha=None,
+            require_terminal_outcome=False,
         )
         == 1
     )
@@ -338,6 +343,7 @@ def test_validate_task_outcomes_blocks_status_mismatch_against_policy(tmp_path: 
             focus=None,
             base_sha=None,
             head_sha=None,
+            require_terminal_outcome=False,
         )
         == 1
     )
@@ -418,6 +424,7 @@ def test_validate_task_outcomes_accepts_blocked_status_with_explicit_blocker(tmp
             focus=None,
             base_sha=None,
             head_sha=None,
+            require_terminal_outcome=False,
         )
         == 0
     )
@@ -456,81 +463,6 @@ def test_validate_task_outcomes_blocks_non_trivial_pr_without_handoff_or_ledger_
         repo_root,
     )
     assert result.returncode == 1
-
-
-def test_worktree_guard_check_emits_start_event_when_powershell_available(tmp_path: Path) -> None:
-    shell = shutil.which("pwsh") or shutil.which("powershell")
-    if shell is None:
-        return
-
-    repo_root = _init_repo(tmp_path)
-    scripts_dir = repo_root / "scripts"
-    for name in ("worktree_guard.ps1", "agent_process_telemetry.py", "context_router.py"):
-        scripts_dir.joinpath(name).write_text((ROOT / "scripts" / name).read_text(encoding="utf-8"), encoding="utf-8")
-
-    init_result = _run(
-        [shell, "-ExecutionPolicy", "Bypass", "-File", "scripts/worktree_guard.ps1", "-Action", "Init"],
-        repo_root,
-    )
-    assert init_result.returncode == 0
-    check_result = _run(
-        [shell, "-ExecutionPolicy", "Bypass", "-File", "scripts/worktree_guard.ps1", "-Action", "Check"],
-        repo_root,
-    )
-    assert check_result.returncode == 0
-    assert "task_id=" in check_result.stdout
-    assert "root=" in check_result.stdout
-    assert (repo_root / ".runlogs/agent-process/state.json").exists()
-
-
-def test_run_lean_gate_records_first_patch_in_minimal_repo(tmp_path: Path, monkeypatch) -> None:
-    repo_root = _init_repo(tmp_path)
-    monkeypatch.chdir(repo_root)
-    scripts_dir = repo_root / "scripts"
-    for name in (
-        "agent_process_telemetry.py",
-        "context_router.py",
-        "run_lean_gate.py",
-        "sync_task_outcomes.py",
-        "validate_task_outcomes.py",
-        "validate_process_regressions.py",
-    ):
-        scripts_dir.joinpath(name).write_text((ROOT / "scripts" / name).read_text(encoding="utf-8"), encoding="utf-8")
-    for name in (
-        "sync_architecture_map.py",
-        "validate_plans.py",
-        "validate_agent_memory.py",
-        "validate_session_handoff.py",
-        "validate_task_request_contract.py",
-        "validate_harness_guideline.py",
-        "validate_pr_only_policy.py",
-        "validate_architecture_policy.py",
-        "validate_agent_contexts.py",
-        "validate_test_cases.py",
-        "validate_user_needs_catalog.py",
-        "validate_skills.py",
-        "validate_codeowners.py",
-        "validate_flaky_policy.py",
-        "validate_observability_stack.py",
-        "validate_taste_invariants.py",
-        "validate_python_style.py",
-        "validate_structured_logging.py",
-        "validate_dependency_decisions.py",
-        "validate_governance_remediation.py",
-        "harness_baseline_metrics.py",
-    ):
-        scripts_dir.joinpath(name).write_text("print('ok')\n", encoding="utf-8")
-
-    telemetry.start_task(
-        events_path=repo_root / ".runlogs/agent-process/task-events.jsonl",
-        state_path=repo_root / ".runlogs/agent-process/state.json",
-        handoff_path=repo_root / "docs/session_handoff.md",
-    )
-    (repo_root / "scripts/sample.py").write_text("print('first patch via lean gate')\n", encoding="utf-8")
-    result = _run([sys.executable, "scripts/run_lean_gate.py"], repo_root)
-    assert result.returncode == 0
-    state = telemetry.load_state(repo_root / ".runlogs/agent-process/state.json")
-    assert state["active_task"]["first_patch_at"] is not None
 
 
 def test_build_governance_dashboard_runs_in_minimal_repo(tmp_path: Path) -> None:

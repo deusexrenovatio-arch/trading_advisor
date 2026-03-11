@@ -32,6 +32,7 @@ def test_run_pr_gate_propagates_explicit_changed_files_to_loop(monkeypatch) -> N
     changed_files = ["docs/README.md"]
 
     monkeypatch.setattr(run_pr_gate, "collect_changed_files", lambda **_kwargs: changed_files)
+    monkeypatch.setattr(run_pr_gate, "check_active_session", lambda **_kwargs: (0, "ok", {}))
     monkeypatch.setattr(
         run_pr_gate,
         "compute_surface",
@@ -51,6 +52,7 @@ def test_run_pr_gate_propagates_explicit_changed_files_to_loop(monkeypatch) -> N
     )
 
     assert run_pr_gate.main() == 0
+    assert "--skip-session-check" in captured["command"]
     assert "--changed-files docs/README.md" in captured["command"]
     assert "--from-git" not in captured["command"]
 
@@ -60,6 +62,7 @@ def test_run_pr_gate_propagates_stdin_scope_to_loop(monkeypatch) -> None:
     changed_files = ["docs/README.md", "docs/workflows/context-budget.md"]
 
     monkeypatch.setattr(run_pr_gate, "collect_changed_files", lambda **_kwargs: changed_files)
+    monkeypatch.setattr(run_pr_gate, "check_active_session", lambda **_kwargs: (0, "ok", {}))
     monkeypatch.setattr(
         run_pr_gate,
         "compute_surface",
@@ -75,6 +78,7 @@ def test_run_pr_gate_propagates_stdin_scope_to_loop(monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", ["run_pr_gate.py", "--stdin"])
 
     assert run_pr_gate.main() == 0
+    assert "--skip-session-check" in captured["command"]
     assert "--changed-files docs/README.md docs/workflows/context-budget.md" in captured["command"]
     assert "--from-git" not in captured["command"]
 
@@ -103,5 +107,6 @@ def test_run_nightly_gate_propagates_explicit_changed_files_to_pr(monkeypatch) -
     )
 
     assert run_nightly_gate.main() == 0
+    assert "--skip-session-check" in captured["command"]
     assert "--changed-files docs/README.md" in captured["command"]
     assert "--from-git" not in captured["command"]
