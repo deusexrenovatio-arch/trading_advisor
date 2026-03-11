@@ -21,3 +21,9 @@ artifacts*/
 # Local workspace internals
 .worktree-context.local.json
 
+# Cold-context governance artifacts (retrieval exclusion by policy)
+plans/
+memory/
+docs/tasks/archive/
+.cursor/skills/
+

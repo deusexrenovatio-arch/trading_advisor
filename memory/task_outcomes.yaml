@@ -1,5 +1,5 @@
 version: 1
-updated_at: '2026-03-10'
+updated_at: '2026-03-11'
 items:
 - task_id: APT-20260306T163854Z-c3d3f52f
   closed_at: '2026-03-06T16:53:22Z'
@@ -869,6 +869,37 @@ items:
     keep adapters thin.
   - CTX-ORCHESTRATION imports span multiple neighboring contexts. Treat as cross-cutting
     and keep adapters thin.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T052416Z-62c9e398
+  closed_at: '2026-03-11T05:24:17Z'
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 16
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
   - Some files are unmapped. Classify manually before implementation.
   - Cold-context files are present. Keep them out of hot retrieval unless the task
     explicitly needs them.

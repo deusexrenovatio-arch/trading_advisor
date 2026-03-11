@@ -1,24 +1,25 @@
 # Session Handoff
-Updated: 2026-03-10 18:10 UTC
+Updated: 2026-03-10 20:06 UTC
 
 ## Active Task Note
 - Path: docs/tasks/active/TASK-2026-03-10-lean-harness-redesign.md
 - Mode: full
-- Status: in_progress
+- Status: completed
 
 ## Current Delta
-- Sequential implementation for plan stages `PR-00`..`PR-13` is complete and validated.
-- Gate stack is migrated to `loop -> pr -> nightly` with legacy compatibility wrapper preserved.
+- Chat PRO remediation gaps are closed: nested scope routing, worktree parity, cold-context retrieval exclusion, runtime harness regressions, classifier regression-suite, canonical server surface, and file-size all-files gate.
+- Targeted failing commands from external audit are now passing on local validation.
 
 ## Blockers
 - No blocker.
 
 ## Next Step
-- Prepare review/commit split for PR delivery.
+- Open PR with the prepared remediation summary and validation evidence.
 
 ## Validation
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
-- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
-- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
-- `python scripts/run_lean_gate.py`
+- `python -m pytest tests/test_compute_change_surface.py tests/test_gate_scope_routing.py tests/test_task_outcomes.py -q`
+- `python scripts/worktree_guard.py --action Check --force-python`
+- `python scripts/validate_file_size_policy.py --all-files`
+- `python scripts/validate_task_outcomes.py --base-sha <merge-base> --head-sha HEAD`

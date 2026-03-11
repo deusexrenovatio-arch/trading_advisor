@@ -15,8 +15,11 @@ def test_nightly_root_hygiene_preserves_git_and_dotfiles(tmp_path: Path, monkeyp
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / ".git").mkdir()
+    (repo / ".pytest_cache").mkdir()
+    (repo / ".ruff_cache").mkdir()
     (repo / ".gitignore").write_text("# gitignore\n", encoding="utf-8")
     (repo / ".cursorignore").write_text("data/\n", encoding="utf-8")
+    (repo / "commitlint.config.cjs").write_text("module.exports = {};\n", encoding="utf-8")
     (repo / "docs").mkdir()
     (repo / "src").mkdir()
     (repo / "stale.log").write_text("stale\n", encoding="utf-8")
@@ -31,8 +34,11 @@ def test_nightly_root_hygiene_preserves_git_and_dotfiles(tmp_path: Path, monkeyp
     assert (archive_root / "stale.log").exists()
     assert not (archive_root / ".git").exists()
     assert (repo / ".git").exists()
+    assert (repo / ".pytest_cache").exists()
+    assert (repo / ".ruff_cache").exists()
     assert (repo / ".gitignore").exists()
     assert (repo / ".cursorignore").exists()
+    assert (repo / "commitlint.config.cjs").exists()
 
 
 def test_nightly_root_hygiene_dry_run_reports_stale(tmp_path: Path, monkeypatch) -> None:

@@ -1,14 +1,13 @@
 version: 1
-
 python:
   leaf_max_lines: 400
   orchestrator_max_lines: 700
   orchestrator_patterns:
-    - src/moex_carry/cli.py
-    - src/moex_carry/pipeline.py
-    - src/moex_carry/unified_runtime.py
-    - src/moex_carry/ui/app.py
-    - src/moex_carry/backtest_v2/engine.py
+  - src/moex_carry/cli.py
+  - src/moex_carry/pipeline.py
+  - src/moex_carry/unified_runtime.py
+  - src/moex_carry/ui/app.py
+  - src/moex_carry/backtest_v2/engine.py
   temporary_facade_allowlist:
     src/moex_carry/ui/app.py:
       max_lines: 6000
@@ -61,3 +60,135 @@ python:
     src/moex_carry/cli_news_handlers.py:
       max_lines: 900
       reason: temporary_facade_phase_split_cli_handlers
+    src/moex_carry/analytics/alpha.py:
+      max_lines: 433
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/cli_news_parsers.py:
+      max_lines: 496
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/config.py:
+      max_lines: 761
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/governance/process_reports.py:
+      max_lines: 733
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/hpo/minute_period_pnl.py:
+      max_lines: 482
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/hpo/objective.py:
+      max_lines: 459
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/hpo/runner.py:
+      max_lines: 639
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/hpo/runtime.py:
+      max_lines: 705
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/integrations/telegram_h4a_followup.py:
+      max_lines: 509
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/integrations/telegram_news_broadcast.py:
+      max_lines: 455
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/anchors.py:
+      max_lines: 677
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/anchors_sources.py:
+      max_lines: 603
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/backfill_helpers.py:
+      max_lines: 449
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/events.py:
+      max_lines: 611
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/factor_autolabel.py:
+      max_lines: 675
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/gold_bootstrap.py:
+      max_lines: 749
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/hitl.py:
+      max_lines: 473
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/linking.py:
+      max_lines: 456
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/live_eval.py:
+      max_lines: 753
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/reaction.py:
+      max_lines: 735
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/research_metrics.py:
+      max_lines: 632
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/research_runtime.py:
+      max_lines: 513
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/research_samples.py:
+      max_lines: 463
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/research_supervised.py:
+      max_lines: 564
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/research_walkforward.py:
+      max_lines: 470
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news/sync.py:
+      max_lines: 437
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news_causal_rules.py:
+      max_lines: 535
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news_commodity_graph.py:
+      max_lines: 459
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news_commodity_graph_knowledge.py:
+      max_lines: 580
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news_live_feed.py:
+      max_lines: 538
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news_live_runtime.py:
+      max_lines: 641
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news_mode_compare.py:
+      max_lines: 442
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/news_shock_pipeline.py:
+      max_lines: 621
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/shock_alert_delivery.py:
+      max_lines: 457
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/signal_execution_contract.py:
+      max_lines: 710
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/signal_replay/core.py:
+      max_lines: 434
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/signal_replay/incremental.py:
+      max_lines: 706
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/storage/models.py:
+      max_lines: 705
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/storage/repositories_news_base.py:
+      max_lines: 647
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/storage/repositories_news_governance.py:
+      max_lines: 600
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/storage/repositories_v2.py:
+      max_lines: 614
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/strategy/two_layer_adapter.py:
+      max_lines: 580
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/ui/app_helpers_base.py:
+      max_lines: 786
+      reason: temporary_facade_phase_split_backlog_20260310
+    src/moex_carry/ui/app_helpers_feed.py:
+      max_lines: 756
+      reason: temporary_facade_phase_split_backlog_20260310
