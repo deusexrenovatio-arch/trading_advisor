@@ -1,5 +1,5 @@
 version: 1
-updated_at: '2026-03-10'
+updated_at: '2026-03-11'
 decisions:
 - id: ADM-2026-03-09-095
   date: 2026-03-09
@@ -1921,6 +1921,24 @@ decisions:
   - tests/test_morning_plan_walk_forward.py
   - tests/test_signal_engine_setups.py
   - docs/hpo-howto.md
+- id: ADM-2026-03-10-097
+  date: 2026-03-10
+  title: Treat process-regression delta comparison as valid only with a full previous
+    rolling window
+  context: During remediation closeout, `validate_process_regressions.py` started
+    blocking even with acknowledged debt active because the comparator used a partial
+    previous window of two historical tasks against a full current window of twenty.
+  decision: Keep acknowledged-debt policy and thresholds unchanged, but compute `previous_window`
+    only when at least `2 * window_size` completed tasks exist; otherwise skip regression
+    delta comparison for that cycle.
+  impact: Process regression gating remains strict when statistically comparable windows
+    exist, while avoiding false hard blocks caused by tiny previous-window samples
+    right after burn-in completion.
+  links:
+  - src/moex_carry/governance/process_reports.py
+  - tests/test_agent_process_telemetry.py
+  - scripts/validate_process_regressions.py
+  - docs/runbooks/governance-remediation.md
 incidents:
 - id: AMI-2026-02-20-001
   date: 2026-02-20

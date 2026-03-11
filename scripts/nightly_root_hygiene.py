@@ -6,8 +6,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-ALLOWED_ROOT_PREFIXES = (
-    ".",
+ALLOWED_ROOT_FILES = {
+    ".cursorignore",
+    ".env.example",
+    ".gitignore",
+    ".worktree-context.local.json",
     "AGENTS.md",
     "CODEOWNERS",
     "README.md",
@@ -16,9 +19,10 @@ ALLOWED_ROOT_PREFIXES = (
     "pyproject.toml",
     "docker-compose.yml",
     "docker-compose.observability.yml",
-)
+}
 ALLOWED_ROOT_DIRS = {
     ".cursor",
+    ".git",
     ".githooks",
     ".github",
     ".runlogs",
@@ -43,7 +47,7 @@ def _is_allowed(path: Path) -> bool:
     name = path.name
     if name in ALLOWED_ROOT_DIRS:
         return True
-    return any(name == item for item in ALLOWED_ROOT_PREFIXES)
+    return name in ALLOWED_ROOT_FILES
 
 
 def main() -> int:

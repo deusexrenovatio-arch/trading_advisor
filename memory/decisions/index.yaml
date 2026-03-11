@@ -1,5 +1,5 @@
 version: 1
-updated_at: '2026-03-10'
+updated_at: '2026-03-11'
 items:
 - id: ADM-2026-03-09-095
   path: memory/decisions/ADM-2026-03-09-095.yaml
@@ -205,3 +205,5 @@ items:
   path: memory/decisions/ADM-2026-03-04-077.yaml
 - id: ADM-2026-03-04-076
   path: memory/decisions/ADM-2026-03-04-076.yaml
+- id: ADM-2026-03-10-097
+  path: memory/decisions/ADM-2026-03-10-097.yaml

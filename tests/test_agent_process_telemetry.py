@@ -375,3 +375,42 @@ def test_validate_process_regressions_blocks_worsening_acknowledged_debt(
     assert rollup["threshold_results"]["decision-quality"]["blocking"] is True
     assert rollup["threshold_results"]["context-efficiency"]["status"] == "regressed"
     assert rollup["threshold_results"]["context-efficiency"]["blocking"] is True
+
+
+def test_validate_process_regressions_ignores_partial_previous_window(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = _init_repo(tmp_path, include_remediation_plan=True)
+    monkeypatch.chdir(repo_root)
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+
+    seed_window = [_build_record(index) for index in range(2)]
+    current_window = [
+        _build_record(
+            2 + index,
+            decision_quality="wrong_path" if index < 8 else "correct_first_time",
+            route_match="expanded" if index < 6 else "matched",
+        )
+        for index in range(20)
+    ]
+    payload = {
+        "version": 1,
+        "updated_at": "2026-03-09",
+        "items": seed_window + current_window,
+    }
+    task_outcomes_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    assert (
+        validate_process_regressions.run(
+            task_outcomes_path=task_outcomes_path,
+            focus=None,
+            report=None,
+        )
+        == 0
+    )
+    rollup = telemetry.compute_process_rollup(payload)
+    assert rollup["threshold_results"]["decision-quality"]["status"] == "acknowledged_debt"
+    assert rollup["threshold_results"]["decision-quality"]["blocking"] is False
+    assert rollup["threshold_results"]["context-efficiency"]["status"] == "acknowledged_debt"
+    assert rollup["threshold_results"]["context-efficiency"]["blocking"] is False
