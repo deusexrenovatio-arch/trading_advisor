@@ -28,6 +28,10 @@ REQUIRED_SNIPPETS: dict[Path, tuple[str, ...]] = {
         "MOEX_CARRY_EMERGENCY_MAIN_PUSH",
         "MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON",
     ),
+    Path("docs/release-notes.md"): (
+        "MOEX_CARRY_EMERGENCY_MAIN_PUSH",
+        "MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON",
+    ),
 }
 FORBIDDEN_SNIPPETS: dict[Path, tuple[str, ...]] = {
     Path(".githooks/pre-push"): (
@@ -36,6 +40,7 @@ FORBIDDEN_SNIPPETS: dict[Path, tuple[str, ...]] = {
     Path("AGENTS.md"): ("MOEX_CARRY_ALLOW_MAIN_PUSH=1",),
     Path("docs/DEV_WORKFLOW.md"): ("MOEX_CARRY_ALLOW_MAIN_PUSH=1",),
     Path("README.md"): ("MOEX_CARRY_ALLOW_MAIN_PUSH=1",),
+    Path("docs/release-notes.md"): ("MOEX_CARRY_ALLOW_MAIN_PUSH=1",),
 }
 
 

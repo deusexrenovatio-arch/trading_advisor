@@ -86,7 +86,10 @@ Changed
   - `scripts/install_git_hooks.py`
 - Added local branch safety in pre-push:
   - direct push to `main` is blocked by default,
-  - explicit override via `MOEX_CARRY_ALLOW_MAIN_PUSH=1`.
+  - emergency-only override requires both:
+    - `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1`
+    - `MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'`
+  - legacy `MOEX_CARRY_ALLOW_MAIN_PUSH` is deprecated and rejected by hook policy.
 - Added pre-push frontend install fallback switch:
   - `MOEX_CARRY_SKIP_NPM_CI=1` skips only `npm ci` while keeping `lint/build` checks.
 - CI now has fail-fast governance gate before backend/frontend jobs:
