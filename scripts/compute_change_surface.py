@@ -151,9 +151,10 @@ def compute_surface(
 
     docs_only = bool(changed_files) and all(_is_docs_only(path, docs_cfg) for path in changed_files)
     unmatched_files = [path for path in changed_files if _normalize(path) not in matched_markers]
-    if unmatched_files and not docs_only:
+    unmatched_non_docs = [path for path in unmatched_files if not _is_docs_only(path, docs_cfg)]
+    if unmatched_non_docs and not docs_only:
         governance_files = surface_matches.setdefault("governance", [])
-        governance_files.extend(unmatched_files)
+        governance_files.extend(unmatched_non_docs)
 
     surfaces = sorted(
         surface_matches.keys(),

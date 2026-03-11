@@ -93,6 +93,21 @@ def test_unknown_path_adds_governance_to_mapped_surface() -> None:
     assert any("validate_plans.py" in command for command in result["commands"]["loop"])
 
 
+def test_docs_markdown_does_not_force_governance_for_mixed_core_diff() -> None:
+    result = compute_surface(
+        [
+            "src/moex_carry/pipeline.py",
+            "docs/README.md",
+        ],
+        mapping_path=MAPPING,
+    )
+
+    assert result["docs_only"] is False
+    assert "core" in result["surfaces"]
+    assert "governance" not in result["surfaces"]
+    assert all("validate_plans.py" not in command for command in result["commands"]["loop"])
+
+
 def test_loop_commands_include_surface_specific_entries() -> None:
     result = compute_surface(
         ["src/moex_carry/news_live_runtime.py"],
