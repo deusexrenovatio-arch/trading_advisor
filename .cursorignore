@@ -1,5 +1,6 @@
 # Reduce indexing and retrieval pressure during heavy local compute sessions.
-# Keep source, tests, contracts, docs, and scripts indexable.
+# Keep source, tests, contracts, and scripts indexable.
+# Keep only hot agent docs indexable by default.
 
 # Python and JS dependencies
 .venv/
@@ -26,4 +27,10 @@ plans/
 memory/
 docs/tasks/archive/
 .cursor/skills/
+
+# Warm/cold documentation excluded from default retrieval budget.
+# Load explicitly when needed.
+docs/**
+!docs/agent/
+!docs/agent/**
 

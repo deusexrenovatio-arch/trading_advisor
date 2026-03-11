@@ -26,7 +26,7 @@
 5) When durable decisions change, update `plans/PLANS.yaml` and `memory/agent_memory.yaml` during closeout; do not pull them into the hot loop without need.
 6) Keep `docs/session_handoff.md` valid via `python scripts/validate_session_handoff.py`.
 7) Before push/PR run `python scripts/run_pr_gate.py --from-git --git-ref HEAD`, then close with `python scripts/task_session.py end`.
-8) Before push run blockers from `docs/DEV_WORKFLOW.md`, including `python scripts/validate_quality_scorecards.py`.
+8) Before push run blockers from `docs/DEV_WORKFLOW.md` that are marked for loop/PR closeout; keep `python scripts/validate_quality_scorecards.py` and `python scripts/validate_codeowners.py` in nightly/cold hygiene.
 9) Any failing gate is a blocker; fix first using `docs/runbooks/governance-remediation.md`.
 
 ## PR-Only Main Policy
