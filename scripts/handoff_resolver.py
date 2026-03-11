@@ -5,6 +5,7 @@ from pathlib import Path
 
 ACTIVE_TASK_NOTE_HEADING = "## Active Task Note"
 PATH_LINE_RE = re.compile(r"^-+\s*path\s*:\s*(.+?)\s*$", re.IGNORECASE)
+STATUS_LINE_RE = re.compile(r"^-+\s*status\s*:\s*(.+?)\s*$", re.IGNORECASE)
 MARKDOWN_LINK_RE = re.compile(r"\[.*?\]\((.+?)\)")
 
 
@@ -20,6 +21,14 @@ def _extract_path_value(raw: str) -> str | None:
     return value.strip("`").strip()
 
 
+def _extract_status_value(raw: str) -> str | None:
+    stripped = raw.strip()
+    match = STATUS_LINE_RE.match(stripped)
+    if not match:
+        return None
+    return match.group(1).strip().strip("`").strip()
+
+
 def extract_active_task_note_path(lines: list[str]) -> str | None:
     in_section = False
     for raw in lines:
@@ -30,6 +39,21 @@ def extract_active_task_note_path(lines: list[str]) -> str | None:
         if not in_section:
             continue
         resolved = _extract_path_value(stripped)
+        if resolved:
+            return resolved
+    return None
+
+
+def extract_active_task_note_status(lines: list[str]) -> str | None:
+    in_section = False
+    for raw in lines:
+        stripped = raw.strip()
+        if stripped.startswith("## "):
+            in_section = stripped == ACTIVE_TASK_NOTE_HEADING
+            continue
+        if not in_section:
+            continue
+        resolved = _extract_status_value(stripped)
         if resolved:
             return resolved
     return None

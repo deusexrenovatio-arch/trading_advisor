@@ -88,7 +88,14 @@ def scope_validate_task_outcomes_command(
     except ValueError:
         return command
     normalized = [_normalize(token) for token in parts]
-    if not any(token.endswith("scripts/validate_task_outcomes.py") for token in normalized):
+    scoped_scripts = (
+        "scripts/validate_task_outcomes.py",
+        "scripts/validate_task_request_contract.py",
+    )
+    if not any(
+        any(token.endswith(script_name) for token in normalized)
+        for script_name in scoped_scripts
+    ):
         return command
     if "--base-sha" in normalized or "--changed-files" in normalized:
         return command

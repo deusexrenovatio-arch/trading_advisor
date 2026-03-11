@@ -1,26 +1,21 @@
 # Session Handoff
-Updated: 2026-03-11 07:30 UTC
+Updated: 2026-03-11 09:45 UTC
 
 ## Active Task Note
-- Path: docs/tasks/archive/TASK-2026-03-10-lean-harness-redesign.md
+- Path: docs/tasks/active/TASK-2026-03-11-harness-tail-fixes.md
 - Mode: full
-- Status: completed
+- Status: in_progress
 
 ## Current Delta
-- Canonical Python session contract is in place: `task_session begin/status/end` now owns lifecycle, and `loop/pr` gates only verify session identity plus run scoped checks.
-- Legacy `worktree_guard` and `run_lean_gate` paths are removed from active flow, docs, validators, and hook/CI wiring.
+- Closing four remaining harness tails: active plan check drift, archived contract inheritance risk, PR-only live-doc coverage drift, and optional `feedparser` guard in standalone utility.
 
 ## Blockers
 - No blocker.
 
 ## Next Step
-- Split the completed refactor into reviewable commits and prepare the final PR summary.
+- Finish the four targeted fixes, run scoped validators/tests, then close the task with terminal outcome.
 
 ## Validation
 - `python scripts/validate_task_request_contract.py`
 - `python scripts/validate_session_handoff.py`
-- `python scripts/task_session.py begin --request "<request>"`
-- `python scripts/task_session.py status`
 - `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
-- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
-- `python scripts/task_session.py end`
