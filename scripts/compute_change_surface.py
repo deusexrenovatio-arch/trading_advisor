@@ -18,7 +18,13 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _normalize(path_text: str) -> str:
-    return path_text.replace("\\", "/").strip().lower()
+    cleaned = path_text.replace("\\", "/").strip()
+    # Support explicit rename notations from diff tooling (`old -> new`, `old => new`).
+    if " -> " in cleaned:
+        cleaned = cleaned.split(" -> ", 1)[1].strip()
+    elif " => " in cleaned:
+        cleaned = cleaned.split(" => ", 1)[1].strip()
+    return cleaned.lower()
 
 
 def _dedupe(items: list[str]) -> list[str]:
@@ -29,7 +35,7 @@ def _dedupe(items: list[str]) -> list[str]:
         if not marker or marker in seen:
             continue
         seen.add(marker)
-        out.append(item.replace("\\", "/").strip())
+        out.append(marker)
     return out
 
 
@@ -120,11 +126,13 @@ def compute_surface(
     *,
     mapping_path: Path,
 ) -> dict[str, Any]:
+    changed_files = _dedupe(changed_files)
     config = _load_yaml(mapping_path)
     surfaces_cfg = config.get("surfaces") or {}
     docs_cfg = config.get("docs_only") or {}
     priority = [str(item) for item in config.get("surface_priority") or []]
     surface_matches: dict[str, list[str]] = {}
+    matched_markers: set[str] = set()
 
     for surface_name, surface_config in surfaces_cfg.items():
         if not isinstance(surface_config, dict):
@@ -132,8 +140,13 @@ def compute_surface(
         matched = [path for path in changed_files if _match_surface(path, surface_config)]
         if matched:
             surface_matches[str(surface_name)] = matched
+            matched_markers.update(_normalize(path) for path in matched)
 
     docs_only = bool(changed_files) and all(_is_docs_only(path, docs_cfg) for path in changed_files)
+    unmatched_files = [path for path in changed_files if _normalize(path) not in matched_markers]
+    if unmatched_files and not docs_only:
+        governance_files = surface_matches.setdefault("governance", [])
+        governance_files.extend(unmatched_files)
 
     surfaces = sorted(
         surface_matches.keys(),

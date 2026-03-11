@@ -27,8 +27,13 @@ def _build_pr_gate_command(
     git_ref: str | None,
     base_ref: str | None,
     head_ref: str | None,
+    explicit_changed_files: list[str] | None,
 ) -> str:
     parts = [sys.executable, "scripts/run_pr_gate.py", "--mapping", mapping]
+    if explicit_changed_files is not None:
+        parts.append("--changed-files")
+        parts.extend(explicit_changed_files)
+        return _join_command(parts)
     if base_ref and head_ref:
         parts.extend(["--base-ref", base_ref, "--head-ref", head_ref])
     elif from_git:
@@ -66,6 +71,7 @@ def main() -> int:
         git_ref=args.git_ref,
         base_ref=args.base_ref,
         head_ref=args.head_ref,
+        explicit_changed_files=list(changed_files) if (args.stdin or args.changed_files) else None,
     )
     pr_code = run_command(pr_command)
     if pr_code != 0:
