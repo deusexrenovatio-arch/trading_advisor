@@ -46,6 +46,19 @@ REQUIRED_TASK_OUTCOME_FIELDS = (
 )
 
 
+def _normalize_changed_files(paths: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in paths:
+        candidate = str(raw).replace("\\", "/").strip()
+        marker = candidate.lower()
+        if not marker or marker in seen:
+            continue
+        seen.add(marker)
+        normalized.append(candidate)
+    return normalized
+
+
 def _load_incident_policy_max_attempts(path: Path) -> int | None:
     if not path.exists():
         return None
@@ -149,17 +162,21 @@ def run(
     focus: str | None,
     base_sha: str | None,
     head_sha: str | None,
-    require_terminal_outcome: bool,
+    changed_files_override: list[str] | None = None,
+    require_terminal_outcome: bool = False,
 ) -> int:
     handoff = parse_session_handoff(session_handoff_path)
     task_outcome_section = handoff.get("task_outcome", {})
     task_outcome = normalize_task_outcome(task_outcome_section)
     repo_root = get_repo_root()
-    changed_files = (
-        collect_diff_between_refs(repo_root, base_sha, head_sha)
-        if base_sha and head_sha
-        else collect_working_tree_changes(repo_root)
-    )
+    if changed_files_override is not None:
+        changed_files = _normalize_changed_files(changed_files_override)
+    else:
+        changed_files = (
+            collect_diff_between_refs(repo_root, base_sha, head_sha)
+            if base_sha and head_sha
+            else collect_working_tree_changes(repo_root)
+        )
     non_trivial = is_non_trivial_diff(changed_files)
     ledger = load_task_outcomes(task_outcomes_path)
     events_path = state_path.parent / "task-events.jsonl"
@@ -395,8 +412,16 @@ def main() -> None:
     parser.add_argument("--focus", choices=("decision-quality", "context-efficiency", "self-learning"))
     parser.add_argument("--base-sha", default=None)
     parser.add_argument("--head-sha", default=None)
+    parser.add_argument("--stdin", action="store_true")
+    parser.add_argument("--changed-files", nargs="*", default=[])
     parser.add_argument("--require-terminal-outcome", action="store_true")
     args = parser.parse_args()
+    changed_files_override: list[str] | None = None
+    if args.base_sha and args.head_sha:
+        changed_files_override = None
+    elif args.stdin or args.changed_files:
+        stdin_items = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()] if args.stdin else []
+        changed_files_override = _normalize_changed_files([*list(args.changed_files), *stdin_items])
     sys.exit(
         run(
             session_handoff_path=Path(args.session_handoff_path),
@@ -406,6 +431,7 @@ def main() -> None:
             focus=args.focus,
             base_sha=args.base_sha,
             head_sha=args.head_sha,
+            changed_files_override=changed_files_override,
             require_terminal_outcome=bool(args.require_terminal_outcome),
         )
     )

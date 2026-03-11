@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -69,6 +71,40 @@ def run_commands(commands: list[str]) -> tuple[int, str | None]:
         if code != 0:
             return code, command
     return 0, None
+
+
+def scope_validate_task_outcomes_command(
+    command: str,
+    *,
+    base_sha: str | None,
+    head_sha: str | None,
+    changed_files: list[str],
+) -> str:
+    def _normalize(token: str) -> str:
+        return token.replace("\\", "/").strip().lower()
+
+    try:
+        parts = shlex.split(command, posix=os.name != "nt")
+    except ValueError:
+        return command
+    normalized = [_normalize(token) for token in parts]
+    if not any(token.endswith("scripts/validate_task_outcomes.py") for token in normalized):
+        return command
+    if "--base-sha" in normalized or "--changed-files" in normalized:
+        return command
+
+    scoped_parts = list(parts)
+    if base_sha and head_sha:
+        scoped_parts.extend(["--base-sha", base_sha, "--head-sha", head_sha])
+    elif changed_files:
+        scoped_parts.append("--changed-files")
+        scoped_parts.extend(changed_files)
+    else:
+        return command
+
+    if os.name == "nt":
+        return subprocess.list2cmdline(scoped_parts)
+    return shlex.join(scoped_parts)
 
 
 def write_summary(

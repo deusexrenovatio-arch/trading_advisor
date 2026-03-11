@@ -465,6 +465,31 @@ def test_validate_task_outcomes_blocks_non_trivial_pr_without_handoff_or_ledger_
     assert result.returncode == 1
 
 
+def test_validate_task_outcomes_changed_files_override_marks_non_trivial_diff(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _init_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+    task_outcomes_path = repo_root / "memory/task_outcomes.yaml"
+    task_outcomes_path.write_text(
+        "version: 1\nupdated_at: 2026-03-06\nitems: []\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        validate_task_outcomes.run(
+            session_handoff_path=repo_root / "docs/session_handoff.md",
+            state_path=repo_root / ".runlogs/agent-process/state.json",
+            task_outcomes_path=task_outcomes_path,
+            incident_policy_path=repo_root / "configs/agent_incident_policy.yaml",
+            focus=None,
+            base_sha=None,
+            head_sha=None,
+            changed_files_override=["contracts/foo.yaml"],
+            require_terminal_outcome=False,
+        )
+        == 1
+    )
+
+
 def test_build_governance_dashboard_runs_in_minimal_repo(tmp_path: Path) -> None:
     repo_root = tmp_path / "dashboard-repo"
     repo_root.mkdir()

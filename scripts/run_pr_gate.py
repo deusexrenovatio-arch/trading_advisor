@@ -8,7 +8,13 @@ import sys
 from pathlib import Path
 
 from compute_change_surface import compute_surface
-from gate_common import collect_changed_files, run_command, run_commands, write_summary
+from gate_common import (
+    collect_changed_files,
+    run_command,
+    run_commands,
+    scope_validate_task_outcomes_command,
+    write_summary,
+)
 from task_session import check_active_session
 
 
@@ -102,7 +108,12 @@ def main() -> int:
         return loop_code
 
     commands = [
-        command
+        scope_validate_task_outcomes_command(
+            command,
+            base_sha=args.base_ref,
+            head_sha=args.head_ref,
+            changed_files=changed_files,
+        )
         for command in surface["commands"]["pr"]
         if "scripts/run_loop_gate.py" not in command
     ]
