@@ -11,12 +11,17 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import ModuleType
 from typing import Iterable
 from urllib.parse import urlparse
 
-import feedparser
 import pandas as pd
 import requests
+
+try:
+    import feedparser as _feedparser
+except ModuleNotFoundError:
+    _feedparser = None
 
 
 COMMODITIES = [
@@ -335,12 +340,21 @@ def _build_internal_candidates(conn: sqlite3.Connection) -> pd.DataFrame:
     return articles
 
 
+def _require_feedparser() -> ModuleType:
+    if _feedparser is None:
+        raise SystemExit(
+            "Missing optional dependency 'feedparser'. Install with "
+            "`pip install -e .[news]` (or `pip install feedparser`) and rerun."
+        )
+    return _feedparser
+
+
 def _google_rss_fetch_query(*, query: str, max_records: int) -> list[dict[str, object]]:
     rss_url = (
         "https://news.google.com/rss/search?"
         f"q={requests.utils.quote(query)}&hl=en-US&gl=US&ceid=US:en"
     )
-    feed = feedparser.parse(rss_url)
+    feed = _require_feedparser().parse(rss_url)
     entries = getattr(feed, "entries", []) or []
     out: list[dict[str, object]] = []
     for entry in entries[: max(int(max_records), 1)]:
