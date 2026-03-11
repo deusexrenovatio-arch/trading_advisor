@@ -1,9 +1,9 @@
-
+﻿
 import pandas as pd
 
 from moex_carry.config import AppSettings, DataConfig
 from moex_carry.contracts.strategy_test import BacktestRequest, ForwardTestRequest
-from moex_carry.ui.app import create_app
+from moex_carry.server import create_server_app as create_app
 
 
 def _write_csv(path, rows):
@@ -223,3 +223,4 @@ def test_hpo_run_accepts_intraday_execution_mode(tmp_path):
     assert response.status_code == 200
     data = response.get_json()
     assert data.get("run_id")
+

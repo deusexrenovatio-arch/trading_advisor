@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timedelta
 
@@ -12,7 +12,7 @@ from moex_carry.storage.repositories import (
     upsert_news_labels,
     upsert_quotes,
 )
-from moex_carry.ui.app import create_app
+from moex_carry.server import create_server_app as create_app
 
 
 def _settings(tmp_path):
@@ -140,3 +140,4 @@ def test_validation_event_study_rebuilds_reactions_if_missing(tmp_path):
     assert isinstance(payload.get("rebuild_report"), dict)
     assert int(payload["rebuild_report"]["rows_upserted"]) >= 1
     assert "car_summary_by_direction" in payload
+

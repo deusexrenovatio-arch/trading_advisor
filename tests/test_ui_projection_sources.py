@@ -1,9 +1,9 @@
-import json
+﻿import json
 
 import pandas as pd
 
 from moex_carry.config import AppSettings, DataConfig
-from moex_carry.ui.app import create_app
+from moex_carry.server import create_server_app as create_app
 from moex_carry.ui.data import (
     load_projection_sources,
     load_signals_with_source,
@@ -93,3 +93,4 @@ def test_projection_source_endpoint_reports_selected_paths(tmp_path):
 
     direct = load_projection_sources(tmp_path, preferred_engine="unified")
     assert direct["datasets"]["top_pairs"]["selected_engine"] == "unified"
+

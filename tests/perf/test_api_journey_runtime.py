@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import time
 
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
-from moex_carry.ui.app import create_app
+from moex_carry.server import create_server_app as create_app
 
 
 def _build_settings(tmp_path) -> AppSettings:
@@ -29,3 +29,4 @@ def test_core_api_journey_under_latency_budget(tmp_path):
     _latency_budget_get(client, "/api/v2/signals/active?limit=5", 2.0)
     _latency_budget_get(client, "/api/v2/decisions/view?limit=5", 2.0)
     _latency_budget_get(client, "/api/v2/ops/slo", 2.0)
+

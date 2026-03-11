@@ -4,15 +4,19 @@ import argparse
 import warnings
 
 from moex_carry.config import load_settings
-from moex_carry.ui.app import create_app, run_ui
+from moex_carry.server.app import (
+    SIGNAL_METRIC_CONTRACT_KEYS,
+    create_server_app as _create_server_app,
+    run_server as _run_server,
+)
 
 
 def create_server_app(settings):
-    return create_app(settings)
+    return _create_server_app(settings)
 
 
 def run_server(settings) -> None:
-    run_ui(settings)
+    _run_server(settings)
 
 
 def run_ui_alias(settings) -> None:
@@ -32,4 +36,10 @@ def main() -> None:
     run_server(settings)
 
 
-__all__ = ["create_server_app", "run_server", "run_ui_alias", "main"]
+__all__ = [
+    "SIGNAL_METRIC_CONTRACT_KEYS",
+    "create_server_app",
+    "run_server",
+    "run_ui_alias",
+    "main",
+]

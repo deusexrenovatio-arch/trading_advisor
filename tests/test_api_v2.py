@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
@@ -23,7 +23,7 @@ from moex_carry.storage.repositories import (
     store_signal_run,
     upsert_decision_view_projection,
 )
-from moex_carry.ui.app import create_app
+from moex_carry.server import create_server_app as create_app
 import moex_carry.ui.app as ui_app
 
 
@@ -2524,6 +2524,7 @@ def test_frontend_preview_serves_process_governance_shell(tmp_path, monkeypatch)
     asset_response = client.get("/assets/index.js")
     assert asset_response.status_code == 200
     assert "console.log('preview')" in asset_response.get_data(as_text=True)
+
 
 
 

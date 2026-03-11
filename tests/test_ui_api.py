@@ -1,10 +1,10 @@
-from datetime import date
+﻿from datetime import date
 
 import pandas as pd
 import requests
 
 from moex_carry.config import AppSettings, DataConfig, UiConfig
-from moex_carry.ui.app import SIGNAL_METRIC_CONTRACT_KEYS, create_app
+from moex_carry.server import SIGNAL_METRIC_CONTRACT_KEYS, create_server_app as create_app
 import moex_carry.ui.app as ui_app
 
 
@@ -465,3 +465,4 @@ def test_v1_endpoints_return_deprecation_headers(tmp_path, monkeypatch):
     assert pretrade_response.status_code == 200
     assert pretrade_response.headers.get("Deprecation") == "true"
     assert "/api/v2/pretrade/check" in str(pretrade_response.headers.get("Link", ""))
+

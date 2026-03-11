@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import warnings
 
-from moex_carry.server import create_server_app, run_server
-
-
 def create_app(settings):
+    from moex_carry.server import create_server_app
+
     warnings.warn(
         "moex_carry.ui.create_app is deprecated; use moex_carry.server.create_server_app.",
         DeprecationWarning,
@@ -15,6 +14,8 @@ def create_app(settings):
 
 
 def run_ui(settings) -> None:
+    from moex_carry.server import run_server
+
     warnings.warn(
         "moex_carry.ui.run_ui is deprecated; use moex_carry.server.run_server.",
         DeprecationWarning,
