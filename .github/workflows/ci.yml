@@ -51,7 +51,7 @@ jobs:
           payload = json.loads(Path(".runlogs/change-surface.json").read_text(encoding="utf-8"))
           surfaces = set(payload.get("surfaces", []))
           backend_surface = {"core", "contracts", "news", "deps", "observability", "perf", "mixed"}
-          ui_surface = {"ui", "mixed"}
+          ui_surface = {"ui", "contracts", "mixed"}
           governance_surface = {"governance", "docs-only"}
           backend_required = bool(surfaces & backend_surface)
           ui_required = bool(surfaces & ui_surface)

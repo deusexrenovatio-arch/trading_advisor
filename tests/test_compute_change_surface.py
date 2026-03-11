@@ -104,6 +104,18 @@ def test_loop_commands_include_surface_specific_entries() -> None:
     assert any("test_news_live_runtime.py" in command for command in loop_commands)
 
 
+def test_pr_commands_include_ui_checks_for_contracts_surface() -> None:
+    result = compute_surface(
+        ["contracts/api-v2.yaml"],
+        mapping_path=MAPPING,
+    )
+
+    pr_commands = result["commands"]["pr"]
+    assert any("npm --prefix ui-web run lint" in command for command in pr_commands)
+    assert any("npm --prefix ui-web run build" in command for command in pr_commands)
+    assert any("pytest tests/test_api_v2.py -q" in command for command in pr_commands)
+
+
 def test_windows_style_paths_are_normalized() -> None:
     result = compute_surface(
         [r"src\moex_carry\storage\repositories_v2.py"],
@@ -111,3 +123,16 @@ def test_windows_style_paths_are_normalized() -> None:
     )
     assert result["primary_surface"] == "contracts"
     assert result["changed_files"] == ["src/moex_carry/storage/repositories_v2.py"]
+
+
+def test_server_paths_are_classified_as_core() -> None:
+    result = compute_surface(
+        [
+            "src/moex_carry/server/app.py",
+            "scripts/run_server.py",
+        ],
+        mapping_path=MAPPING,
+    )
+
+    assert result["primary_surface"] == "core"
+    assert "core" in result["surfaces"]

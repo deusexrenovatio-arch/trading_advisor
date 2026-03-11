@@ -24,12 +24,14 @@ surfaces:
       - src/moex_carry/portfolio/
       - src/moex_carry/pretrade/
       - src/moex_carry/selection/
+      - src/moex_carry/server/
       - src/moex_carry/signal_engine/
       - src/moex_carry/signal_replay/
       - src/moex_carry/strategy/
       - src/moex_carry/history.py
       - src/moex_carry/pipeline.py
       - src/moex_carry/unified_runtime.py
+      - scripts/run_server.py
       - tests/test_signal_
       - tests/test_backtest_
       - tests/test_forward_
@@ -156,6 +158,8 @@ command_profiles:
     core:
       - "pytest"
     contracts:
+      - "npm --prefix ui-web run lint"
+      - "npm --prefix ui-web run build"
       - "pytest tests/test_api_v2.py -q"
     news:
       - "pytest tests/test_news_live_runtime.py tests/test_news_backfill.py -q"

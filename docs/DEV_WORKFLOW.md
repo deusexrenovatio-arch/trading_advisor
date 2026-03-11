@@ -208,7 +208,6 @@ Blockers:
 - Enable repository hooks once per clone:
   - `python scripts/install_git_hooks.py`
 - This installs `core.hooksPath=.githooks` and runs scoped loop gate on `git push`.
-- This installs `core.hooksPath=.githooks` and runs scoped PR gate on `git push`.
 - Any failed required check blocks push.
 - Direct push to `main` is blocked (PR-only).
 - Required merge path:
@@ -220,7 +219,7 @@ Blockers:
   - Bash: `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1 MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>' git push`
   - PowerShell: `$env:MOEX_CARRY_EMERGENCY_MAIN_PUSH='1'; $env:MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'; git push`
 - Hook command baseline:
-  - `python scripts/run_pr_gate.py --base-ref origin/main --head-ref HEAD --skip-session-check`
+  - `python scripts/run_loop_gate.py --base-ref origin/main --head-ref HEAD --skip-session-check`
 
 ## Optional checks (manual / data-dependent)
 - Data integrity parity:
