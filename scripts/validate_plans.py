@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 import sys
 from collections import Counter, defaultdict
 from datetime import date
@@ -14,6 +15,7 @@ ITEM_ID_PATTERN = re.compile(r"^[A-Z0-9-]+$")
 ALLOWED_STATUSES = {"planned", "active", "blocked", "completed", "deferred"}
 ALLOWED_EXECUTION_MODES = {"autonomous", "assisted", "manual"}
 REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
+CHECK_PATH_VALIDATION_STATUSES = {"active"}
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -102,6 +104,82 @@ def _required_list(
     return out
 
 
+def _resolve_repo_root(path: Path) -> Path:
+    resolved = path.resolve()
+    if resolved.name == "index.yaml" and resolved.parent.name == "items":
+        plans_root = resolved.parent.parent
+        if plans_root.name == "plans":
+            return plans_root.parent
+    if resolved.parent.name == "plans":
+        return resolved.parent.parent
+    for candidate in (resolved.parent, *resolved.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return resolved.parent
+
+
+def _is_python_invocation(token: str) -> bool:
+    lowered = token.lower()
+    return lowered in {"python", "python3", "py"} or lowered.endswith("/python") or lowered.endswith(
+        "\\python.exe"
+    )
+
+
+def _extract_check_paths(command: str) -> list[str]:
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+    if not tokens:
+        return []
+
+    refs: list[str] = []
+    first = tokens[0].strip().strip("\"'")
+    if _is_python_invocation(first):
+        for token in tokens[1:]:
+            cleaned = token.strip().strip("\"'")
+            if not cleaned:
+                continue
+            if cleaned in {"-m", "-c"}:
+                return refs
+            if cleaned.startswith("-"):
+                continue
+            if cleaned.endswith(".py"):
+                refs.append(cleaned)
+            return refs
+
+    for token in tokens:
+        cleaned = token.strip().strip("\"'")
+        if not cleaned or cleaned.startswith("-"):
+            continue
+        if cleaned.endswith(".py") and (
+            "/" in cleaned or "\\" in cleaned or cleaned.startswith("scripts")
+        ):
+            refs.append(cleaned)
+    return refs
+
+
+def _validate_check_paths(
+    *,
+    checks: list[str],
+    item_id: str,
+    status: str,
+    repo_root: Path,
+    errors: list[str],
+) -> None:
+    if status not in CHECK_PATH_VALIDATION_STATUSES:
+        return
+    for command in checks:
+        for ref in _extract_check_paths(command):
+            candidate = Path(ref)
+            if not candidate.is_absolute():
+                candidate = (repo_root / candidate).resolve()
+            if not candidate.exists():
+                errors.append(
+                    f"{item_id}: check command references missing path '{ref}'"
+                )
+
+
 def run(path: Path) -> int:
     if not path.exists():
         print(f"plans file not found: {path.as_posix()}")
@@ -121,6 +199,7 @@ def run(path: Path) -> int:
         print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
+    repo_root = _resolve_repo_root(source_path)
     errors: list[str] = []
     version = payload.get("version")
     if version != 1:
@@ -166,7 +245,7 @@ def run(path: Path) -> int:
         )
         _required_non_empty_str(raw, "owner", item_id or f"items[{idx}]", errors)
         _required_list(raw, "acceptance", item_id or f"items[{idx}]", errors)
-        _required_list(raw, "checks", item_id or f"items[{idx}]", errors)
+        checks = _required_list(raw, "checks", item_id or f"items[{idx}]", errors)
 
         if status and status not in ALLOWED_STATUSES:
             errors.append(
@@ -182,6 +261,14 @@ def run(path: Path) -> int:
             status_counts[status] += 1
         if lane and status == "active":
             lane_active_counts[lane] += 1
+
+        _validate_check_paths(
+            checks=checks,
+            item_id=item_id or f"items[{idx}]",
+            status=status,
+            repo_root=repo_root,
+            errors=errors,
+        )
 
         dependencies = raw.get("dependencies") or []
         if not isinstance(dependencies, list):
