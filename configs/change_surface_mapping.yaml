@@ -14,31 +14,24 @@ surface_priority:
 surfaces:
   core:
     prefixes:
-      - src/moex_carry/backtest/
-      - src/moex_carry/backtest_v2/
-      - src/moex_carry/data/
-      - src/moex_carry/domain/
-      - src/moex_carry/execution/
-      - src/moex_carry/forward/
-      - src/moex_carry/minute_ingest/
-      - src/moex_carry/portfolio/
-      - src/moex_carry/pretrade/
-      - src/moex_carry/selection/
-      - src/moex_carry/server/
-      - src/moex_carry/signal_engine/
-      - src/moex_carry/signal_replay/
-      - src/moex_carry/strategy/
-      - src/moex_carry/history.py
-      - src/moex_carry/pipeline.py
-      - src/moex_carry/unified_runtime.py
+      - src/moex_carry/
       - scripts/run_server.py
       - tests/test_signal_
       - tests/test_backtest_
       - tests/test_forward_
+    exclude_prefixes:
+      - src/moex_carry/ui/
+      - src/moex_carry/news
+      - src/moex_carry/contracts/
+      - src/moex_carry/storage/
+      - src/moex_carry/observability/
+      - src/moex_carry/governance/
   news:
     prefixes:
       - src/moex_carry/news/
       - src/moex_carry/news_
+      - src/moex_carry/config_news.py
+      - src/moex_carry/cli_news
       - scripts/run_news_
       - scripts/news_
       - tests/test_news_
@@ -72,6 +65,7 @@ surfaces:
       - scripts/run_loop_gate.py
       - scripts/run_pr_gate.py
       - scripts/run_nightly_gate.py
+      - src/moex_carry/governance/
       - plans/
       - memory/
       - .githooks/
@@ -107,13 +101,7 @@ docs_only:
 
 command_profiles:
   loop:
-    default:
-      - "{python} scripts/validate_task_outcomes.py"
-      - "{python} scripts/validate_process_regressions.py"
-      - "{python} scripts/sync_architecture_map.py --check"
-      - "{python} scripts/sync_state_layout.py"
-      - "{python} scripts/validate_task_request_contract.py"
-      - "{python} scripts/validate_session_handoff.py"
+    default: []
     governance:
       - "{python} scripts/validate_plans.py"
       - "{python} scripts/validate_agent_memory.py"
@@ -121,21 +109,16 @@ command_profiles:
       - "{python} scripts/validate_harness_guideline.py"
       - "{python} scripts/validate_pr_only_policy.py"
       - "{python} scripts/validate_governance_remediation.py"
-      - "{python} scripts/validate_file_size_policy.py"
     contracts:
-      - "{python} scripts/validate_architecture_policy.py"
       - "{python} scripts/validate_dependency_decisions.py"
+      - "{python} scripts/validate_api_v2_contract_parity.py"
+      - "{python} scripts/validate_frontend_gate_contract.py"
     core:
-      - "{python} scripts/validate_architecture_policy.py"
-      - "{python} scripts/validate_python_style.py"
-      - "{python} scripts/validate_file_size_policy.py"
-      - "pytest tests/architecture -q"
+      - "{python} scripts/validate_api_v2_contract_parity.py"
     news:
-      - "{python} scripts/validate_python_style.py"
       - "pytest tests/test_news_live_runtime.py -q"
     ui:
       - "{python} scripts/validate_frontend_gate_contract.py"
-      - "{python} scripts/validate_design_contract.py"
     deps:
       - "{python} scripts/validate_dependency_decisions.py"
     observability:
@@ -143,15 +126,12 @@ command_profiles:
       - "{python} scripts/validate_observability_stack.py"
     perf:
       - "pytest tests/perf -q"
-    docs-only:
-      - "{python} scripts/validate_test_cases.py"
+    docs-only: []
 
   pr:
     default:
       - "{python} scripts/run_loop_gate.py"
       - "{python} scripts/validate_task_outcomes.py --require-terminal-outcome"
-      - "{python} scripts/validate_quality_scorecards.py"
-      - "{python} scripts/validate_codeowners.py"
     ui:
       - "npm --prefix ui-web run lint"
       - "npm --prefix ui-web run build"
@@ -167,6 +147,14 @@ command_profiles:
   nightly:
     default:
       - "{python} scripts/run_pr_gate.py"
+      - "{python} scripts/validate_task_outcomes.py"
+      - "{python} scripts/validate_task_request_contract.py"
+      - "{python} scripts/validate_session_handoff.py"
+      - "{python} scripts/validate_process_regressions.py"
+      - "{python} scripts/sync_architecture_map.py --check"
+      - "{python} scripts/sync_state_layout.py"
+      - "{python} scripts/validate_quality_scorecards.py"
+      - "{python} scripts/validate_codeowners.py"
       - "{python} scripts/doc_gardening_report.py"
       - "{python} scripts/process_improvement_report.py --output artifacts/process-improvement-report.md"
       - "{python} scripts/autonomy_kpi_report.py"

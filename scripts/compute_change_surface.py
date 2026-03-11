@@ -74,9 +74,16 @@ def _collect_changed_from_stdin() -> list[str]:
 
 def _match_surface(path_text: str, surface_config: dict[str, Any]) -> bool:
     prefixes = surface_config.get("prefixes") or []
+    exclude_prefixes = surface_config.get("exclude_prefixes") or []
     if not isinstance(prefixes, list):
         return False
+    if not isinstance(exclude_prefixes, list):
+        return False
     normalized = _normalize(path_text)
+    for raw_exclude in exclude_prefixes:
+        exclude = _normalize(str(raw_exclude))
+        if exclude and normalized.startswith(exclude):
+            return False
     for raw_prefix in prefixes:
         prefix = _normalize(str(raw_prefix))
         if normalized.startswith(prefix):

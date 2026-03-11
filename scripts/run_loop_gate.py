@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
 from agent_process_telemetry import (
     default_events_path,
@@ -21,6 +22,10 @@ from task_session import check_active_session
 
 
 REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
+NON_TRIVIAL_LOOP_VALIDATION_SCRIPTS = (
+    "scripts/validate_task_request_contract.py",
+    "scripts/validate_session_handoff.py",
+)
 
 
 def _ensure_active_session() -> int:
@@ -47,6 +52,47 @@ def _record_first_patch_if_needed(changed_files: list[str]) -> int:
             f"(task_id={active['task_id']} time_to_first_patch_sec={active['time_to_first_patch_sec']})"
         )
     return 0
+
+
+def _normalize_command_text(command: str) -> str:
+    return command.replace("\\", "/").strip().lower()
+
+
+def _command_mentions_script(command: str, script_path: str) -> bool:
+    return script_path.lower() in _normalize_command_text(command)
+
+
+def _resolve_python_command(script_path: str) -> str:
+    python_exec = sys.executable
+    if " " in python_exec:
+        python_exec = f"\"{python_exec}\""
+    return f"{python_exec} {script_path}"
+
+
+def _apply_non_trivial_loop_policy(
+    commands: list[str],
+    *,
+    changed_files: list[str],
+    docs_only: bool,
+) -> tuple[list[str], bool]:
+    require_contract_validation = is_non_trivial_diff(changed_files) and not docs_only
+    filtered = [
+        command
+        for command in commands
+        if require_contract_validation
+        or not any(
+            _command_mentions_script(command, script_path)
+            for script_path in NON_TRIVIAL_LOOP_VALIDATION_SCRIPTS
+        )
+    ]
+
+    if require_contract_validation:
+        for script_path in NON_TRIVIAL_LOOP_VALIDATION_SCRIPTS:
+            if any(_command_mentions_script(command, script_path) for command in filtered):
+                continue
+            filtered.append(_resolve_python_command(script_path))
+
+    return filtered, require_contract_validation
 
 
 def main() -> int:
@@ -84,6 +130,11 @@ def main() -> int:
         _record_first_patch_if_needed(changed_files)
 
     surface = compute_surface(changed_files, mapping_path=Path(args.mapping))
+    loop_commands, non_trivial_validation = _apply_non_trivial_loop_policy(
+        list(surface["commands"]["loop"]),
+        changed_files=changed_files,
+        docs_only=bool(surface.get("docs_only")),
+    )
     commands = [
         scope_validate_task_outcomes_command(
             command,
@@ -91,7 +142,7 @@ def main() -> int:
             head_sha=args.head_ref,
             changed_files=changed_files,
         )
-        for command in surface["commands"]["loop"]
+        for command in loop_commands
     ]
     code, failed_command = run_commands(commands)
     write_summary(
@@ -110,7 +161,9 @@ def main() -> int:
 
     print(
         "loop gate: OK "
-        f"(primary_surface={surface['primary_surface']} surfaces={','.join(surface['surfaces'])})"
+        f"(primary_surface={surface['primary_surface']} "
+        f"surfaces={','.join(surface['surfaces'])} "
+        f"non_trivial_validation={non_trivial_validation})"
     )
     return 0
 
