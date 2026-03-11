@@ -29,7 +29,13 @@ def _build_pr_gate_command(
     head_ref: str | None,
     explicit_changed_files: list[str] | None,
 ) -> str:
-    parts = [sys.executable, "scripts/run_pr_gate.py", "--mapping", mapping]
+    parts = [
+        sys.executable,
+        "scripts/run_pr_gate.py",
+        "--mapping",
+        mapping,
+        "--skip-session-check",
+    ]
     if explicit_changed_files is not None:
         parts.append("--changed-files")
         parts.extend(explicit_changed_files)

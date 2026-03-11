@@ -149,6 +149,7 @@ def run(
     focus: str | None,
     base_sha: str | None,
     head_sha: str | None,
+    require_terminal_outcome: bool,
 ) -> int:
     handoff = parse_session_handoff(session_handoff_path)
     task_outcome_section = handoff.get("task_outcome", {})
@@ -260,13 +261,13 @@ def run(
             for bucket in errors_by_focus.values():
                 bucket.append(
                     "non-trivial diff detected but active task telemetry state is missing; "
-                    "run worktree_guard -Action Check first"
+                    "run `python scripts/task_session.py begin --request \"<request>\"` first"
                 )
-        if current_record is None and not (base_sha and head_sha):
-            for bucket in errors_by_focus.values():
-                bucket.append(
-                    "non-trivial diff detected but memory/task_outcomes.yaml has no record for the active task"
-                )
+
+    if require_terminal_outcome and non_trivial and effective_task_outcome["outcome_status"] == "in_progress":
+        errors_by_focus["decision-quality"].append(
+            "PR closeout requires terminal Task Outcome status before the gate can pass"
+        )
 
     if isinstance(active, dict):
         if max_same_path_attempts is not None:
@@ -394,6 +395,7 @@ def main() -> None:
     parser.add_argument("--focus", choices=("decision-quality", "context-efficiency", "self-learning"))
     parser.add_argument("--base-sha", default=None)
     parser.add_argument("--head-sha", default=None)
+    parser.add_argument("--require-terminal-outcome", action="store_true")
     args = parser.parse_args()
     sys.exit(
         run(
@@ -404,6 +406,7 @@ def main() -> None:
             focus=args.focus,
             base_sha=args.base_sha,
             head_sha=args.head_sha,
+            require_terminal_outcome=bool(args.require_terminal_outcome),
         )
     )
 

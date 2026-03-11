@@ -66,8 +66,7 @@ surfaces:
       - scripts/validate_
       - scripts/sync_state_layout.py
       - scripts/context_router.py
-      - scripts/worktree_guard.ps1
-      - scripts/run_lean_gate.py
+      - scripts/task_session.py
       - scripts/run_loop_gate.py
       - scripts/run_pr_gate.py
       - scripts/run_nightly_gate.py
@@ -107,7 +106,6 @@ docs_only:
 command_profiles:
   loop:
     default:
-      - "{python} scripts/sync_task_outcomes.py"
       - "{python} scripts/validate_task_outcomes.py"
       - "{python} scripts/validate_process_regressions.py"
       - "{python} scripts/sync_architecture_map.py --check"
@@ -149,6 +147,7 @@ command_profiles:
   pr:
     default:
       - "{python} scripts/run_loop_gate.py"
+      - "{python} scripts/validate_task_outcomes.py --require-terminal-outcome"
       - "{python} scripts/validate_quality_scorecards.py"
       - "{python} scripts/validate_codeowners.py"
     ui:

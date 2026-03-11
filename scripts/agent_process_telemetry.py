@@ -1126,7 +1126,14 @@ def _base_active_task_payload(
     }
 
 
-def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tuple[bool, dict[str, Any]]:
+def start_task(
+    *,
+    events_path: Path,
+    state_path: Path,
+    handoff_path: Path,
+    route_override: dict[str, Any] | None = None,
+    baseline_changed_files_override: list[str] | None = None,
+) -> tuple[bool, dict[str, Any]]:
     repo_root = get_repo_root()
     state = reconcile_legacy_process_storage(repo_root, events_path=events_path, state_path=state_path)
     handoff = parse_session_handoff(handoff_path)
@@ -1141,8 +1148,12 @@ def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tu
     ):
         return False, active
 
-    changed_files = collect_working_tree_changes(repo_root)
-    route = resolve_context_route(repo_root, handoff_path, changed_files)
+    changed_files = (
+        list(baseline_changed_files_override)
+        if baseline_changed_files_override is not None
+        else collect_working_tree_changes(repo_root)
+    )
+    route = route_override or resolve_context_route(repo_root, handoff_path, changed_files)
     task_id = build_task_id(task_key)
     baseline_diff_hash = compute_diff_fingerprint(repo_root, changed_files)
     active_task = _base_active_task_payload(
@@ -1190,6 +1201,8 @@ def record_first_patch(*, events_path: Path, state_path: Path, handoff_path: Pat
 
     changed_files = collect_working_tree_changes(repo_root)
     if not changed_files:
+        return False, active
+    if not is_non_trivial_diff(changed_files):
         return False, active
 
     diff_hash = compute_diff_fingerprint(repo_root, changed_files)
