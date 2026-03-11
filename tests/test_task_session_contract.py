@@ -100,6 +100,105 @@ def _write_handoff(
     handoff_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _write_pointer_handoff_with_task_note(repo_root: Path) -> None:
+    note_relative = "docs/tasks/active/TASK-2026-03-10-lean-harness-redesign.md"
+    note_path = repo_root / note_relative
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+    note_lines = [
+        "# Task Note",
+        "Updated: 2026-03-10 12:00 UTC",
+        "",
+        "## Goal",
+        "- Validate task-note archive lifecycle on session closeout.",
+        "",
+        "## Task Request Contract",
+        "- Objective: close the task and archive the note.",
+        "- In Scope: task_session end lifecycle sync.",
+        "- Out of Scope: product logic.",
+        "- Constraints: stay repo-local.",
+        "- Done Evidence: closeout commands pass.",
+        "- Priority Rule: keep lifecycle deterministic.",
+        "",
+        "## Current Delta",
+        "- Pointer handoff should move note to archive on closeout.",
+        "",
+        "## First-Time-Right Report",
+        "1. Confirmed coverage: note path + index lifecycle.",
+        "2. Missing or risky scenarios: stale index entries.",
+        "3. Resource/time risks and chosen controls: minimal temp repo.",
+        "4. Highest-priority fixes or follow-ups: index/archive sync.",
+        "",
+        "## Repetition Control",
+        "- Max Same-Path Attempts: 2",
+        "- Stop Trigger: lifecycle mismatch repeats twice.",
+        "- Reset Action: inspect note/index sync.",
+        "- New Search Space: pointer parsing, index update, archive move.",
+        "- Next Probe: end session and assert archive state.",
+        "",
+        "## Task Outcome",
+        "- Outcome Status: completed",
+        "- Decision Quality: correct_first_time",
+        "- Final Contexts: CTX-OPS",
+        "- Route Match: matched",
+        "- Primary Rework Cause: none",
+        "- Incident Signature: none",
+        "- Improvement Action: none",
+        "- Improvement Artifact: none",
+        "- Linked Plan ID: P1-TEMP-001",
+        "",
+        "## Blockers",
+        "- No blocker.",
+        "",
+        "## Next Step",
+        "- Run closeout.",
+        "",
+        "## Validation",
+        "- `pytest`",
+        "",
+    ]
+    note_path.write_text("\n".join(note_lines), encoding="utf-8")
+
+    handoff_lines = [
+        "# Session Handoff",
+        "Updated: 2026-03-10 12:00 UTC",
+        "",
+        "## Active Task Note",
+        f"- Path: {note_relative}",
+        "- Mode: full",
+        "- Status: in_progress",
+        "",
+        "## Validation",
+        "- `pytest`",
+        "",
+    ]
+    (repo_root / "docs/session_handoff.md").write_text("\n".join(handoff_lines), encoding="utf-8")
+
+    active_index = {
+        "version": 1,
+        "updated_at": "2026-03-10",
+        "items": [
+            {
+                "id": "TASK-2026-03-10-LEAN-HARNESS-REDESIGN",
+                "path": note_relative,
+                "mode": "full",
+                "status": "in_progress",
+                "started_at": "2026-03-10",
+            }
+        ],
+    }
+    archive_index = {
+        "version": 1,
+        "updated_at": "2026-03-10",
+        "items": [],
+    }
+    active_index_path = repo_root / "docs/tasks/active/index.yaml"
+    archive_index_path = repo_root / "docs/tasks/archive/index.yaml"
+    active_index_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_index_path.parent.mkdir(parents=True, exist_ok=True)
+    active_index_path.write_text(yaml.safe_dump(active_index, sort_keys=False), encoding="utf-8")
+    archive_index_path.write_text(yaml.safe_dump(archive_index, sort_keys=False), encoding="utf-8")
+
+
 def _init_repo(tmp_path: Path) -> Path:
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
@@ -292,3 +391,46 @@ def test_task_session_end_syncs_outcome_and_clears_lock(tmp_path: Path, monkeypa
     payload = yaml.safe_load(task_outcomes_path.read_text(encoding="utf-8")) or {}
     assert payload["items"][0]["outcome_status"] == "completed"
     assert payload["items"][0]["closed_at"] is not None
+
+
+def test_task_session_end_archives_task_note_and_indexes(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _init_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+    _copy_scripts(
+        repo_root,
+        "agent_process_telemetry.py",
+        "context_router.py",
+        "handoff_resolver.py",
+        "sync_task_outcomes.py",
+        "task_session.py",
+    )
+    _write_pointer_handoff_with_task_note(repo_root)
+
+    begin_result = _run(
+        [sys.executable, "scripts/task_session.py", "begin", "--request", "Close pointer task note"],
+        repo_root,
+    )
+    assert begin_result.returncode == 0
+
+    end_result = _run([sys.executable, "scripts/task_session.py", "end"], repo_root)
+    assert end_result.returncode == 0
+
+    archived_note = repo_root / "docs/tasks/archive/TASK-2026-03-10-lean-harness-redesign.md"
+    active_note = repo_root / "docs/tasks/active/TASK-2026-03-10-lean-harness-redesign.md"
+    assert archived_note.exists()
+    assert not active_note.exists()
+
+    active_index = yaml.safe_load((repo_root / "docs/tasks/active/index.yaml").read_text(encoding="utf-8")) or {}
+    archive_index = yaml.safe_load((repo_root / "docs/tasks/archive/index.yaml").read_text(encoding="utf-8")) or {}
+    active_paths = [str(item.get("path", "")) for item in active_index.get("items", []) if isinstance(item, dict)]
+    archive_items = [item for item in archive_index.get("items", []) if isinstance(item, dict)]
+    assert "docs/tasks/active/TASK-2026-03-10-lean-harness-redesign.md" not in active_paths
+    assert any(
+        str(item.get("path")) == "docs/tasks/archive/TASK-2026-03-10-lean-harness-redesign.md"
+        and str(item.get("status")) == "completed"
+        for item in archive_items
+    )
+
+    handoff_text = (repo_root / "docs/session_handoff.md").read_text(encoding="utf-8")
+    assert "- Path: docs/tasks/archive/TASK-2026-03-10-lean-harness-redesign.md" in handoff_text
+    assert "- Status: completed" in handoff_text

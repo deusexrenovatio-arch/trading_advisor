@@ -2,7 +2,7 @@
 Updated: 2026-03-11 07:30 UTC
 
 ## Active Task Note
-- Path: docs/tasks/active/TASK-2026-03-10-lean-harness-redesign.md
+- Path: docs/tasks/archive/TASK-2026-03-10-lean-harness-redesign.md
 - Mode: full
 - Status: completed
 

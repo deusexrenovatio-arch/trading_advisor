@@ -1643,3 +1643,29 @@ items:
   - session_handoff
   start_recommendations:
   - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260311T080304Z-5986ebe3
+  closed_at: '2026-03-11T08:57:34Z'
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 2165
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - request
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.

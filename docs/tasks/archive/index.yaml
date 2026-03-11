@@ -1,3 +1,9 @@
 version: 1
-updated_at: 2026-03-10
-items: []
+updated_at: '2026-03-11'
+items:
+- id: TASK-2026-03-10-LEAN-HARNESS-REDESIGN
+  path: docs/tasks/archive/TASK-2026-03-10-lean-harness-redesign.md
+  mode: full
+  status: completed
+  started_at: '2026-03-10'
+  completed_at: '2026-03-11'

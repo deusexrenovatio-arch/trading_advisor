@@ -3,14 +3,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 DEFAULT_SESSION_LOCK = Path(".runlogs/task-session/session-lock.json")
 DEFAULT_SESSION_TTL_HOURS = 12
+ACTIVE_TASK_NOTE_HEADING = "## Active Task Note"
+TASK_INDEX_ACTIVE = Path("docs/tasks/active/index.yaml")
+TASK_INDEX_ARCHIVE = Path("docs/tasks/archive/index.yaml")
 
 
 def _now() -> datetime:
@@ -171,6 +177,192 @@ def _session_handoff_text(path: Path) -> str:
         return ""
     _resolved_path, lines, _is_pointer = read_task_note_lines(path)
     return "\n".join(lines)
+
+
+def _today_iso_utc() -> str:
+    return _now().date().isoformat()
+
+
+def _repo_relative(path: Path, *, repo_root: Path) -> str:
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except Exception:
+        return path.as_posix()
+
+
+def _load_task_index(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"version": 1, "updated_at": _today_iso_utc(), "items": []}
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        payload = {"version": 1}
+    items = payload.get("items")
+    if not isinstance(items, list):
+        payload["items"] = []
+    payload.setdefault("version", 1)
+    payload.setdefault("updated_at", _today_iso_utc())
+    return payload
+
+
+def _write_task_index(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _path_marker(value: str | None) -> str:
+    return str(value or "").replace("\\", "/").strip().lower()
+
+
+def _update_task_indexes(
+    *,
+    repo_root: Path,
+    source_relative: str,
+    archive_relative: str,
+) -> None:
+    active_index_path = (repo_root / TASK_INDEX_ACTIVE).resolve()
+    archive_index_path = (repo_root / TASK_INDEX_ARCHIVE).resolve()
+    active_payload = _load_task_index(active_index_path)
+    archive_payload = _load_task_index(archive_index_path)
+    active_items = [row for row in active_payload.get("items", []) if isinstance(row, dict)]
+    archive_items = [row for row in archive_payload.get("items", []) if isinstance(row, dict)]
+
+    source_key = _path_marker(source_relative)
+    archive_key = _path_marker(archive_relative)
+    completed_at = _today_iso_utc()
+
+    matched_active: dict[str, Any] | None = None
+    remaining_active: list[dict[str, Any]] = []
+    for item in active_items:
+        marker = _path_marker(item.get("path"))
+        if marker in {source_key, archive_key}:
+            if matched_active is None:
+                matched_active = dict(item)
+            continue
+        remaining_active.append(dict(item))
+    active_payload["items"] = remaining_active
+    active_payload["updated_at"] = completed_at
+
+    matched_archive_index: int | None = None
+    for idx, item in enumerate(archive_items):
+        marker = _path_marker(item.get("path"))
+        same_id = bool(
+            matched_active
+            and str(item.get("id", "")).strip()
+            and str(item.get("id", "")).strip() == str(matched_active.get("id", "")).strip()
+        )
+        if marker in {source_key, archive_key} or same_id:
+            matched_archive_index = idx
+            break
+
+    base_entry: dict[str, Any] = {}
+    if matched_archive_index is not None:
+        base_entry.update(dict(archive_items[matched_archive_index]))
+    if matched_active is not None:
+        base_entry.update(matched_active)
+
+    entry_id = str(base_entry.get("id", "")).strip() or Path(archive_relative).stem.upper()
+    started_at = str(base_entry.get("started_at", "")).strip() or completed_at
+    mode = str(base_entry.get("mode", "")).strip() or "full"
+
+    archived_entry = dict(base_entry)
+    archived_entry.update(
+        {
+            "id": entry_id,
+            "path": archive_relative,
+            "mode": mode,
+            "status": "completed",
+            "started_at": started_at,
+            "completed_at": completed_at,
+        }
+    )
+
+    if matched_archive_index is None:
+        archive_items.append(archived_entry)
+    else:
+        archive_items[matched_archive_index] = archived_entry
+    archive_payload["items"] = archive_items
+    archive_payload["updated_at"] = completed_at
+
+    _write_task_index(active_index_path, active_payload)
+    _write_task_index(archive_index_path, archive_payload)
+
+
+def _update_session_handoff_active_note(
+    *,
+    session_handoff_path: Path,
+    archive_relative: str,
+) -> None:
+    if not session_handoff_path.exists():
+        return
+    lines = session_handoff_path.read_text(encoding="utf-8").splitlines()
+    section_start = -1
+    for idx, raw in enumerate(lines):
+        if raw.strip() == ACTIVE_TASK_NOTE_HEADING:
+            section_start = idx
+            break
+    if section_start < 0:
+        return
+
+    section_end = len(lines)
+    for idx in range(section_start + 1, len(lines)):
+        if lines[idx].strip().startswith("## "):
+            section_end = idx
+            break
+
+    body = list(lines[section_start + 1 : section_end])
+    path_updated = False
+    status_updated = False
+    for idx, raw in enumerate(body):
+        stripped = raw.strip()
+        if re.match(r"^-+\s*path\s*:", stripped, flags=re.IGNORECASE):
+            body[idx] = f"- Path: {archive_relative}"
+            path_updated = True
+        elif re.match(r"^-+\s*status\s*:", stripped, flags=re.IGNORECASE):
+            body[idx] = "- Status: completed"
+            status_updated = True
+    if not path_updated:
+        body.append(f"- Path: {archive_relative}")
+    if not status_updated:
+        body.append("- Status: completed")
+
+    updated_lines = lines[: section_start + 1] + body + lines[section_end:]
+    session_handoff_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+
+
+def _close_task_note_lifecycle(*, repo_root: Path, session_handoff_path: Path) -> None:
+    try:
+        from handoff_resolver import read_task_note_lines
+    except Exception:
+        return
+    if not session_handoff_path.exists():
+        return
+
+    target_path, _target_lines, is_pointer = read_task_note_lines(session_handoff_path)
+    if not is_pointer:
+        return
+
+    source_path = target_path.resolve()
+    source_relative = _repo_relative(source_path, repo_root=repo_root)
+    source_marker = _path_marker(source_relative)
+    if not source_marker.startswith("docs/tasks/active/"):
+        return
+
+    archive_path = (repo_root / "docs/tasks/archive" / source_path.name).resolve()
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    if source_path != archive_path:
+        archive_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+        source_path.unlink(missing_ok=True)
+
+    archive_relative = _repo_relative(archive_path, repo_root=repo_root)
+    _update_task_indexes(
+        repo_root=repo_root,
+        source_relative=source_relative,
+        archive_relative=archive_relative,
+    )
+    _update_session_handoff_active_note(
+        session_handoff_path=session_handoff_path,
+        archive_relative=archive_relative,
+    )
 
 
 def _route_begin_context(*, request: str, handoff_path: Path) -> dict[str, Any]:
@@ -350,6 +542,7 @@ def end_session(
     )
     if sync_rc != 0:
         return sync_rc
+    _close_task_note_lifecycle(repo_root=repo_root, session_handoff_path=session_handoff_path)
 
     clear_session_lock(session_lock_path)
     print("task session: ended")
