@@ -15,7 +15,7 @@ RELEVANT_SKILL_FILES = {
     "docs/workflows/skill-governance-sync.md",
     "docs/checklists/first-time-right-gate.md",
     "docs/runbooks/governance-remediation.md",
-    "scripts/run_lean_gate.py",
+    "scripts/run_loop_gate.py",
     "scripts/validate_skills.py",
 }
 

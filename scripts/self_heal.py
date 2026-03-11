@@ -62,7 +62,16 @@ def _append_summary(path: Path | None, payload: dict) -> None:
 def run(report_path: Path, summary_file: Path | None) -> int:
     actions: list[ActionResult] = []
 
-    initial_rc = _run([sys.executable, "scripts/run_lean_gate.py", "--skip-metrics"])
+    initial_rc = _run(
+        [
+            sys.executable,
+            "scripts/run_loop_gate.py",
+            "--from-git",
+            "--git-ref",
+            "HEAD",
+            "--skip-session-check",
+        ]
+    )
     initial_pass = initial_rc == 0
 
     autofix_applied = False
@@ -89,7 +98,16 @@ def run(report_path: Path, summary_file: Path | None) -> int:
             if result.returncode == 0:
                 autofix_applied = True
 
-        final_rc = _run([sys.executable, "scripts/run_lean_gate.py", "--skip-metrics"])
+        final_rc = _run(
+            [
+                sys.executable,
+                "scripts/run_loop_gate.py",
+                "--from-git",
+                "--git-ref",
+                "HEAD",
+                "--skip-session-check",
+            ]
+        )
         final_pass = final_rc == 0
 
     payload = {

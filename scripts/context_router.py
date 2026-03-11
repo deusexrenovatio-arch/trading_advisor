@@ -103,7 +103,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "docs/architecture/modules/compute-stack-policy.md",
         ),
         minimal_checks=(
-            "python scripts/run_lean_gate.py",
+            "python scripts/run_loop_gate.py --from-git --git-ref HEAD",
             "python scripts/check_data_integrity.py --data-dir data --max-day-gap 2",
         ),
         intent_keywords=(
@@ -137,7 +137,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "docs/architecture/modules/strategy-signal-interface.md",
             "contracts/decision-log.schema.json",
         ),
-        minimal_checks=("python scripts/run_lean_gate.py", "pytest tests/architecture -q"),
+        minimal_checks=("python scripts/run_loop_gate.py --from-git --git-ref HEAD", "pytest tests/architecture -q"),
         intent_keywords=(
             "signal",
             "signals",
@@ -174,7 +174,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "docs/architecture/modules/minute-replay-canon-v1.md",
             "docs/architecture/modules/compute-stack-policy.md",
         ),
-        minimal_checks=("python scripts/run_lean_gate.py", "pytest tests/perf -q"),
+        minimal_checks=("python scripts/run_loop_gate.py --from-git --git-ref HEAD", "pytest tests/perf -q"),
         intent_keywords=(
             "analytics",
             "alpha",
@@ -231,7 +231,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "docs/architecture/layers-v2.md",
             "docs/contracts/api-v2.yaml",
         ),
-        minimal_checks=("python scripts/run_lean_gate.py", "pytest tests/test_news_live_runtime.py -q"),
+        minimal_checks=("python scripts/run_loop_gate.py --from-git --git-ref HEAD", "pytest tests/test_news_live_runtime.py -q"),
         intent_keywords=(
             "news",
             "shock",
@@ -270,7 +270,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "docs/architecture/trading-advisor.md",
             "docs/architecture/layers-v2.md",
         ),
-        minimal_checks=("python scripts/run_lean_gate.py", "python scripts/validate_architecture_policy.py"),
+        minimal_checks=("python scripts/run_loop_gate.py --from-git --git-ref HEAD", "python scripts/validate_architecture_policy.py"),
         intent_keywords=(
             "cli",
             "config",
@@ -305,7 +305,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "docs/contracts/api-v2.yaml",
         ),
         minimal_checks=(
-            "python scripts/run_lean_gate.py",
+            "python scripts/run_loop_gate.py --from-git --git-ref HEAD",
             "npm --prefix ui-web run lint",
             "npm --prefix ui-web run build",
         ),
@@ -340,7 +340,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "docs/contracts/api-v2.yaml",
         ),
         minimal_checks=(
-            "python scripts/run_lean_gate.py",
+            "python scripts/run_loop_gate.py --from-git --git-ref HEAD",
             "python scripts/validate_dependency_decisions.py",
         ),
         intent_keywords=(
@@ -389,7 +389,7 @@ CONTEXTS: tuple[ContextSpec, ...] = (
             "docs/workflows/context-budget.md",
         ),
         minimal_checks=(
-            "python scripts/run_lean_gate.py",
+            "python scripts/run_loop_gate.py --from-git --git-ref HEAD",
             "python scripts/validate_session_handoff.py",
         ),
         intent_keywords=(

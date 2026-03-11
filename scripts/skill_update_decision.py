@@ -18,7 +18,7 @@ GOVERNANCE_TRIGGER_FILES = {
     "docs/dev_workflow.md",
     "docs/checklists/first-time-right-gate.md",
     "docs/runbooks/governance-remediation.md",
-    "scripts/run_lean_gate.py",
+    "scripts/run_loop_gate.py",
 }
 SKILL_FILE_RE = re.compile(r"^\.cursor/skills/([^/\\\\]+)(/|\\\\)SKILL\\.md$", re.IGNORECASE)
 STOP_WORDS = {
@@ -385,7 +385,7 @@ def _decision_from_candidates(
         next_steps.extend(
             [
                 "Refresh all local skill governance sections per this workflow.",
-                "Re-run `python scripts/validate_skills.py` and `python scripts/run_lean_gate.py`.",
+                "Re-run `python scripts/validate_skills.py` and `python scripts/run_loop_gate.py --from-git --git-ref HEAD`.",
             ]
         )
         return Decision(action, confidence, 1.0, targets, gates, rationale, next_steps)

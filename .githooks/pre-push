@@ -45,7 +45,7 @@ if [[ "$PUSHES_TO_MAIN" == "1" ]]; then
 fi
 
 echo "[pre-push] running required local gates"
-echo "[pre-push] scoped loop gate against origin/main..HEAD"
-python scripts/run_loop_gate.py --base-ref origin/main --head-ref HEAD
+echo "[pre-push] scoped PR gate against origin/main..HEAD"
+python scripts/run_pr_gate.py --base-ref origin/main --head-ref HEAD --skip-session-check
 
 echo "[pre-push] all required gates passed"
