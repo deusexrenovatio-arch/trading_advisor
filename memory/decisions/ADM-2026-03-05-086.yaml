@@ -1,0 +1,22 @@
+id: ADM-2026-03-05-086
+date: 2026-03-05
+title: Move WF hypothesis verification to signal-tape engine and validate 44x throughput
+  uplift
+context: Strategy loops required thousands of deterministic hypothesis checks on `planned_signals`,
+  and legacy verifier rescanned raw rows for each candidate, creating a bottleneck
+  for iterative causal validation.
+decision: Added signal-tape/bitset path to `verify_wf_hypothesis.py` with engine switch
+  (`tape|legacy`), lite-summary and rejection-count pruning knobs, plus dedicated
+  batch evaluator and benchmark scripts; validated parity against legacy path and
+  measured throughput on 8,192 candidates.
+impact: Hypothesis verification loop is no longer a blocking runtime stage; benchmark
+  shows `44.14x` speedup (`19.99s -> 0.45s`) with `0` parity mismatches, enabling
+  much denser candidate sweeps before expensive causal reruns.
+links:
+- scripts/verify_wf_hypothesis.py
+- scripts/evaluate_wf_hypothesis_batch.py
+- scripts/benchmark_wf_hypothesis_engines.py
+- tests/test_verify_wf_hypothesis.py
+- artifacts/research/wf_goal_v6_verify_engine_benchmark_20260305.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

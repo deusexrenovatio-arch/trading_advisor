@@ -1,0 +1,29 @@
+id: P1-REQUEST-CONTRACT-039
+title: Enforce task request contract and first-time-right report as governance blockers
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- session handoff includes explicit task request contract fields for objective, scope,
+  constraints, done evidence, and priority rule
+- first-time-right report block is machine-validated in handoff
+- lean governance loop fails when request contract or report blocks are missing
+- governance remediation and source-of-truth docs include deterministic operator guidance
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/run_lean_gate.py
+docs:
+- scripts/validate_task_request_contract.py
+- scripts/run_lean_gate.py
+- docs/checklists/task-request-contract.md
+- docs/workflows/agent-practices-alignment.md
+- docs/DEV_WORKFLOW.md
+- AGENTS.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-CONTEXT-BUDGET-012
+- P1-SKILL-DECISION-018
+started_at: 2026-03-04
+completed_at: 2026-03-04

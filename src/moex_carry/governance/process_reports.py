@@ -226,7 +226,11 @@ def _is_problem_task(record: dict[str, Any]) -> bool:
 def compute_process_rollup(payload: dict[str, Any], window_size: int = ROLLING_WINDOW_SIZE) -> dict[str, Any]:
     completed = _enrich_repeat_markers(completed_task_records(payload))
     current_window = completed[-window_size:] if window_size > 0 else list(completed)
-    previous_window = completed[-2 * window_size : -window_size] if window_size > 0 else []
+    previous_window: list[dict[str, Any]]
+    if window_size > 0 and len(completed) >= 2 * window_size:
+        previous_window = completed[-2 * window_size : -window_size]
+    else:
+        previous_window = []
     total = len(current_window)
     same_path_values = [int(row.get("same_path_attempts", 1) or 1) for row in current_window]
     timing_values = [

@@ -1,0 +1,19 @@
+id: P0-AUTONOMY-KPI-008
+title: Autonomy KPI reporting for agent-driven development
+lane: observability
+status: completed
+execution_mode: autonomous
+owner: engineering-enablement
+acceptance:
+- KPI report script exists and computes plan/memory/quality signals
+- docs-gardening workflow publishes KPI report artifact and summary
+- harness guideline includes KPI definitions
+checks:
+- python scripts/autonomy_kpi_report.py
+docs:
+- harness-guideline.md
+- docs/DEV_WORKFLOW.md
+dependencies:
+- P0-AGENT-PLANS-001
+started_at: 2026-02-20
+completed_at: 2026-02-20

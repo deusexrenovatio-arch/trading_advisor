@@ -1,0 +1,14 @@
+id: ADM-2026-02-23-012
+date: 2026-02-23
+title: Mirror global skill catalog into repository-local `.cursor/skills`
+context: Team requested always accounting for global and local skills together while
+  keeping repository validation deterministic.
+decision: Copy global skills into `.cursor/skills`, normalize lifecycle and governance
+  baseline markers, and refresh `AGENTS.md` from local skill metadata.
+impact: Skill discovery no longer depends on external home directory state; repository-local
+  catalog is complete and machine-validated.
+links:
+- .cursor/skills
+- AGENTS.md
+- docs/workflows/skill-governance-sync.md
+- scripts/validate_skills.py

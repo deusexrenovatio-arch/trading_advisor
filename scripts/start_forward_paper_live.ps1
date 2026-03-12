@@ -98,7 +98,7 @@ Write-Host "[moex] Python: $python"
 Write-Host "[moex] BackendBaseUrl: $backendBaseUrl"
 Write-Host "[moex] Mode: paper-forward-live"
 
-if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli ui")) {
+if (-not (Is-ProcessRunning -NameRegex "^python" -CommandRegex "moex_carry\.cli server")) {
     Write-Host "[moex] Starting backend..."
     if (-not $CheckOnly) {
         Start-Process `

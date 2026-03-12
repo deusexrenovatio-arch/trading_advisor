@@ -1,0 +1,11 @@
+id: AMP-2026-03-03-026
+date: 2026-03-03
+title: Keep Telegram shock feed as rolling canonical CSV plus per-run snapshot
+pattern: Write a stable rolling path for runtime consumers and also persist per-run
+  snapshot artifact for auditability and rollback-safe comparisons.
+when_to_use: Any batch workflow that feeds a live notifier and also needs reproducible
+  run artifacts.
+links:
+- src/moex_carry/news_shock_automation.py
+- data/output/shock_alerts/live_shocks.csv
+- docs/runbooks/news-shock-go-live.md

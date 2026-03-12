@@ -1,0 +1,25 @@
+id: ADM-2026-03-05-084
+date: 2026-03-05
+title: Close causal hard-go robustness with LIMIT fallback and absolute TP cap execution
+  semantics
+context: After correcting to the baseline context, fixed execution profile `M3` passed
+  on full window but failed robustness splits (`P1` trades-per-week/concentration
+  and `P2` winrate), with probability gate intentionally removed.
+decision: Extend `run_morning_plan_walk_forward.py` execution model with LIMIT fallback-to-market
+  controls (`limit_fallback_to_market_minutes`, `limit_fallback_slip_ticks`) and absolute
+  TP cap (`max_profit_ticks`), keep defaults backward compatible, and iterate execution-only
+  causal reruns; accept profile `O4` (`fallback=10m/1t`, `max_profit_ticks=120`) as
+  current robust profile.
+impact: Hard-go constraints now pass simultaneously on full period, both split periods,
+  and additional seeds (72/111) under causal walk-forward without probability gate,
+  while preserving deterministic fixed-profile replay speed.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- tests/test_morning_plan_walk_forward.py
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed124_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_P1_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_P2_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed72_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_limitfallback10m1t_maxtp120_frontnearest_seed111_20260305.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

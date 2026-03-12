@@ -1,0 +1,167 @@
+version: 1
+
+surface_priority:
+  - contracts
+  - core
+  - news
+  - ui
+  - deps
+  - observability
+  - perf
+  - governance
+  - docs-only
+
+surfaces:
+  core:
+    prefixes:
+      - src/moex_carry/
+      - scripts/run_server.py
+      - tests/test_signal_
+      - tests/test_backtest_
+      - tests/test_forward_
+    exclude_prefixes:
+      - src/moex_carry/ui/
+      - src/moex_carry/news
+      - src/moex_carry/contracts/
+      - src/moex_carry/storage/
+      - src/moex_carry/observability/
+      - src/moex_carry/governance/
+  news:
+    prefixes:
+      - src/moex_carry/news/
+      - src/moex_carry/news_
+      - src/moex_carry/config_news.py
+      - src/moex_carry/cli_news
+      - scripts/run_news_
+      - scripts/news_
+      - tests/test_news_
+  ui:
+    prefixes:
+      - ui-web/
+      - src/moex_carry/ui/
+      - scripts/run_ui.py
+      - tests/test_ui_
+      - tests/test_api_v2.py
+  contracts:
+    prefixes:
+      - contracts/
+      - docs/contracts/
+      - src/moex_carry/contracts/
+      - src/moex_carry/storage/
+      - src/moex_carry/decision_log.py
+  governance:
+    prefixes:
+      - AGENTS.md
+      - docs/agent/
+      - docs/checklists/
+      - docs/workflows/
+      - docs/runbooks/
+      - docs/session_handoff.md
+      - docs/tasks/
+      - scripts/validate_
+      - scripts/sync_state_layout.py
+      - scripts/context_router.py
+      - scripts/task_session.py
+      - scripts/run_loop_gate.py
+      - scripts/run_pr_gate.py
+      - scripts/run_nightly_gate.py
+      - src/moex_carry/governance/
+      - plans/
+      - memory/
+      - .githooks/
+      - .github/workflows/
+      - CODEOWNERS
+  deps:
+    prefixes:
+      - pyproject.toml
+      - requirements.txt
+      - requirements-dev.txt
+      - ui-web/package.json
+      - ui-web/package-lock.json
+      - docs/architecture/adr/
+  observability:
+    prefixes:
+      - src/moex_carry/observability/
+      - src/moex_carry/logging.py
+      - docker-compose.observability.yml
+      - scripts/validate_observability_stack.py
+  perf:
+    prefixes:
+      - tests/perf/
+      - scripts/benchmark_
+      - scripts/prewarm_
+
+docs_only:
+  prefixes:
+    - docs/
+  suffixes:
+    - .md
+    - .txt
+    - .rst
+
+command_profiles:
+  loop:
+    default: []
+    governance:
+      - "{python} scripts/validate_plans.py"
+      - "{python} scripts/validate_agent_memory.py"
+      - "{python} scripts/validate_skills.py"
+      - "{python} scripts/validate_harness_guideline.py"
+      - "{python} scripts/validate_pr_only_policy.py"
+      - "{python} scripts/validate_governance_remediation.py"
+    contracts:
+      - "{python} scripts/validate_dependency_decisions.py"
+      - "{python} scripts/validate_api_v2_contract_parity.py"
+      - "{python} scripts/validate_frontend_gate_contract.py"
+    core:
+      - "{python} scripts/validate_api_v2_contract_parity.py"
+    news:
+      - "pytest tests/test_news_live_runtime.py -q"
+    ui:
+      - "{python} scripts/validate_frontend_gate_contract.py"
+    deps:
+      - "{python} scripts/validate_dependency_decisions.py"
+    observability:
+      - "{python} scripts/validate_structured_logging.py"
+      - "{python} scripts/validate_observability_stack.py"
+    perf:
+      - "pytest tests/perf -q"
+    docs-only: []
+
+  pr:
+    default:
+      - "{python} scripts/run_loop_gate.py"
+      - "{python} scripts/validate_task_outcomes.py --require-terminal-outcome"
+    ui:
+      - "npm --prefix ui-web run lint"
+      - "npm --prefix ui-web run build"
+    core:
+      - "pytest"
+    contracts:
+      - "npm --prefix ui-web run lint"
+      - "npm --prefix ui-web run build"
+      - "pytest tests/test_api_v2.py -q"
+    news:
+      - "pytest tests/test_news_live_runtime.py tests/test_news_backfill.py -q"
+
+  nightly:
+    default:
+      - "{python} scripts/run_pr_gate.py"
+      - "{python} scripts/validate_task_outcomes.py"
+      - "{python} scripts/validate_task_request_contract.py"
+      - "{python} scripts/validate_session_handoff.py"
+      - "{python} scripts/validate_process_regressions.py"
+      - "{python} scripts/sync_architecture_map.py --check"
+      - "{python} scripts/sync_state_layout.py"
+      - "{python} scripts/validate_architecture_policy.py"
+      - "{python} scripts/validate_python_style.py"
+      - "{python} scripts/validate_quality_scorecards.py"
+      - "{python} scripts/validate_codeowners.py"
+      - "{python} scripts/doc_gardening_report.py"
+      - "{python} scripts/process_improvement_report.py --output artifacts/process-improvement-report.md"
+      - "{python} scripts/autonomy_kpi_report.py"
+      - "{python} scripts/nightly_root_hygiene.py --apply"
+    perf:
+      - "pytest tests/perf -q"
+    ui:
+      - "npm --prefix ui-web run test:e2e"

@@ -1,0 +1,25 @@
+id: P1-PROCESS-GOV-ADVISORY-053
+title: Remove process-governance advisory overrun and prepare PR merge to main
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- src/moex_carry/governance/process_reports.py no longer exceeds the target line budget
+  reported by taste invariants
+- process-governance API/report behavior stays unchanged under focused regression
+  tests
+- branch is pushed and a PR targeting `main` is opened
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/run_lean_gate.py
+- python -m pytest tests/test_process_reports.py tests/test_api_v2.py::test_v2_ops_process_improvement_report
+  -q
+docs:
+- docs/session_handoff.md
+- src/moex_carry/governance/process_reports.py
+- plans/PLANS.yaml
+dependencies:
+- P1-PROCESS-GOV-ENV-BLOCKER-052
+started_at: 2026-03-09
+completed_at: 2026-03-09

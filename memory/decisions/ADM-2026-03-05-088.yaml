@@ -1,0 +1,27 @@
+id: ADM-2026-03-05-088
+date: 2026-03-05
+title: Add expert trade/skip layer and regime-expert search profile; confirm hard
+  winrate remains limiting factor
+context: After proving filter-space exhaustion with fast multi-seed verifier, the
+  next hypothesis was to move from pure post-filtering to structural routing in causal
+  runs.
+decision: Extended `run_morning_plan_walk_forward.py` with JSON-driven `ExpertGateConfig`
+  (rule matching by setup/side/slot/root/cluster/instrument plus risk/target thresholds),
+  added `intraday_goal_regime_experts_v1` cluster-specific HPO profile, and executed
+  new causal reruns on seed124 (expert-gate run and regime-expert runs with/without
+  probability gate).
+impact: Structural routing is now integrated in the causal runner and reproducible,
+  but current strategy still fails `hard_min_win_rate_net` (best structural run around
+  `0.524` winrate), and even fast post-run filter search on the new artifact found
+  `0` `final_go` candidates; next search space must shift to execution-model changes
+  (TP/SL/exit semantics), not more filter/routing tuning.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- tests/test_morning_plan_walk_forward.py
+- artifacts/research/wf_goal_v6_h24_expert_policy_v1_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_causalfirst_expert_v1_seed124_20260305.json
+- artifacts/research/wf_goal_v6_h24_expert_v1_seed124_filter_search_finalgo_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_seed124_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_regimeexperts_v1_noprob_seed124_20260305.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

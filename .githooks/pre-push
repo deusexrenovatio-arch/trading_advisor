@@ -45,33 +45,7 @@ if [[ "$PUSHES_TO_MAIN" == "1" ]]; then
 fi
 
 echo "[pre-push] running required local gates"
-
-echo "[pre-push] install python dev dependencies"
-python -m pip install -e ".[dev]"
-
-echo "[pre-push] lean governance gate"
-python scripts/run_lean_gate.py
-
-echo "[pre-push] quality scorecards gate"
-python scripts/validate_quality_scorecards.py
-
-echo "[pre-push] data integrity parity gate"
-if compgen -G "data/output/intraday_minute_series/intraday_minute_series_*.csv" > /dev/null; then
-  python scripts/check_data_integrity.py --data-dir data --max-day-gap 2
-else
-  echo "[pre-push] skip data integrity parity (no minute source files)"
-fi
-
-echo "[pre-push] backend test suite"
-pytest
-
-echo "[pre-push] frontend install/lint/build"
-if [[ "$SKIP_NPM_CI" == "1" ]]; then
-  echo "[pre-push] skipping npm ci (MOEX_CARRY_SKIP_NPM_CI=1)"
-else
-  npm --prefix ui-web ci
-fi
-npm --prefix ui-web run lint
-npm --prefix ui-web run build
+echo "[pre-push] scoped loop gate against origin/main..HEAD"
+python scripts/run_loop_gate.py --base-ref origin/main --head-ref HEAD --skip-session-check
 
 echo "[pre-push] all required gates passed"

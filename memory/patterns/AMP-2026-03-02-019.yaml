@@ -1,0 +1,11 @@
+id: AMP-2026-03-02-019
+date: 2026-03-02
+title: Re-pin editable install to active worktree before running tests
+pattern: After switching worktrees, verify `moex_carry.__file__` path and run `python
+  -m pip install -e .` if imports still point to another checkout.
+when_to_use: Test runs unexpectedly ignore local patches after worktree/branch switch
+  in a shared Python environment.
+links:
+- pyproject.toml
+- docs/DEV_WORKFLOW.md
+- memory/agent_memory.yaml

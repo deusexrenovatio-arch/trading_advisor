@@ -1,0 +1,17 @@
+id: ADM-2026-03-06-079
+date: 2026-03-06
+title: Make agent context routing intent-aware and complete enough to gate significant
+  files
+context: Path-only routing reduced context only after a diff existed and left central
+  orchestration files outside any bounded context.
+decision: Add `CTX-ORCHESTRATION` and `CTX-NEWS`, expand existing ownership slices,
+  infer start-of-task context from request plus session handoff plus target modules,
+  add dependency hints from import edges, and gate significant Python files with `validate_agent_contexts.py`.
+impact: Context routing now helps before the first edit, warns on cross-context orchestration
+  paths, and prevents new unmapped core files from silently increasing prompt load.
+links:
+- docs/agent-contexts/README.md
+- docs/agent-contexts/CTX-ORCHESTRATION.md
+- docs/agent-contexts/CTX-NEWS.md
+- scripts/context_router.py
+- scripts/validate_agent_contexts.py

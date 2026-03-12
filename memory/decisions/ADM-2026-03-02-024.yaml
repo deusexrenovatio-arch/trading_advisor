@@ -1,0 +1,15 @@
+id: ADM-2026-03-02-024
+date: 2026-03-02
+title: Close review-derived operator safety gaps in the same iteration
+context: Component-first review surfaced contract-critical write-path and risk-gate
+  gaps that were still open in UI/backend behavior.
+decision: Implement idempotency payload generation in UI write actions, enforce server-side
+  rebalance commit risk gate, and add forward start action in Research workspace without
+  delaying to a separate sprint.
+impact: Reduced duplicate-write and unsafe-commit risk immediately after discovery;
+  operator flow now covers forward run start and status in one UI path.
+links:
+- ui-web/src/features/market/useMarketTables.ts
+- ui-web/src/features/decisions/useDecisionView.ts
+- src/moex_carry/ui/routes_market_data.py
+- ui-web/src/features/forward/ForwardTab.tsx

@@ -1,0 +1,24 @@
+id: P1-ARCH-AUDIT-045
+title: Run end-to-end architecture audit and remove research-route reverse dependency
+  on UI app module
+lane: architecture
+status: completed
+execution_mode: autonomous
+owner: architecture-owner
+acceptance:
+- whole-app architecture audit covers bounded contexts, dependency direction, anti-corruption
+  seams, event/api contracts, and shared-storage shortcuts
+- findings are prioritized by P0/P1/P2 with file+line evidence
+- safe P1 fix removes route-layer import back-edge from `ui.routes_research` to `ui.app`
+checks:
+- manual static dependency scan (`rg` import graph)
+- governance gates attempted as supporting checks and reported when blocked
+docs:
+- src/moex_carry/ui/routes_research.py
+- src/moex_carry/ui/app.py
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-API-DECOMPOSE-024
+started_at: 2026-03-06
+completed_at: 2026-03-06

@@ -1,0 +1,14 @@
+id: ADM-2026-02-23-014
+date: 2026-02-23
+title: Automate skill scope decision
+context: Repeated questions appeared about whether repeated problems require updating
+  existing skills or adding a new one.
+decision: Add `scripts/skill_update_decision.py` and wire it into skill governance
+  workflow, AGENTS, and DEV workflow as a pre-edit decision gate.
+impact: Routing between existing-skill updates and new skill creation became machine-supported
+  and repeatable.
+links:
+- scripts/skill_update_decision.py
+- docs/workflows/skill-governance-sync.md
+- AGENTS.md
+- docs/DEV_WORKFLOW.md

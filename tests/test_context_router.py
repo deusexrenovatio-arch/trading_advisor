@@ -51,3 +51,22 @@ def test_route_files_adds_dependency_hints_for_pipeline() -> None:
     assert result["primary_context"] == "CTX-ORCHESTRATION"
     assert "CTX-DATA" in entry["dependency_contexts"]
     assert "CTX-STRATEGY" in entry["dependency_contexts"]
+
+
+def test_route_files_separates_cold_context_defaults() -> None:
+    result = route_files(
+        [
+            "src/moex_carry/pipeline.py",
+            "plans/PLANS.yaml",
+            "memory/agent_memory.yaml",
+        ]
+    )
+
+    assert result["primary_context"] == "CTX-ORCHESTRATION"
+    assert sorted(result["cold_context_files"]) == [
+        "memory/agent_memory.yaml",
+        "plans/PLANS.yaml",
+    ]
+    assert any(
+        "Cold-context files are present." in note for note in result["recommendations"]
+    )

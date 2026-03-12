@@ -1,0 +1,24 @@
+id: ADM-2026-03-05-079
+date: 2026-03-05
+title: Lock manual web-backed golden event baseline and split Iran strike routing
+  from outage semantics
+context: Root-cause recall on 2026-02-28 Iran strike headlines remained inconsistent
+  because generic geopolitical labels dropped route context, while naive strike terms
+  over-promoted outage classes.
+decision: Add a manual golden set (`BRN`, `NG_US`, `GOLD`, 10 events each) sourced
+  from internet links with local move/post-effect metrics; add `exporter_military_strike_risk`
+  event-first route class; tighten outage/strike term matching and word-boundary term
+  detection; extend feed verification to match `selected_event_id`, `v2_event_id`,
+  and `broad_event_id`.
+impact: Causal calibration now has a stable benchmark artifact and the known 2026-02-28
+  strike class is captured with explicit route context without conflating all strike
+  headlines with physical outages.
+links:
+- docs/research/news_golden_events_v1.md
+- docs/research/news_golden_events_v1.csv
+- src/moex_carry/news_commodity_graph.py
+- src/moex_carry/news_causal.py
+- src/moex_carry/news_live_feed.py
+- tests/test_news_commodity_graph.py
+- tests/test_news_causal.py
+- tests/test_news_live_feed.py

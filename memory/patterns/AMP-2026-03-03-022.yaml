@@ -1,0 +1,11 @@
+id: AMP-2026-03-03-022
+date: 2026-03-03
+title: Keep oversized runtime modules within hard limits by extracting leaf capabilities
+pattern: When a hard size gate blocks integration, extract feature-specific runtime
+  paths into dedicated modules and keep composition entrypoint thin.
+when_to_use: Any worker or API composition module near hard line cap where a new capability
+  must be added without loosening governance limits.
+links:
+- src/moex_carry/integrations/telegram_worker.py
+- src/moex_carry/integrations/telegram_shock_broadcast.py
+- src/moex_carry/integrations/telegram_runtime_utils.py

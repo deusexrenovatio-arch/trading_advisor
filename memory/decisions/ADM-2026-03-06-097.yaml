@@ -1,0 +1,19 @@
+id: ADM-2026-03-06-097
+date: 2026-03-06
+title: Fix O4 execution winner as default morning-plan policy and verify against M3
+context: User requested to lock the execution winner after O4 had already shown hard-go
+  robustness on full/split/multi-seed causal checks.
+decision: Promoted O4 parameter set into `SignalEngineMorningExecutionConfig` defaults
+  in `src/moex_carry/config.py` (break-even, TP/SL RR, max holding, TP caps, trailing,
+  same-bar, limit fallback, and outcome-cost multipliers), then reran direct O4 vs
+  M3 comparison on the same front-nearest baseline universe.
+impact: New default causal execution behavior now aligns with the validated winner
+  profile without CLI override drift; fresh comparison confirms O4 dominates M3 and
+  is acceptance-safe (`O4 pass=true` vs `M3 pass=false` from concentration fail).
+links:
+- src/moex_carry/config.py
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_M3_frontnearest_seed124_20260306.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_execution_fixed_O4_frontnearest_seed124_20260306.json
+- artifacts/research/wf_goal_v6_h24_execution_profile_compare_O4_vs_M3_seed124_20260306.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

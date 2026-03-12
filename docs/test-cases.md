@@ -1049,27 +1049,26 @@ Expected:
 - Team switches from patching to structured root-cause workflow.
 - Issue is not closed without explicit regression validation.
 
-### TC-PROC-TELE-001 Worktree start and lean gate first patch emit telemetry lifecycle
+### TC-PROC-TELE-001 Task session begin and loop gate emit telemetry lifecycle
 Acceptance: process-telemetry-start-first-patch
-Automation: tests/test_task_outcomes.py::test_run_lean_gate_records_first_patch_in_minimal_repo
+Automation: tests/test_task_session_contract.py::test_run_loop_gate_records_first_patch_after_begin
 Steps:
-1. Start task with `worktree_guard -Action Check`.
+1. Start task with `python scripts/task_session.py begin --request "<request>"`.
 2. Make one first diff on the task path.
-3. Run `python scripts/run_lean_gate.py`.
+3. Run `python scripts/run_loop_gate.py --from-git --git-ref HEAD`.
 Expected:
 - The repo-shared `.runlogs/agent-process/task-events.jsonl` contains `task_start` and `first_patch`.
 - The repo-shared `.runlogs/agent-process/state.json` stores active task id and time-to-first-patch.
 
-### TC-PROC-TELE-002 Non-trivial diff requires task outcome sync and ledger record
+### TC-PROC-TELE-002 Task closeout syncs ledger and clears the session
 Acceptance: process-task-outcome-closeout
-Automation: tests/test_task_outcomes.py::test_validate_task_outcomes_requires_sync_for_non_trivial_diff
+Automation: tests/test_task_session_contract.py::test_task_session_end_syncs_outcome_and_clears_lock
 Steps:
-1. Create a non-trivial working-tree diff.
-2. Run `python scripts/validate_task_outcomes.py` before syncing.
-3. Run `python scripts/sync_task_outcomes.py` and validate again.
+1. Start a task session and keep `## Task Outcome` in terminal state.
+2. Run `python scripts/task_session.py end`.
 Expected:
-- Validator fails before sync because current task has no ledger record.
-- Validator passes after sync and `memory/task_outcomes.yaml` contains the active task id.
+- Closeout sync writes the final task record into `memory/task_outcomes.yaml`.
+- Session lock is removed after successful closeout.
 
 ### TC-PROC-TELE-003 Repeated incident signature needs new prevention artifact
 Acceptance: process-repeated-signature-prevention

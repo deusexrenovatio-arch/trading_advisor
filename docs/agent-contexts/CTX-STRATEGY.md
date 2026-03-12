@@ -1,4 +1,4 @@
-# CTX-STRATEGY
+﻿# CTX-STRATEGY
 
 ## Scope
 Signal generation, gating, portfolio intent, and decision semantics.
@@ -22,6 +22,7 @@ Signal generation, gating, portfolio intent, and decision semantics.
 - Output: normalized signal payloads and portfolio intent.
 
 ## Minimum Checks
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `pytest tests/architecture -q`
+
 

@@ -1,0 +1,14 @@
+id: ADM-2026-03-03-066
+date: 2026-03-03
+title: Add live polling stability controls for commodity news ingestion
+context: Live 5-minute cycle showed transient GDELT SSL/timeout failures and risk
+  of burning NewsAPI daily quota too early.
+decision: Add provider retry/backoff in runtime fetch path and enforce per-commodity
+  NewsAPI live polling interval in addition to daily budgets.
+impact: Improved provider resilience and preserved NewsAPI quota for full-day operation
+  while keeping frequent GDELT polling.
+links:
+- src/moex_carry/news_live_runtime.py
+- tests/test_news_live_runtime.py
+- configs/news-livecheck-ng.yaml
+- docs/runbooks/news-shock-go-live.md

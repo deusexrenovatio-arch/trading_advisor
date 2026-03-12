@@ -25,6 +25,33 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _collect_run_commands(steps: Any) -> list[str]:
+    commands: list[str] = []
+    if not isinstance(steps, list):
+        return commands
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        run_cmd = step.get("run")
+        if isinstance(run_cmd, str):
+            commands.append(run_cmd)
+    return commands
+
+
+def _has_lint_command(commands: list[str]) -> bool:
+    return any(
+        "npm run lint" in command or "npm --prefix ui-web run lint" in command
+        for command in commands
+    )
+
+
+def _has_build_command(commands: list[str]) -> bool:
+    return any(
+        "npm run build" in command or "npm --prefix ui-web run build" in command
+        for command in commands
+    )
+
+
 def run(workflow_path: Path, package_json_path: Path) -> int:
     errors: list[str] = []
 
@@ -42,43 +69,34 @@ def run(workflow_path: Path, package_json_path: Path) -> int:
 
     workflow = _load_yaml(workflow_path)
     jobs = workflow.get("jobs") or {}
-    if not isinstance(jobs, dict) or "frontend" not in jobs:
-        errors.append("ci workflow must define jobs.frontend")
-    else:
-        frontend = jobs.get("frontend") or {}
-        if not isinstance(frontend, dict):
-            errors.append("jobs.frontend must be an object")
-        else:
-            steps = frontend.get("steps") or []
-            run_commands: list[str] = []
-            if isinstance(steps, list):
-                for step in steps:
-                    if isinstance(step, dict):
-                        run_cmd = step.get("run")
-                        if isinstance(run_cmd, str):
-                            run_commands.append(run_cmd)
-            lint_present = any("npm run lint" in cmd for cmd in run_commands)
-            build_present = any("npm run build" in cmd for cmd in run_commands)
-            if not lint_present:
-                errors.append("jobs.frontend must run `npm run lint`")
-            if not build_present:
-                errors.append("jobs.frontend must run `npm run build`")
+    if not isinstance(jobs, dict):
+        errors.append("ci workflow field 'jobs' must be an object")
+        jobs = {}
 
-    if not isinstance(jobs, dict) or "frontend-e2e" not in jobs:
-        errors.append("ci workflow must define jobs.frontend-e2e")
+    ui_job_name = "ui-suite" if "ui-suite" in jobs else ("frontend" if "frontend" in jobs else None)
+    if ui_job_name is None:
+        errors.append("ci workflow must define jobs.ui-suite (or legacy jobs.frontend)")
     else:
-        frontend_e2e = jobs.get("frontend-e2e") or {}
+        ui_job = jobs.get(ui_job_name) or {}
+        if not isinstance(ui_job, dict):
+            errors.append(f"jobs.{ui_job_name} must be an object")
+        else:
+            run_commands = _collect_run_commands(ui_job.get("steps") or [])
+            if not _has_lint_command(run_commands):
+                errors.append(f"jobs.{ui_job_name} must run `npm run lint`")
+            if not _has_build_command(run_commands):
+                errors.append(f"jobs.{ui_job_name} must run `npm run build`")
+
+    frontend_e2e = jobs.get("frontend-e2e")
+    if frontend_e2e is None:
+        if ui_job_name == "frontend":
+            errors.append("legacy jobs.frontend flow must define jobs.frontend-e2e")
+    else:
         if not isinstance(frontend_e2e, dict):
             errors.append("jobs.frontend-e2e must be an object")
         else:
             steps = frontend_e2e.get("steps") or []
-            run_commands = []
-            if isinstance(steps, list):
-                for step in steps:
-                    if isinstance(step, dict):
-                        run_cmd = step.get("run")
-                        if isinstance(run_cmd, str):
-                            run_commands.append(run_cmd)
+            run_commands = _collect_run_commands(steps)
             e2e_present = any("npm run test:e2e" in cmd for cmd in run_commands)
             artifact_present = any(
                 isinstance(step, dict) and str(step.get("uses", "")).startswith("actions/upload-artifact")
@@ -98,7 +116,7 @@ def run(workflow_path: Path, package_json_path: Path) -> int:
             errors.append("ui-web/package.json missing `scripts.lint`")
         if "build" not in scripts:
             errors.append("ui-web/package.json missing `scripts.build`")
-        if "test:e2e" not in scripts:
+        if frontend_e2e is not None and "test:e2e" not in scripts:
             errors.append("ui-web/package.json missing `scripts.test:e2e`")
 
     if errors:

@@ -118,7 +118,7 @@ def _build_findings(changed: list[str]) -> list[Finding]:
                     severity="P1",
                     rule_id="non-trivial-diff-without-task-outcome-ledger",
                     message="Non-trivial diff changed code/governance files without task outcomes ledger update.",
-                    recommendation="Run scripts/sync_task_outcomes.py and commit memory/task_outcomes.yaml.",
+            recommendation="Run `python scripts/task_session.py end` and commit memory/task_outcomes.yaml.",
                 )
             )
 

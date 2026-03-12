@@ -1,0 +1,18 @@
+id: ADM-2026-03-09-090
+date: 2026-03-09
+title: Split Process Governance into lazy frontend chunks and use backend-served preview
+  for local review
+context: The new Process Governance workspace pushed the frontend build into a large
+  single entry chunk, and this shell blocked a separate Node/Vite background process
+  for live review.
+decision: Lazy-load the Process Governance workspace from `App.tsx`, split heavy UI
+  vendors with explicit Vite manual chunks, and serve the built `ui-web/dist` shell
+  plus assets from backend ops routes so review can happen on the same backend port.
+impact: The entry bundle dropped from a single ~1.4 MB client chunk to a smaller split
+  graph, and manual review of `/process-governance` is now possible from the backend
+  at `127.0.0.1:8061` without relying on a separate frontend process.
+links:
+- ui-web/src/App.tsx
+- ui-web/vite.config.ts
+- src/moex_carry/ui/routes_ops.py
+- tests/test_api_v2.py

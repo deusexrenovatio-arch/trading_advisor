@@ -1,0 +1,13 @@
+id: AMI-2026-02-20-004
+date: 2026-02-20
+title: Cursor indexing storm during parallel agent execution
+symptom: Spikes of pending documents, forced index resets, and repeated sync cycles
+  during heavy sessions.
+root_cause: Background indexing scope included high-churn generated paths while compute
+  agents were active.
+remediation: Exclude generated paths with .cursorignore and avoid concurrent heavy
+  indexing with three heavy agents.
+remediation_type: guardrail
+links:
+- .cursorignore
+- agent-runbook.md

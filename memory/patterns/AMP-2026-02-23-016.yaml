@@ -1,0 +1,10 @@
+id: AMP-2026-02-23-016
+date: 2026-02-23
+title: Keep route-parity and baseline scanners aligned with multi-file route extraction
+pattern: Any time API routes are moved out of `ui/app.py`, update parity and baseline
+  metric scanners to aggregate all UI route modules.
+when_to_use: Incremental decomposition of Flask route groups into registrar modules.
+links:
+- scripts/validate_api_v2_contract_parity.py
+- scripts/harness_baseline_metrics.py
+- src/moex_carry/ui/routes_market_data.py

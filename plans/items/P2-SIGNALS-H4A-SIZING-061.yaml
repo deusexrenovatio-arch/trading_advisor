@@ -1,0 +1,36 @@
+id: P2-SIGNALS-H4A-SIZING-061
+title: Add absolute-RUB multi-contract sizing for H4A without changing trade frequency
+  or win-rate behavior
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- walk-forward sizing supports an absolute `20_000 RUB` per-trade risk budget while
+  keeping legacy fixed-lot and percent-risk modes intact
+- H4A sizing analysis produces a deterministic artifact that shows unchanged filled-trade
+  count and win-rate semantics with higher money output from larger quantity where
+  risk allows
+- risk/config/docs/governance artifacts are updated and lean gate stays green
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+- pytest tests/test_morning_plan_walk_forward.py tests/test_h4a_contract_sizing_review.py
+  tests/test_h4a_vs_baseline_risk.py tests/test_risk_gate.py -q
+- python scripts/run_h4a_contract_sizing_review.py --position-sizing-risk-money 20000
+  --out-json artifacts/research/wf_goal_v6_h4a_contract_sizing_20000_20260309.json
+- python scripts/run_lean_gate.py
+docs:
+- scripts/run_morning_plan_walk_forward.py
+- scripts/run_h4a_contract_sizing_review.py
+- docs/runbooks/h4a-manual-execution-baseline.md
+- artifacts/research/wf_goal_v6_h4a_contract_sizing_20000_20260309.json
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-SIZING-049
+- P2-SIGNALS-H4A-MONEY-050
+- P2-SIGNALS-H4A-OPS-051
+started_at: 2026-03-09
+completed_at: 2026-03-09

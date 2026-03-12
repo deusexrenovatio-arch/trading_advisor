@@ -1,0 +1,16 @@
+id: ADM-2026-03-03-029
+date: 2026-03-03
+title: Formalize shock-first ML readiness with deterministic curation and pass/fail
+  report
+context: Existing evaluation mixed detector and direction quality, with hidden data-quality
+  risk and no single launch decision artifact.
+decision: Add one pipeline for outlier curation, label-pack generation, label ingest,
+  and launch-readiness checks with critical thresholds and machine-readable outputs.
+impact: Launch/no-launch decision is reproducible and auditable; critical blockers
+  are visible immediately from report files.
+links:
+- src/moex_carry/news_shock_pipeline.py
+- src/moex_carry/news_shock_readiness.py
+- scripts/news_shock_readiness.py
+- docs/runbooks/news-shock-go-live.md
+- data/output/news_shock_readiness_2026_ytd/readiness_report.json

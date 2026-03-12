@@ -1,0 +1,14 @@
+id: ADM-2026-02-23-001
+date: 2026-02-23
+title: Use single orchestration script for shock-first to silver-high-confidence labeling
+  cycle
+context: Multi-step manual execution of backfill, target_v2, factor extraction, and
+  silver bootstrap slowed iteration and increased operator error risk.
+decision: Add scripts/run_news_shock_silver_cycle.py to run full cycle for NG_US BRN
+  GOLD and export machine-readable summary plus silver_high_conf dataset.
+impact: Lower manual overhead, repeatable daily or ad-hoc cycle, easier comparison
+  between label-generation runs.
+links:
+- scripts/run_news_shock_silver_cycle.py
+- scripts/export_shock_news_pro_pack.py
+- docs/session_handoff.md

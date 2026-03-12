@@ -1,0 +1,9 @@
+id: AMP-2026-02-20-002
+date: 2026-02-20
+title: No prompt-only remediation
+pattern: Any repeated failure is resolved by capability, guardrail, docs, test, or
+  workflow updates tracked in-repo.
+when_to_use: Repeated incidents, flaky regressions, or governance drift.
+links:
+- configs/agent_incident_policy.yaml
+- docs/runbooks/self-heal-escalation.md

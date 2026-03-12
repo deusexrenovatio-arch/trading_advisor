@@ -1,0 +1,13 @@
+id: ADM-2026-02-22-010
+date: 2026-02-22
+title: Add trajectory scorecard gates and deterministic API request id propagation
+context: Main local risks were scenario regressions, non-repeatable failures, and
+  excessive request payloads.
+decision: Extend quality scorecards with trajectory and context-budget dimensions;
+  add API v2 request id propagation and payload-size guard.
+impact: Critical action flows are regression-gated; every v2 response is traceable
+  by request id; oversized requests fail fast.
+links:
+- configs/quality_scorecards.yaml
+- src/moex_carry/ui/app.py
+- tests/test_api_v2.py

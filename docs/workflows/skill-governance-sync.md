@@ -18,12 +18,13 @@
   2. local `.cursor/skills/*/SKILL.md`
 
 ## Mandatory repository baseline for every invoked skill
-- Run `./scripts/worktree_guard.ps1 -Action Check` before edits/long commands (run `Init` when missing/expired).
-- Run `python scripts/run_lean_gate.py` before and after meaningful patches.
+- Run `python scripts/task_session.py begin --request "<request>"` at the start of the task and `python scripts/task_session.py status` before long edit/test stretches.
+- Run `python scripts/run_loop_gate.py --from-git --git-ref HEAD` after meaningful patches.
 - Keep `plans/PLANS.yaml`, `memory/agent_memory.yaml`, and `docs/session_handoff.md` aligned with real progress.
 - Run `python scripts/validate_session_handoff.py` after handoff updates.
 - Run `python scripts/validate_task_request_contract.py` after updating task contract and first-time-right report blocks.
 - Ensure `## Repetition Control` is present in handoff and incident learning fields follow `configs/agent_incident_policy.yaml`.
+- Before push, run `python scripts/run_pr_gate.py --from-git --git-ref HEAD`, then close with `python scripts/task_session.py end`.
 - Before push, run blocker checks from `docs/DEV_WORKFLOW.md`, including `python scripts/validate_quality_scorecards.py`.
 - For repeated issues/regressions, run `docs/checklists/first-time-right-gate.md` and produce the required 4-part report block.
 
@@ -38,7 +39,9 @@ Run this workflow when any of these change:
 - `docs/DEV_WORKFLOW.md`
 - `docs/checklists/first-time-right-gate.md`
 - `docs/runbooks/governance-remediation.md`
-- `scripts/run_lean_gate.py`
+- `scripts/task_session.py`
+- `scripts/run_loop_gate.py`
+- `scripts/run_pr_gate.py`
 - global skill content under `$CODEX_HOME/skills` that must be mirrored locally
 
 ## Update procedure
@@ -50,7 +53,7 @@ Run this workflow when any of these change:
 6. Validate local catalog:
    - `python scripts/validate_skills.py`
 7. Run governance loop:
-   - `python scripts/run_lean_gate.py`
+   - `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 8. Record durable state updates:
    - `plans/PLANS.yaml`
    - `memory/agent_memory.yaml`

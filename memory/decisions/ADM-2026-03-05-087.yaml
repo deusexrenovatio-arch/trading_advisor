@@ -1,0 +1,24 @@
+id: ADM-2026-03-05-087
+date: 2026-03-05
+title: Complete fast multi-seed causal filter search and confirm filter-space exhaustion
+  for current strategy
+context: After speeding up hypothesis verification, remaining requirement was to execute
+  full multi-seed validation loop (not single-artifact checks) and determine whether
+  final-go targets are reachable via filter-only search.
+decision: Added `search_wf_hypothesis_multi_seed.py` with early pruning and causal-first
+  ranking; ran large sweeps over causal baselines (`seed72/111/124`) for `final_go`/`stage_go`,
+  including targeted neighborhood search around known ORB root-set hypotheses.
+impact: Search throughput is now high enough for six-figure candidate sweeps, and
+  evidence shows no filter candidate reaches `final_go` even at `pass>=1` across current
+  causal baselines; next iterations must shift to structural strategy changes rather
+  than more filter-axis sweeps.
+links:
+- scripts/search_wf_hypothesis_multi_seed.py
+- tests/test_search_wf_hypothesis_multi_seed.py
+- artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass1_20260305.json
+- artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass2_20260305.json
+- artifacts/research/wf_goal_v6_h24_multiseed_search_finalgo_pass3_20260305.json
+- artifacts/research/wf_goal_v6_h24_multiseed_search_stagego_pass2_20260305.json
+- artifacts/research/wf_goal_v6_h24_multiseed_targeted_search_finalgo_20260305.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

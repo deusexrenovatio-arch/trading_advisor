@@ -6,29 +6,19 @@
 - Make checks repeatable locally and in CI.
 - Keep team context overhead bounded and machine-checked.
 
-## Mandatory worktree preflight
+## Mandatory session preflight
 - Verify local runtime before any gate command:
   - `python --version`
-  - `powershell -ExecutionPolicy Bypass -File scripts/worktree_guard.ps1 -Action Check`
-- `worktree_guard -Action Check` prints CTX routing from current diff plus `docs/session_handoff.md`.
-- Successful `worktree_guard -Action Check` also emits/refreshes local task-start telemetry under one repo-shared `.runlogs/agent-process/` root and prints the active `task_id` plus write location.
-- Optional intent sharpeners for start-of-task routing:
-  - `MOEX_CARRY_CONTEXT_ROUTER_REQUEST="<user request>"`
-  - `MOEX_CARRY_CONTEXT_ROUTER_TARGET_MODULES="pipeline,ui,news_live_runtime"`
-- Before any code change, lock expected worktree + branch for the current session:
-  - `./scripts/worktree_guard.ps1 -Action Init -WorktreePath "D:\\wt-<name>" -Branch "<branch>" -ContextTtlHours 12`
-- Before every development task, verify context:
-  - `./scripts/worktree_guard.ps1 -Action Check`
-- Inspect current vs expected context:
-  - `./scripts/worktree_guard.ps1 -Action Show`
-- Reset context when switching streams:
-  - `./scripts/worktree_guard.ps1 -Action Clear`
+- Start each non-trivial task with:
+  - `python scripts/task_session.py begin --request "<request>"`
+- During the task, verify the active lock with:
+  - `python scripts/task_session.py status`
+- `begin` reads the current repo root and branch from git, creates the session lock, performs one context-routing pass, and starts telemetry exactly once.
 
 Policy:
-- If `Check` fails, stop development actions immediately.
-- Fix by switching to the correct worktree/branch or re-running `Init` with explicit user-approved values.
-- Local context file `.worktree-context.local.json` is intentionally ignored by git.
-- Context lock expires automatically (`ContextTtlHours`, default `12`) and must be re-initialized for a new session.
+- If `status` reports mismatch or expiration, stop development actions immediately.
+- Fix by switching back to the correct worktree/branch or starting a new session with `begin`.
+- Do not create or edit manual context files as a workaround.
 
 ## Data integrity gate (mandatory before analysis/decisions)
 - Treat data layers as strictly ordered:
@@ -143,12 +133,16 @@ Blockers:
 
 ## Lean loop (default while coding)
 - Use progressive disclosure: load only the files/slices required for the active step.
+- Local workflow modes:
+  - quick: `python scripts/run_dev_workflow.py --mode quick`
+  - expanded: `python scripts/run_dev_workflow.py --mode expanded`
+  - release: `python scripts/run_dev_workflow.py --mode release`
 - Run fast governance loop after each meaningful patch:
-  - `python scripts/run_lean_gate.py`
-- Lean gate automatically:
-  - records first-patch telemetry when the diff meaningfully changes,
-  - syncs `memory/task_outcomes.yaml` from `docs/session_handoff.md` + active local task state,
-  - validates task-outcome closeout and rolling process regressions.
+  - `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- `run_loop_gate` automatically:
+  - verifies the active session lock,
+  - records first-patch telemetry on the first real non-trivial diff,
+  - runs only the scoped loop validators for the current surface.
 - After burn-in, process regressions may surface as staged remediation instead of immediate hard-fail, but only when the failing baseline debt is tied to an explicit active plan item and is not worsening.
 - On gate failure, use deterministic remediation map:
   - `docs/runbooks/governance-remediation.md`
@@ -169,8 +163,9 @@ Blockers:
   - update `docs/session_handoff.md` with current goal, delta, blockers, and next step.
   - keep task request contract and first-time-right report sections current.
 - Keep task outcome ledger fresh:
-  - run `python scripts/sync_task_outcomes.py` after updating `## Task Outcome` or let `python scripts/run_lean_gate.py` sync it automatically.
-  - if `Outcome Status` disagrees with the policy-derived status, sync writes the derived status and `python scripts/validate_task_outcomes.py` fails until handoff is corrected.
+  - update `## Task Outcome` before closeout and run `python scripts/task_session.py end`.
+  - `end` records task closeout and syncs `memory/task_outcomes.yaml`.
+  - if `Outcome Status` disagrees with the policy-derived status, closeout is blocked until handoff is corrected.
   - `memory/task_outcomes.yaml` is the canonical tracked ledger for PR/weekly process rollups.
 - Keep diffs single-concern and short-lived; defer side-work to separate follow-ups.
 - Before push/PR, always run the full blocker gate below.
@@ -184,32 +179,36 @@ Blockers:
 
 ## Required checks (CI + local)
 - Treat this list as a blocker gate for pre-push and PR readiness.
+- Use surface-aware gates as canonical entrypoint; do not duplicate heavy checks manually unless explicitly required.
 
-### Backend (Python)
-- `python -m pip install -e ".[dev]"`
-- `python scripts/run_lean_gate.py`
-- `python scripts/validate_agent_contexts.py`
-- `python scripts/validate_session_handoff.py`
-- `python scripts/validate_task_request_contract.py`
-- `python scripts/validate_task_outcomes.py`
-- `python scripts/validate_process_regressions.py`
-- `python scripts/validate_quality_scorecards.py`
+### Baseline pre-push / PR closeout (hot path)
+- `python scripts/task_session.py status` (or `python scripts/task_session.py begin --request "<request>"` if inactive/expired)
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
+- `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
+- `python scripts/task_session.py end`
+
+### Surface-escalated checks (automatic via loop/pr gates)
+- backend tests for `core`/`news`/`contracts` surfaces
+- UI lint/build subset for `ui`/`contracts` surfaces
+- dependency, observability, and perf validators only when the diff matches those surfaces
+
+### Nightly / cold hygiene (not baseline pre-push blockers)
+- `python scripts/validate_architecture_policy.py`
 - `python scripts/validate_python_style.py`
-- `python scripts/validate_structured_logging.py`
+- `python scripts/validate_quality_scorecards.py`
 - `python scripts/validate_codeowners.py`
-- `pytest`
+- process-regression and docs-hygiene sweeps
+- long-running full regression/e2e probes
 
-### Frontend (UI)
-- `cd ui-web`
-- `npm ci`
-- `npm run lint`
-- `npm run build`
-- `npm run test:e2e` (CI required; local run before major UI merges)
+### Optional local rehearsal for major merges/releases
+- `pytest`
+- `cd ui-web && npm ci && npm run lint && npm run build`
+- `cd ui-web && npm run test:e2e`
 
 ## Automatic pre-push gate (recommended)
 - Enable repository hooks once per clone:
   - `python scripts/install_git_hooks.py`
-- This installs `core.hooksPath=.githooks` and runs required backend/frontend checks on `git push`.
+- This installs `core.hooksPath=.githooks` and runs scoped loop gate on `git push`.
 - Any failed required check blocks push.
 - Direct push to `main` is blocked (PR-only).
 - Required merge path:
@@ -220,9 +219,8 @@ Blockers:
 - Emergency override for direct `main` push (incident/hotfix only, with explicit reason):
   - Bash: `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1 MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>' git push`
   - PowerShell: `$env:MOEX_CARRY_EMERGENCY_MAIN_PUSH='1'; $env:MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'; git push`
-- Windows lock workaround for `npm ci` (`EPERM` on `esbuild.exe`):
-  - Bash: `MOEX_CARRY_SKIP_NPM_CI=1 git push`
-  - PowerShell: `$env:MOEX_CARRY_SKIP_NPM_CI='1'; git push`
+- Hook command baseline:
+  - `python scripts/run_loop_gate.py --base-ref origin/main --head-ref HEAD --skip-session-check`
 
 ## Optional checks (manual / data-dependent)
 - Data integrity parity:
@@ -266,7 +264,7 @@ Blockers:
 
 ## Scheduled maintenance (CI)
 - `docs-gardening` workflow runs weekly and on manual trigger:
-  - `python scripts/run_lean_gate.py`
+  - `python scripts/run_nightly_gate.py --from-git --git-ref HEAD`
   - `python scripts/doc_gardening_report.py`
   - `python scripts/autonomy_kpi_report.py`
   - `python scripts/process_improvement_report.py`

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
@@ -9,7 +9,7 @@ import pandas as pd
 from moex_carry.config import AppSettings, DataConfig, SpreadCarryAlphaConfig, UiConfig
 from moex_carry.signal_replay.core import ReplayMetrics, ReplayResult
 from moex_carry.signal_replay.incremental import ReplayMutation
-from moex_carry.ui.app import create_app
+from moex_carry.server import create_server_app as create_app
 import moex_carry.unified_runtime as core_unified_runtime
 import moex_carry.ui.unified_runtime as unified_runtime
 from moex_carry.ui.unified_runtime import (
@@ -530,7 +530,7 @@ def test_manual_refresh_defaults_to_incremental_and_supports_force_full(tmp_path
             degraded=False,
         )
 
-    monkeypatch.setattr("moex_carry.ui.app.run_incremental_minute_ingest", _fake_incremental_ingest)
+    monkeypatch.setattr("moex_carry.server.app.run_incremental_minute_ingest", _fake_incremental_ingest)
 
     app = create_app(settings)
     client = app.server.test_client()
@@ -637,3 +637,4 @@ def test_forward_forecast_event_first_hit_shrinkage_and_effective_sample():
     assert 0.5 <= float(forecast["forward_tp_first_probability"]) <= 0.7
     assert 0.05 <= float(forecast["forward_sl_first_probability"]) <= 0.15
     assert 0.2 <= float(forecast["forward_no_exit_first_probability"]) <= 0.4
+

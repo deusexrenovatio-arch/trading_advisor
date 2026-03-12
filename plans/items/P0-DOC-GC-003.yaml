@@ -1,0 +1,19 @@
+id: P0-DOC-GC-003
+title: Scheduled docs-gardening and entropy reporting
+lane: docs
+status: completed
+execution_mode: autonomous
+owner: engineering-enablement
+acceptance:
+- scheduled workflow exists
+- entropy report is generated and attached as artifact
+- report publishes key hygiene indicators
+checks:
+- python scripts/doc_gardening_report.py
+docs:
+- docs/DEV_WORKFLOW.md
+- harness-guideline.md
+dependencies:
+- P0-AGENT-PLANS-001
+started_at: 2026-02-20
+completed_at: 2026-02-20

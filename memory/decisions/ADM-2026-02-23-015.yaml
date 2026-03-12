@@ -1,0 +1,14 @@
+id: ADM-2026-02-23-015
+date: 2026-02-23
+title: Enforce skill decision on commit
+context: Even after pre-edit routing, commits with skill edits could bypass decision
+  checks.
+decision: Add `scripts/skill_precommit_gate.py` and `.githooks/pre-commit` to run
+  `skill_update_decision` for staged skill/governance files.
+impact: Introduced a commit-time guard that blocks `NO_CHANGE` ambiguous edits unless
+  explicitly scoped.
+links:
+- .githooks/pre-commit
+- scripts/skill_precommit_gate.py
+- docs/workflows/skill-governance-sync.md
+- AGENTS.md

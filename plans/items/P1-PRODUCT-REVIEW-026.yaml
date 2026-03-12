@@ -1,0 +1,28 @@
+id: P1-PRODUCT-REVIEW-026
+title: Component-first product and business scenario coverage review
+lane: product
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- application is reviewed sequentially by user-facing components and core runtime
+  domains
+- user scenario documentation is updated with component walkthrough and missing high-risk
+  cases
+- product needs documentation includes prioritized gaps and first-time-right review
+  block
+checks:
+- python scripts/validate_user_needs_catalog.py
+- python scripts/validate_session_handoff.py
+- python scripts/run_lean_gate.py
+docs:
+- docs/planning/user-needs-catalog.md
+- docs/user-scenarios.md
+- docs/planning/product-decisions.md
+- docs/ux/workspaces-map.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-API-DECOMPOSE-025
+started_at: 2026-03-02
+completed_at: 2026-03-02

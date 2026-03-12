@@ -1,0 +1,21 @@
+id: ADM-2026-03-06-098
+date: 2026-03-06
+title: Revert execution default from O4 cap to O1 and add live paper-forward launch
+  orchestration
+context: User confirmed O1 dominates O4 on the same trade set and requested signals-only
+  operation with existing Telegram format plus forward-test launch from today on live
+  MOEX contour.
+decision: Switched `SignalEngineMorningExecutionConfig.max_profit_ticks` default from
+  `120` to `0` (O1 behavior), added `scripts/start_forward_paper_live.ps1` to orchestrate
+  backend startup, manual live signal refresh, optional Telegram worker start, and
+  forward run initialization for current date, and documented the operator flow in
+  `README.md`.
+impact: Default runtime no longer clips profitable tails by hard absolute TP cap;
+  operator can launch a reproducible live paper-forward contour from one command while
+  preserving current Telegram message contract.
+links:
+- src/moex_carry/config.py
+- scripts/start_forward_paper_live.ps1
+- README.md
+- docs/session_handoff.md
+- plans/PLANS.yaml

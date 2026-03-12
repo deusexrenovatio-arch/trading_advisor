@@ -1,0 +1,97 @@
+version: 1
+
+profiles:
+  session_check:
+    description: "Pure session-lock status check on the hot path."
+    commands:
+      - name: session_check
+        cmd:
+          - "{python}"
+          - scripts/task_session.py
+          - status
+          - --quiet
+
+  surface_docs:
+    description: "Docs-only loop surface baseline with cold first run and warm follow-ups."
+    commands:
+      - name: loop_docs_surface
+        cmd:
+          - "{python}"
+          - scripts/run_loop_gate.py
+          - --changed-files
+          - docs/README.md
+
+  surface_contracts:
+    description: "Contracts loop surface baseline with cold first run and warm follow-ups."
+    commands:
+      - name: loop_contracts_surface
+        cmd:
+          - "{python}"
+          - scripts/run_loop_gate.py
+          - --changed-files
+          - docs/contracts/api-v2.yaml
+
+  surface_core:
+    description: "Core loop surface baseline with cold first run and warm follow-ups."
+    commands:
+      - name: loop_core_surface
+        cmd:
+          - "{python}"
+          - scripts/run_loop_gate.py
+          - --changed-files
+          - src/moex_carry/pipeline.py
+
+  surface_ui:
+    description: "UI loop surface baseline with cold first run and warm follow-ups."
+    commands:
+      - name: loop_ui_surface
+        cmd:
+          - "{python}"
+          - scripts/run_loop_gate.py
+          - --changed-files
+          - ui-web/src/App.tsx
+
+  loop:
+    description: "Local hot-loop timing for day-to-day coding."
+    commands:
+      - name: loop_gate
+        cmd:
+          - "{python}"
+          - scripts/run_loop_gate.py
+          - --from-git
+          - --git-ref
+          - HEAD
+
+  pre_push:
+    description: "Pre-push deterministic baseline for local quality gate."
+    commands:
+      - name: quality_scorecards
+        cmd:
+          - "{python}"
+          - scripts/validate_quality_scorecards.py
+      - name: architecture_smoke
+        cmd:
+          - pytest
+          - tests/architecture
+          - -q
+      - name: frontend_contract
+        cmd:
+          - "{python}"
+          - scripts/validate_frontend_gate_contract.py
+
+  ci:
+    description: "CI-required jobs median baseline."
+    commands:
+      - name: governance_contract
+        cmd:
+          - "{python}"
+          - scripts/validate_task_request_contract.py
+      - name: backend_smoke
+        cmd:
+          - pytest
+          - tests/architecture
+          - -q
+      - name: frontend_contract
+        cmd:
+          - "{python}"
+          - scripts/validate_frontend_gate_contract.py

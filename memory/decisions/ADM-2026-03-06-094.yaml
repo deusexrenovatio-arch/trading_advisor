@@ -1,0 +1,22 @@
+id: ADM-2026-03-06-094
+date: 2026-03-06
+title: Exclude mini-contract duplicates and promote H4 after no-mini historical validation
+context: User requested a historical re-check without duplicated full-plus-mini exposure
+  for the same underlying and agreed that H4 promotion looked reasonable if the result
+  survived that correction.
+decision: Added a post-run analyzer to exclude mini roots by default (`BM`, `GN`,
+  `NR`, `RM`, `S1` when the corresponding full root exists), recomputed the historical
+  profile comparison on the cleaned universe, and promoted `H4A_CAP_OFF` as the working
+  execution baseline because it still dominates `O1` on both `2020-2024` and `2020-2026`.
+impact: Whole-universe execution evaluation no longer double-counts mini contracts,
+  runtime defaults now align with the strongest no-mini historical profile, and future
+  reviews should treat mini exclusion as default universe hygiene.
+links:
+- scripts/analyze_execution_profiles_historical_review.py
+- artifacts/research/wf_goal_v6_execution_profiles_historical_review_no_minis_2020_2026_20260306.json
+- docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+- src/moex_carry/config.py
+- tests/test_config_loading.py
+- docs/research/evaluation-policy.md
+- docs/session_handoff.md
+- plans/PLANS.yaml

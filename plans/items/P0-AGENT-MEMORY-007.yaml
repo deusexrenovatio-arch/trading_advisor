@@ -1,0 +1,19 @@
+id: P0-AGENT-MEMORY-007
+title: Agent operational memory registry and validation
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-owner
+acceptance:
+- memory registry exists with decisions/incidents/patterns
+- validator enforces schema and integrity
+- lean gate validates memory on each run
+checks:
+- python scripts/validate_agent_memory.py
+docs:
+- AGENTS.md
+- docs/DEV_WORKFLOW.md
+dependencies:
+- P0-AGENT-PLANS-001
+started_at: 2026-02-20
+completed_at: 2026-02-20

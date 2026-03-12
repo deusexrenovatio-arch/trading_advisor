@@ -1,0 +1,11 @@
+id: AMP-2026-03-05-031
+date: 2026-03-05
+title: Convert non-blocking governance warnings into explicit follow-up tasks
+pattern: When validators emit advisory/non-blocking findings, record one concrete
+  follow-up in `plans/PLANS.yaml` and link rationale in `memory/agent_memory.yaml`
+  to avoid repeating the same warning without ownership.
+when_to_use: Any run where lean gate passes but advisories recur across sessions.
+links:
+- docs/runbooks/governance-remediation.md
+- plans/PLANS.yaml
+- memory/agent_memory.yaml

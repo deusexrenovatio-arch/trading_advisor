@@ -1,0 +1,17 @@
+id: ADM-2026-03-03-026
+date: 2026-03-03
+title: Compare news matching modes by precision-coverage tradeoff instead of raw hit-count
+  only
+context: Broad-first shock-to-news linkage produced higher candidate coverage but
+  frequently selected off-topic headlines, masking the quality gain of stricter root-event
+  linking.
+decision: Add deterministic comparator that runs current broad-first and proposed
+  root-event strict selection side-by-side on the same shock dataset, reports per-symbol
+  deltas, and supports threshold sweep with minimum-coverage constraint.
+impact: Team can now make promotion decisions on measurable tradeoffs (coverage, labeled
+  directional accuracy, relevance quality) rather than anecdotal examples.
+links:
+- src/moex_carry/news_mode_compare.py
+- scripts/compare_news_modes.py
+- src/moex_carry/cli.py
+- data/output/news_mode_compare_365d_5m_opt/news_mode_compare_report.txt

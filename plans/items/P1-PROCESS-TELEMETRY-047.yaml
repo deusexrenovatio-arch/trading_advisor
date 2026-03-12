@@ -1,0 +1,35 @@
+id: P1-PROCESS-TELEMETRY-047
+title: Build task telemetry, task outcome ledger, and process-regression governance
+  loop
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- canonical task telemetry records start, first-patch, end, and rollup events without
+  adding a parallel governance system
+- task closeout requires `docs/session_handoff.md` Task Outcome fields and a synced
+  `memory/task_outcomes.yaml` record for non-trivial diffs
+- scorecards, lean gate, agent review, KPI, and governance dashboard surface process-health
+  blocking signals and rollups
+- unit, integration, governance smoke, and acceptance scenario coverage proves lifecycle,
+  burn-in thresholds, and repeated-signature enforcement
+checks:
+- python scripts/validate_task_outcomes.py
+- python scripts/validate_process_regressions.py
+- python scripts/validate_quality_scorecards.py
+- python -m pytest tests/test_agent_process_telemetry.py tests/test_task_outcomes.py
+  tests/architecture/test_governance_policies.py -q
+- python scripts/run_lean_gate.py
+docs:
+- docs/session_handoff.md
+- docs/DEV_WORKFLOW.md
+- docs/runbooks/governance-remediation.md
+- memory/task_outcomes.yaml
+- scripts/agent_process_telemetry.py
+- scripts/validate_task_outcomes.py
+- scripts/validate_process_regressions.py
+dependencies:
+- P1-AGENT-CONTEXT-V2-046
+started_at: 2026-03-06
+completed_at: 2026-03-06

@@ -1,0 +1,14 @@
+id: ADM-2026-03-03-001
+date: 2026-03-03
+title: Expand default commodity ingest queries with explicit geopolitics terms
+context: Root-shock capture around Iran/Israel and chokepoints was sensitive to weak
+  ticker mentions in early headlines.
+decision: Add explicit geopolitical terms to BRN/GOLD/NG_US default GDELT and NewsAPI
+  profile queries and document a dedicated GEOPOLITICAL_ESCALATION profile pack.
+impact: Better recall for cross-commodity root events while preserving commodity filters
+  in NewsAPI query tails.
+links:
+- src/moex_carry/config.py
+- configs/default.yaml
+- docs/news-data-bootstrap.md
+- data/runtime/news_geo_ingest.yaml

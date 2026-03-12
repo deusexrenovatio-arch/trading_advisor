@@ -1,4 +1,4 @@
-# CTX-API-UI
+﻿# CTX-API-UI
 
 ## Scope
 API handlers, UI behavior, operator actions, and delivery surfaces.
@@ -21,7 +21,8 @@ API handlers, UI behavior, operator actions, and delivery surfaces.
 - Output: stable API responses and UI rendering behavior.
 
 ## Minimum Checks
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `npm --prefix ui-web run lint`
 - `npm --prefix ui-web run build`
+
 

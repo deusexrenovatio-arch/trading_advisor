@@ -1,0 +1,31 @@
+id: P1-HE-PARTIAL-CLOSURE-009
+title: Close remaining Harness alignment partials with enforceable gates
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: engineering-platform
+acceptance:
+- docs index and ADR workflow exist and are validated
+- flaky, taste, and observability policies are machine-validated
+- UI e2e CI job runs with artifact upload
+- self-heal failure path escalates via deterministic runbook and workflow issue
+- startup and API journey NFR budgets are tested in CI
+checks:
+- python scripts/validate_dependency_decisions.py
+- python scripts/validate_flaky_policy.py
+- python scripts/validate_taste_invariants.py
+- python scripts/validate_observability_stack.py
+- pytest tests/perf/test_app_startup_runtime.py tests/perf/test_api_journey_runtime.py
+  -q
+docs:
+- docs/README.md
+- docs/runbooks/governance-remediation.md
+- docs/runbooks/flaky-tests-policy.md
+- docs/runbooks/local-observability-stack.md
+- docs/runbooks/self-heal-escalation.md
+dependencies:
+- P0-AGENT-PLANS-001
+- P0-QUALITY-SCORECARDS-005
+- P0-SELF-HEAL-006
+started_at: 2026-02-20
+completed_at: 2026-02-20

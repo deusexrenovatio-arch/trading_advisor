@@ -1,0 +1,8 @@
+version: 1
+updated_at: '2026-03-11'
+items:
+- id: TASK-2026-03-11-PR-REVIEW-REMEDIATION
+  path: docs/tasks/active/TASK-2026-03-11-pr-review-remediation.md
+  mode: full
+  status: in_progress
+  started_at: '2026-03-11'

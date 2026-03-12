@@ -1,5 +1,5 @@
 version: 1
-updated_at: '2026-03-10'
+updated_at: '2026-03-11'
 items:
 - task_id: APT-20260306T163854Z-c3d3f52f
   closed_at: '2026-03-06T16:53:22Z'
@@ -712,3 +712,986 @@ items:
   - session_handoff
   start_recommendations:
   - Patch is scoped to one context.
+- task_id: APT-20260310T172216Z-a54fd7be
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  - CTX-STRATEGY
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  route_match: pending
+  time_to_first_patch_sec: 66
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-CODEX-FIRST-LEAN-HARNESS
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 0
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+  - Intent spans multiple contexts. Set an explicit target module before implementation.
+- task_id: APT-20260310T172726Z-789e84b3
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  route_match: pending
+  time_to_first_patch_sec: 8
+  same_path_attempts: 3
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-CODEX-FIRST-LEAN-HARNESS
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 2
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260310T172841Z-a7dc05ee
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-NEWS
+  route_match: pending
+  time_to_first_patch_sec: 25
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 2
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260310T181232Z-a7dc05ee
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-NEWS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-NEWS
+  route_match: pending
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 42
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - CTX-NEWS imports span multiple neighboring contexts. Treat as cross-cutting and
+    keep adapters thin.
+  - CTX-ORCHESTRATION imports span multiple neighboring contexts. Treat as cross-cutting
+    and keep adapters thin.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260310T181512Z-a7dc05ee
+  closed_at: null
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-NEWS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-NEWS
+  route_match: pending
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: pending
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: pending
+  improvement_artifact: pending
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: in_progress
+  unmapped_files_count: 42
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - CTX-NEWS imports span multiple neighboring contexts. Treat as cross-cutting and
+    keep adapters thin.
+  - CTX-ORCHESTRATION imports span multiple neighboring contexts. Treat as cross-cutting
+    and keep adapters thin.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T052416Z-62c9e398
+  closed_at: '2026-03-11T05:24:17Z'
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-API-UI
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 16
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T053836Z-62c9e398
+  closed_at: '2026-03-11T05:38:36Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+- task_id: APT-20260311T053839Z-62c9e398
+  closed_at: '2026-03-11T05:38:40Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T053843Z-62c9e398
+  closed_at: '2026-03-11T05:38:44Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T053846Z-62c9e398
+  closed_at: '2026-03-11T05:38:47Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T053855Z-62c9e398
+  closed_at: '2026-03-11T05:38:55Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T053903Z-62c9e398
+  closed_at: '2026-03-11T05:39:03Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T053906Z-62c9e398
+  closed_at: '2026-03-11T05:39:25Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054002Z-62c9e398
+  closed_at: '2026-03-11T05:40:02Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054005Z-62c9e398
+  closed_at: '2026-03-11T05:40:06Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054009Z-62c9e398
+  closed_at: '2026-03-11T05:40:09Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054012Z-62c9e398
+  closed_at: '2026-03-11T05:40:12Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054020Z-62c9e398
+  closed_at: '2026-03-11T05:40:20Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054028Z-62c9e398
+  closed_at: '2026-03-11T05:40:28Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054035Z-62c9e398
+  closed_at: '2026-03-11T05:40:36Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054047Z-62c9e398
+  closed_at: '2026-03-11T05:40:47Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054058Z-62c9e398
+  closed_at: '2026-03-11T05:40:58Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054109Z-62c9e398
+  closed_at: '2026-03-11T05:41:09Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054112Z-62c9e398
+  closed_at: '2026-03-11T05:41:12Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054115Z-62c9e398
+  closed_at: '2026-03-11T05:41:15Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054118Z-62c9e398
+  closed_at: '2026-03-11T05:41:20Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054124Z-62c9e398
+  closed_at: '2026-03-11T05:41:26Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054130Z-62c9e398
+  closed_at: '2026-03-11T05:41:32Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 7
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T054338Z-62c9e398
+  closed_at: '2026-03-11T05:43:39Z'
+  branch: codex/lean-harness-redesign
+  goal_class: orchestration
+  start_primary_context: CTX-ORCHESTRATION
+  start_contexts:
+  - CTX-ORCHESTRATION
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: null
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 8
+  intent_sources:
+  - session_handoff
+  start_recommendations:
+  - Patch touches multiple contexts. Split by ownership to keep review and agent context
+    small.
+  - Some files are unmapped. Classify manually before implementation.
+  - Cold-context files are present. Keep them out of hot retrieval unless the task
+    explicitly needs them.
+- task_id: APT-20260311T065001Z-5986ebe3
+  closed_at: '2026-03-11T07:00:37Z'
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 53
+  same_path_attempts: 2
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - request
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260311T072022Z-5986ebe3
+  closed_at: '2026-03-11T07:23:40Z'
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 1
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - request
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260311T080304Z-5986ebe3
+  closed_at: '2026-03-11T08:57:34Z'
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 2165
+  same_path_attempts: 1
+  decision_quality: correct_after_replan
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: P1-AGENT-CONTEXT-V2-046
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - request
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.
+- task_id: APT-20260311T090850Z-5986ebe3
+  closed_at: '2026-03-11T12:08:16Z'
+  branch: codex/lean-harness-redesign
+  goal_class: ops
+  start_primary_context: CTX-OPS
+  start_contexts:
+  - CTX-OPS
+  final_contexts:
+  - CTX-OPS
+  route_match: matched
+  time_to_first_patch_sec: 2041
+  same_path_attempts: 1
+  decision_quality: correct_first_time
+  primary_rework_cause: none
+  incident_signature: none
+  improvement_action: none
+  improvement_artifact: none
+  linked_plan_id: null
+  linked_memory_id: null
+  outcome_status: completed
+  unmapped_files_count: 0
+  intent_sources:
+  - request
+  - session_handoff
+  start_recommendations:
+  - No diff yet. Using request/session intent fallback.

@@ -1,0 +1,16 @@
+id: ADM-2026-03-05-082
+date: 2026-03-05
+title: Evaluate forward detector by known-event walk-forward coverage, not only shock-row
+  recall
+context: User clarified the target metric as coverage of already known root events
+  in rolling time windows.
+decision: Add no-lookahead walk-forward validation over golden known events where
+  each test window checks if known root events are found by detector outputs, with
+  threshold tuning only on past calibration slices.
+impact: Quality decisions now match business expectation ("caught known events") and
+  are auditable per window with found/missed ledgers.
+links:
+- scripts/news_known_events_walkforward.py
+- docs/runbooks/news-forward-synthetic-validation.md
+- docs/runbooks/news-shock-go-live.md
+- docs/session_handoff.md

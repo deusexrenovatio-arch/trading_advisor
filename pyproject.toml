@@ -20,6 +20,19 @@ dependencies = [
   "dash>=2.16",
   "plotly>=5.20",
   "python-dateutil>=2.8",
+]
+
+[project.scripts]
+moex-carry = "moex_carry.cli:main"
+moex-carry-server = "moex_carry.server:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "responses>=0.25",
+  "ruff>=0.9",
+]
+news = [
   "feedparser>=6.0",
   "trafilatura>=1.8",
   "beautifulsoup4>=4.12",
@@ -27,20 +40,28 @@ dependencies = [
   "transformers>=4.45",
   "tokenizers>=0.20",
   "datasets>=2.21",
-  "onnxruntime>=1.19",
-  "optimum>=1.22",
   "scikit-learn>=1.5",
+]
+market = [
   "yfinance>=0.2",
 ]
-
-[project.scripts]
-moex-carry = "moex_carry.cli:main"
-
-[project.optional-dependencies]
-dev = [
-  "pytest>=8.0",
-  "responses>=0.25",
-  "ruff>=0.9",
+perf = [
+  "onnxruntime>=1.19",
+  "optimum>=1.22",
+]
+obs = []
+all = [
+  "feedparser>=6.0",
+  "trafilatura>=1.8",
+  "beautifulsoup4>=4.12",
+  "dateparser>=1.2",
+  "transformers>=4.45",
+  "tokenizers>=0.20",
+  "datasets>=2.21",
+  "scikit-learn>=1.5",
+  "yfinance>=0.2",
+  "onnxruntime>=1.19",
+  "optimum>=1.22",
 ]
 
 [tool.setuptools]

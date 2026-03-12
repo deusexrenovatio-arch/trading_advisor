@@ -1,0 +1,11 @@
+id: AMP-2026-02-23-009
+date: 2026-02-23
+title: Two-tier skill governance with local hard gates
+pattern: Use local and global skills together, but always apply repository baseline
+  and validate local skills with machine checks before push.
+when_to_use: Any task where global skill guidance overlaps with repository-specific
+  delivery workflow.
+links:
+- docs/workflows/skill-governance-sync.md
+- .cursor/skills
+- scripts/validate_skills.py

@@ -26,13 +26,24 @@ def _changed_files(base_sha: str | None, head_sha: str | None) -> list[str]:
     if base_sha and head_sha:
         code, out = _run_capture(["git", "diff", "--name-only", base_sha, head_sha])
         if code == 0:
-            return sorted({line.strip().replace("\\", "/") for line in out.splitlines() if line.strip()})
+            changed = {line.strip().replace("\\", "/") for line in out.splitlines() if line.strip()}
+            code_untracked, out_untracked = _run_capture(
+                ["git", "ls-files", "--others", "--exclude-standard"]
+            )
+            if code_untracked == 0:
+                changed.update(
+                    line.strip().replace("\\", "/")
+                    for line in out_untracked.splitlines()
+                    if line.strip()
+                )
+            return sorted(changed)
 
     changed: set[str] = set()
     for command in (
         ["git", "diff", "--name-only"],
         ["git", "diff", "--name-only", "--cached"],
         ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+        ["git", "ls-files", "--others", "--exclude-standard"],
     ):
         code, out = _run_capture(command)
         if code != 0:

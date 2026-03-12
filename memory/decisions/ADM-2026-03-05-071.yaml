@@ -1,0 +1,20 @@
+id: ADM-2026-03-05-071
+date: 2026-03-05
+title: Surface task-request contract in scorecards and bind advisory findings to explicit
+  remediation queue
+context: Harness-oriented review showed the task-contract gate was enforced in lean
+  loop but not visible as a scorecard check, while recurring advisory findings had
+  no mandatory planning path.
+decision: Add task-request-contract check to quality scorecards, add deterministic
+  preflight in workflow, and document advisory debt routing into plans plus memory
+  artifacts.
+impact: Request-quality regressions become visible in scorecard runs; non-blocking
+  advisories are captured as explicit follow-up work instead of drifting.
+links:
+- configs/quality_scorecards.yaml
+- docs/DEV_WORKFLOW.md
+- docs/runbooks/governance-remediation.md
+- plans/PLANS.yaml
+- .cursor/skills/parallel-worktree-flow/SKILL.md
+- .cursor/skills/ai-agent-architect/SKILL.md
+- .cursor/skills/docs-sync/SKILL.md

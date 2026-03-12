@@ -1,0 +1,11 @@
+id: AMP-2026-02-23-017
+date: 2026-02-23
+title: Reuse legacy module runtime callables during registrar extraction
+pattern: Keep extracted route modules pure on wiring, but resolve runtime callables
+  through the legacy module when tests monkeypatch that module directly.
+when_to_use: Flask route decomposition where regression tests patch `ui.app` symbols
+  such as backtest/HPO runtime entrypoints.
+links:
+- src/moex_carry/ui/routes_research.py
+- src/moex_carry/ui/app.py
+- tests/test_api_v2.py

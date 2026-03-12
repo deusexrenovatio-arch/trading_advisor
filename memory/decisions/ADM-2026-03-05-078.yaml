@@ -1,0 +1,24 @@
+id: ADM-2026-03-05-078
+date: 2026-03-05
+title: Reach final-go hypothesis on H24 via iterative root-level search and record
+  stability gap
+context: Slot/side precision sweeps were insufficient to hit `final_go`; user requested
+  continued testing/iteration until goal thresholds were reached.
+decision: Performed focused iterative auto-search across constrained artifacts with
+  root-level hill-climb and verified best candidate using deterministic verifier;
+  accepted passing hypothesis on `h24` (`ORB_BREAKOUT`, clusters `energy+other`, slots
+  `12:00/14:15`, 17-root whitelist), then ran cross-artifact check with identical
+  filter.
+impact: Goal thresholds are now reached on `h24` (`win_rate_net=0.7523`, `trades_per_week=2.0790`,
+  positive net, low concentration), but portability remains limited because the same
+  filter fails neighboring artifacts and multi-report same-config sweep yields `max_passes=0`;
+  next loop must validate causal rerun and OOS stability before promoting as strategy
+  baseline.
+links:
+- artifacts/research/wf_goal_v6_iterative_autosearch_focus_finalgo_20260305.json
+- artifacts/research/wf_goal_v6_h24_orb_energy_other_roots17_finalgo_pass_20260305.json
+- artifacts/research/wf_goal_v6_h24_candidate_crosscheck_20260305.json
+- artifacts/research/wf_goal_v6_multireport_config_sweep_20260305.json
+- scripts/verify_wf_hypothesis.py
+- docs/session_handoff.md
+- plans/PLANS.yaml

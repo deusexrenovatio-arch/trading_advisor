@@ -290,6 +290,8 @@ def _fetch_yfinance_series(
         return []
     try:
         yfinance = importlib.import_module("yfinance")
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("Missing optional dependency 'yfinance'. Install extra: .[market]") from exc
     except Exception:
         return []
     try:

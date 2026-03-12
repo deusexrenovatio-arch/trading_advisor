@@ -1,0 +1,13 @@
+id: ADM-2026-03-05-072
+date: 2026-03-05
+title: Stabilize news gate bridge behavior for tests via explicit as-of timestamp
+context: Full pre-push pytest exposed a wall-clock sensitive bridge test where fixed
+  fixture timestamps aged out of lookback window over time.
+decision: Extend load_news_gate_items with optional as_of_utc override and use fixed
+  as-of in time-sensitive test.
+impact: Bridge tests are deterministic across calendar dates while production behavior
+  keeps current-time default.
+links:
+- src/moex_carry/news_live_bridge.py
+- tests/test_news_live_runtime.py
+- plans/PLANS.yaml

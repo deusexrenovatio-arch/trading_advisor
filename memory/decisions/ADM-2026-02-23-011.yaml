@@ -1,0 +1,14 @@
+id: ADM-2026-02-23-011
+date: 2026-02-23
+title: Treat local and global skills as one catalog with repository governance precedence
+context: Team workflows use many global skills, while repository gates only validated
+  local `.cursor/skills` and drift appeared in governance instructions.
+decision: Add explicit combined-catalog workflow, sync all local skills to one governance
+  baseline block, and enforce markers in `scripts/validate_skills.py`.
+impact: Skill selection now remains broad while repository guardrails stay deterministic
+  and machine-checked for every local skill update.
+links:
+- docs/workflows/skill-governance-sync.md
+- AGENTS.md
+- docs/DEV_WORKFLOW.md
+- scripts/validate_skills.py

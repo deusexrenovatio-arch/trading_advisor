@@ -1,0 +1,468 @@
+{
+  "generated_at_utc": "2026-03-11T07:23:24+00:00",
+  "iterations": 3,
+  "config_path": "configs/dev_loop_timing_profiles.yaml",
+  "profiles": [
+    {
+      "name": "session_check",
+      "description": "Pure session-lock status check on the hot path.",
+      "command_stats": [
+        {
+          "name": "session_check",
+          "median_sec": 0.107,
+          "mean_sec": 0.108,
+          "min_sec": 0.105,
+          "max_sec": 0.112,
+          "p95_sec": 0.112,
+          "samples_sec": [
+            0.112,
+            0.107,
+            0.105
+          ],
+          "cold_sec": 0.112,
+          "warm_summary": {
+            "median_sec": 0.106,
+            "mean_sec": 0.106,
+            "min_sec": 0.105,
+            "max_sec": 0.107,
+            "p95_sec": 0.107
+          }
+        }
+      ],
+      "profile_total": {
+        "median_sec": 0.107,
+        "mean_sec": 0.108,
+        "min_sec": 0.105,
+        "max_sec": 0.112,
+        "p95_sec": 0.112,
+        "samples_sec": [
+          0.112,
+          0.107,
+          0.105
+        ],
+        "cold_sec": 0.112,
+        "warm_summary": {
+          "median_sec": 0.106,
+          "mean_sec": 0.106,
+          "min_sec": 0.105,
+          "max_sec": 0.107,
+          "p95_sec": 0.107
+        }
+      }
+    },
+    {
+      "name": "surface_docs",
+      "description": "Docs-only loop surface baseline with cold first run and warm follow-ups.",
+      "command_stats": [
+        {
+          "name": "loop_docs_surface",
+          "median_sec": 1.887,
+          "mean_sec": 1.891,
+          "min_sec": 1.792,
+          "max_sec": 1.994,
+          "p95_sec": 1.983,
+          "samples_sec": [
+            1.792,
+            1.994,
+            1.887
+          ],
+          "cold_sec": 1.792,
+          "warm_summary": {
+            "median_sec": 1.94,
+            "mean_sec": 1.94,
+            "min_sec": 1.887,
+            "max_sec": 1.994,
+            "p95_sec": 1.988
+          }
+        }
+      ],
+      "profile_total": {
+        "median_sec": 1.887,
+        "mean_sec": 1.891,
+        "min_sec": 1.792,
+        "max_sec": 1.994,
+        "p95_sec": 1.983,
+        "samples_sec": [
+          1.792,
+          1.994,
+          1.887
+        ],
+        "cold_sec": 1.792,
+        "warm_summary": {
+          "median_sec": 1.94,
+          "mean_sec": 1.94,
+          "min_sec": 1.887,
+          "max_sec": 1.994,
+          "p95_sec": 1.988
+        }
+      }
+    },
+    {
+      "name": "surface_contracts",
+      "description": "Contracts loop surface baseline with cold first run and warm follow-ups.",
+      "command_stats": [
+        {
+          "name": "loop_contracts_surface",
+          "median_sec": 6.404,
+          "mean_sec": 6.477,
+          "min_sec": 6.368,
+          "max_sec": 6.659,
+          "p95_sec": 6.634,
+          "samples_sec": [
+            6.659,
+            6.368,
+            6.404
+          ],
+          "cold_sec": 6.659,
+          "warm_summary": {
+            "median_sec": 6.386,
+            "mean_sec": 6.386,
+            "min_sec": 6.368,
+            "max_sec": 6.404,
+            "p95_sec": 6.402
+          }
+        }
+      ],
+      "profile_total": {
+        "median_sec": 6.404,
+        "mean_sec": 6.477,
+        "min_sec": 6.368,
+        "max_sec": 6.659,
+        "p95_sec": 6.634,
+        "samples_sec": [
+          6.659,
+          6.368,
+          6.404
+        ],
+        "cold_sec": 6.659,
+        "warm_summary": {
+          "median_sec": 6.386,
+          "mean_sec": 6.386,
+          "min_sec": 6.368,
+          "max_sec": 6.404,
+          "p95_sec": 6.402
+        }
+      }
+    },
+    {
+      "name": "surface_core",
+      "description": "Core loop surface baseline with cold first run and warm follow-ups.",
+      "command_stats": [
+        {
+          "name": "loop_core_surface",
+          "median_sec": 10.163,
+          "mean_sec": 10.209,
+          "min_sec": 10.076,
+          "max_sec": 10.39,
+          "p95_sec": 10.367,
+          "samples_sec": [
+            10.076,
+            10.163,
+            10.39
+          ],
+          "cold_sec": 10.076,
+          "warm_summary": {
+            "median_sec": 10.276,
+            "mean_sec": 10.276,
+            "min_sec": 10.163,
+            "max_sec": 10.39,
+            "p95_sec": 10.379
+          }
+        }
+      ],
+      "profile_total": {
+        "median_sec": 10.163,
+        "mean_sec": 10.209,
+        "min_sec": 10.076,
+        "max_sec": 10.39,
+        "p95_sec": 10.367,
+        "samples_sec": [
+          10.076,
+          10.163,
+          10.39
+        ],
+        "cold_sec": 10.076,
+        "warm_summary": {
+          "median_sec": 10.276,
+          "mean_sec": 10.276,
+          "min_sec": 10.163,
+          "max_sec": 10.39,
+          "p95_sec": 10.379
+        }
+      }
+    },
+    {
+      "name": "surface_ui",
+      "description": "UI loop surface baseline with cold first run and warm follow-ups.",
+      "command_stats": [
+        {
+          "name": "loop_ui_surface",
+          "median_sec": 1.91,
+          "mean_sec": 1.871,
+          "min_sec": 1.758,
+          "max_sec": 1.947,
+          "p95_sec": 1.943,
+          "samples_sec": [
+            1.758,
+            1.947,
+            1.91
+          ],
+          "cold_sec": 1.758,
+          "warm_summary": {
+            "median_sec": 1.928,
+            "mean_sec": 1.928,
+            "min_sec": 1.91,
+            "max_sec": 1.947,
+            "p95_sec": 1.945
+          }
+        }
+      ],
+      "profile_total": {
+        "median_sec": 1.91,
+        "mean_sec": 1.871,
+        "min_sec": 1.758,
+        "max_sec": 1.947,
+        "p95_sec": 1.943,
+        "samples_sec": [
+          1.758,
+          1.947,
+          1.91
+        ],
+        "cold_sec": 1.758,
+        "warm_summary": {
+          "median_sec": 1.928,
+          "mean_sec": 1.928,
+          "min_sec": 1.91,
+          "max_sec": 1.947,
+          "p95_sec": 1.945
+        }
+      }
+    },
+    {
+      "name": "loop",
+      "description": "Local hot-loop timing for day-to-day coding.",
+      "command_stats": [
+        {
+          "name": "loop_gate",
+          "median_sec": 11.075,
+          "mean_sec": 11.093,
+          "min_sec": 10.972,
+          "max_sec": 11.233,
+          "p95_sec": 11.217,
+          "samples_sec": [
+            11.233,
+            11.075,
+            10.972
+          ],
+          "cold_sec": 11.233,
+          "warm_summary": {
+            "median_sec": 11.024,
+            "mean_sec": 11.024,
+            "min_sec": 10.972,
+            "max_sec": 11.075,
+            "p95_sec": 11.07
+          }
+        }
+      ],
+      "profile_total": {
+        "median_sec": 11.075,
+        "mean_sec": 11.093,
+        "min_sec": 10.972,
+        "max_sec": 11.233,
+        "p95_sec": 11.217,
+        "samples_sec": [
+          11.233,
+          11.075,
+          10.972
+        ],
+        "cold_sec": 11.233,
+        "warm_summary": {
+          "median_sec": 11.024,
+          "mean_sec": 11.024,
+          "min_sec": 10.972,
+          "max_sec": 11.075,
+          "p95_sec": 11.07
+        }
+      }
+    },
+    {
+      "name": "pre_push",
+      "description": "Pre-push deterministic baseline for local quality gate.",
+      "command_stats": [
+        {
+          "name": "architecture_smoke",
+          "median_sec": 3.862,
+          "mean_sec": 3.842,
+          "min_sec": 3.795,
+          "max_sec": 3.869,
+          "p95_sec": 3.869,
+          "samples_sec": [
+            3.869,
+            3.862,
+            3.795
+          ],
+          "cold_sec": 3.869,
+          "warm_summary": {
+            "median_sec": 3.829,
+            "mean_sec": 3.829,
+            "min_sec": 3.795,
+            "max_sec": 3.862,
+            "p95_sec": 3.859
+          }
+        },
+        {
+          "name": "frontend_contract",
+          "median_sec": 0.056,
+          "mean_sec": 0.057,
+          "min_sec": 0.055,
+          "max_sec": 0.06,
+          "p95_sec": 0.059,
+          "samples_sec": [
+            0.055,
+            0.056,
+            0.06
+          ],
+          "cold_sec": 0.055,
+          "warm_summary": {
+            "median_sec": 0.058,
+            "mean_sec": 0.058,
+            "min_sec": 0.056,
+            "max_sec": 0.06,
+            "p95_sec": 0.06
+          }
+        },
+        {
+          "name": "quality_scorecards",
+          "median_sec": 21.166,
+          "mean_sec": 21.237,
+          "min_sec": 21.142,
+          "max_sec": 21.403,
+          "p95_sec": 21.379,
+          "samples_sec": [
+            21.142,
+            21.403,
+            21.166
+          ],
+          "cold_sec": 21.142,
+          "warm_summary": {
+            "median_sec": 21.284,
+            "mean_sec": 21.284,
+            "min_sec": 21.166,
+            "max_sec": 21.403,
+            "p95_sec": 21.391
+          }
+        }
+      ],
+      "profile_total": {
+        "median_sec": 25.066,
+        "mean_sec": 25.136,
+        "min_sec": 25.02,
+        "max_sec": 25.321,
+        "p95_sec": 25.296,
+        "samples_sec": [
+          25.066,
+          25.321,
+          25.02
+        ],
+        "cold_sec": 25.066,
+        "warm_summary": {
+          "median_sec": 25.171,
+          "mean_sec": 25.171,
+          "min_sec": 25.02,
+          "max_sec": 25.321,
+          "p95_sec": 25.306
+        }
+      }
+    },
+    {
+      "name": "ci",
+      "description": "CI-required jobs median baseline.",
+      "command_stats": [
+        {
+          "name": "backend_smoke",
+          "median_sec": 3.729,
+          "mean_sec": 3.75,
+          "min_sec": 3.66,
+          "max_sec": 3.862,
+          "p95_sec": 3.849,
+          "samples_sec": [
+            3.862,
+            3.66,
+            3.729
+          ],
+          "cold_sec": 3.862,
+          "warm_summary": {
+            "median_sec": 3.695,
+            "mean_sec": 3.695,
+            "min_sec": 3.66,
+            "max_sec": 3.729,
+            "p95_sec": 3.726
+          }
+        },
+        {
+          "name": "frontend_contract",
+          "median_sec": 0.054,
+          "mean_sec": 0.054,
+          "min_sec": 0.052,
+          "max_sec": 0.056,
+          "p95_sec": 0.056,
+          "samples_sec": [
+            0.052,
+            0.054,
+            0.056
+          ],
+          "cold_sec": 0.052,
+          "warm_summary": {
+            "median_sec": 0.055,
+            "mean_sec": 0.055,
+            "min_sec": 0.054,
+            "max_sec": 0.056,
+            "p95_sec": 0.056
+          }
+        },
+        {
+          "name": "governance_contract",
+          "median_sec": 0.048,
+          "mean_sec": 0.047,
+          "min_sec": 0.045,
+          "max_sec": 0.048,
+          "p95_sec": 0.048,
+          "samples_sec": [
+            0.048,
+            0.048,
+            0.045
+          ],
+          "cold_sec": 0.048,
+          "warm_summary": {
+            "median_sec": 0.046,
+            "mean_sec": 0.046,
+            "min_sec": 0.045,
+            "max_sec": 0.048,
+            "p95_sec": 0.048
+          }
+        }
+      ],
+      "profile_total": {
+        "median_sec": 3.831,
+        "mean_sec": 3.851,
+        "min_sec": 3.762,
+        "max_sec": 3.962,
+        "p95_sec": 3.949,
+        "samples_sec": [
+          3.962,
+          3.762,
+          3.831
+        ],
+        "cold_sec": 3.962,
+        "warm_summary": {
+          "median_sec": 3.796,
+          "mean_sec": 3.796,
+          "min_sec": 3.762,
+          "max_sec": 3.831,
+          "p95_sec": 3.827
+        }
+      }
+    }
+  ],
+  "failures": []
+}

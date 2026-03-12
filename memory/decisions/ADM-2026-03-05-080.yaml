@@ -1,0 +1,18 @@
+id: ADM-2026-03-05-080
+date: 2026-03-05
+title: Split forward root hypotheses from post-factum market verification and add
+  no-lookahead synthetic gate
+context: Trading value degrades if root detection waits for realized 1H/1D move confirmation;
+  however launch risk remains high without pre-launch proof on historical shocks.
+decision: Keep live routing hypothesis-only (root/aftershock from causal text+route
+  evidence), use 1H/1D only for offline validation/calibration, and require walk-forward
+  synthetic validation with frozen past-only threshold tuning and explicit leakage
+  filtering before forward enablement.
+impact: Runtime can emit early root signals without post-knowledge latency, while
+  release readiness remains controlled by deterministic no-lookahead metrics across
+  rolling historical windows.
+links:
+- scripts/news_forward_synthetic.py
+- docs/runbooks/news-forward-synthetic-validation.md
+- docs/runbooks/news-shock-go-live.md
+- docs/session_handoff.md

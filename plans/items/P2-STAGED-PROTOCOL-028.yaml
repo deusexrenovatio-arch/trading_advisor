@@ -1,0 +1,41 @@
+id: P2-STAGED-PROTOCOL-028
+title: Implement true staged two-leg execution protocol and rerun base vs staged comparison
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- replay and pipeline execution support sequential leg-by-leg entry and exit with
+  second-leg timeout handling
+- strategy contracts and settings expose staged protocol defaults with validation
+- telegram signal message explicitly describes staged leg order and timeout behavior
+- base vs staged run is recomputed on the 55-pair historical pack with comparable
+  scenario parameters
+checks:
+- pytest tests/test_execution_replay.py tests/test_backtest_defaults.py tests/test_signal_replay_core.py
+  tests/test_telegram_worker.py -q
+- pytest tests/test_config_resolver.py tests/test_signal_api.py -q
+- python scripts/intraday_period_pnl_eval.py --config configs/default.yaml --pairs
+  "$(Get-Content data/reports/pairs_55_20260223.txt)" --from-date 2025-08-27 --till-date
+  2026-02-23 --signal-exec-lag-days 0 --scenario-specs "30,720,0.01,0.0125,0.015,0"
+  --pair-workers 8 --preload-workers 8 --minute-chunk-days 21 --preload-cache-mode
+  readonly --preload-cache-dir data/output/intraday_preload_cache_entry_exit_55
+- python scripts/intraday_period_pnl_eval.py --config configs/default.sequential_staged.yaml
+  --pairs "$(Get-Content data/reports/pairs_55_20260223.txt)" --from-date 2025-08-27
+  --till-date 2026-02-23 --signal-exec-lag-days 0 --scenario-specs "30,720,0.01,0.0125,0.015,0"
+  --pair-workers 8 --preload-workers 8 --minute-chunk-days 21 --preload-cache-mode
+  readonly --preload-cache-dir data/output/intraday_preload_cache_entry_exit_55
+docs:
+- src/moex_carry/pipeline.py
+- src/moex_carry/signal_replay/minute_replay.py
+- src/moex_carry/integrations/telegram_worker.py
+- src/moex_carry/contracts/strategy_test.py
+- src/moex_carry/config.py
+- data/reports/sequential_compare_base_vs_staged_summary_20260302.csv
+- data/reports/sequential_protocol_settings_20260302.json
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-UX-RISK-HARDENING-027
+started_at: 2026-03-02
+completed_at: 2026-03-02

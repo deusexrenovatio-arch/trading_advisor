@@ -1,0 +1,17 @@
+id: ADM-2026-03-06-099
+date: 2026-03-06
+title: Harden live paper-forward launcher with automatic raw-data bootstrap on forward-start
+  failure
+context: Operator launch of `/api/forward/start` failed with `400 Missing raw data`
+  even though signal refresh path was reachable on live MOEX contour.
+decision: Updated `scripts/start_forward_paper_live.ps1` to load local env (`scripts/moex-carry.local.ps1`)
+  by default, resolve Python executable, and on `Missing raw data` run `moex_carry.cli
+  fetch` then retry `/api/forward/start` once automatically.
+impact: One-command launch now reaches `forward status=ready` from a cold raw-data
+  state without manual fetch steps, while preserving existing Telegram signal formatting
+  and API contracts.
+links:
+- scripts/start_forward_paper_live.ps1
+- README.md
+- docs/session_handoff.md
+- plans/PLANS.yaml

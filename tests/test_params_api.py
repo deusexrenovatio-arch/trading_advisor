@@ -1,5 +1,5 @@
 ﻿from moex_carry.config import AppSettings, DataConfig
-from moex_carry.ui.app import create_app
+from moex_carry.server import create_server_app as create_app
 
 
 def test_params_specs_api_returns_list(tmp_path):
@@ -12,3 +12,4 @@ def test_params_specs_api_returns_list(tmp_path):
     data = response.get_json()
     assert isinstance(data, list)
     assert len(data) > 0
+

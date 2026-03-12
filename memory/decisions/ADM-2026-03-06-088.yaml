@@ -1,0 +1,24 @@
+id: ADM-2026-03-06-088
+date: 2026-03-06
+title: Split live signals by strategy stream end-to-end for API actionability and
+  Telegram delivery
+context: User asked to separate arbitrage and commodity-futures signals in the existing
+  live paper-forward contour while preserving current Telegram format and ACK flow.
+decision: Added normalized strategy metadata propagation (`strategy_id`, `strategy_type`,
+  `strategy_stream`) from runtime adapter into API actionability payloads, strategy-aware
+  signal fingerprinting, and Telegram worker stream-aware cooldown/daily keys plus
+  strategy label in messages.
+impact: Live contour can now filter and track signals per strategy stream without
+  cross-stream dedupe collisions; operator can query actionability by stream and receive
+  Telegram messages tagged by strategy.
+links:
+- src/moex_carry/strategy/two_layer_adapter.py
+- src/moex_carry/ui/app.py
+- src/moex_carry/signals_ack.py
+- src/moex_carry/integrations/telegram_strategy.py
+- src/moex_carry/integrations/telegram_worker.py
+- tests/test_api_v2.py
+- tests/test_telegram_worker.py
+- tests/test_signal_cycle.py
+- docs/session_handoff.md
+- plans/PLANS.yaml

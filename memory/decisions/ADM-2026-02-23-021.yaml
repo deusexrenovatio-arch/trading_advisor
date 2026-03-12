@@ -1,0 +1,16 @@
+id: ADM-2026-02-23-021
+date: 2026-02-23
+title: Group read-heavy market and portfolio routes under dedicated registrar
+context: '`ui/app.py` still carried signal history/execution read APIs, spread-series,
+  and portfolio rebalance endpoints in one large block.'
+decision: Extract these endpoints to `ui/routes_market_data.py` and wire from composition
+  root, preserving `ui.app.build_spread_series` seam via accessor callback.
+impact: Further reduced UI composition root size and isolated read/preview API behavior
+  into a focused module without changing route contracts.
+links:
+- src/moex_carry/ui/app.py
+- src/moex_carry/ui/routes_market_data.py
+- scripts/validate_api_v2_contract_parity.py
+- scripts/harness_baseline_metrics.py
+- tests/test_signal_api.py
+- tests/test_ui_api.py

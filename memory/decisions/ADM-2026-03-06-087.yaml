@@ -1,0 +1,21 @@
+id: ADM-2026-03-06-087
+date: 2026-03-06
+title: Promote Telegram root events to first-class runtime output and demote discovery
+  to optional secondary flow
+context: The module goal was clarified as root-event delivery, but the live Telegram
+  worker still sent discovery messages by default and exposed root context only indirectly
+  through shock alerts.
+decision: Add a dedicated Telegram root broadcaster that reads `news_root_registry`
+  from the live SQLite DB, persist root-specific dedup and cursor state in the worker,
+  switch default runtime to root-first, and keep shock/discovery as optional secondary
+  channels.
+impact: Telegram now has a direct user-facing path for new root topics with replay-safe
+  deduplication, while live operations can run in a root-only mode without retroactive
+  discovery noise.
+links:
+- src/moex_carry/integrations/telegram_root_broadcast.py
+- src/moex_carry/integrations/telegram_worker.py
+- src/moex_carry/config.py
+- configs/default.yaml
+- tests/test_telegram_worker.py
+- docs/runbooks/news-shock-go-live.md

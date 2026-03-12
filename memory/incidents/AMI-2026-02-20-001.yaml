@@ -1,0 +1,9 @@
+id: AMI-2026-02-20-001
+date: 2026-02-20
+title: Worktree drift during edits
+symptom: Early edits were applied to a different checkout path and had to be re-synced.
+root_cause: Missing immediate cwd verification before patch phase.
+remediation: Enforce worktree_guard check at task start and before major edit batches.
+remediation_type: guardrail
+links:
+- scripts/worktree_guard.ps1

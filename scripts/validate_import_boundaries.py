@@ -89,7 +89,11 @@ def main() -> int:
     parser.add_argument(
         "--allow",
         action="append",
-        default=["src/moex_carry/cli.py"],
+        default=[
+            "src/moex_carry/cli.py",
+            "src/moex_carry/server/__init__.py",
+            "src/moex_carry/server/app.py",
+        ],
         help="Path allowed to import UI modules (repeatable).",
     )
     args = parser.parse_args()

@@ -1,0 +1,15 @@
+id: ADM-2026-02-20-002
+date: 2026-02-20
+title: Convert remaining partial governance gaps into enforceable repository checks
+context: Partial Harness alignment remained in ADR policy, flaky handling, e2e CI,
+  observability setup, and NFR journey budgets.
+decision: Add explicit policies plus validators and CI gates instead of relying on
+  informal guidance.
+impact: Reduced prompt-dependence and stronger machine-verifiable governance across
+  delivery flows.
+links:
+- scripts/validate_dependency_decisions.py
+- scripts/validate_flaky_policy.py
+- scripts/validate_taste_invariants.py
+- scripts/validate_observability_stack.py
+- .github/workflows/ci.yml

@@ -1,0 +1,13 @@
+id: ADM-2026-02-22-009
+date: 2026-02-22
+title: Standardize signal continuity documentation around worktree and data-layer
+  contracts
+context: Repeated troubleshooting loops showed the same failures around wrong worktree,
+  stale projection files, and mixed metric semantics.
+decision: Add a dedicated runbook that defines canonical paths, signal semantics,
+  and mandatory verification flow for signal-related changes.
+impact: Faster root-cause isolation, fewer false regressions, and stable handoffs
+  across sessions and worktrees.
+links:
+- docs/runbooks/signal-agent-continuity.md
+- docs/session_handoff.md

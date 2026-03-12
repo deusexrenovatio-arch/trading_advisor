@@ -1,0 +1,9 @@
+id: AMP-2026-02-20-005
+date: 2026-02-20
+title: Quantify trigger before mitigation
+pattern: For every crash RCA, rank contributors by CPU, memory commit, and disk pressure
+  in one time window before choosing remediation.
+when_to_use: Reboots, hangs, BSOD/live dump incidents, or any suspected multi-factor
+  resource overload.
+links:
+- agent-runbook.md

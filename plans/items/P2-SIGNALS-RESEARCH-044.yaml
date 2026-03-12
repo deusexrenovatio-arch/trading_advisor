@@ -1,0 +1,24 @@
+id: P2-SIGNALS-RESEARCH-044
+title: Record dominant-top and per-root diagnostics as mandatory execution research
+  views
+lane: governance
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- future execution reviews state the whole-universe result first
+- concentration-sensitive candidates are additionally checked without dominant tops
+- per-root or per-instrument quality is reported before claiming a structural uplift
+checks:
+- python scripts/run_lean_gate.py
+docs:
+- docs/research/evaluation-policy.md
+- docs/research/o1-execution-hypothesis-program-2026-03-06.md
+- docs/research/o1-execution-hypothesis-results-2026-03-06.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-RESEARCH-043
+started_at: 2026-03-06
+completed_at: 2026-03-06

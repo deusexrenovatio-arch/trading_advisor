@@ -1,0 +1,12 @@
+id: AMP-2026-03-02-018
+date: 2026-03-02
+title: Review components in operator journey order before expanding requirements
+pattern: Start from workspace entry, then walk decisions, actions, research, news,
+  portfolio, and ops, documenting primary/edge/negative/interruption scenarios per
+  component.
+when_to_use: Product or BA tasks aimed at maximizing use-case coverage and reducing
+  hidden workflow gaps.
+links:
+- docs/planning/user-needs-catalog.md
+- docs/user-scenarios.md
+- docs/checklists/first-time-right-gate.md

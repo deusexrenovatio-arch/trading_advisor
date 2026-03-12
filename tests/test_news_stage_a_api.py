@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 
@@ -15,7 +15,7 @@ from moex_carry.storage.repositories import (
     upsert_news_llm_runs,
     upsert_news_signal_links,
 )
-from moex_carry.ui.app import create_app
+from moex_carry.server import create_server_app as create_app
 
 
 def _settings(tmp_path):
@@ -289,3 +289,4 @@ def test_stage_a_news_feed_derives_event_scores_from_news_level(tmp_path):
     assert primary["target_id"] == "evt-1"
     assert primary["derived_from"] == "news_items"
     assert primary["direction"] in {"up", "down", "neutral"}
+

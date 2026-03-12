@@ -27,22 +27,22 @@
 5. Push feature branch with `--force-with-lease` only for owned feature branches.
 6. Sync integration branch with no-ff merges for early conflict detection.
 
-## Mandatory guardrail (session context lock)
-Use the worktree guard script in every coding session:
+## Mandatory guardrail (task session lock)
+Use the task session contract in every coding session:
 
-1. Initialize expected context once per stream:
-```powershell
-./scripts/worktree_guard.ps1 -Action Init -WorktreePath "D:\wt-<stream>" -Branch "<branch>" -ContextTtlHours 12
+1. Start the session from the worktree and branch you are actually using:
+```bash
+python scripts/task_session.py begin --request "<request>"
 ```
-2. Check context before any development command:
-```powershell
-./scripts/worktree_guard.ps1 -Action Check
+2. Check session identity before development commands when needed:
+```bash
+python scripts/task_session.py status
 ```
-3. If check fails:
+3. If the check fails:
 - stop all code changes/tests in the wrong worktree,
 - switch to the expected worktree/branch,
-- run `Check` again before proceeding,
-- if lock expired, run `Init` again for the current session.
+- start a fresh session from the correct location,
+- do not recreate context manually through path/branch arguments.
 
 ## Merge order policy
 1. `refactor/app-core`

@@ -1,0 +1,24 @@
+id: ADM-2026-03-05-077
+date: 2026-03-05
+title: Add deterministic WF hypothesis verifier with explicit pass/fail gates and
+  baseline-candidate verdict
+context: Strategy iteration required strict, reproducible hypothesis checks on `planned_signals`
+  instead of ad-hoc notebook snippets and manual metric inspection.
+decision: Added `scripts/verify_wf_hypothesis.py` with deterministic filters (setup/side/slot/cluster/root/instrument
+  plus side-slot exclusions), walk-forward-aligned metrics (`win_rate_net`, `trades_per_week`,
+  concentration), and explicit gate profiles (`stage_go`, `final_go`) with machine-readable
+  verdicts; added focused tests and produced two artifact checks for the current ORB
+  candidate.
+impact: Each hypothesis can now be evaluated with the same command contract and auditable
+  JSON outputs; current candidate (`ORB_BREAKOUT`, cluster `other`, slots `12:00/14:15`,
+  exclude `BUY@12:00`) passes `stage_go` and fails `final_go`; compact neighbor sweep
+  (`77` variants) found `0` `final_go` passes, narrowing next optimization scope to
+  structural uplift beyond slot/side filtering.
+links:
+- scripts/verify_wf_hypothesis.py
+- tests/test_verify_wf_hypothesis.py
+- artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_stagego_20260305.json
+- artifacts/research/wf_goal_v6_hypothesis_orb_other_1200_1415_exbuy1200_finalgo_20260305.json
+- artifacts/research/wf_goal_v6_hypothesis_orb_other_slot_sweep_finalgo_20260305.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

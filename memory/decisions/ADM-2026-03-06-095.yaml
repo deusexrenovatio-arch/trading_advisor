@@ -1,0 +1,23 @@
+id: ADM-2026-03-06-095
+date: 2026-03-06
+title: Treat thin roots as cause-based diagnostics and record index-heavy silent cluster
+  on 2025-2026
+context: User asked to keep the current thin-root policy only provisionally, then
+  requested a late-period check on `2025-2026` and noted that the roots sent to review
+  looked like index instruments rather than commodities.
+decision: Reclassify sparse roots by cause instead of by one aggregate `thin-sample`
+  label. Keep `FF (TTF Gas)`, `CE (Copper)`, `NC (Nickel)`, `AN (Aluminum)`, and `KC
+  (Coffee)` as `late-launch but active`; keep `DJ (Dow Jones)` and `SU (Sugar)` as
+  `sparse-trigger but active`; and record `N2 (Nikkei 225)`, `SF (S&P 500)`, `DX (DAX)`,
+  and `SX (Euro Stoxx 50)` as a `current-regime silent` cluster on `2025-2026`.
+impact: Future universe-pruning decisions must not treat sparse roots as one homogeneous
+  failure mode. The late-period silent cluster should be investigated as an index-family
+  regime-fit question before any root-level pruning, and app-facing histogram artifacts
+  should be published in a renderable format (`png`) as well as `svg`.
+links:
+- artifacts/research/wf_goal_v6_h4a_cap_off_full_2020_2026_20260306.json
+- artifacts/research/h4_no_minis_monthly_revenue_histogram_20260306.png
+- docs/research/evaluation-policy.md
+- docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+- docs/session_handoff.md
+- plans/PLANS.yaml

@@ -1,0 +1,28 @@
+id: P2-SIGNALS-STRATEGY-STREAM-041
+title: Separate live signal flow by strategy stream in actionability APIs and Telegram
+  worker
+lane: operations
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- actionability APIs expose and filter `strategy_type` and `strategy_stream` for pair
+  signals
+- signal fingerprint/cooldown logic does not collide between arbitrage and commodity-futures
+  streams
+- Telegram signal message contains strategy label while preserving existing command/ACK
+  UX
+- regression tests cover API filtering, runtime metrics propagation, and worker stream
+  cooldown split
+checks:
+- pytest tests/test_api_v2.py tests/test_telegram_worker.py tests/test_signal_cycle.py
+  -q
+- python scripts/run_lean_gate.py
+docs:
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-FWD-LIVE-040
+started_at: 2026-03-06
+completed_at: 2026-03-06

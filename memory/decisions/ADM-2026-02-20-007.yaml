@@ -1,0 +1,14 @@
+id: ADM-2026-02-20-007
+date: 2026-02-20
+title: Enforce context budget with versioned handoff and lean-gate validator
+context: Team discussion identified repeated context bloat from long chat recaps and
+  duplicated instruction payloads.
+decision: Introduce `docs/session_handoff.md` + `docs/workflows/context-budget.md`
+  and validate with `scripts/validate_session_handoff.py` in lean gate.
+impact: Team handoff becomes short and deterministic; context continuity moves from
+  chat history to repository artifacts.
+links:
+- docs/session_handoff.md
+- docs/workflows/context-budget.md
+- scripts/validate_session_handoff.py
+- scripts/run_lean_gate.py

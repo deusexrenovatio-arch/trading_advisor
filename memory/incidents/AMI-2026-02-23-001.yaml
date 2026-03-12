@@ -1,0 +1,13 @@
+id: AMI-2026-02-23-001
+date: 2026-02-23
+title: File patch initially landed in wrong repository root during dual-worktree session
+symptom: New orchestration script was first created under d:\New Project instead of
+  d:\wt-news-module.
+root_cause: Patch tool default root followed active environment path rather than intended
+  feature worktree.
+remediation: Use absolute file paths for apply_patch when session includes multiple
+  repositories and verify file presence in target worktree before validation.
+remediation_type: guardrail
+links:
+- scripts/worktree_guard.ps1
+- scripts/run_news_shock_silver_cycle.py

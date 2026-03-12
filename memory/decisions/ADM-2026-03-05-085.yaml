@@ -1,0 +1,29 @@
+id: ADM-2026-03-05-085
+date: 2026-03-05
+title: Add root/instrument precision filters and validate causal rerun reproducibility
+  limits
+context: Post-hoc verifier found one `final_go`-passing filtered hypothesis on `h24`,
+  but direct causal reruns with existing precision controls could not reproduce target
+  thresholds.
+decision: Extended precision filter in `run_morning_plan_walk_forward.py` with `--precision-allow-root`
+  and `--precision-allow-instrument`, added tests for root/instrument gating, and
+  ran multiple causal reruns (integrated filter, seed sweeps, baseline reruns with
+  post-filter checks).
+impact: Tooling now supports causal root/instrument gating, but current filter-only
+  strategy still misses target in causal mode (`winrate` and `tpw` shortfall); evidence
+  indicates next iteration must move constraints into train-objective/selection logic,
+  not only precision gate.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- tests/test_morning_plan_walk_forward.py
+- artifacts/research/wf_goal_v6_h24_causal_rerun_orb_energy_other_roots17_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_precision_rootfilter_seed_sweep_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_filtered_finalgo_check_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_posthoc_autosearch_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed124_local_neighborhood_search_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed_sweep_20260305.json
+- artifacts/research/wf_goal_v6_h24_causal_rerun_baseline_seed72_111_posthoc_compare_20260305.json
+- docs/session_handoff.md
+- plans/PLANS.yaml

@@ -1,4 +1,4 @@
-# Release Notes
+﻿# Release Notes
 
 ## 2026-02-20 - PR-only main hardening and emergency override contract
 
@@ -15,7 +15,7 @@ Changed
   - legacy `MOEX_CARRY_ALLOW_MAIN_PUSH` override is rejected.
 - New governance validator:
   - `scripts/validate_pr_only_policy.py`
-  - wired into `scripts/run_lean_gate.py` and `tests/architecture/test_governance_policies.py`.
+  - wired into `scripts/run_loop_gate.py` and `tests/architecture/test_governance_policies.py`.
 - Governance docs aligned:
   - `AGENTS.md`
   - `docs/DEV_WORKFLOW.md`
@@ -25,7 +25,7 @@ Changed
 
 Verification
 - `python scripts/validate_pr_only_policy.py`
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `pytest tests/architecture/test_governance_policies.py -q`
 
 ## 2026-02-17 - Minute portfolio HPO parity + execution quality projection
@@ -86,7 +86,10 @@ Changed
   - `scripts/install_git_hooks.py`
 - Added local branch safety in pre-push:
   - direct push to `main` is blocked by default,
-  - explicit override via `MOEX_CARRY_ALLOW_MAIN_PUSH=1`.
+  - emergency-only override requires both:
+    - `MOEX_CARRY_EMERGENCY_MAIN_PUSH=1`
+    - `MOEX_CARRY_EMERGENCY_MAIN_PUSH_REASON='<ticket/incident>'`
+  - legacy `MOEX_CARRY_ALLOW_MAIN_PUSH` is deprecated and rejected by hook policy.
 - Added pre-push frontend install fallback switch:
   - `MOEX_CARRY_SKIP_NPM_CI=1` skips only `npm ci` while keeping `lint/build` checks.
 - CI now has fail-fast governance gate before backend/frontend jobs:
@@ -821,4 +824,5 @@ Added
 
 Notes
 - Backtest engine and decision_log/decision_view schemas unchanged.
+
 

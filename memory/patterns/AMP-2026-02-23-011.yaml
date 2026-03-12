@@ -1,0 +1,11 @@
+id: AMP-2026-02-23-011
+date: 2026-02-23
+title: Reference-over-duplication for governance text
+pattern: Keep skill files domain-focused and reference one centralized governance
+  workflow instead of repeating full command lists in every skill.
+when_to_use: Any large skill-catalog update where context budget can regress due to
+  repeated lifecycle instructions.
+links:
+- docs/workflows/skill-governance-sync.md
+- .cursor/skills
+- docs/workflows/context-budget.md

@@ -1,0 +1,25 @@
+id: P2-NEWS-ROOT-TG-058
+title: Make Telegram delivery root-first with first-class root-event alerts
+lane: news
+status: completed
+execution_mode: autonomous
+owner: quant-research
+acceptance:
+- Telegram worker reads root events directly from `news_root_registry` and sends dedicated
+  root-event messages
+- worker state deduplicates root alerts across reruns and restarts
+- default runtime treats root alerts as the primary Telegram path while leaving discovery
+  and shock as optional secondary channels
+- focused tests cover root broadcast formatting and worker-cycle delivery
+checks:
+- pytest tests/test_news_root_maintenance.py tests/test_telegram_worker.py -q
+- python scripts/validate_task_request_contract.py
+- python scripts/run_lean_gate.py
+docs:
+- docs/session_handoff.md
+- README.md
+- docs/runbooks/news-shock-go-live.md
+dependencies:
+- P1-AGENT-CONTEXT-V2-046
+started_at: 2026-03-06
+completed_at: 2026-03-06

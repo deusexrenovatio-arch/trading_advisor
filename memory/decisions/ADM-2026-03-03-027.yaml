@@ -1,0 +1,13 @@
+id: ADM-2026-03-03-027
+date: 2026-03-03
+title: Split shock workflow into primary and aftershock capture metrics
+context: Single shock recall metric mixed initial impulse and continuation bursts,
+  making optimization ambiguous for alerting logic.
+decision: Add deterministic episode segmentation (`primary` + `aftershock`) and report
+  mode capture recall for both roles separately.
+impact: 'Tuning now targets the stated objective directly: catch initial market shock
+  while measuring continuation coverage independently.'
+links:
+- src/moex_carry/shock_episodes.py
+- scripts/analyze_shock_episodes.py
+- data/output/shock_episode_analysis_2026_ytd/shock_mode_capture.csv

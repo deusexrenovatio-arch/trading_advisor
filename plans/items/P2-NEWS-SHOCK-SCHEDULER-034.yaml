@@ -1,0 +1,26 @@
+id: P2-NEWS-SHOCK-SCHEDULER-034
+title: Enable unattended daily shock label cycle via Windows Task Scheduler
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- launcher script exists for one-shot cycle execution with timestamped output directories
+- task-manager script supports install/status/run/remove and configurable schedule
+- runbook documents unattended setup and operational commands
+- task installation and manual trigger succeed on target workstation
+checks:
+- powershell -ExecutionPolicy Bypass -File scripts/start_shock_label_cycle.ps1 -CheckOnly
+- powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1
+  -Action Install -DryRun
+- powershell -ExecutionPolicy Bypass -File scripts/manage_shock_label_cycle_task.ps1
+  -Action Status
+- python scripts/run_lean_gate.py
+docs:
+- scripts/start_shock_label_cycle.ps1
+- scripts/manage_shock_label_cycle_task.ps1
+- docs/runbooks/news-shock-go-live.md
+dependencies:
+- P2-NEWS-SHOCK-AUTOMATION-033
+started_at: 2026-03-03
+completed_at: 2026-03-03

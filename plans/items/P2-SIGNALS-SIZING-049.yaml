@@ -1,0 +1,30 @@
+id: P2-SIGNALS-SIZING-049
+title: Add money-based futures position sizing to walk-forward research and rerun
+  baseline versus scenario 2/3 on the frozen window
+lane: research
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- walk-forward supports an explicit economic sizing mode while preserving the legacy
+  one-lot path
+- baseline and scenario 2/3 reruns are compared on the same frozen window in money
+  and return-on-equity terms
+- a research artifact records weak-month floor and concentration metrics for the compared
+  scenarios
+checks:
+- python scripts/run_lean_gate.py
+- targeted walk-forward tests
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+docs:
+- scripts/run_morning_plan_walk_forward.py
+- scripts/run_signals_sizing_scenarios.py
+- scripts/run_o1_execution_hypothesis_program.py
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+- plans/PLANS.yaml
+dependencies:
+- P2-SIGNALS-METRICS-048
+started_at: 2026-03-07
+completed_at: 2026-03-07

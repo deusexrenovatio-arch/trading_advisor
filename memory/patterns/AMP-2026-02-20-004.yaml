@@ -1,0 +1,9 @@
+id: AMP-2026-02-20-004
+date: 2026-02-20
+title: Exclude high-churn paths from IDE indexing
+pattern: Keep dependency folders, caches, logs, and generated artifacts outside default
+  index scope.
+when_to_use: Any repository with parallel compute agents or known local resource pressure.
+links:
+- .cursorignore
+- agent-runbook.md

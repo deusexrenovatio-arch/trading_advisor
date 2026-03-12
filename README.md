@@ -34,7 +34,7 @@ python -m moex_carry.cli fetch
 python -m moex_carry.cli compute
 python -m moex_carry.cli backtest
 python -m moex_carry.cli paper
-python -m moex_carry.cli ui
+python -m moex_carry.cli server
 ```
 
 3) Start the UI (React + Vite):
@@ -53,7 +53,7 @@ Or use the demo scripts:
 
 ```
 python scripts/pipeline_demo.py
-python scripts/run_ui.py
+python scripts/run_server.py
 ```
 
 ## Development workflow
@@ -110,7 +110,7 @@ MOEX_CARRY_TELEGRAM__DAILY_HEALTHCHECK_TIME_LOCAL=09:00
 4) Start backend:
 
 ```
-python -m moex_carry.cli ui --config configs/default.yaml
+python -m moex_carry.cli server --config configs/default.yaml
 ```
 
 5) Start Telegram worker:

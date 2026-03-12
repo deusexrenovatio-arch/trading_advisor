@@ -1,0 +1,28 @@
+id: ADM-2026-03-06-085
+date: 2026-03-06
+title: Make discovery feed the only forward news route and demote verified and legacy
+  schedulers to non-production roles
+context: After `news_root_cycle` was introduced, the runtime still exposed multiple
+  production-looking routes (`news_ingest`, `shock_label_cycle`, single `live_news_signals.csv`),
+  which kept forward gating tied to post-factum verification and single-row Telegram
+  delivery semantics.
+decision: Split runtime export into `discovery` and `verified` feeds, route bridge
+  and Telegram defaults to discovery, refactor live-news storage/feed contracts toward
+  story-first many-to-many commodity attribution, group Telegram discovery alerts
+  by `story_id`, and delete legacy production scheduler/launcher paths in favor of
+  one `news_root_cycle` manager pair.
+impact: Production truth becomes one runtime command and one forward news contour;
+  verified output remains for retrospective calibration, while Telegram and strategy
+  gate consume the same discovery contract with explicit multi-commodity scope.
+links:
+- src/moex_carry/news_live_runtime.py
+- src/moex_carry/news_live_runtime_ops.py
+- src/moex_carry/news_live_feed.py
+- src/moex_carry/news_live_bridge.py
+- src/moex_carry/news_shock_live_input.py
+- src/moex_carry/news_shock_live_input_helpers.py
+- src/moex_carry/integrations/telegram_news_broadcast.py
+- src/moex_carry/integrations/telegram_worker.py
+- scripts/start_news_root_cycle.ps1
+- scripts/manage_news_root_cycle_task.ps1
+- docs/runbooks/news-shock-go-live.md

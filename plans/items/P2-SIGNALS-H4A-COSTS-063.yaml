@@ -1,0 +1,35 @@
+id: P2-SIGNALS-H4A-COSTS-063
+title: Apply real broker plus maker-taker MOEX commissions to H4A revenue and enforce
+  no-mini review hygiene
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: strategy-engineering
+acceptance:
+- H4A walk-forward net-money accounting uses `0.45 RUB` broker fee per executed order
+  per contract plus a table-driven MOEX exchange fee applied only to taker executions
+- H4A risk and contract-sizing review artifacts are recomputed from the updated fee
+  model and exclude `BM`, `GN`, `NR`, `RM`, and `S1` by default
+- regression tests and governance/docs are aligned with the new commission contract
+  and no-mini policy
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+- pytest tests/test_morning_plan_walk_forward.py tests/test_h4a_contract_sizing_review.py
+  tests/test_h4a_vs_baseline_risk.py tests/test_risk_gate.py -q
+- python scripts/run_h4a_vs_baseline_risk.py
+- python scripts/run_h4a_contract_sizing_review.py --position-sizing-risk-money 20000
+- python scripts/run_lean_gate.py
+docs:
+- scripts/run_morning_plan_walk_forward.py
+- scripts/run_h4a_vs_baseline_risk.py
+- scripts/run_h4a_contract_sizing_review.py
+- docs/runbooks/h4a-manual-execution-baseline.md
+- docs/research/execution-profiles-historical-review-no-minis-2026-03-06.md
+- docs/session_handoff.md
+- plans/PLANS.yaml
+- memory/agent_memory.yaml
+dependencies:
+- P2-SIGNALS-H4A-SIZING-062
+started_at: 2026-03-09
+completed_at: 2026-03-09

@@ -1,4 +1,4 @@
-# Self-Heal Escalation Runbook
+﻿# Self-Heal Escalation Runbook
 
 ## Scope
 Escalation path for failed deterministic self-heal runs.
@@ -11,7 +11,7 @@ Escalation path for failed deterministic self-heal runs.
 1. Inspect `self-heal-report.json` artifact.
 2. Identify failing gate command(s).
 3. Reproduce locally with:
-   - `python scripts/run_lean_gate.py --skip-metrics`
+   - `python scripts/run_loop_gate.py --from-git --git-ref HEAD --skip-session-check`
    - `python scripts/validate_quality_scorecards.py`
 
 ## Escalation Contract
@@ -32,3 +32,4 @@ When self-heal fails, create an issue with:
 - Root cause and mitigation are documented in:
   - `memory/agent_memory.yaml` (incident + remediation),
   - `plans/PLANS.yaml` (follow-up item if needed).
+

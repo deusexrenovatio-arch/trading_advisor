@@ -1,0 +1,29 @@
+id: P1-API-DECOMPOSE-023
+title: Extract ops and pretrade route groups from UI app composition
+lane: architecture
+status: completed
+execution_mode: autonomous
+owner: backend-platform
+acceptance:
+- ops routes moved from `ui/app.py` into dedicated module and wired through composition
+  root
+- pretrade routes moved from `ui/app.py` into dedicated module while keeping test
+  monkeypatch seams
+- API endpoint behavior and existing regression tests remain green
+checks:
+- pytest tests/test_api_v2.py::test_v2_ops_health_and_slo_observability tests/test_api_v2.py::test_v2_pretrade_check_post
+  tests/test_ui_api.py::test_pretrade_check_endpoint_returns_price_bands_and_volume_gate
+  tests/test_ui_api.py::test_pretrade_check_endpoint_fail_opens_on_iss_transport_error
+  -q
+- python scripts/validate_architecture_policy.py
+docs:
+- src/moex_carry/ui/routes_ops.py
+- src/moex_carry/ui/routes_pretrade.py
+- docs/architecture/modules/backend-core.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-API-DECOMPOSE-021
+- P1-TASTE-TARGET-022
+started_at: 2026-02-23
+completed_at: 2026-02-23

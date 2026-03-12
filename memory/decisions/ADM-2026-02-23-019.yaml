@@ -1,0 +1,14 @@
+id: ADM-2026-02-23-019
+date: 2026-02-23
+title: Separate hard and target file-size budgets for agent-friendly decomposition
+context: A single hard line-limit either forced many exceptions or blocked incremental
+  decomposition of large legacy modules.
+decision: Keep hard gate at `max_lines_default=800` with focused `allowed_large_files`,
+  and add non-blocking `target_lines_default` plus `target_large_files` advisory budgets.
+impact: Exception list stays small for true outliers, while teams get an explicit
+  ratchet target without breaking delivery flow.
+links:
+- configs/taste_invariants.yaml
+- scripts/validate_taste_invariants.py
+- docs/runbooks/governance-remediation.md
+- plans/PLANS.yaml

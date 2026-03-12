@@ -1,0 +1,36 @@
+id: P2-NEWS-GOLDEN-SET-045
+title: Build manual web-backed golden events set and tune causal routing for 2026-02-28
+  strike miss
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- manual golden set contains 10 root-cause events per commodity in active contour
+  (`BRN`, `NG_US`, `GOLD`) with links and verification metrics
+- route-aware strike class is introduced to capture exporter-level military strike
+  risk without forcing outage label
+- live feed verification can use broad and v2 event ids when selected id is absent
+- regression tests cover strike-route inference and broad-id verification behavior
+checks:
+- python -m pytest tests/test_news_commodity_graph.py tests/test_news_causal.py tests/test_news_live_feed.py
+  -q
+- python scripts/validate_task_request_contract.py
+- python scripts/validate_session_handoff.py
+- python scripts/run_lean_gate.py
+- python scripts/validate_quality_scorecards.py
+docs:
+- docs/research/news_golden_events_v1.md
+- docs/research/news_golden_events_v1.csv
+- src/moex_carry/news_commodity_graph.py
+- src/moex_carry/news_causal.py
+- src/moex_carry/news_live_feed.py
+- tests/test_news_commodity_graph.py
+- tests/test_news_causal.py
+- tests/test_news_live_feed.py
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P2-NEWS-EVENT-FIRST-GRAPH-044
+started_at: 2026-03-05
+completed_at: 2026-03-05

@@ -1,4 +1,4 @@
-# News Shock Go-Live Runbook
+﻿# News Shock Go-Live Runbook
 
 ## Scope
 - Production runtime for commodity-news discovery, verified attribution, shock-row maintenance, strategy gate input, and Telegram delivery.
@@ -162,7 +162,7 @@ Research and validation tooling remains non-production:
 - `python scripts/news_shock_readiness.py ...`
 
 Mandatory checks before enabling or changing forward routing:
-- `python scripts/run_lean_gate.py`
+- `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `python scripts/validate_quality_scorecards.py`
 - `python scripts/news_multi_commodity_benchmark.py --benchmark-csv docs/research/news_multi_commodity_benchmark.csv --output-dir data/output/news_multi_commodity_benchmark`
 - `python -m pytest tests/test_news_live_runtime.py tests/test_news_live_feed.py tests/test_telegram_news_broadcast.py tests/test_telegram_worker.py tests/test_news_shock_live_input.py tests/test_news_operational_contract.py -q`
@@ -178,3 +178,4 @@ Multi-commodity attribution benchmark contract:
 - fixture: `docs/research/news_multi_commodity_benchmark.csv`
 - evaluator: `scripts/news_multi_commodity_benchmark.py`
 - settings: configured commodity universe from `configs/news-livecheck-ng.yaml` and discovery min-link threshold
+

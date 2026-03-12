@@ -1,0 +1,20 @@
+id: ADM-2026-03-06-096
+date: 2026-03-06
+title: Walk-forward futures economics must default to money/equity metrics instead
+  of raw cross-instrument ticks
+context: User asked to revisit the current futures baseline because annual profitability
+  depends too much on a few bright trades or months and explicitly noted that raw
+  ticks are not economically comparable across futures with different cash tick values.
+decision: Extended `run_morning_plan_walk_forward.py` to resolve per-instrument cash
+  tick value from MOEX futures specs, emit additive money and return-on-equity fields
+  in planned-signal and summary outputs, and make concentration plus train-selection
+  logic prefer money metrics whenever they are available while retaining legacy tick
+  fields for compatibility.
+impact: Future strategy comparisons, concentration checks, and weak-month diagnostics
+  can be judged on economically comparable units instead of raw point totals, which
+  reduces cross-instrument distortion without forcing an immediate baseline re-optimization.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- tests/test_morning_plan_walk_forward.py
+- docs/session_handoff.md
+- plans/PLANS.yaml

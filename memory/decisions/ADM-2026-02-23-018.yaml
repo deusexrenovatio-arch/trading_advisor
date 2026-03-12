@@ -1,0 +1,14 @@
+id: ADM-2026-02-23-018
+date: 2026-02-23
+title: Split UI composition by extracting scheduler and decision-action service
+context: '`ui/app.py` concentrated routing, background scheduler loop, and decision-action
+  write logic in one file.'
+decision: Extract scheduler lease loop to `ui/refresh_scheduler.py` and decision action
+  handling to `ui/decision_actions.py`, keeping `app.py` as composition root.
+impact: Lower blast radius for route/scheduler changes and cleaner ownership boundaries
+  inside the UI backend package.
+links:
+- src/moex_carry/ui/app.py
+- src/moex_carry/ui/refresh_scheduler.py
+- src/moex_carry/ui/decision_actions.py
+- docs/architecture/modules/backend-core.md

@@ -1,0 +1,9 @@
+id: AMP-2026-02-20-003
+date: 2026-02-20
+title: Guardrails before parallelism
+pattern: Establish measurable resource thresholds before scaling parallel agents;
+  stop scaling on first red signal.
+when_to_use: Any local session with two or more heavy compute agents.
+links:
+- agent-runbook.md
+- docs/checklists/first-time-right-gate.md

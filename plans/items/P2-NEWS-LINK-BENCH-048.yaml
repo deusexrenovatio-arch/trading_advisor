@@ -1,0 +1,35 @@
+id: P2-NEWS-LINK-BENCH-048
+title: Add formal multi-commodity attribution benchmark and close strict acceptance
+  for discovery routing
+lane: strategy
+status: completed
+execution_mode: autonomous
+owner: product-engineering
+acceptance:
+- a structured multi-commodity benchmark fixture exists with explicit expected commodity
+  scopes
+- deterministic linker rules reject generic weak anchors without commodity-specific
+  evidence
+- benchmark validator reports false multi-commodity assignment rate <= 0.10 under
+  production-style discovery settings
+- targeted linker and runtime validations remain green after the benchmark hardening
+checks:
+- python -m pytest tests/test_news_linking.py tests/test_news_live_runtime.py tests/test_news_live_feed.py
+  tests/test_telegram_news_broadcast.py tests/test_telegram_worker.py tests/test_news_operational_contract.py
+  -q
+- python scripts/news_multi_commodity_benchmark.py --benchmark-csv docs/research/news_multi_commodity_benchmark.csv
+  --output-dir data/output/news_multi_commodity_benchmark
+- python scripts/run_lean_gate.py
+- python scripts/validate_quality_scorecards.py
+docs:
+- src/moex_carry/news/linking.py
+- docs/research/news_multi_commodity_benchmark.csv
+- scripts/news_multi_commodity_benchmark.py
+- tests/test_news_linking.py
+- docs/runbooks/news-shock-go-live.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P2-NEWS-DISCOVERY-047
+started_at: 2026-03-06
+completed_at: 2026-03-06

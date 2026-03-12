@@ -51,5 +51,5 @@ if ($CheckOnly) {
 }
 
 Set-Location $repoRoot
-& $python -m moex_carry.cli ui --config $configAbsolute --log-level $LogLevel
+& $python -m moex_carry.cli server --config $configAbsolute --log-level $LogLevel
 exit $LASTEXITCODE

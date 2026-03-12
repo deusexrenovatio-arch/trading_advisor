@@ -1,0 +1,20 @@
+id: ADM-2026-03-04-078
+date: 2026-03-04
+title: Add precision-filter gate to walk-forward runner and lock first hypothesis
+  artifact
+context: Baseline analysis showed duplicate setup_id rows across decision slots and
+  unstable winrate concentration, while requested target is precision-first improvement
+  with explicit impact tracking.
+decision: Extend `run_morning_plan_walk_forward.py` with optional precision filter
+  controls (`--enable-precision-filter`, side/setup/stop/time allowlists, `min_risk_ticks`,
+  `min_target_return_pct`, and `--precision-dedup-setup-ids`) and serialize filter
+  config in `tuning_points`; evaluate Hypothesis
+impact: Team can run controlled precision experiments without changing default baseline
+  path, and each hypothesis now has deterministic metrics artifact to prevent repeated
+  analysis loops.
+links:
+- scripts/run_morning_plan_walk_forward.py
+- tests/test_morning_plan_walk_forward.py
+- artifacts/research/wf_goal_v6_hyp1_precision_filter_eval_20260304.json
+- plans/PLANS.yaml
+- docs/session_handoff.md

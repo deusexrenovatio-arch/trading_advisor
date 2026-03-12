@@ -1,0 +1,20 @@
+id: ADM-2026-03-04-072
+date: 2026-03-04
+title: Enable incremental shock-row backfill via cursor and scheduler wiring
+context: news_shock_rows backfill existed as a standalone script but was not integrated
+  into the regular shock-label cycle and scheduler plan, so historical DB coverage
+  depended on manual runs.
+decision: Add CLI command `news_shock_backfill`, add optional pre-cycle shock backfill
+  stage in `run_shock_label_cycle.py`, and wire daily backfill task to run `RunShockBackfill`
+  with bounded windows and persistent cursor.
+impact: Historical shock rows now fill gradually in DB (`news_state` cursor progression)
+  without long one-shot jobs; daily automation can extend history while keeping runtime
+  bounded.
+links:
+- src/moex_carry/cli.py
+- src/moex_carry/news_shock_backfill.py
+- scripts/run_shock_label_cycle.py
+- scripts/start_shock_label_cycle.ps1
+- scripts/manage_shock_label_cycle_task.ps1
+- scripts/manage_news_shock_live_plan.ps1
+- docs/runbooks/news-shock-go-live.md

@@ -1,0 +1,15 @@
+id: ADM-2026-02-23-022
+date: 2026-02-23
+title: Extract v2 research wrappers while preserving ui.app monkeypatch points
+context: '`ui/app.py` still included `/api/v2/research/*` wrappers and kept growing
+  despite earlier route-group decomposition.'
+decision: Move research wrappers to `ui/routes_research.py`, register from composition
+  root, and resolve runtime backtest/HPO callables through `moex_carry.ui.app` for
+  test seam compatibility.
+impact: Reduced app composition size and unblocked next extraction of action/actionability
+  routes without regressing research endpoint behavior.
+links:
+- src/moex_carry/ui/app.py
+- src/moex_carry/ui/routes_research.py
+- tests/test_api_v2.py
+- docs/architecture/modules/backend-core.md

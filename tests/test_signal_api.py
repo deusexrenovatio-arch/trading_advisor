@@ -1,4 +1,4 @@
-import json
+﻿import json
 from datetime import datetime
 
 from moex_carry.config import AppSettings, DataConfig, DatabaseConfig, UiConfig
@@ -10,7 +10,7 @@ from moex_carry.storage.repositories import (
     store_signal_history,
     store_signal_run,
 )
-from moex_carry.ui.app import SIGNAL_METRIC_CONTRACT_KEYS, create_app
+from moex_carry.server import SIGNAL_METRIC_CONTRACT_KEYS, create_server_app as create_app
 
 
 def _seed_signal_run(session, run_id: str, timestamp: datetime, records: list[dict[str, object]]):
@@ -1445,3 +1445,4 @@ def test_signals_active_repriced_enter_uses_spread_based_tolerance(tmp_path):
     assert abs(float(row["entry_stock_max"]) - 102.0) < 1e-9
     assert abs(float(row["entry_spread_min"]) - (-1.03)) < 1e-9
     assert abs(float(row["entry_spread_max"]) - (-0.97)) < 1e-9
+

@@ -1,0 +1,15 @@
+id: ADM-2026-03-02-023
+date: 2026-03-02
+title: Use component-first scenario review as product documentation baseline
+context: Existing artifacts covered endpoints and modules well, but user journeys
+  were not consistently reviewed in component order with edge/negative/interruption
+  paths.
+decision: Update planning and scenario docs with a sequential component walkthrough
+  and explicit high-priority risk gaps.
+impact: Product and engineering now share one review frame for operator journeys,
+  making coverage gaps visible before implementation.
+links:
+- docs/planning/user-needs-catalog.md
+- docs/user-scenarios.md
+- docs/planning/product-decisions.md
+- docs/ux/workspaces-map.md

@@ -1,0 +1,24 @@
+id: P1-PROCESS-GOV-ENV-BLOCKER-052
+title: Normalize missing environment-blocker signatures in process governance reports
+lane: frontend
+status: completed
+execution_mode: autonomous
+owner: frontend-platform
+acceptance:
+- process report no longer emits raw `none` for environment blockers when incident
+  signatures are missing
+- human summaries use the same normalized blocker wording as ranked blocker lists
+- targeted report/API regression tests cover the missing-signature case
+checks:
+- python scripts/validate_task_request_contract.py
+- python scripts/run_lean_gate.py
+- python -m pytest tests/test_process_reports.py tests/test_api_v2.py::test_v2_ops_process_improvement_report
+  -q
+docs:
+- docs/session_handoff.md
+- src/moex_carry/governance/process_reports.py
+- tests/test_process_reports.py
+dependencies:
+- P1-PROCESS-GOV-RU-UX-051
+started_at: 2026-03-09
+completed_at: 2026-03-09

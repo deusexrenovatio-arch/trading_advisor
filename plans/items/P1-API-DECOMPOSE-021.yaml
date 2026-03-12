@@ -1,0 +1,26 @@
+id: P1-API-DECOMPOSE-021
+title: Decompose ui app composition by extracting scheduler and decision-action services
+lane: architecture
+status: completed
+execution_mode: autonomous
+owner: backend-platform
+acceptance:
+- refresh loop singleton lease logic moved from `ui/app.py` into dedicated scheduler
+  module
+- decision action write flow extracted into dedicated service module and wired back
+  into API routes
+- backend architecture docs mention extracted UI modules and responsibilities
+- architecture and API regression tests stay green
+checks:
+- pytest tests/test_api_v2.py::test_v2_decision_actions_and_v1_adapter tests/test_api_v2.py::test_v2_signals_active_and_actions_idempotency
+  tests/test_signal_api.py::test_signals_execute_endpoint_v1_adapter_idempotency tests/architecture/test_import_boundaries.py
+  -q
+- python scripts/validate_architecture_policy.py
+docs:
+- docs/architecture/modules/backend-core.md
+- docs/session_handoff.md
+- memory/agent_memory.yaml
+dependencies:
+- P1-ARCH-HARDEN-020
+started_at: 2026-02-23
+completed_at: 2026-02-23

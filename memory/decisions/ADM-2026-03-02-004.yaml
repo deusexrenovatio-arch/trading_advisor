@@ -1,0 +1,12 @@
+id: ADM-2026-03-02-004
+date: 2026-03-02
+title: Standardize live news operations around three-commodity wrapper and runbook
+context: Operations repeatedly required manual per-symbol CLI execution and hit command-path
+  issues when PYTHONPATH was not set.
+decision: Add dedicated runbook and wrapper script for NG_US BRN GOLD daily silver
+  cycle, with explicit local CLI bootstrap requirements.
+impact: Lower operator friction, fewer runtime mistakes, and consistent live cadence
+  for target commodities.
+links:
+- docs/runbooks/news-live-3-commodities.md
+- scripts/run_news_daily_silver_cycle_3c.ps1

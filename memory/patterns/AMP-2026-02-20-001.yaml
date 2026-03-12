@@ -1,0 +1,9 @@
+id: AMP-2026-02-20-001
+date: 2026-02-20
+title: Progressive disclosure first
+pattern: Read only the smallest set of files needed for the active step, then gate
+  quickly.
+when_to_use: Any coding task with multi-doc instructions and potential context bloat.
+links:
+- AGENTS.md
+- docs/DEV_WORKFLOW.md

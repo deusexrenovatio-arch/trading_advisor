@@ -1,0 +1,11 @@
+id: AMP-2026-02-20-006
+date: 2026-02-20
+title: Delta-first handoff over chat recap
+pattern: Keep working state in plans/memory/session_handoff and communicate only short
+  deltas in chat.
+when_to_use: Any multi-step task where context growth starts to slow execution or
+  requires frequent history recomposition.
+links:
+- docs/session_handoff.md
+- docs/workflows/context-budget.md
+- docs/DEV_WORKFLOW.md

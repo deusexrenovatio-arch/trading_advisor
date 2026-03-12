@@ -1,0 +1,17 @@
+id: ADM-2026-03-05-083
+date: 2026-03-05
+title: Reach >=90% known-event coverage in no-lookahead walk-forward via discovery
+  profile and rebuilt GOLD labels
+context: User target was to maximize coverage of known root events in rolling windows
+  while keeping acceptable precision.
+decision: Introduce `discovery` vs `publish` causal profiles, enrich missing `cause_event/cause_route_key`
+  in GOLD root rows, and calibrate walk-forward in discovery mode for coverage-first
+  validation.
+impact: Known-event walk-forward achieved `avg_known_event_coverage=0.976` and `avg_precision=0.608`
+  (discovery), while publish mode remains stricter for downstream Telegram filtering.
+links:
+- scripts/news_known_events_walkforward.py
+- scripts/enrich_news_golden_events.py
+- docs/research/news_golden_events_gold.csv
+- data/output/news_known_events_walkforward_h5_discovery/known_events_walkforward_summary.json
+- docs/runbooks/news-forward-synthetic-validation.md

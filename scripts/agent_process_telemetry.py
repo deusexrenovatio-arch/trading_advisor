@@ -19,8 +19,42 @@ REPO_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(REPO_SRC) not in sys.path:
     sys.path.insert(0, str(REPO_SRC))
 
-from context_router import route_files
-from moex_carry.governance.process_reports import ROLLING_WINDOW_SIZE
+try:
+    from handoff_resolver import read_task_note_lines
+except Exception:
+    def read_task_note_lines(path: Path) -> tuple[Path, list[str], bool]:
+        if not path.exists():
+            return path, [], False
+        text = path.read_text(encoding="utf-8")
+        return path, text.splitlines(), False
+
+try:
+    from context_router import route_files
+except Exception:
+    def route_files(
+        changed_files: list[str],
+        *,
+        request_text: str = "",
+        target_modules: list[str] | None = None,
+        session_handoff_text: str = "",
+    ) -> dict[str, Any]:
+        _ = (request_text, target_modules, session_handoff_text)
+        has_scope = bool(changed_files)
+        contexts = [{"id": "CTX-OPS"}] if has_scope else []
+        return {
+            "primary_context": "CTX-OPS" if has_scope else None,
+            "contexts": contexts,
+            "intent_sources": [],
+            "cold_context_files": [],
+            "unmapped_dependency_hints": {},
+            "unmapped_files": [],
+            "recommendations": [],
+        }
+
+try:
+    from moex_carry.governance.process_reports import ROLLING_WINDOW_SIZE
+except Exception:
+    ROLLING_WINDOW_SIZE = 20
 
 
 TERMINAL_OUTCOME_STATUSES = {"completed", "partial", "blocked"}
@@ -229,7 +263,7 @@ def parse_session_handoff(path: Path) -> dict[str, Any]:
             "blockers_text": "",
             "blockers_lines": [],
         }
-    lines = path.read_text(encoding="utf-8").splitlines()
+    _resolved_path, lines, _is_pointer = read_task_note_lines(path)
     blockers_lines = _section_lines(lines, "## Blockers")
     return {
         "goal_text": _section_text(lines, "## Goal"),
@@ -1092,7 +1126,14 @@ def _base_active_task_payload(
     }
 
 
-def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tuple[bool, dict[str, Any]]:
+def start_task(
+    *,
+    events_path: Path,
+    state_path: Path,
+    handoff_path: Path,
+    route_override: dict[str, Any] | None = None,
+    baseline_changed_files_override: list[str] | None = None,
+) -> tuple[bool, dict[str, Any]]:
     repo_root = get_repo_root()
     state = reconcile_legacy_process_storage(repo_root, events_path=events_path, state_path=state_path)
     handoff = parse_session_handoff(handoff_path)
@@ -1107,8 +1148,12 @@ def start_task(*, events_path: Path, state_path: Path, handoff_path: Path) -> tu
     ):
         return False, active
 
-    changed_files = collect_working_tree_changes(repo_root)
-    route = resolve_context_route(repo_root, handoff_path, changed_files)
+    changed_files = (
+        list(baseline_changed_files_override)
+        if baseline_changed_files_override is not None
+        else collect_working_tree_changes(repo_root)
+    )
+    route = route_override or resolve_context_route(repo_root, handoff_path, changed_files)
     task_id = build_task_id(task_key)
     baseline_diff_hash = compute_diff_fingerprint(repo_root, changed_files)
     active_task = _base_active_task_payload(
@@ -1156,6 +1201,8 @@ def record_first_patch(*, events_path: Path, state_path: Path, handoff_path: Pat
 
     changed_files = collect_working_tree_changes(repo_root)
     if not changed_files:
+        return False, active
+    if not is_non_trivial_diff(changed_files):
         return False, active
 
     diff_hash = compute_diff_fingerprint(repo_root, changed_files)

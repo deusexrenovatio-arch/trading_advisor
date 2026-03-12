@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 import yaml
+
+from handoff_resolver import (
+    extract_active_task_note_path,
+    extract_active_task_note_status,
+    read_task_note_lines,
+)
 
 REMEDIATION_DOC = "docs/runbooks/governance-remediation.md"
 INCIDENT_POLICY_PATH = Path("configs/agent_incident_policy.yaml")
@@ -31,6 +38,7 @@ REQUIRED_REPETITION_ITEMS = (
     "- new search space:",
     "- next probe:",
 )
+ACTIVE_HOT_DOC = "docs/session_handoff.md"
 
 
 def _find_heading_line(lines: list[str], heading: str) -> int:
@@ -107,15 +115,133 @@ def _extract_max_same_path_attempts(repetition_section: list[str], errors: list[
     return None
 
 
-def run(path: Path) -> int:
+def _normalize_changed_files(paths: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in paths:
+        normalized = str(raw).replace("\\", "/").strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        out.append(normalized)
+    return out
+
+
+def _collect_changed_files(
+    *,
+    base_sha: str | None,
+    head_sha: str | None,
+    changed_files_override: list[str] | None,
+) -> list[str]:
+    if changed_files_override is not None:
+        return _normalize_changed_files(changed_files_override)
+    if not base_sha or not head_sha:
+        return []
+    completed = subprocess.run(
+        ["git", "diff", "--name-only", f"{base_sha}..{head_sha}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return []
+    rows = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    return _normalize_changed_files(rows)
+
+
+def _relative_marker(path: Path, root: Path) -> str | None:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix().lower()
+    except ValueError:
+        return None
+
+
+def _extract_archive_marker(path_text: str) -> str | None:
+    normalized = str(path_text).replace("\\", "/").strip().lower()
+    marker = "/docs/tasks/archive/"
+    if marker in normalized:
+        return "docs/tasks/archive/" + normalized.split(marker, 1)[1].lstrip("/")
+    if normalized.startswith("docs/tasks/archive/"):
+        return normalized
+    return None
+
+
+def _enforce_pointer_freshness(
+    *,
+    path: Path,
+    target_path: Path,
+    is_pointer: bool,
+    handoff_lines: list[str],
+    changed_files: list[str],
+    errors: list[str],
+) -> None:
+    if not is_pointer:
+        return
+
+    active_note_path = extract_active_task_note_path(handoff_lines) or ""
+    active_note_status = (extract_active_task_note_status(handoff_lines) or "").strip().lower()
+    note_path_marker = _extract_archive_marker(active_note_path)
+    target_marker = _extract_archive_marker(target_path.as_posix())
+    archived_pointer = bool(note_path_marker or target_marker)
+    closed_status = active_note_status in {"completed", "archived"}
+    if not archived_pointer and not closed_status:
+        return
+
+    changed = set(changed_files)
+    repo_root = path.resolve().parent.parent
+    target_rel = _relative_marker(target_path, repo_root)
+    handoff_rel = _relative_marker(path, repo_root) or ACTIVE_HOT_DOC
+    note_markers = {
+        marker
+        for marker in {
+            note_path_marker,
+            target_marker,
+            target_rel,
+            active_note_path.replace("\\", "/").strip().lower() or None,
+        }
+        if marker
+    }
+
+    if (
+        handoff_rel in changed
+        and any(marker in changed for marker in note_markers)
+    ):
+        return
+
+    errors.append(
+        "Active Task Note points to an archived/completed note without scoped closeout evidence. "
+        "Create a new active note or include docs/session_handoff.md plus archived note updates in this diff."
+    )
+
+
+def run(
+    path: Path,
+    *,
+    base_sha: str | None = None,
+    head_sha: str | None = None,
+    changed_files_override: list[str] | None = None,
+) -> int:
     if not path.exists():
         print(f"task request contract validation failed: missing {path.as_posix()}")
         print(f"remediation: see {REMEDIATION_DOC}")
         return 1
 
-    text = path.read_text(encoding="utf-8")
-    lines = text.splitlines()
+    handoff_lines = path.read_text(encoding="utf-8").splitlines()
+    target_path, lines, is_pointer = read_task_note_lines(path)
+    changed_files = _collect_changed_files(
+        base_sha=base_sha,
+        head_sha=head_sha,
+        changed_files_override=changed_files_override,
+    )
     errors: list[str] = []
+    _enforce_pointer_freshness(
+        path=path,
+        target_path=target_path,
+        is_pointer=is_pointer,
+        handoff_lines=handoff_lines,
+        changed_files=changed_files,
+        errors=errors,
+    )
 
     contract_heading = "## Task Request Contract"
     report_heading = "## First-Time-Right Report"
@@ -167,7 +293,8 @@ def run(path: Path) -> int:
 
     print(
         "task request contract validation: OK "
-        f"(contract_items={len(REQUIRED_CONTRACT_ITEMS)} "
+        f"(source={target_path.as_posix()} pointer_mode={is_pointer} "
+        f"contract_items={len(REQUIRED_CONTRACT_ITEMS)} "
         f"report_items={len(REQUIRED_REPORT_ITEMS)} "
         f"repetition_items={len(REQUIRED_REPETITION_ITEMS)})"
     )
@@ -179,8 +306,25 @@ def main() -> None:
         description="Validate task request contract and first-time-right report in session handoff."
     )
     parser.add_argument("--path", default="docs/session_handoff.md")
+    parser.add_argument("--base-sha", default=None)
+    parser.add_argument("--head-sha", default=None)
+    parser.add_argument("--stdin", action="store_true")
+    parser.add_argument("--changed-files", nargs="*", default=[])
     args = parser.parse_args()
-    sys.exit(run(Path(args.path)))
+    changed_files_override: list[str] | None = None
+    if args.base_sha and args.head_sha:
+        changed_files_override = None
+    elif args.stdin or args.changed_files:
+        stdin_items = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()] if args.stdin else []
+        changed_files_override = [*list(args.changed_files), *stdin_items]
+    sys.exit(
+        run(
+            Path(args.path),
+            base_sha=args.base_sha,
+            head_sha=args.head_sha,
+            changed_files_override=changed_files_override,
+        )
+    )
 
 
 if __name__ == "__main__":

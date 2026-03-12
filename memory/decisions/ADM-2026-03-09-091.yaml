@@ -1,0 +1,18 @@
+id: ADM-2026-03-09-091
+date: 2026-03-09
+title: Localize Process Governance through a dedicated metadata layer instead of ad
+  hoc JSX copy
+context: The Process Governance workspace shipped with English copy, raw machine statuses,
+  and almost no explanation for metrics or risk lists, which violated local UI/UX
+  standards and made the new governance screen hard to interpret.
+decision: Add one frontend metadata layer for Russian labels, status translations,
+  and tooltip text, then localize backend-generated human summaries used by the screen
+  so the UI stays readable without scattering copy rules across the component tree.
+impact: The governance workspace now exposes Russian labels, formula-plus-interpretation
+  tooltips, human-readable task cards, and localized weekly summaries while preserving
+  the existing route structure and bundle split.
+links:
+- ui-web/src/features/process-governance/processGovernanceMeta.ts
+- ui-web/src/features/process-governance/ProcessGovernanceTab.tsx
+- ui-web/src/features/process-governance/useProcessGovernance.ts
+- src/moex_carry/governance/process_reports.py

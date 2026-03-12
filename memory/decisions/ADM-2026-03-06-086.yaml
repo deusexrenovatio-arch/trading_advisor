@@ -1,0 +1,22 @@
+id: ADM-2026-03-06-086
+date: 2026-03-06
+title: Close discovery acceptance with a formal multi-commodity benchmark and weak-anchor
+  linker guard
+context: Runtime unification and discovery routing were complete, but strict acceptance
+  remained open because the repository had no structured multi-label benchmark and
+  the deterministic linker could still leak extra commodities from generic terms such
+  as `mine strike` or `drought`.
+decision: Add a curated multi-commodity benchmark fixture plus validator under discovery
+  settings, and harden `score_commodity_links` so commodity aliases, route evidence,
+  or specific topic terms are required while generic weak anchors only act as supporting
+  evidence.
+impact: False secondary links are now machine-checked against an in-repo benchmark,
+  and discovery acceptance can be closed with auditable benchmark output instead of
+  proxy judgments from single-label gold data.
+links:
+- src/moex_carry/news/linking.py
+- src/moex_carry/news/linking_benchmark.py
+- scripts/news_multi_commodity_benchmark.py
+- docs/research/news_multi_commodity_benchmark.csv
+- tests/test_news_linking.py
+- docs/runbooks/news-shock-go-live.md

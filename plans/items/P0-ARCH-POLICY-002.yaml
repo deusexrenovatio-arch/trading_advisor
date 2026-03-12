@@ -1,0 +1,18 @@
+id: P0-ARCH-POLICY-002
+title: Hard architecture policy gate for dependency direction and API contract parity
+lane: architecture
+status: completed
+execution_mode: autonomous
+owner: architecture-owner
+acceptance:
+- architecture policy config exists
+- policy gate fails on boundary/contract violations
+- policy gate is part of lean/CI flow
+checks:
+- python scripts/validate_architecture_policy.py
+docs:
+- harness-guideline.md
+dependencies:
+- P0-AGENT-PLANS-001
+started_at: 2026-02-20
+completed_at: 2026-02-20
