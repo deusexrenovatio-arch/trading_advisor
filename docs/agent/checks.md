@@ -11,7 +11,7 @@
 - Required checks from `docs/DEV_WORKFLOW.md`
 
 ## Nightly / Cold Hygiene
-- quality scorecards, codeowners, docs gardening, governance dashboard, and scheduled deep checks.
+- architecture policy, python style, quality scorecards, codeowners, docs gardening, governance dashboard, and scheduled deep checks.
 - drift cleanup, archive hygiene, and long-running quality/perf probes.
 
 ## First-Time-Right Gate

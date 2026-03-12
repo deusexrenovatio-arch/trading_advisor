@@ -175,6 +175,17 @@ def test_pr_default_excludes_cold_governance_checks() -> None:
     assert all("validate_codeowners.py" not in command for command in pr_commands)
 
 
+def test_nightly_keeps_architecture_and_style_invariants() -> None:
+    result = compute_surface(
+        ["src/moex_carry/pipeline.py"],
+        mapping_path=MAPPING,
+    )
+
+    nightly_commands = result["commands"]["nightly"]
+    assert any("validate_architecture_policy.py" in command for command in nightly_commands)
+    assert any("validate_python_style.py" in command for command in nightly_commands)
+
+
 def test_windows_style_paths_are_normalized() -> None:
     result = compute_surface(
         [r"src\moex_carry\storage\repositories_v2.py"],

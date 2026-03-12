@@ -179,30 +179,31 @@ Blockers:
 
 ## Required checks (CI + local)
 - Treat this list as a blocker gate for pre-push and PR readiness.
+- Use surface-aware gates as canonical entrypoint; do not duplicate heavy checks manually unless explicitly required.
 
-### Backend (Python)
-- `python -m pip install -e ".[dev]"`
-- `python scripts/task_session.py begin --request "<request>"`
+### Baseline pre-push / PR closeout (hot path)
+- `python scripts/task_session.py status` (or `python scripts/task_session.py begin --request "<request>"` if inactive/expired)
 - `python scripts/run_loop_gate.py --from-git --git-ref HEAD`
 - `python scripts/run_pr_gate.py --from-git --git-ref HEAD`
 - `python scripts/task_session.py end`
-- `python scripts/validate_agent_contexts.py`
-- `python scripts/validate_session_handoff.py`
-- `python scripts/validate_task_request_contract.py`
-- `python scripts/validate_task_outcomes.py`
-- `python scripts/validate_process_regressions.py`
-- `python scripts/validate_quality_scorecards.py`
-- `python scripts/validate_python_style.py`
-- `python scripts/validate_structured_logging.py`
-- `python scripts/validate_codeowners.py`
-- `pytest`
 
-### Frontend (UI)
-- `cd ui-web`
-- `npm ci`
-- `npm run lint`
-- `npm run build`
-- `npm run test:e2e` (CI required; local run before major UI merges)
+### Surface-escalated checks (automatic via loop/pr gates)
+- backend tests for `core`/`news`/`contracts` surfaces
+- UI lint/build subset for `ui`/`contracts` surfaces
+- dependency, observability, and perf validators only when the diff matches those surfaces
+
+### Nightly / cold hygiene (not baseline pre-push blockers)
+- `python scripts/validate_architecture_policy.py`
+- `python scripts/validate_python_style.py`
+- `python scripts/validate_quality_scorecards.py`
+- `python scripts/validate_codeowners.py`
+- process-regression and docs-hygiene sweeps
+- long-running full regression/e2e probes
+
+### Optional local rehearsal for major merges/releases
+- `pytest`
+- `cd ui-web && npm ci && npm run lint && npm run build`
+- `cd ui-web && npm run test:e2e`
 
 ## Automatic pre-push gate (recommended)
 - Enable repository hooks once per clone:

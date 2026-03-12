@@ -153,6 +153,8 @@ command_profiles:
       - "{python} scripts/validate_process_regressions.py"
       - "{python} scripts/sync_architecture_map.py --check"
       - "{python} scripts/sync_state_layout.py"
+      - "{python} scripts/validate_architecture_policy.py"
+      - "{python} scripts/validate_python_style.py"
       - "{python} scripts/validate_quality_scorecards.py"
       - "{python} scripts/validate_codeowners.py"
       - "{python} scripts/doc_gardening_report.py"
