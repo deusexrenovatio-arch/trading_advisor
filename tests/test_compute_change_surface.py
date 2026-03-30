@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import compute_change_surface  # noqa: E402
 from compute_change_surface import compute_surface  # noqa: E402
 
 
@@ -206,3 +207,17 @@ def test_server_paths_are_classified_as_core() -> None:
 
     assert result["primary_surface"] == "core"
     assert "core" in result["surfaces"]
+
+
+def test_python_command_keeps_sys_executable_case(monkeypatch) -> None:
+    python_exec = "/opt/hostedtoolcache/Python/3.11.15/x64/bin/python"
+    monkeypatch.setattr(compute_change_surface.sys, "executable", python_exec)
+
+    result = compute_surface(
+        ["docs/agent/runtime.md"],
+        mapping_path=MAPPING,
+    )
+
+    nightly_commands = result["commands"]["nightly"]
+    assert any(command.startswith(f"{python_exec} scripts/run_pr_gate.py") for command in nightly_commands)
+    assert all("/opt/hostedtoolcache/python/" not in command for command in nightly_commands)

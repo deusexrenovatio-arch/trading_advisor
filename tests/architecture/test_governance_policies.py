@@ -56,7 +56,16 @@ def test_validate_session_handoff_passes() -> None:
 
 
 def test_validate_task_outcomes_passes() -> None:
-    result = _run([sys.executable, "scripts/validate_task_outcomes.py"])
+    result = _run(
+        [
+            sys.executable,
+            "scripts/validate_task_outcomes.py",
+            "--base-sha",
+            "HEAD",
+            "--head-sha",
+            "HEAD",
+        ]
+    )
     if result.returncode != 0:
         raise AssertionError(result.stdout + "\n" + result.stderr)
 
