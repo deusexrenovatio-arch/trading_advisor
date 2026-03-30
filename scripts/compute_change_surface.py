@@ -125,7 +125,15 @@ def _commands_for_level(
     for surface in surfaces:
         for raw in level_profile.get(surface) or []:
             candidates.append(_resolve_command(str(raw)))
-    return _dedupe(candidates)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for command in candidates:
+        marker = _normalize(command)
+        if not marker or marker in seen:
+            continue
+        seen.add(marker)
+        deduped.append(command.strip())
+    return deduped
 
 
 def compute_surface(
