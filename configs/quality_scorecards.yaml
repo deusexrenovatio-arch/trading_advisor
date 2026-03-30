@@ -38,13 +38,31 @@ dimensions:
       - id: task-request-contract
         command: ["{python}", "scripts/validate_task_request_contract.py"]
       - id: task-outcomes-contract
-        command: ["{python}", "scripts/validate_task_outcomes.py"]
+        command:
+          [
+            "{python}",
+            "scripts/validate_task_outcomes.py",
+            "--base-sha",
+            "HEAD",
+            "--head-sha",
+            "HEAD",
+          ]
 
   - id: decision-quality
     threshold: 1.0
     checks:
       - id: task-outcomes-decision
-        command: ["{python}", "scripts/validate_task_outcomes.py", "--focus", "decision-quality"]
+        command:
+          [
+            "{python}",
+            "scripts/validate_task_outcomes.py",
+            "--focus",
+            "decision-quality",
+            "--base-sha",
+            "HEAD",
+            "--head-sha",
+            "HEAD",
+          ]
       - id: process-regressions-decision
         command: ["{python}", "scripts/validate_process_regressions.py", "--focus", "decision-quality"]
 
@@ -54,7 +72,17 @@ dimensions:
       - id: agent-context-coverage
         command: ["{python}", "scripts/validate_agent_contexts.py"]
       - id: task-outcomes-context
-        command: ["{python}", "scripts/validate_task_outcomes.py", "--focus", "context-efficiency"]
+        command:
+          [
+            "{python}",
+            "scripts/validate_task_outcomes.py",
+            "--focus",
+            "context-efficiency",
+            "--base-sha",
+            "HEAD",
+            "--head-sha",
+            "HEAD",
+          ]
       - id: process-regressions-context
         command: ["{python}", "scripts/validate_process_regressions.py", "--focus", "context-efficiency"]
 
@@ -62,7 +90,17 @@ dimensions:
     threshold: 1.0
     checks:
       - id: task-outcomes-learning
-        command: ["{python}", "scripts/validate_task_outcomes.py", "--focus", "self-learning"]
+        command:
+          [
+            "{python}",
+            "scripts/validate_task_outcomes.py",
+            "--focus",
+            "self-learning",
+            "--base-sha",
+            "HEAD",
+            "--head-sha",
+            "HEAD",
+          ]
       - id: process-regressions-learning
         command: ["{python}", "scripts/validate_process_regressions.py", "--focus", "self-learning"]
 
